@@ -25,3 +25,57 @@ export interface DayTab {
   sublabel: string;
   count: number;
 }
+
+export type ConfidenceTier =
+  | 'BANGER'
+  | 'TOP PICK'
+  | 'HIGH CONFIDENCE'
+  | 'MID CONFIDENCE'
+  | 'LOW CONFIDENCE'
+  | 'RISKY';
+
+export interface FootballPrediction {
+  id: string;
+  fixture_id: string;
+  simulation_run_id?: string;
+  market: string;
+  prediction: string;
+  probability: number;
+  confidence_category: ConfidenceTier;
+  publication_status: string;
+  tier_required: string;
+  source_data_version: string;
+  metadata?: {
+    probability_pct?: number;
+    simulations?: number;
+    canonical_key?: string;
+    model_version?: string;
+    home_attack?: number;
+    away_attack?: number;
+    lambda_home?: number;
+    lambda_away?: number;
+  };
+  target_kickoff_at: string;
+  created_at: string;
+}
+
+export interface SimulationRecord {
+  id: string;
+  fixture_id: string;
+  simulation_run_id: string;
+  target_simulations: number;
+  completed_simulations: number;
+  duration_ms: number;
+  status: string;
+  summary_stats?: {
+    model_version?: string;
+    home_win_pct?: number;
+    draw_pct?: number;
+    away_win_pct?: number;
+    over_25_pct?: number;
+    under_25_pct?: number;
+    btts_yes_pct?: number;
+    lambda_home?: number;
+    lambda_away?: number;
+  };
+}

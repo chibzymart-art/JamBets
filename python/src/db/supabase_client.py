@@ -122,3 +122,7 @@ class SupabaseClient:
             "resolution": "unresolved"
         }
         self.post("football_data_conflicts", payload)
+
+
+# Alias for explicit domain naming
+CloudSupabaseClient = SupabaseClient
