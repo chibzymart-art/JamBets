@@ -1,0 +1,126 @@
+"""
+JamBets — LiveScore Verified Data Source Adapter
+Queries LiveScore public match feeds for multi-source validation.
+"""
+
+from datetime import datetime, timezone, timedelta
+from typing import List, Optional
+import httpx
+from python.src.config import LeagueConfig
+from python.src.football.models import RawFixturePayload, FixtureStatus
+from python.src.sources.base import BaseSourceAdapter
+
+
+class LiveScoreAdapter(BaseSourceAdapter):
+    def __init__(self):
+        super().__init__(
+            name="LiveScore",
+            slug="livescore",
+            base_url="https://prod-public-api.livescore.com/v1/api/app/date/soccer"
+        )
+        self.client.headers.update({
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+            "Accept": "application/json"
+        })
+
+    def _map_livescore_status(self, eps: str) -> FixtureStatus:
+        status_map = {
+            "NS": FixtureStatus.SCHEDULED,
+            "1H": FixtureStatus.LIVE,
+            "2H": FixtureStatus.LIVE,
+            "HT": FixtureStatus.LIVE,
+            "ET": FixtureStatus.LIVE,
+            "P": FixtureStatus.LIVE,
+            "FT": FixtureStatus.FINISHED,
+            "AET": FixtureStatus.FINISHED,
+            "AP": FixtureStatus.FINISHED,
+            "Postp.": FixtureStatus.POSTPONED,
+            "Canc.": FixtureStatus.CANCELLED,
+            "Susp.": FixtureStatus.SUSPENDED,
+            "Int.": FixtureStatus.INTERRUPTED
+        }
+        return status_map.get(eps, FixtureStatus.SCHEDULED)
+
+    def fetch_fixtures(self, league: LeagueConfig, date_from: datetime, date_to: datetime) -> List[RawFixturePayload]:
+        """Queries LiveScore by date and filters for matching league stages."""
+        results: List[RawFixturePayload] = []
+        now_utc = datetime.now(timezone.utc)
+
+        current_day = date_from.date()
+        end_day = date_to.date()
+
+        while current_day <= end_day:
+            date_str = current_day.strftime("%Y%m%d")
+            url = f"{self.base_url}/{date_str}/0.00?MD=1"
+
+            try:
+                resp = self.client.get(url, timeout=12.0)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    stages = data.get("Stages", [])
+                    for stage in stages:
+                        stage_country = (stage.get("Cnm") or "").lower().replace(" ", "-")
+                        stage_name = (stage.get("Snm") or "").lower().replace(" ", "-")
+
+                        # Match against league configuration keywords
+                        is_match = (
+                            league.livescore_country in stage_country or
+                            league.livescore_stage in stage_name or
+                            league.name.lower() in stage_name.lower()
+                        )
+                        if not is_match:
+                            continue
+
+                        events = stage.get("Events", [])
+                        for ev in events:
+                            event_id = str(ev.get("Eid"))
+                            t1 = ev.get("T1", [{}])[0].get("Nm")
+                            t2 = ev.get("T2", [{}])[0].get("Nm")
+                            if not t1 or not t2:
+                                continue
+
+                            # Parse Esd timestamp (e.g. 20260908140000)
+                            esd_str = str(ev.get("Esd", ""))
+                            try:
+                                kickoff_dt = datetime.strptime(esd_str, "%Y%m%d%H%M%S").replace(tzinfo=timezone.utc)
+                            except Exception:
+                                continue
+
+                            eps = str(ev.get("Eps", "NS"))
+                            canonical_status = self._map_livescore_status(eps)
+
+                            home_score = None
+                            away_score = None
+                            if canonical_status in (FixtureStatus.LIVE, FixtureStatus.FINISHED):
+                                try:
+                                    home_score = int(ev.get("Tr1"))
+                                    away_score = int(ev.get("Tr2"))
+                                except (ValueError, TypeError):
+                                    pass
+
+                            payload = RawFixturePayload(
+                                source_name=self.name,
+                                provider_event_id=event_id,
+                                league_code=league.code,
+                                season=str(current_day.year),
+                                home_team_raw=t1,
+                                away_team_raw=t2,
+                                kickoff_time=kickoff_dt,
+                                status=canonical_status,
+                                home_score=home_score,
+                                away_score=away_score,
+                                retrieved_at=now_utc,
+                                raw_metadata={"livescore_eps": eps, "stage": stage.get("Snm")}
+                            )
+                            results.append(payload)
+            except Exception:
+                pass
+
+            current_day += timedelta(days=1)
+
+        return results
+
+    def fetch_live_scores(self, league: LeagueConfig) -> List[RawFixturePayload]:
+        today = datetime.now(timezone.utc)
+        fixtures = self.fetch_fixtures(league, today, today)
+        return [f for f in fixtures if f.status == FixtureStatus.LIVE]
