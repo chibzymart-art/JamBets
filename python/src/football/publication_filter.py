@@ -54,6 +54,8 @@ class PublicationFilter:
         else:
             return None
 
+    classify_tier = classify_confidence_tier
+
     @classmethod
     def filter_market_outcomes(
         cls,

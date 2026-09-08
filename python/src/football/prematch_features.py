@@ -236,3 +236,7 @@ class PreMatchFeatureEngine:
             not_ready_reason=None,
             historical_matches_used=len(home_matches) + len(away_matches)
         )
+
+    # Alias for pipeline compatibility
+    extract_features = compute_features
+

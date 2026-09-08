@@ -37,6 +37,7 @@ export type ConfidenceTier =
 export interface FootballPrediction {
   id: string;
   fixture_id: string;
+  simulation_id?: string;
   simulation_run_id?: string;
   market: string;
   prediction: string;
@@ -46,6 +47,7 @@ export interface FootballPrediction {
   tier_required: string;
   source_data_version: string;
   metadata?: {
+    simulation_job_id?: string;
     probability_pct?: number;
     simulations?: number;
     canonical_key?: string;
@@ -62,20 +64,36 @@ export interface FootballPrediction {
 export interface SimulationRecord {
   id: string;
   fixture_id: string;
-  simulation_run_id: string;
   target_simulations: number;
   completed_simulations: number;
-  duration_ms: number;
   status: string;
-  summary_stats?: {
+  created_at: string;
+  run_tracking?: {
+    simulation_job_id?: string;
     model_version?: string;
+    dataset_version?: string;
+    feature_version?: string;
+    calibration_version?: string;
+    rng_algorithm?: string;
+    seed?: number;
+    duration_ms?: number;
+    lambda_home?: number;
+    lambda_away?: number;
     home_win_pct?: number;
     draw_pct?: number;
     away_win_pct?: number;
     over_25_pct?: number;
     under_25_pct?: number;
     btts_yes_pct?: number;
-    lambda_home?: number;
-    lambda_away?: number;
+    first_half_avg_goals?: number;
+    second_half_avg_goals?: number;
+    corners_simulated?: boolean;
+    sanity_report?: {
+      sum_1x2?: number;
+      sum_btts?: number;
+      is_valid?: boolean;
+    };
+    scoreline_distribution?: Record<string, number>;
   };
 }
+
