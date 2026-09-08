@@ -1,16 +1,47 @@
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from './lib/supabase';
-import { QueueFixture, FootballPrediction, ConfidenceTier, SimulationRecord, SchedulerJob, SettlementJob } from './types';
+import {
+  QueueFixture,
+  FootballPrediction,
+  ConfidenceTier,
+  SimulationRecord,
+  SchedulerJob,
+  SettlementJob,
+  UserProfile,
+  UserSubscription,
+  UserEntitlement,
+  PredictionTeaser,
+  LeagueRecord
+} from './types';
+import { AuthModal } from './components/AuthModal';
+import { ProfileModal } from './components/ProfileModal';
 
 export default function App() {
+  // Authentication & Entitlement State
+  const [currentUser, setCurrentUser] = useState<any | null>(null);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [subscription, setSubscription] = useState<UserSubscription | null>(null);
+  const [entitlement, setEntitlement] = useState<UserEntitlement | null>(null);
+
+  // Modals
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [authModalMode, setAuthModalMode] = useState<'signin' | 'register'>('signin');
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+
+  // Authoritative Cloud Data State
   const [fixtures, setFixtures] = useState<QueueFixture[]>([]);
   const [predictions, setPredictions] = useState<FootballPrediction[]>([]);
+  const [teasers, setTeasers] = useState<PredictionTeaser[]>([]);
   const [simulations, setSimulations] = useState<SimulationRecord[]>([]);
+  const [leaguesList, setLeaguesList] = useState<LeagueRecord[]>([]);
   const [schedulerJob, setSchedulerJob] = useState<SchedulerJob | null>(null);
   const [settlementJob, setSettlementJob] = useState<SettlementJob | null>(null);
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedDay, setSelectedDay] = useState<number | 'all'>('all');
+
+  // Date Navigation State (Section 5: Default to Today / Day 0)
+  const [selectedDay, setSelectedDay] = useState<number | 'history' | 'yesterday' | 'all'>(0);
   const [selectedLeague, setSelectedLeague] = useState<string>('all');
   const [selectedTier, setSelectedTier] = useState<string>('all');
   const [settlementFilter, setSettlementFilter] = useState<'all' | 'pending' | 'won' | 'lost' | 'void'>('all');
@@ -26,6 +57,7 @@ export default function App() {
   const [slot15Index, setSlot15Index] = useState<number>(0);
   const [next15RunCountdown, setNext15RunCountdown] = useState<string>('');
 
+  // 1. Live Lagos Time Clock
   useEffect(() => {
     const updateTime = () => {
       const now = new Date();
@@ -79,68 +111,172 @@ export default function App() {
     return () => clearInterval(timer);
   }, []);
 
-  const fetchQueueAndPredictions = async () => {
+  // 2. User & Auth Session Management
+  const fetchUserData = async (userId: string) => {
+    try {
+      const [userRes, subRes, entRes] = await Promise.all([
+        supabase.from('users').select('*').eq('id', userId).single(),
+        supabase.from('subscriptions').select('*').eq('user_id', userId).order('created_at', { ascending: false }).limit(1),
+        supabase.from('entitlements').select('*').eq('user_id', userId).order('created_at', { ascending: false }).limit(1)
+      ]);
+
+      if (userRes.data) {
+        setProfile(userRes.data as UserProfile);
+      }
+      if (subRes.data && subRes.data.length > 0) {
+        setSubscription(subRes.data[0] as UserSubscription);
+      }
+      if (entRes.data && entRes.data.length > 0) {
+        setEntitlement(entRes.data[0] as UserEntitlement);
+      }
+    } catch (err) {
+      console.warn('Error fetching user profile from Cloud Supabase:', err);
+    }
+  };
+
+  useEffect(() => {
+    // Initial session check
+    supabase.auth.getUser().then(({ data }) => {
+      if (data?.user) {
+        setCurrentUser(data.user);
+        fetchUserData(data.user.id);
+      } else {
+        setCurrentUser(null);
+        setProfile(null);
+        setSubscription(null);
+        setEntitlement(null);
+      }
+    });
+
+    // Auth state listener
+    const { data: authListener } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (session?.user) {
+        setCurrentUser(session.user);
+        await fetchUserData(session.user.id);
+      } else {
+        setCurrentUser(null);
+        setProfile(null);
+        setSubscription(null);
+        setEntitlement(null);
+      }
+    });
+
+    return () => {
+      authListener.subscription.unsubscribe();
+    };
+  }, []);
+
+  // Entitlement resolution
+  const canViewPredictions = useMemo(() => {
+    if (!currentUser) return false;
+    if (entitlement?.can_view_predictions) return true;
+    const role = (profile?.role || subscription?.tier || '').toLowerCase();
+    return ['standard', 'bigbang', 'pro', 'premium', 'admin'].includes(role);
+  }, [currentUser, entitlement, profile, subscription]);
+
+  const activeTierLabel = useMemo(() => {
+    if (!currentUser) return 'VISITOR';
+    const role = (profile?.role || subscription?.tier || 'free').toUpperCase();
+    return role;
+  }, [currentUser, profile, subscription]);
+
+  // 3. Fetch Cloud Supabase Data (Authoritative)
+  const fetchCloudData = async () => {
     setLoading(true);
     setError(null);
     const start = performance.now();
+
     try {
-      const [queueRes, predRes, simRes, jobRes, settleJobRes] = await Promise.all([
-        supabase
-          .from('football_prediction_queue')
-          .select('*')
-          .order('target_kickoff_at', { ascending: true })
-          .limit(300),
-        supabase
-          .from('football_predictions')
-          .select('*')
-          .eq('publication_status', 'published')
-          .order('probability', { ascending: false }),
-        supabase
-          .from('football_simulations')
-          .select('*')
-          .order('created_at', { ascending: false })
-          .limit(100),
-        supabase
-          .from('system_jobs')
-          .select('*')
-          .eq('job_type', 'prediction_worker')
-          .order('created_at', { ascending: false })
-          .limit(1),
-        supabase
-          .from('system_jobs')
-          .select('*')
-          .ilike('idempotency_key', 'settlement-cycle-%')
-          .order('created_at', { ascending: false })
-          .limit(1)
+      // Parallel fetch for queue, simulations, leagues, and system jobs
+      const queueQuery = supabase
+        .from('football_prediction_queue')
+        .select('*')
+        .order('target_kickoff_at', { ascending: true })
+        .limit(300);
+
+      const simQuery = supabase
+        .from('football_simulations')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(100);
+
+      const leagueQuery = supabase
+        .from('football_leagues')
+        .select('*')
+        .eq('is_active', true)
+        .order('priority', { ascending: true });
+
+      const jobQuery = supabase
+        .from('system_jobs')
+        .select('*')
+        .eq('job_type', 'prediction_worker')
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      const settleJobQuery = supabase
+        .from('system_jobs')
+        .select('*')
+        .ilike('idempotency_key', 'settlement-cycle-%')
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      // Conditional query: If entitled, fetch full predictions; else fetch public teasers
+      const predOrTeaserQuery = canViewPredictions
+        ? supabase
+            .from('football_predictions')
+            .select('*')
+            .eq('publication_status', 'published')
+            .order('probability', { ascending: false })
+        : supabase
+            .from('football_prediction_teasers')
+            .select('*')
+            .eq('publication_status', 'published');
+
+      const [queueRes, simRes, leagueRes, jobRes, settleJobRes, predOrTeaserRes] = await Promise.all([
+        queueQuery,
+        simQuery,
+        leagueQuery,
+        jobQuery,
+        settleJobQuery,
+        predOrTeaserQuery
       ]);
 
       const elapsed = Math.round(performance.now() - start);
       setLatencyMs(elapsed);
 
       if (queueRes.error) throw queueRes.error;
-      if (predRes.error) throw predRes.error;
-
       setFixtures(queueRes.data || []);
-      setPredictions(predRes.data || []);
       setSimulations(simRes.data || []);
+      if (leagueRes.data) {
+        setLeaguesList(leagueRes.data || []);
+      }
       if (jobRes.data && jobRes.data.length > 0) {
         setSchedulerJob(jobRes.data[0]);
       }
       if (settleJobRes.data && settleJobRes.data.length > 0) {
         setSettlementJob(settleJobRes.data[0]);
       }
+
+      if (canViewPredictions) {
+        setPredictions(predOrTeaserRes.data || []);
+        setTeasers([]);
+      } else {
+        setPredictions([]);
+        setTeasers(predOrTeaserRes.data || []);
+      }
+
       setLastRefreshed(new Date());
     } catch (err: any) {
       console.error('Error querying Cloud Supabase:', err);
-      setError(err.message || 'Failed to fetch data from Cloud Supabase');
+      setError(err.message || 'Failed to fetch authoritative data from Cloud Supabase');
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchQueueAndPredictions();
-  }, []);
+    fetchCloudData();
+  }, [canViewPredictions]);
 
   // Group predictions by fixture_id
   const predsByFixture = useMemo(() => {
@@ -152,6 +288,17 @@ export default function App() {
     });
     return map;
   }, [predictions]);
+
+  // Group teasers by fixture_id
+  const teasersByFixture = useMemo(() => {
+    const map = new Map<string, PredictionTeaser[]>();
+    teasers.forEach((t) => {
+      const list = map.get(t.fixture_id) || [];
+      list.push(t);
+      map.set(t.fixture_id, list);
+    });
+    return map;
+  }, [teasers]);
 
   // Index simulations by fixture_id
   const simsByFixture = useMemo(() => {
@@ -171,25 +318,43 @@ export default function App() {
 
   // Compute counts per day
   const dayCounts = useMemo(() => {
-    const counts: Record<number, number> = { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0 };
+    const counts: Record<string, number> = {
+      0: 0,
+      1: 0,
+      2: 0,
+      3: 0,
+      4: 0,
+      yesterday: 0,
+      history: 0
+    };
     fixtures.forEach((f) => {
-      if (typeof f.queue_day === 'number' && f.queue_day in counts) {
-        counts[f.queue_day]++;
+      if (f.status === 'finished') {
+        counts.history++;
+      }
+      if (typeof f.queue_day === 'number') {
+        if (f.queue_day in counts) {
+          counts[String(f.queue_day)]++;
+        } else if (f.queue_day === -1) {
+          counts.yesterday++;
+        }
       }
     });
     return counts;
   }, [fixtures]);
 
-  // Unique leagues for filter
-  const leagues = useMemo(() => {
+  // Dynamic Leagues for filter (Primary from football_leagues, enriched with fixture leagues)
+  const availableLeagues = useMemo(() => {
     const map = new Map<string, string>();
+    leaguesList.forEach((l) => {
+      if (l.code && l.name) map.set(l.code, l.name);
+    });
     fixtures.forEach((f) => {
-      if (f.league_code && f.league_name) {
+      if (f.league_code && f.league_name && !map.has(f.league_code)) {
         map.set(f.league_code, f.league_name);
       }
     });
     return Array.from(map.entries()).map(([code, name]) => ({ code, name }));
-  }, [fixtures]);
+  }, [leaguesList, fixtures]);
 
   // Settlement statistics
   const settlementCounts = useMemo(() => {
@@ -209,18 +374,26 @@ export default function App() {
 
   // High confidence count
   const highConfidenceCount = useMemo(() => {
-    return predictions.filter((p) =>
-      ['BANGER', 'TOP PICK', 'HIGH CONFIDENCE'].includes(p.confidence_category)
+    if (canViewPredictions) {
+      return predictions.filter((p) =>
+        ['BANGER', 'TOP PICK', 'HIGH CONFIDENCE'].includes(p.confidence_category)
+      ).length;
+    }
+    return teasers.filter((t) =>
+      ['BANGER', 'TOP PICK', 'HIGH CONFIDENCE'].includes(t.confidence_category)
     ).length;
-  }, [predictions]);
+  }, [canViewPredictions, predictions, teasers]);
 
   // Filtered fixtures
   const filteredFixtures = useMemo(() => {
     return fixtures.filter((f) => {
       const fixturePreds = predsByFixture.get(f.id) || [];
+      const fixtureTeasers = teasersByFixture.get(f.id) || [];
+      const totalSignals = canViewPredictions ? fixturePreds.length : fixtureTeasers.length;
 
       // Settlement filter
       if (settlementFilter !== 'all') {
+        if (!canViewPredictions) return true;
         const hasMatchingStatus = fixturePreds.some((p) => {
           const st = p.settlement_status || 'pending';
           if (settlementFilter === 'void') return st === 'void' || st === 'voided';
@@ -230,19 +403,28 @@ export default function App() {
       }
 
       // Only predicted filter
-      if (onlyPredicted && fixturePreds.length === 0) {
+      if (onlyPredicted && totalSignals === 0) {
         return false;
       }
 
       // Tier filter
       if (selectedTier !== 'all') {
-        const hasTier = fixturePreds.some((p) => p.confidence_category === selectedTier);
-        if (!hasTier) return false;
+        if (canViewPredictions) {
+          const hasTier = fixturePreds.some((p) => p.confidence_category === selectedTier);
+          if (!hasTier) return false;
+        } else {
+          const hasTier = fixtureTeasers.some((t) => t.confidence_category === selectedTier);
+          if (!hasTier) return false;
+        }
       }
 
-      // Day filter
-      if (selectedDay !== 'all' && f.queue_day !== selectedDay) {
-        return false;
+      // Date Navigation Filter (Section 5)
+      if (selectedDay === 'history') {
+        if (f.status !== 'finished' && f.queue_day >= 0) return false;
+      } else if (selectedDay === 'yesterday') {
+        if (f.queue_day !== -1 && !(f.status === 'finished' && f.queue_day < 0)) return false;
+      } else if (selectedDay !== 'all') {
+        if (f.queue_day !== selectedDay) return false;
       }
 
       // League filter
@@ -262,14 +444,26 @@ export default function App() {
       }
       return true;
     });
-  }, [fixtures, predsByFixture, selectedDay, selectedLeague, selectedTier, settlementFilter, onlyPredicted, searchQuery]);
+  }, [
+    fixtures,
+    predsByFixture,
+    teasersByFixture,
+    canViewPredictions,
+    selectedDay,
+    selectedLeague,
+    selectedTier,
+    settlementFilter,
+    onlyPredicted,
+    searchQuery
+  ]);
 
   const formatKickoff = (isoString: string) => {
     const d = new Date(isoString);
     return {
-      local: d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }),
-      date: d.toLocaleDateString([], { month: 'short', day: 'numeric' }),
-      utc: d.toISOString().replace('.000Z', ' UTC').replace('T', ' ')
+      local: d.toLocaleTimeString('en-GB', { timeZone: 'Africa/Lagos', hour: '2-digit', minute: '2-digit', hour12: false }),
+      date: d.toLocaleDateString('en-GB', { timeZone: 'Africa/Lagos', month: 'short', day: 'numeric' }),
+      wat: d.toLocaleDateString('en-GB', { timeZone: 'Africa/Lagos', month: 'short', day: 'numeric' }) + ' ' +
+           d.toLocaleTimeString('en-GB', { timeZone: 'Africa/Lagos', hour: '2-digit', minute: '2-digit', hour12: false }) + ' WAT'
     };
   };
 
@@ -332,10 +526,9 @@ export default function App() {
     }
   };
 
-
   return (
     <div className="app-container">
-      {/* Top Header */}
+      {/* Top Header Bar with Auth and Entitlement Navigation */}
       <header className="header-bar">
         <div className="brand-section">
           <div className="brand-logo">JB</div>
@@ -345,10 +538,87 @@ export default function App() {
           </div>
         </div>
 
-        <div className="db-pill">
-          <span className="pulsing-dot"></span>
-          <span>Cloud Supabase Live</span>
-          {latencyMs !== null && <span>({latencyMs}ms)</span>}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <div className="db-pill">
+            <span className="pulsing-dot"></span>
+            <span>Cloud Supabase Live</span>
+            {latencyMs !== null && <span>({latencyMs}ms)</span>}
+          </div>
+
+          {/* User Auth & Entitlement Bar (Phase 8) */}
+          <div className="user-nav-group">
+            {!currentUser ? (
+              <>
+                <div className="visitor-pill">
+                  <span>🔒</span>
+                  <span>Visitor Mode</span>
+                </div>
+                <button
+                  type="button"
+                  className="btn-header-action signin-btn"
+                  onClick={() => {
+                    setAuthModalMode('signin');
+                    setIsAuthModalOpen(true);
+                  }}
+                >
+                  Sign In
+                </button>
+                <button
+                  type="button"
+                  className="btn-header-action register-btn"
+                  onClick={() => {
+                    setAuthModalMode('register');
+                    setIsAuthModalOpen(true);
+                  }}
+                >
+                  Create Account
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  className="user-profile-btn"
+                  onClick={() => setIsProfileModalOpen(true)}
+                  title="View Profile, Disclaimers & Subscriptions"
+                >
+                  <div className="user-avatar-small">
+                    {profile?.display_name ? profile.display_name.charAt(0).toUpperCase() : (currentUser.email?.charAt(0).toUpperCase() || 'U')}
+                  </div>
+                  <span className="user-email-label">
+                    {profile?.display_name || currentUser.email}
+                  </span>
+                  <span className={`tier-pill-badge tier-${(profile?.role || 'free').toLowerCase()}`}>
+                    {activeTierLabel}
+                  </span>
+                </button>
+
+                {!canViewPredictions && (
+                  <button
+                    type="button"
+                    className="upgrade-header-btn"
+                    onClick={() => setIsProfileModalOpen(true)}
+                  >
+                    ⚡ Upgrade
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  className="btn-header-action signin-btn"
+                  onClick={async () => {
+                    await supabase.auth.signOut();
+                    setCurrentUser(null);
+                    setProfile(null);
+                    setSubscription(null);
+                    setEntitlement(null);
+                  }}
+                >
+                  Sign Out
+                </button>
+              </>
+            )}
+          </div>
         </div>
       </header>
 
@@ -438,7 +708,7 @@ export default function App() {
               <div className="prov-stat">
                 <span className="prov-stat-label">Published (≥45.00%)</span>
                 <span className="prov-stat-val" style={{ color: '#34d399' }}>
-                  {schedulerJob.metadata?.predictions_published ?? predictions.length}
+                  {schedulerJob.metadata?.predictions_published ?? (canViewPredictions ? predictions.length : teasers.length)}
                 </span>
               </div>
               <div className="prov-stat">
@@ -540,8 +810,12 @@ export default function App() {
 
         <div className="metric-card">
           <div className="metric-label">Published Predictions</div>
-          <div className="metric-value" style={{ color: '#34d399' }}>{predictions.length}</div>
-          <div className="metric-sub">≥45.00% Publication Gate</div>
+          <div className="metric-value" style={{ color: '#34d399' }}>
+            {canViewPredictions ? predictions.length : teasers.length}
+          </div>
+          <div className="metric-sub">
+            {canViewPredictions ? 'Unlocked (Active Entitlement)' : 'Teasers (Locked)'}
+          </div>
         </div>
 
         <div className="metric-card">
@@ -569,22 +843,30 @@ export default function App() {
         </div>
       </div>
 
-      {/* Queue Navigation Tabs */}
+      {/* Queue & Date Navigation Bar (Section 5: History, Yesterday, Today [Default], Tomorrow, +2, +3, +4) */}
       <div className="queue-nav-bar">
         <div className="day-tabs">
           <button
-            className={`day-tab ${selectedDay === 'all' ? 'active' : ''}`}
-            onClick={() => setSelectedDay('all')}
+            className={`day-tab ${selectedDay === 'history' ? 'active' : ''}`}
+            onClick={() => setSelectedDay('history')}
           >
-            <span>All Days</span>
-            <span className="day-tab-count">{fixtures.length}</span>
+            <span>History</span>
+            <span className="day-tab-count">{dayCounts.history}</span>
+          </button>
+
+          <button
+            className={`day-tab ${selectedDay === 'yesterday' ? 'active' : ''}`}
+            onClick={() => setSelectedDay('yesterday')}
+          >
+            <span>Yesterday (-1)</span>
+            <span className="day-tab-count">{dayCounts.yesterday}</span>
           </button>
 
           <button
             className={`day-tab ${selectedDay === 0 ? 'active' : ''}`}
             onClick={() => setSelectedDay(0)}
           >
-            <span>Today (Day 0)</span>
+            <span>Today (Default)</span>
             <span className="day-tab-count">{dayCounts[0]}</span>
           </button>
 
@@ -619,9 +901,17 @@ export default function App() {
             <span>Day +4</span>
             <span className="day-tab-count">{dayCounts[4]}</span>
           </button>
+
+          <button
+            className={`day-tab ${selectedDay === 'all' ? 'active' : ''}`}
+            onClick={() => setSelectedDay('all')}
+          >
+            <span>All Days</span>
+            <span className="day-tab-count">{fixtures.length}</span>
+          </button>
         </div>
 
-        {/* Filters and Search Row */}
+        {/* Filters and Search Row (Section 6: Dynamic Competitions from football_leagues) */}
         <div className="filters-row">
           <input
             type="text"
@@ -636,8 +926,8 @@ export default function App() {
             value={selectedLeague}
             onChange={(e) => setSelectedLeague(e.target.value)}
           >
-            <option value="all">All Competitions ({leagues.length})</option>
-            {leagues.map((l) => (
+            <option value="all">All Competitions ({availableLeagues.length})</option>
+            {availableLeagues.map((l) => (
               <option key={l.code} value={l.code}>
                 {l.name}
               </option>
@@ -666,41 +956,43 @@ export default function App() {
             <span>{onlyPredicted ? '✓ Predictions Only' : 'Show Predictions Only'}</span>
           </button>
 
-          <button className="refresh-btn" onClick={fetchQueueAndPredictions} disabled={loading}>
+          <button className="refresh-btn" onClick={fetchCloudData} disabled={loading}>
             <span>{loading ? 'Refreshing...' : '↻ Sync Cloud'}</span>
           </button>
         </div>
 
         {/* Settlement Filter Tabs */}
-        <div className="settlement-filter-bar">
-          <span style={{ fontSize: '11px', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.6px', marginRight: '4px' }}>
-            Settlement Status:
-          </span>
-          <button
-            className={`settle-filter-btn ${settlementFilter === 'all' ? 'active' : ''}`}
-            onClick={() => setSettlementFilter('all')}
-          >
-            All Predictions <span className="settle-count-pill">{settlementCounts.total}</span>
-          </button>
-          <button
-            className={`settle-filter-btn ${settlementFilter === 'pending' ? 'active' : ''}`}
-            onClick={() => setSettlementFilter('pending')}
-          >
-            ⏳ Pending <span className="settle-count-pill">{settlementCounts.pending}</span>
-          </button>
-          <button
-            className={`settle-filter-btn won ${settlementFilter === 'won' ? 'active won' : ''}`}
-            onClick={() => setSettlementFilter('won')}
-          >
-            ✓ Won <span className="settle-count-pill">{settlementCounts.won}</span>
-          </button>
-          <button
-            className={`settle-filter-btn lost ${settlementFilter === 'lost' ? 'active lost' : ''}`}
-            onClick={() => setSettlementFilter('lost')}
-          >
-            ✗ Lost (Early/FT) <span className="settle-count-pill">{settlementCounts.lost}</span>
-          </button>
-        </div>
+        {canViewPredictions && (
+          <div className="settlement-filter-bar">
+            <span style={{ fontSize: '11px', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.6px', marginRight: '4px' }}>
+              Settlement Status:
+            </span>
+            <button
+              className={`settle-filter-btn ${settlementFilter === 'all' ? 'active' : ''}`}
+              onClick={() => setSettlementFilter('all')}
+            >
+              All Predictions <span className="settle-count-pill">{settlementCounts.total}</span>
+            </button>
+            <button
+              className={`settle-filter-btn ${settlementFilter === 'pending' ? 'active' : ''}`}
+              onClick={() => setSettlementFilter('pending')}
+            >
+              ⏳ Pending <span className="settle-count-pill">{settlementCounts.pending}</span>
+            </button>
+            <button
+              className={`settle-filter-btn won ${settlementFilter === 'won' ? 'active won' : ''}`}
+              onClick={() => setSettlementFilter('won')}
+            >
+              ✓ Won <span className="settle-count-pill">{settlementCounts.won}</span>
+            </button>
+            <button
+              className={`settle-filter-btn lost ${settlementFilter === 'lost' ? 'active lost' : ''}`}
+              onClick={() => setSettlementFilter('lost')}
+            >
+              ✗ Lost (Early/FT) <span className="settle-count-pill">{settlementCounts.lost}</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Error state */}
@@ -728,6 +1020,7 @@ export default function App() {
             const homeInitial = fixture.home_team_name?.charAt(0)?.toUpperCase() || 'H';
             const awayInitial = fixture.away_team_name?.charAt(0)?.toUpperCase() || 'A';
             const fixturePreds = predsByFixture.get(fixture.id) || [];
+            const fixtureTeasers = teasersByFixture.get(fixture.id) || [];
             const isLive = fixture.status === 'live';
             const isFinished = fixture.status === 'finished';
 
@@ -738,7 +1031,7 @@ export default function App() {
                     {fixture.league_name || fixture.league_code}
                   </span>
                   <span className={`queue-day-pill ${getQueueBadgeClass(fixture.queue_day)}`}>
-                    {fixture.queue_day === 0 ? 'Queue: Today' : `Queue: Day +${fixture.queue_day}`}
+                    {fixture.queue_day === 0 ? 'Queue: Today' : fixture.queue_day < 0 ? 'History' : `Queue: Day +${fixture.queue_day}`}
                   </span>
                 </div>
 
@@ -800,9 +1093,9 @@ export default function App() {
                 <div className="card-bottom">
                   <div className="kickoff-info">
                     <span className="kickoff-time">
-                      {time.date} • {time.local}
+                      {time.date} • {time.local} WAT
                     </span>
-                    <span className="kickoff-utc">{time.utc}</span>
+                    <span className="kickoff-utc">{time.wat}</span>
                   </div>
 
                   <div className="canonical-tag" title={fixture.canonical_key}>
@@ -815,112 +1108,167 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Phase 5 Simulation & Predictions Section */}
-                {fixturePreds.length > 0 ? (
-                  <div className="prediction-panel">
-                    <div className="prediction-panel-header">
-                      <div className="sim-verified-pill">
-                        <span className="dot"></span>
-                        <span>Exact 250,000 Draws Verified</span>
+                {/* Conditional Predictions Section: Full Entitled View vs Locked Teaser View */}
+                {canViewPredictions ? (
+                  /* ================= ENTITLED PREDICTION VIEW ================= */
+                  fixturePreds.length > 0 ? (
+                    <div className="prediction-panel">
+                      <div className="prediction-panel-header">
+                        <div className="sim-verified-pill">
+                          <span className="dot"></span>
+                          <span>Exact 250,000 Draws Verified</span>
+                        </div>
+                        <span className="model-tag">PCG64 • Dixon-Coles</span>
                       </div>
-                      <span className="model-tag">PCG64 • Dixon-Coles</span>
-                    </div>
 
-                    {/* Simulation Job Provenance & Market Sanity */}
-                    {simsByFixture.get(fixture.id) && (() => {
-                      const sim = simsByFixture.get(fixture.id)!;
-                      const tracking = sim.run_tracking || {};
-                      return (
-                        <>
-                          <div className="sim-job-bar">
-                            <span className="sim-job-tag">
-                              ⚡ Job: {tracking.simulation_job_id ? tracking.simulation_job_id.slice(0, 8) + '...' : '250k'}
-                            </span>
-                            <span>• Seed: {tracking.seed ?? 'PCG64'}</span>
-                            <span>• {tracking.duration_ms ? `${tracking.duration_ms}ms` : '<100ms'}</span>
-                            <span className="sanity-tag">✓ 1X2 Sum: {tracking.sanity_report?.sum_1x2 ?? 100}%</span>
-                          </div>
-                          {(tracking.first_half_avg_goals !== undefined || tracking.second_half_avg_goals !== undefined) && (
-                            <div className="ht-stats-bar">
-                              <span>⏱ 1H Goals: <strong>{tracking.first_half_avg_goals ?? '0.00'}</strong></span>
-                              <span>⏱ 2H Goals: <strong>{tracking.second_half_avg_goals ?? '0.00'}</strong></span>
-                              <span className="corners-tag">Corners: MARKET_NOT_READY (0 Fake Data)</span>
-                            </div>
-                          )}
-                        </>
-                      );
-                    })()}
-
-                    <div className="prediction-list">
-                      {fixturePreds.map((p) => {
-                        const pct = (p.probability * 100).toFixed(2);
-                        const isWon = p.settlement_status === 'won';
-                        const isLost = p.settlement_status === 'lost';
-                        const isVoid = p.settlement_status === 'void' || p.settlement_status === 'voided';
-                        const isPending = !p.settlement_status || p.settlement_status === 'pending';
-
+                      {/* Simulation Job Provenance */}
+                      {simsByFixture.get(fixture.id) && (() => {
+                        const sim = simsByFixture.get(fixture.id)!;
+                        const tracking = sim.run_tracking || {};
                         return (
-                          <div key={p.id} className={`prediction-row ${isWon ? 'pred-row-won' : ''} ${isLost ? 'pred-row-lost' : ''}`}>
-                            <div className="pred-row-top">
-                              <div className="pred-market-outcome">
-                                <span className="pred-market-name">{formatMarketName(p.market)}:</span>
-                                <span className="pred-outcome-val">{formatPredictionOutcome(p.prediction)}</span>
-                              </div>
-                              <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
-                                {isWon && <span className="badge-settled-won">✓ WON</span>}
-                                {isLost && <span className="badge-settled-lost">✗ LOST</span>}
-                                {isVoid && <span className="badge-settled-void">⊘ VOID</span>}
-                                {isPending && <span className="badge-settled-pending">⏳ PENDING</span>}
-                                <span className={`tier-badge ${getTierBadgeClass(p.confidence_category)}`}>
-                                  {p.confidence_category}
-                                </span>
-                              </div>
+                          <>
+                            <div className="sim-job-bar">
+                              <span className="sim-job-tag">
+                                ⚡ Job: {tracking.simulation_job_id ? tracking.simulation_job_id.slice(0, 8) + '...' : '250k'}
+                              </span>
+                              <span>• Seed: {tracking.seed ?? 'PCG64'}</span>
+                              <span>• {tracking.duration_ms ? `${tracking.duration_ms}ms` : '<100ms'}</span>
+                              <span className="sanity-tag">✓ 1X2 Sum: {tracking.sanity_report?.sum_1x2 ?? 100}%</span>
                             </div>
-
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                              <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Simulated Probability</span>
-                              <span className="pred-prob-val">{pct}%</span>
-                            </div>
-
-                            <div className="pred-bar-container">
-                              <div
-                                className="pred-bar-fill"
-                                style={{
-                                  width: `${Math.min(100, p.probability * 100)}%`,
-                                  background:
-                                    isWon
-                                      ? '#10b981'
-                                      : isLost
-                                      ? '#ef4444'
-                                      : p.confidence_category === 'BANGER'
-                                      ? 'linear-gradient(90deg, #10b981, #f59e0b)'
-                                      : p.confidence_category === 'TOP PICK'
-                                      ? '#a855f7'
-                                      : p.confidence_category === 'HIGH CONFIDENCE'
-                                      ? '#38bdf8'
-                                      : p.confidence_category === 'MID CONFIDENCE'
-                                      ? '#f59e0b'
-                                      : '#64748b'
-                                }}
-                              />
-                            </div>
-
-                            {/* Settlement Reason & Notes */}
-                            {p.settlement_notes && (
-                              <div className={`settle-reason-tag ${isWon ? 'won' : ''}`}>
-                                <strong>Settlement:</strong> {p.settlement_notes} {p.actual_score ? `• Score: ${p.actual_score}` : ''}
+                            {(tracking.first_half_avg_goals !== undefined || tracking.second_half_avg_goals !== undefined) && (
+                              <div className="ht-stats-bar">
+                                <span>⏱ 1H Goals: <strong>{tracking.first_half_avg_goals ?? '0.00'}</strong></span>
+                                <span>⏱ 2H Goals: <strong>{tracking.second_half_avg_goals ?? '0.00'}</strong></span>
+                                <span className="corners-tag">Corners: MARKET_NOT_READY (0 Fake Data)</span>
                               </div>
                             )}
-                          </div>
+                          </>
                         );
-                      })}
+                      })()}
+
+                      <div className="prediction-list">
+                        {fixturePreds.map((p) => {
+                          const pct = (p.probability * 100).toFixed(2);
+                          const isWon = p.settlement_status === 'won';
+                          const isLost = p.settlement_status === 'lost';
+                          const isVoid = p.settlement_status === 'void' || p.settlement_status === 'voided';
+                          const isPending = !p.settlement_status || p.settlement_status === 'pending';
+
+                          return (
+                            <div key={p.id} className={`prediction-row ${isWon ? 'pred-row-won' : ''} ${isLost ? 'pred-row-lost' : ''}`}>
+                              <div className="pred-row-top">
+                                <div className="pred-market-outcome">
+                                  <span className="pred-market-name">{formatMarketName(p.market)}:</span>
+                                  <span className="pred-outcome-val">{formatPredictionOutcome(p.prediction)}</span>
+                                </div>
+                                <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
+                                  {isWon && <span className="badge-settled-won">✓ WON</span>}
+                                  {isLost && <span className="badge-settled-lost">✗ LOST</span>}
+                                  {isVoid && <span className="badge-settled-void">⊘ VOID</span>}
+                                  {isPending && <span className="badge-settled-pending">⏳ PENDING</span>}
+                                  <span className={`tier-badge ${getTierBadgeClass(p.confidence_category)}`}>
+                                    {p.confidence_category}
+                                  </span>
+                                </div>
+                              </div>
+
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Simulated Probability</span>
+                                <span className="pred-prob-val">{pct}%</span>
+                              </div>
+
+                              <div className="pred-bar-container">
+                                <div
+                                  className="pred-bar-fill"
+                                  style={{
+                                    width: `${Math.min(100, p.probability * 100)}%`,
+                                    background:
+                                      isWon
+                                        ? '#10b981'
+                                        : isLost
+                                        ? '#ef4444'
+                                        : p.confidence_category === 'BANGER'
+                                        ? 'linear-gradient(90deg, #10b981, #f59e0b)'
+                                        : p.confidence_category === 'TOP PICK'
+                                        ? '#a855f7'
+                                        : p.confidence_category === 'HIGH CONFIDENCE'
+                                        ? '#38bdf8'
+                                        : p.confidence_category === 'MID CONFIDENCE'
+                                        ? '#f59e0b'
+                                        : '#64748b'
+                                  }}
+                                />
+                              </div>
+
+                              {/* Settlement Reason & Notes */}
+                              {p.settlement_notes && (
+                                <div className={`settle-reason-tag ${isWon ? 'won' : ''}`}>
+                                  <strong>Settlement:</strong> {p.settlement_notes} {p.actual_score ? `• Score: ${p.actual_score}` : ''}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
-                  </div>
+                  ) : (
+                    <div className="not-ready-panel">
+                      <span className="not-ready-tag">⚙ Features Incomplete • NOT_READY</span>
+                      <span className="not-ready-shield">0 Sims • 0 Predictions (Zero Leakage)</span>
+                    </div>
+                  )
                 ) : (
-                  <div className="not-ready-panel">
-                    <span className="not-ready-tag">⚙ Features Incomplete • NOT_READY</span>
-                    <span className="not-ready-shield">0 Sims • 0 Predictions (Zero Leakage)</span>
-                  </div>
+                  /* ================= VISITOR / FREE TEASER VIEW ================= */
+                  fixtureTeasers.length > 0 ? (
+                    <div className="prediction-teaser-panel">
+                      <div className="prediction-panel-header">
+                        <div className="sim-verified-pill" style={{ background: 'rgba(245, 158, 11, 0.15)', borderColor: 'rgba(245, 158, 11, 0.3)', color: '#fbbf24' }}>
+                          <span>🔒</span>
+                          <span>{fixtureTeasers.length} Model Signal{fixtureTeasers.length > 1 ? 's' : ''} (Locked)</span>
+                        </div>
+                        <span className="model-tag">250k Draws Backed</span>
+                      </div>
+
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '10px' }}>
+                        {fixtureTeasers.map((t) => (
+                          <div key={t.id} className="teaser-locked-box">
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span className="teaser-market-label">{formatMarketName(t.market)}</span>
+                                <span className={`tier-badge ${getTierBadgeClass(t.confidence_category)}`}>
+                                  {t.confidence_category}
+                                </span>
+                              </div>
+                              <div className="teaser-lock-info">
+                                <span className="teaser-lock-icon">🔒</span>
+                                <span>Prediction & Simulated Probability Locked</span>
+                              </div>
+                            </div>
+
+                            <button
+                              type="button"
+                              className="teaser-unlock-btn"
+                              onClick={() => {
+                                if (!currentUser) {
+                                  setAuthModalMode('register');
+                                  setIsAuthModalOpen(true);
+                                } else {
+                                  setIsProfileModalOpen(true);
+                                }
+                              }}
+                            >
+                              {!currentUser ? 'Unlock Signal' : 'Upgrade Plan'}
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="not-ready-panel">
+                      <span className="not-ready-tag">⚙ Features Incomplete • NOT_READY</span>
+                      <span className="not-ready-shield">0 Sims • 0 Predictions (Zero Leakage)</span>
+                    </div>
+                  )
                 )}
               </div>
             );
@@ -928,10 +1276,50 @@ export default function App() {
         </div>
       )}
 
+      {/* Mandatory Legal & Responsible Gaming Banner (Phase 8 Section 15, 26, 44) */}
+      <section className="responsible-gaming-banner">
+        <span className="responsible-tag">18+ ONLY • RESPONSIBLE GAMING NOTICE</span>
+        <p className="responsible-text">
+          Sports betting involves substantial risk of financial loss. JamBets provides statistical models,
+          bivariate Poisson probability distributions, and 250,000 Monte Carlo simulations for educational and informational
+          purposes only. None of the materials or predictions constitutes financial or investment advice.
+          JamBets and its operators assume zero liability for financial losses incurred through reliance on these simulations.
+          Please wager responsibly and within your personal financial limits.
+        </p>
+      </section>
+
       {/* Footer */}
-      <footer style={{ marginTop: 48, textAlign: 'center', color: '#64748b', fontSize: 12, borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: 20 }}>
-        JamBets AI Platform • Automatic 6-Hour Scheduler (Lagos WAT / UTC+1) • Cloud Supabase Distributed Locking • 250,000 Monte Carlo Simulations • Synced: {lastRefreshed.toLocaleTimeString()}
+      <footer style={{ marginTop: 24, textAlign: 'center', color: '#64748b', fontSize: 12, borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: 20 }}>
+        JamBets AI Platform • Automatic 6-Hour Scheduler & 15-Minute Settlement Engine (Lagos WAT / UTC+1) • Cloud Supabase Row-Level Security • 250,000 Monte Carlo Simulations • Synced: {lastRefreshed.toLocaleTimeString()}
       </footer>
+
+      {/* Authentication Modal */}
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+        onAuthSuccess={async () => {
+          const { data } = await supabase.auth.getUser();
+          if (data?.user) {
+            setCurrentUser(data.user);
+            await fetchUserData(data.user.id);
+          }
+        }}
+        initialMode={authModalMode}
+      />
+
+      {/* Profile & Subscriptions Modal */}
+      <ProfileModal
+        isOpen={isProfileModalOpen}
+        onClose={() => setIsProfileModalOpen(false)}
+        profile={profile}
+        subscription={subscription}
+        entitlement={entitlement}
+        onProfileUpdated={async () => {
+          if (currentUser) {
+            await fetchUserData(currentUser.id);
+          }
+        }}
+      />
     </div>
   );
 }

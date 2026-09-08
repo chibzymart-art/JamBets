@@ -183,3 +183,55 @@ export interface SchedulerJob {
   created_at: string;
 }
 
+export type SubscriptionTier = 'visitor' | 'free' | 'standard' | 'bigbang' | 'admin';
+
+export interface UserProfile {
+  id: string;
+  email: string;
+  display_name?: string;
+  role: 'free' | 'standard' | 'bigbang' | 'admin';
+  disclaimer_age_accepted: boolean;
+  disclaimer_age_accepted_at?: string;
+  disclaimer_financial_accepted: boolean;
+  disclaimer_financial_accepted_at?: string;
+  disclaimer_version?: string;
+  created_at: string;
+}
+
+export interface UserSubscription {
+  id: string;
+  user_id: string;
+  tier: 'free' | 'standard' | 'bigbang';
+  status: 'active' | 'cancelled' | 'expired';
+  starts_at: string;
+  expires_at?: string;
+}
+
+export interface UserEntitlement {
+  id: string;
+  user_id: string;
+  tier: 'free' | 'standard' | 'bigbang';
+  can_view_predictions: boolean;
+  can_view_detailed_stats: boolean;
+  can_view_simulation_breakdown: boolean;
+  expires_at?: string;
+}
+
+export interface PredictionTeaser {
+  id: string;
+  fixture_id: string;
+  market: string;
+  confidence_category: ConfidenceTier;
+  publication_status: string;
+  target_kickoff_at: string;
+  is_locked: boolean;
+}
+
+export interface LeagueRecord {
+  id: string;
+  name: string;
+  code: string;
+  country: string;
+  is_active?: boolean;
+  priority?: number;
+}
