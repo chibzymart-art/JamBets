@@ -778,3 +778,248 @@ body {
   border-radius: 6px;
 }
 
+/* Phase 6: Automatic 6-Hour Scheduler Banner (Lagos Timezone / WAT) */
+.scheduler-banner {
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.85), rgba(30, 41, 59, 0.7));
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  border-radius: 16px;
+  padding: 22px 26px;
+  margin-bottom: 24px;
+  backdrop-filter: blur(12px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3), inset 0 0 20px rgba(56, 189, 248, 0.05);
+}
+
+.scheduler-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.scheduler-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.12);
+  padding: 4px 12px;
+  border-radius: 9999px;
+  border: 1px solid rgba(56, 189, 248, 0.3);
+}
+
+.live-radar-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #10b981;
+  box-shadow: 0 0 8px #10b981;
+  animation: pulse-green 2s infinite ease-in-out;
+}
+
+@keyframes pulse-green {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.85); }
+}
+
+.scheduler-title {
+  font-family: var(--font-heading);
+  font-size: 18px;
+  font-weight: 700;
+  color: #f8fafc;
+  margin-top: 6px;
+  letter-spacing: -0.3px;
+}
+
+.scheduler-clock-group {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.clock-card {
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 8px 16px;
+  text-align: right;
+  min-width: 140px;
+}
+
+.countdown-highlight {
+  border-color: rgba(56, 189, 248, 0.35);
+  background: rgba(56, 189, 248, 0.06);
+}
+
+.clock-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+}
+
+.clock-value {
+  font-size: 16px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  color: #f8fafc;
+  margin-top: 2px;
+}
+
+.countdown-highlight .clock-value {
+  color: #38bdf8;
+}
+
+.clock-tz {
+  font-size: 10px;
+  color: #10b981;
+  font-weight: 700;
+  background: rgba(16, 185, 129, 0.15);
+  padding: 2px 5px;
+  border-radius: 4px;
+  margin-left: 3px;
+}
+
+.scheduler-slots-bar {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin: 18px 0 14px;
+}
+
+@media (max-width: 768px) {
+  .scheduler-slots-bar {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.slot-item {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 10px;
+  padding: 10px 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  transition: all 0.25s ease;
+}
+
+.slot-item.slot-active {
+  background: rgba(56, 189, 248, 0.12);
+  border-color: rgba(56, 189, 248, 0.45);
+  box-shadow: 0 0 16px rgba(56, 189, 248, 0.2);
+}
+
+.slot-pill {
+  font-size: 11px;
+  font-weight: 700;
+  color: #94a3b8;
+}
+
+.slot-item.slot-active .slot-pill {
+  color: #38bdf8;
+}
+
+.slot-time {
+  font-size: 12px;
+  font-family: var(--font-mono);
+  color: #cbd5e1;
+}
+
+.scheduler-provenance-card {
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 10px;
+  padding: 14px 18px;
+}
+
+.prov-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+  gap: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  padding-bottom: 8px;
+}
+
+.prov-status-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.status-badge-pill {
+  font-size: 10px;
+  font-weight: 800;
+  padding: 3px 9px;
+  border-radius: 9999px;
+  letter-spacing: 0.6px;
+}
+
+.badge-success {
+  background: rgba(16, 185, 129, 0.2);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.4);
+}
+
+.badge-warn {
+  background: rgba(245, 158, 11, 0.2);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.4);
+}
+
+.prov-idempotency {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+.prov-worker {
+  font-size: 11px;
+  color: #64748b;
+}
+
+.prov-worker code {
+  font-family: var(--font-mono);
+  color: #cbd5e1;
+  background: rgba(255, 255, 255, 0.06);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.prov-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+}
+
+.prov-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.prov-stat-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  color: #64748b;
+  letter-spacing: 0.6px;
+  font-weight: 600;
+}
+
+.prov-stat-val {
+  font-size: 13px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  color: #f8fafc;
+}
+
+

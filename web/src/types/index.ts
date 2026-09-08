@@ -97,3 +97,32 @@ export interface SimulationRecord {
   };
 }
 
+export interface SchedulerJob {
+  id: string;
+  job_type: string;
+  status: 'running' | 'completed' | 'failed' | 'skipped';
+  idempotency_key: string;
+  started_at: string;
+  completed_at?: string;
+  error_message?: string;
+  metadata?: {
+    slot?: number;
+    cycle_id?: string;
+    timezone?: string;
+    slot_time_wat?: string;
+    next_scheduled_wat?: string;
+    worker_id?: string;
+    duration_ms?: number;
+    fixtures_discovered?: number;
+    fixtures_eligible?: number;
+    fixtures_processed?: number;
+    simulations_completed?: number;
+    total_simulated_draws?: number;
+    predictions_published?: number;
+    fixtures_skipped?: number;
+    fixtures_failed?: number;
+    retried_count?: number;
+  };
+  created_at: string;
+}
+

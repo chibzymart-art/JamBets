@@ -32,27 +32,31 @@ class PublicationFilter:
     @classmethod
     def classify_confidence_tier(cls, probability_pct: float) -> Optional[str]:
         """
-        Maps probability percentage to exact JamBets confidence tier.
+        Maps probability percentage (or decimal <= 1.0) to exact JamBets confidence tier.
         Rejects anything < 45.00%.
         """
+        # Automatically handle decimal representation (e.g. 0.85 -> 85.0)
+        pct = probability_pct * 100.0 if 0.0 <= probability_pct <= 1.0 else probability_pct
+
         # Strict non-rounding comparison on exact float
-        if probability_pct < cls.MIN_PROBABILITY:
+        if pct < cls.MIN_PROBABILITY:
             return None
 
-        if 96.00 <= probability_pct <= 100.00:
+        if 96.00 <= pct <= 100.00:
             return "BANGER"
-        elif 90.00 <= probability_pct < 96.00:
+        elif 90.00 <= pct < 96.00:
             return "TOP PICK"
-        elif 83.00 <= probability_pct < 90.00:
+        elif 83.00 <= pct < 90.00:
             return "HIGH CONFIDENCE"
-        elif 70.00 <= probability_pct < 83.00:
+        elif 70.00 <= pct < 83.00:
             return "MID CONFIDENCE"
-        elif 60.00 <= probability_pct < 70.00:
+        elif 60.00 <= pct < 70.00:
             return "LOW CONFIDENCE"
-        elif 45.00 <= probability_pct < 60.00:
+        elif 45.00 <= pct < 60.00:
             return "RISKY"
         else:
             return None
+
 
     classify_tier = classify_confidence_tier
 

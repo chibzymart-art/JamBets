@@ -1,11 +1,12 @@
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from './lib/supabase';
-import { QueueFixture, FootballPrediction, ConfidenceTier, SimulationRecord } from './types';
+import { QueueFixture, FootballPrediction, ConfidenceTier, SimulationRecord, SchedulerJob } from './types';
 
 export default function App() {
   const [fixtures, setFixtures] = useState<QueueFixture[]>([]);
   const [predictions, setPredictions] = useState<FootballPrediction[]>([]);
   const [simulations, setSimulations] = useState<SimulationRecord[]>([]);
+  const [schedulerJob, setSchedulerJob] = useState<SchedulerJob | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedDay, setSelectedDay] = useState<number | 'all'>('all');
@@ -16,12 +17,59 @@ export default function App() {
   const [latencyMs, setLatencyMs] = useState<number | null>(null);
   const [lastRefreshed, setLastRefreshed] = useState<Date>(new Date());
 
+  // Live Lagos Time (WAT / UTC+1)
+  const [watTime, setWatTime] = useState<string>('');
+  const [nextRunCountdown, setNextRunCountdown] = useState<string>('');
+  const [currentSlotIndex, setCurrentSlotIndex] = useState<number>(0);
+
+  useEffect(() => {
+    const updateTime = () => {
+      const now = new Date();
+      const lagosStr = now.toLocaleTimeString('en-GB', {
+        timeZone: 'Africa/Lagos',
+        hour12: false,
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+      });
+      setWatTime(lagosStr);
+
+      const lagosParts = new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Africa/Lagos',
+        hour: 'numeric',
+        minute: 'numeric',
+        second: 'numeric',
+        hour12: false
+      }).formatToParts(now);
+
+      const hour = parseInt(lagosParts.find(p => p.type === 'hour')?.value || '0', 10);
+      const minute = parseInt(lagosParts.find(p => p.type === 'minute')?.value || '0', 10);
+      const second = parseInt(lagosParts.find(p => p.type === 'second')?.value || '0', 10);
+
+      const slot = Math.floor(hour / 6);
+      setCurrentSlotIndex(slot);
+
+      const nextSlotHour = (slot + 1) * 6;
+      let diffSeconds = (nextSlotHour * 3600) - (hour * 3600 + minute * 60 + second);
+      if (diffSeconds < 0) diffSeconds += 24 * 3600;
+
+      const h = Math.floor(diffSeconds / 3600);
+      const m = Math.floor((diffSeconds % 3600) / 60);
+      const s = diffSeconds % 60;
+      setNextRunCountdown(`${String(h).padStart(2, '0')}h ${String(m).padStart(2, '0')}m ${String(s).padStart(2, '0')}s`);
+    };
+
+    updateTime();
+    const timer = setInterval(updateTime, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
   const fetchQueueAndPredictions = async () => {
     setLoading(true);
     setError(null);
     const start = performance.now();
     try {
-      const [queueRes, predRes, simRes] = await Promise.all([
+      const [queueRes, predRes, simRes, jobRes] = await Promise.all([
         supabase
           .from('football_prediction_queue')
           .select('*')
@@ -36,7 +84,13 @@ export default function App() {
           .from('football_simulations')
           .select('*')
           .order('created_at', { ascending: false })
-          .limit(100)
+          .limit(100),
+        supabase
+          .from('system_jobs')
+          .select('*')
+          .eq('job_type', 'prediction_worker')
+          .order('created_at', { ascending: false })
+          .limit(1)
       ]);
 
       const elapsed = Math.round(performance.now() - start);
@@ -48,6 +102,9 @@ export default function App() {
       setFixtures(queueRes.data || []);
       setPredictions(predRes.data || []);
       setSimulations(simRes.data || []);
+      if (jobRes.data && jobRes.data.length > 0) {
+        setSchedulerJob(jobRes.data[0]);
+      }
       setLastRefreshed(new Date());
     } catch (err: any) {
       console.error('Error querying Cloud Supabase:', err);
@@ -253,6 +310,96 @@ export default function App() {
           Every published prediction is backed by <strong>exactly 250,000 Monte Carlo simulations</strong>,
           strict zero future data leakage, and a rigorous <strong>45.00% publication threshold</strong>.
         </p>
+      </section>
+
+      {/* Phase 6: Automatic 6-Hour Scheduler Status (WAT / Lagos Timezone) */}
+      <section className="scheduler-banner">
+        <div className="scheduler-header">
+          <div className="scheduler-title-group">
+            <div className="scheduler-badge">
+              <span className="live-radar-dot"></span>
+              PHASE 6 • AUTOMATIC 6-HOUR SCHEDULER
+            </div>
+            <h3 className="scheduler-title">Lagos Timezone Orchestration (WAT / UTC+1)</h3>
+          </div>
+
+          <div className="scheduler-clock-group">
+            <div className="clock-card">
+              <div className="clock-label">Lagos Local Time</div>
+              <div className="clock-value">{watTime || 'Loading...'} <span className="clock-tz">WAT</span></div>
+            </div>
+            <div className="clock-card countdown-highlight">
+              <div className="clock-label">Next 6h Cycle In</div>
+              <div className="clock-value">{nextRunCountdown || '--h --m --s'}</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Slot Progress Bar */}
+        <div className="scheduler-slots-bar">
+          <div className={`slot-item ${currentSlotIndex === 0 ? 'slot-active' : ''}`}>
+            <div className="slot-pill">Slot 0</div>
+            <div className="slot-time">00:00 WAT</div>
+          </div>
+          <div className={`slot-item ${currentSlotIndex === 1 ? 'slot-active' : ''}`}>
+            <div className="slot-pill">Slot 1</div>
+            <div className="slot-time">06:00 WAT</div>
+          </div>
+          <div className={`slot-item ${currentSlotIndex === 2 ? 'slot-active' : ''}`}>
+            <div className="slot-pill">Slot 2</div>
+            <div className="slot-time">12:00 WAT</div>
+          </div>
+          <div className={`slot-item ${currentSlotIndex === 3 ? 'slot-active' : ''}`}>
+            <div className="slot-pill">Slot 3</div>
+            <div className="slot-time">18:00 WAT</div>
+          </div>
+        </div>
+
+        {/* Latest Cycle Execution Provenance Card */}
+        {schedulerJob && (
+          <div className="scheduler-provenance-card">
+            <div className="prov-header">
+              <div className="prov-status-group">
+                <span className={`status-badge-pill ${schedulerJob.status === 'completed' ? 'badge-success' : 'badge-warn'}`}>
+                  {schedulerJob.status.toUpperCase()}
+                </span>
+                <span className="prov-idempotency">{schedulerJob.idempotency_key}</span>
+              </div>
+              <div className="prov-worker">
+                Worker: <code>{schedulerJob.metadata?.worker_id || 'active'}</code>
+              </div>
+            </div>
+
+            <div className="prov-metrics-grid">
+              <div className="prov-stat">
+                <span className="prov-stat-label">Discovered</span>
+                <span className="prov-stat-val">{schedulerJob.metadata?.fixtures_discovered ?? fixtures.length}</span>
+              </div>
+              <div className="prov-stat">
+                <span className="prov-stat-label">4-Day Horizon Eligible</span>
+                <span className="prov-stat-val">{schedulerJob.metadata?.fixtures_eligible ?? fixtures.length}</span>
+              </div>
+              <div className="prov-stat">
+                <span className="prov-stat-label">250k Simulations</span>
+                <span className="prov-stat-val" style={{ color: '#c084fc' }}>
+                  {schedulerJob.metadata?.simulations_completed ?? 1} (250,000 Draws)
+                </span>
+              </div>
+              <div className="prov-stat">
+                <span className="prov-stat-label">Published (≥45.00%)</span>
+                <span className="prov-stat-val" style={{ color: '#34d399' }}>
+                  {schedulerJob.metadata?.predictions_published ?? predictions.length}
+                </span>
+              </div>
+              <div className="prov-stat">
+                <span className="prov-stat-label">Cycle Duration</span>
+                <span className="prov-stat-val">
+                  {schedulerJob.metadata?.duration_ms ? `${(schedulerJob.metadata.duration_ms / 1000).toFixed(1)}s` : '--'}
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
       </section>
 
       {/* Metric Cards */}
@@ -557,7 +704,7 @@ export default function App() {
 
       {/* Footer */}
       <footer style={{ marginTop: 48, textAlign: 'center', color: '#64748b', fontSize: 12, borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: 20 }}>
-        JamBets AI Platform • Cloud Supabase Authoritative Datastore • 250,000 Monte Carlo Simulations Verified • Synced: {lastRefreshed.toLocaleTimeString()}
+        JamBets AI Platform • Automatic 6-Hour Scheduler (Lagos WAT / UTC+1) • Cloud Supabase Distributed Locking • 250,000 Monte Carlo Simulations • Synced: {lastRefreshed.toLocaleTimeString()}
       </footer>
     </div>
   );

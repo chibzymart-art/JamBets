@@ -124,5 +124,59 @@ class SupabaseClient:
         self.post("football_data_conflicts", payload)
 
 
+    def get_system_job_by_key(self, idempotency_key: str) -> Optional[Dict[str, Any]]:
+        """Retrieves system job record by idempotency key."""
+        records = self.get("system_jobs", {"idempotency_key": f"eq.{idempotency_key}"})
+        return records[0] if records else None
+
+    def create_system_job(self, job_payload: Dict[str, Any]) -> Dict[str, Any]:
+        """Creates a new system job record."""
+        res = self.post("system_jobs", job_payload)
+        return res[0] if res else {}
+
+    def update_system_job(self, job_id: str, updates: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Updates an existing system job record."""
+        records = self.patch("system_jobs", updates, {"id": f"eq.{job_id}"})
+        return records[0] if records else None
+
+    def record_audit_log(
+        self,
+        actor_type: str,
+        action: str,
+        resource_type: Optional[str] = None,
+        resource_id: Optional[str] = None,
+        details: Optional[Dict[str, Any]] = None,
+        actor_id: Optional[str] = None
+    ) -> Optional[Dict[str, Any]]:
+        """Appends an immutable audit log entry."""
+        payload = {
+            "actor_type": actor_type,
+            "actor_id": actor_id or "prediction_scheduler_wat",
+            "action": action,
+            "resource_type": resource_type,
+            "resource_id": resource_id,
+            "details": details or {}
+        }
+        res = self.post("audit_logs", payload)
+        return res[0] if res else None
+
+    def has_unresolved_conflict(self, fixture_id: str) -> bool:
+        """Checks whether a fixture has any unresolved data conflicts."""
+        conflicts = self.get("football_data_conflicts", {
+            "fixture_id": f"eq.{fixture_id}",
+            "resolution": "eq.unresolved",
+            "limit": "1"
+        })
+        return len(conflicts) > 0
+
+    def get_existing_predictions(self, fixture_id: str) -> List[Dict[str, Any]]:
+        """Retrieves existing published predictions for a fixture."""
+        return self.get("football_predictions", {
+            "fixture_id": f"eq.{fixture_id}",
+            "publication_status": "eq.published"
+        })
+
+
 # Alias for explicit domain naming
 CloudSupabaseClient = SupabaseClient
+
