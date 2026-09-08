@@ -29,7 +29,8 @@ class DistributedSchedulerLock:
         self,
         idempotency_key: str,
         timeout_minutes: int = LOCK_TIMEOUT_MINUTES,
-        extra_metadata: Optional[Dict[str, Any]] = None
+        extra_metadata: Optional[Dict[str, Any]] = None,
+        job_type: str = "prediction_worker"
     ) -> Tuple[bool, Optional[str], str]:
         """
         Attempts to acquire the distributed lock for a specific cycle idempotency key.
@@ -50,7 +51,7 @@ class DistributedSchedulerLock:
             if existing is None:
                 # No job exists for this idempotency key — acquire fresh lock
                 payload = {
-                    "job_type": "prediction_worker",
+                    "job_type": job_type,
                     "status": "running",
                     "started_at": now_utc.isoformat(),
                     "idempotency_key": idempotency_key,

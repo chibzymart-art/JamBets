@@ -5,6 +5,15 @@ export interface QueueFixture {
   status: 'scheduled' | 'live' | 'finished' | 'postponed' | 'cancelled';
   queue_day: number;
   in_prediction_queue: boolean;
+  home_score?: number | null;
+  away_score?: number | null;
+  match_minute?: number | null;
+  period?: string | null;
+  half_time_home_score?: number | null;
+  half_time_away_score?: number | null;
+  corners_home?: number | null;
+  corners_away?: number | null;
+  last_synced_at?: string | null;
   postponed_at: string | null;
   cancelled_at: string | null;
   created_at: string;
@@ -46,6 +55,10 @@ export interface FootballPrediction {
   publication_status: string;
   tier_required: string;
   source_data_version: string;
+  settlement_status?: 'pending' | 'won' | 'lost' | 'void' | 'voided' | 'conflict';
+  settled_at?: string | null;
+  settlement_notes?: string | null;
+  actual_score?: string | null;
   metadata?: {
     simulation_job_id?: string;
     probability_pct?: number;
@@ -58,6 +71,50 @@ export interface FootballPrediction {
     lambda_away?: number;
   };
   target_kickoff_at: string;
+  created_at: string;
+}
+
+export interface SettlementRecord {
+  id: string;
+  fixture_id: string;
+  prediction_id: string;
+  market_type: string;
+  target_value: string;
+  status: 'pending' | 'won' | 'lost' | 'void' | 'voided' | 'conflict';
+  settlement_reason?: string;
+  source_confirmation_count: number;
+  sources_verified: string[];
+  settled_at: string;
+}
+
+export interface SettlementJob {
+  id: string;
+  job_type: string;
+  status: 'running' | 'completed' | 'failed' | 'skipped';
+  idempotency_key: string;
+  started_at: string;
+  completed_at?: string;
+  error_message?: string;
+  metadata?: {
+    slot?: number;
+    cycle_id?: string;
+    timezone?: string;
+    slot_time_wat?: string;
+    next_scheduled_wat?: string;
+    worker_id?: string;
+    duration_ms?: number;
+    fixtures_inspected?: number;
+    fixtures_live?: number;
+    fixtures_finished?: number;
+    predictions_inspected?: number;
+    predictions_settled?: number;
+    settled_won?: number;
+    settled_lost?: number;
+    settled_void?: number;
+    predictions_pending?: number;
+    conflicts_detected?: number;
+    errors_count?: number;
+  };
   created_at: string;
 }
 

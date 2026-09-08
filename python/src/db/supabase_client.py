@@ -176,6 +176,81 @@ class SupabaseClient:
             "publication_status": "eq.published"
         })
 
+    def get_unsettled_predictions(self, fixture_id: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Retrieves published predictions that are pending settlement."""
+        params = {
+            "publication_status": "eq.published",
+            "settlement_status": "eq.pending",
+            "order": "target_kickoff_at.asc"
+        }
+        if fixture_id:
+            params["fixture_id"] = f"eq.{fixture_id}"
+        return self.get("football_predictions", params)
+
+    def get_active_fixtures_for_monitoring(self, limit: int = 100) -> List[Dict[str, Any]]:
+        """
+        Retrieves fixtures that need live monitoring or settlement:
+        Matches that are in prediction queue or recently kicked off / live / finished.
+        """
+        params = {
+            "order": "target_kickoff_at.asc",
+            "limit": str(limit)
+        }
+        try:
+            return self.get("football_prediction_queue", params)
+        except Exception:
+            return self.get("football_fixtures", params)
+
+    def update_fixture_live_state(self, fixture_id: str, state_dict: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Updates live score, minute, period, and status for a fixture."""
+        records = self.patch("football_fixtures", state_dict, {"id": f"eq.{fixture_id}"})
+        return records[0] if records else None
+
+    def record_live_events(self, events: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Appends verified live match events to football_live_events."""
+        if not events:
+            return []
+        return self.post("football_live_events", events)
+
+    def record_football_result(self, result_payload: Dict[str, Any]) -> Dict[str, Any]:
+        """Upserts a verified final result record into football_results."""
+        res = self.post("football_results", result_payload, on_conflict="fixture_id")
+        return res[0] if res else {}
+
+    def upsert_settlement(self, settlement_dict: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Persists an immutable settlement record in football_settlements
+        and mirrors settlement_status to football_predictions for client indexing.
+        """
+        res = self.post("football_settlements", settlement_dict, on_conflict="prediction_id")
+
+        # Update mirrored fields on football_predictions
+        pred_id = settlement_dict.get("prediction_id")
+        if pred_id:
+            status_val = settlement_dict.get("status", "pending")
+            # Normalize 'voided' to 'void' if needed
+            if status_val == "voided":
+                status_val = "void"
+
+            self.patch("football_predictions", {
+                "settlement_status": status_val,
+                "settled_at": settlement_dict.get("settlement_timestamp") or datetime.now(timezone.utc).isoformat(),
+                "settlement_notes": settlement_dict.get("notes"),
+                "actual_score": settlement_dict.get("actual_score")
+            }, {"id": f"eq.{pred_id}"})
+
+        return res[0] if res else {}
+
+    def get_settlements_by_fixture(self, fixture_id: str) -> List[Dict[str, Any]]:
+        """Retrieves settlement records for predictions associated with a fixture."""
+        preds = self.get("football_predictions", {"fixture_id": f"eq.{fixture_id}", "select": "id"})
+        if not preds:
+            return []
+        pred_ids = [p["id"] for p in preds]
+        # In PostgREST in syntax: id=in.(id1,id2)
+        id_list = ",".join(pred_ids)
+        return self.get("football_settlements", {"prediction_id": f"in.({id_list})"})
+
 
 # Alias for explicit domain naming
 CloudSupabaseClient = SupabaseClient

@@ -1,17 +1,19 @@
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from './lib/supabase';
-import { QueueFixture, FootballPrediction, ConfidenceTier, SimulationRecord, SchedulerJob } from './types';
+import { QueueFixture, FootballPrediction, ConfidenceTier, SimulationRecord, SchedulerJob, SettlementJob } from './types';
 
 export default function App() {
   const [fixtures, setFixtures] = useState<QueueFixture[]>([]);
   const [predictions, setPredictions] = useState<FootballPrediction[]>([]);
   const [simulations, setSimulations] = useState<SimulationRecord[]>([]);
   const [schedulerJob, setSchedulerJob] = useState<SchedulerJob | null>(null);
+  const [settlementJob, setSettlementJob] = useState<SettlementJob | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedDay, setSelectedDay] = useState<number | 'all'>('all');
   const [selectedLeague, setSelectedLeague] = useState<string>('all');
   const [selectedTier, setSelectedTier] = useState<string>('all');
+  const [settlementFilter, setSettlementFilter] = useState<'all' | 'pending' | 'won' | 'lost' | 'void'>('all');
   const [onlyPredicted, setOnlyPredicted] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [latencyMs, setLatencyMs] = useState<number | null>(null);
@@ -21,6 +23,8 @@ export default function App() {
   const [watTime, setWatTime] = useState<string>('');
   const [nextRunCountdown, setNextRunCountdown] = useState<string>('');
   const [currentSlotIndex, setCurrentSlotIndex] = useState<number>(0);
+  const [slot15Index, setSlot15Index] = useState<number>(0);
+  const [next15RunCountdown, setNext15RunCountdown] = useState<string>('');
 
   useEffect(() => {
     const updateTime = () => {
@@ -46,6 +50,7 @@ export default function App() {
       const minute = parseInt(lagosParts.find(p => p.type === 'minute')?.value || '0', 10);
       const second = parseInt(lagosParts.find(p => p.type === 'second')?.value || '0', 10);
 
+      // Phase 6: 6-Hour Slot (0 to 3)
       const slot = Math.floor(hour / 6);
       setCurrentSlotIndex(slot);
 
@@ -57,6 +62,16 @@ export default function App() {
       const m = Math.floor((diffSeconds % 3600) / 60);
       const s = diffSeconds % 60;
       setNextRunCountdown(`${String(h).padStart(2, '0')}h ${String(m).padStart(2, '0')}m ${String(s).padStart(2, '0')}s`);
+
+      // Phase 7: 15-Minute Slot (0 to 95)
+      const slot15 = hour * 4 + Math.floor(minute / 15);
+      setSlot15Index(slot15);
+
+      const next15Min = (Math.floor(minute / 15) + 1) * 15;
+      const next15DiffSeconds = (next15Min * 60) - (minute * 60 + second);
+      const m15 = Math.floor(next15DiffSeconds / 60);
+      const s15 = next15DiffSeconds % 60;
+      setNext15RunCountdown(`${String(m15).padStart(2, '0')}m ${String(s15).padStart(2, '0')}s`);
     };
 
     updateTime();
@@ -69,7 +84,7 @@ export default function App() {
     setError(null);
     const start = performance.now();
     try {
-      const [queueRes, predRes, simRes, jobRes] = await Promise.all([
+      const [queueRes, predRes, simRes, jobRes, settleJobRes] = await Promise.all([
         supabase
           .from('football_prediction_queue')
           .select('*')
@@ -90,6 +105,12 @@ export default function App() {
           .select('*')
           .eq('job_type', 'prediction_worker')
           .order('created_at', { ascending: false })
+          .limit(1),
+        supabase
+          .from('system_jobs')
+          .select('*')
+          .ilike('idempotency_key', 'settlement-cycle-%')
+          .order('created_at', { ascending: false })
           .limit(1)
       ]);
 
@@ -104,6 +125,9 @@ export default function App() {
       setSimulations(simRes.data || []);
       if (jobRes.data && jobRes.data.length > 0) {
         setSchedulerJob(jobRes.data[0]);
+      }
+      if (settleJobRes.data && settleJobRes.data.length > 0) {
+        setSettlementJob(settleJobRes.data[0]);
       }
       setLastRefreshed(new Date());
     } catch (err: any) {
@@ -167,6 +191,22 @@ export default function App() {
     return Array.from(map.entries()).map(([code, name]) => ({ code, name }));
   }, [fixtures]);
 
+  // Settlement statistics
+  const settlementCounts = useMemo(() => {
+    let won = 0;
+    let lost = 0;
+    let voided = 0;
+    let pending = 0;
+    predictions.forEach((p) => {
+      const st = p.settlement_status || 'pending';
+      if (st === 'won') won++;
+      else if (st === 'lost') lost++;
+      else if (st === 'void' || st === 'voided') voided++;
+      else pending++;
+    });
+    return { won, lost, voided, pending, total: predictions.length };
+  }, [predictions]);
+
   // High confidence count
   const highConfidenceCount = useMemo(() => {
     return predictions.filter((p) =>
@@ -178,6 +218,16 @@ export default function App() {
   const filteredFixtures = useMemo(() => {
     return fixtures.filter((f) => {
       const fixturePreds = predsByFixture.get(f.id) || [];
+
+      // Settlement filter
+      if (settlementFilter !== 'all') {
+        const hasMatchingStatus = fixturePreds.some((p) => {
+          const st = p.settlement_status || 'pending';
+          if (settlementFilter === 'void') return st === 'void' || st === 'voided';
+          return st === settlementFilter;
+        });
+        if (!hasMatchingStatus) return false;
+      }
 
       // Only predicted filter
       if (onlyPredicted && fixturePreds.length === 0) {
@@ -212,7 +262,7 @@ export default function App() {
       }
       return true;
     });
-  }, [fixtures, predsByFixture, selectedDay, selectedLeague, selectedTier, onlyPredicted, searchQuery]);
+  }, [fixtures, predsByFixture, selectedDay, selectedLeague, selectedTier, settlementFilter, onlyPredicted, searchQuery]);
 
   const formatKickoff = (isoString: string) => {
     const d = new Date(isoString);
@@ -402,6 +452,84 @@ export default function App() {
         )}
       </section>
 
+      {/* Phase 7: Automatic 15-Minute Live Data & Settlement Engine Status (WAT / Lagos Timezone) */}
+      <section className="scheduler-banner" style={{ marginTop: '16px', background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(13, 21, 39, 0.95) 100%)', borderColor: 'rgba(16, 185, 129, 0.25)' }}>
+        <div className="scheduler-header">
+          <div className="scheduler-title-group">
+            <div className="scheduler-badge" style={{ background: 'rgba(16, 185, 129, 0.15)', color: '#34d399', borderColor: 'rgba(16, 185, 129, 0.35)' }}>
+              <span className="live-radar-dot" style={{ background: '#10b981' }}></span>
+              PHASE 7 • AUTOMATIC 15-MINUTE SETTLEMENT ENGINE
+            </div>
+            <h3 className="scheduler-title">Deterministic Outcome Verification & Early Settlement (WAT)</h3>
+          </div>
+
+          <div className="scheduler-clock-group">
+            <div className="clock-card" style={{ borderColor: 'rgba(16, 185, 129, 0.2)' }}>
+              <div className="clock-label">Lagos Slot (15-Min)</div>
+              <div className="clock-value">Slot {slot15Index} <span className="clock-tz">/ 96</span></div>
+            </div>
+            <div className="clock-card countdown-highlight" style={{ borderColor: 'rgba(16, 185, 129, 0.4)', background: 'rgba(16, 185, 129, 0.1)' }}>
+              <div className="clock-label">Next 15m Settlement In</div>
+              <div className="clock-value" style={{ color: '#34d399' }}>{next15RunCountdown || '--m --s'}</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Latest Settlement Cycle Execution Provenance Card */}
+        {settlementJob && (
+          <div className="scheduler-provenance-card">
+            <div className="prov-header">
+              <div className="prov-status-group">
+                <span className={`status-badge-pill ${settlementJob.status === 'completed' ? 'badge-success' : 'badge-warn'}`}>
+                  {settlementJob.status.toUpperCase()}
+                </span>
+                <span className="prov-idempotency">{settlementJob.idempotency_key}</span>
+              </div>
+              <div className="prov-worker">
+                Worker: <code>{settlementJob.metadata?.worker_id || 'settlement_engine_v1'}</code>
+              </div>
+            </div>
+
+            <div className="prov-metrics-grid">
+              <div className="prov-stat">
+                <span className="prov-stat-label">Fixtures Monitored</span>
+                <span className="prov-stat-val">{settlementJob.metadata?.fixtures_inspected ?? fixtures.length}</span>
+              </div>
+              <div className="prov-stat">
+                <span className="prov-stat-label">Live In-Play</span>
+                <span className="prov-stat-val" style={{ color: '#ef4444' }}>
+                  {settlementJob.metadata?.fixtures_live ?? fixtures.filter(f => f.status === 'live').length} Active
+                </span>
+              </div>
+              <div className="prov-stat">
+                <span className="prov-stat-label">Full-Time Finished</span>
+                <span className="prov-stat-val" style={{ color: '#10b981' }}>
+                  {settlementJob.metadata?.fixtures_finished ?? fixtures.filter(f => f.status === 'finished').length} Matches
+                </span>
+              </div>
+              <div className="prov-stat">
+                <span className="prov-stat-label">Settled (Early / FT)</span>
+                <span className="prov-stat-val" style={{ color: '#fbbf24' }}>
+                  {settlementCounts.won + settlementCounts.lost} ({settlementCounts.won}W / {settlementCounts.lost}L)
+                </span>
+              </div>
+              <div className="prov-stat">
+                <span className="prov-stat-label">Still Pending</span>
+                <span className="prov-stat-val" style={{ color: '#38bdf8' }}>
+                  {settlementCounts.pending}
+                </span>
+              </div>
+              <div className="prov-stat">
+                <span className="prov-stat-label">Source Conflicts</span>
+                <span className="prov-stat-val" style={{ color: settlementJob.metadata?.conflicts_detected ? '#f43f5e' : '#34d399' }}>
+                  {settlementJob.metadata?.conflicts_detected ?? 0} (Zero Drift)
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+      </section>
+
       {/* Metric Cards */}
       <div className="metrics-grid">
         <div className="metric-card">
@@ -420,6 +548,16 @@ export default function App() {
           <div className="metric-label">High Confidence / Top Picks</div>
           <div className="metric-value" style={{ color: '#38bdf8' }}>{highConfidenceCount}</div>
           <div className="metric-sub">≥83% Strict Probability</div>
+        </div>
+
+        <div className="metric-card">
+          <div className="metric-label">Settled Predictions</div>
+          <div className="metric-value" style={{ color: '#fbbf24' }}>
+            {settlementCounts.won + settlementCounts.lost}
+          </div>
+          <div className="metric-sub">
+            <span style={{ color: '#10b981' }}>{settlementCounts.won} Won</span> • <span style={{ color: '#f87171' }}>{settlementCounts.lost} Lost</span>
+          </div>
         </div>
 
         <div className="metric-card">
@@ -532,6 +670,37 @@ export default function App() {
             <span>{loading ? 'Refreshing...' : '↻ Sync Cloud'}</span>
           </button>
         </div>
+
+        {/* Settlement Filter Tabs */}
+        <div className="settlement-filter-bar">
+          <span style={{ fontSize: '11px', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.6px', marginRight: '4px' }}>
+            Settlement Status:
+          </span>
+          <button
+            className={`settle-filter-btn ${settlementFilter === 'all' ? 'active' : ''}`}
+            onClick={() => setSettlementFilter('all')}
+          >
+            All Predictions <span className="settle-count-pill">{settlementCounts.total}</span>
+          </button>
+          <button
+            className={`settle-filter-btn ${settlementFilter === 'pending' ? 'active' : ''}`}
+            onClick={() => setSettlementFilter('pending')}
+          >
+            ⏳ Pending <span className="settle-count-pill">{settlementCounts.pending}</span>
+          </button>
+          <button
+            className={`settle-filter-btn won ${settlementFilter === 'won' ? 'active won' : ''}`}
+            onClick={() => setSettlementFilter('won')}
+          >
+            ✓ Won <span className="settle-count-pill">{settlementCounts.won}</span>
+          </button>
+          <button
+            className={`settle-filter-btn lost ${settlementFilter === 'lost' ? 'active lost' : ''}`}
+            onClick={() => setSettlementFilter('lost')}
+          >
+            ✗ Lost (Early/FT) <span className="settle-count-pill">{settlementCounts.lost}</span>
+          </button>
+        </div>
       </div>
 
       {/* Error state */}
@@ -545,12 +714,12 @@ export default function App() {
       {loading ? (
         <div className="empty-state">
           <div className="empty-title">Querying Cloud Supabase...</div>
-          <div className="empty-desc">Fetching authoritative prediction queue and verified 250k simulations from vepcoopomlfjageijsew.supabase.co</div>
+          <div className="empty-desc">Fetching authoritative prediction queue, verified 250k simulations, and 15m settlement states from vepcoopomlfjageijsew.supabase.co</div>
         </div>
       ) : filteredFixtures.length === 0 ? (
         <div className="empty-state">
           <div className="empty-title">No Fixtures Found</div>
-          <div className="empty-desc">No fixtures match the selected queue day, competition, and confidence filters.</div>
+          <div className="empty-desc">No fixtures match the selected queue day, competition, settlement, and confidence filters.</div>
         </div>
       ) : (
         <div className="fixtures-grid">
@@ -559,9 +728,11 @@ export default function App() {
             const homeInitial = fixture.home_team_name?.charAt(0)?.toUpperCase() || 'H';
             const awayInitial = fixture.away_team_name?.charAt(0)?.toUpperCase() || 'A';
             const fixturePreds = predsByFixture.get(fixture.id) || [];
+            const isLive = fixture.status === 'live';
+            const isFinished = fixture.status === 'finished';
 
             return (
-              <div key={fixture.id} className="fixture-card">
+              <div key={fixture.id} className={`fixture-card ${isLive ? 'fixture-card-live' : ''}`}>
                 <div className="card-top">
                   <span className="league-badge">
                     {fixture.league_name || fixture.league_code}
@@ -592,6 +763,39 @@ export default function App() {
                     </div>
                   </div>
                 </div>
+
+                {/* Phase 7: Live Match State Banner */}
+                {isLive && (
+                  <div className="live-match-banner">
+                    <div className="live-score-pill">
+                      <span className="live-indicator">
+                        <span className="live-pulse-dot"></span>
+                        LIVE {fixture.match_minute ? `${fixture.match_minute}'` : (fixture.period || '')}
+                      </span>
+                      {fixture.half_time_home_score !== null && fixture.half_time_away_score !== null && (
+                        <span className="ht-score-sub">(HT {fixture.half_time_home_score}-{fixture.half_time_away_score})</span>
+                      )}
+                    </div>
+                    <div className="match-score-display">
+                      {fixture.home_score ?? 0} - {fixture.away_score ?? 0}
+                    </div>
+                  </div>
+                )}
+
+                {/* Phase 7: Finished Match State Banner */}
+                {isFinished && (
+                  <div className="finished-match-banner">
+                    <div className="live-score-pill">
+                      <span className="finished-indicator">FULL TIME</span>
+                      {fixture.half_time_home_score !== null && fixture.half_time_away_score !== null && (
+                        <span className="ht-score-sub">(HT {fixture.half_time_home_score}-{fixture.half_time_away_score})</span>
+                      )}
+                    </div>
+                    <div className="match-score-display">
+                      {fixture.home_score ?? 0} - {fixture.away_score ?? 0}
+                    </div>
+                  </div>
+                )}
 
                 <div className="card-bottom">
                   <div className="kickoff-info">
@@ -650,16 +854,27 @@ export default function App() {
                     <div className="prediction-list">
                       {fixturePreds.map((p) => {
                         const pct = (p.probability * 100).toFixed(2);
+                        const isWon = p.settlement_status === 'won';
+                        const isLost = p.settlement_status === 'lost';
+                        const isVoid = p.settlement_status === 'void' || p.settlement_status === 'voided';
+                        const isPending = !p.settlement_status || p.settlement_status === 'pending';
+
                         return (
-                          <div key={p.id} className="prediction-row">
+                          <div key={p.id} className={`prediction-row ${isWon ? 'pred-row-won' : ''} ${isLost ? 'pred-row-lost' : ''}`}>
                             <div className="pred-row-top">
                               <div className="pred-market-outcome">
                                 <span className="pred-market-name">{formatMarketName(p.market)}:</span>
                                 <span className="pred-outcome-val">{formatPredictionOutcome(p.prediction)}</span>
                               </div>
-                              <span className={`tier-badge ${getTierBadgeClass(p.confidence_category)}`}>
-                                {p.confidence_category}
-                              </span>
+                              <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
+                                {isWon && <span className="badge-settled-won">✓ WON</span>}
+                                {isLost && <span className="badge-settled-lost">✗ LOST</span>}
+                                {isVoid && <span className="badge-settled-void">⊘ VOID</span>}
+                                {isPending && <span className="badge-settled-pending">⏳ PENDING</span>}
+                                <span className={`tier-badge ${getTierBadgeClass(p.confidence_category)}`}>
+                                  {p.confidence_category}
+                                </span>
+                              </div>
                             </div>
 
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -673,7 +888,11 @@ export default function App() {
                                 style={{
                                   width: `${Math.min(100, p.probability * 100)}%`,
                                   background:
-                                    p.confidence_category === 'BANGER'
+                                    isWon
+                                      ? '#10b981'
+                                      : isLost
+                                      ? '#ef4444'
+                                      : p.confidence_category === 'BANGER'
                                       ? 'linear-gradient(90deg, #10b981, #f59e0b)'
                                       : p.confidence_category === 'TOP PICK'
                                       ? '#a855f7'
@@ -685,6 +904,13 @@ export default function App() {
                                 }}
                               />
                             </div>
+
+                            {/* Settlement Reason & Notes */}
+                            {p.settlement_notes && (
+                              <div className={`settle-reason-tag ${isWon ? 'won' : ''}`}>
+                                <strong>Settlement:</strong> {p.settlement_notes} {p.actual_score ? `• Score: ${p.actual_score}` : ''}
+                              </div>
+                            )}
                           </div>
                         );
                       })}
