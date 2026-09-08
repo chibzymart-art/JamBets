@@ -160,3 +160,21 @@ def build_canonical_fixture(raw: RawFixturePayload) -> CanonicalFixture:
         agreement_count=1,
         has_conflict=False
     )
+
+
+class CanonicalIdentityResolver:
+    """Wrapper class providing identity resolution methods."""
+
+    @staticmethod
+    def normalize_team_name(name: str) -> str:
+        return normalize_team_name(name)
+
+    @staticmethod
+    def generate_canonical_key(league_code: str, home_name: str, away_name: str, kickoff_at: datetime) -> str:
+        home_norm = normalize_team_name(home_name)
+        away_norm = normalize_team_name(away_name)
+        return generate_canonical_key(league_code, home_norm, away_norm, kickoff_at)
+
+    @staticmethod
+    def build_canonical_fixture(raw: RawFixturePayload) -> CanonicalFixture:
+        return build_canonical_fixture(raw)

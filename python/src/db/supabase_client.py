@@ -69,8 +69,36 @@ class SupabaseClient:
         return created[0]["id"]
 
     def upsert_fixture(self, fixture_payload: Dict[str, Any]) -> Dict[str, Any]:
-        """Upserts a canonical fixture record."""
-        return self.post("football_fixtures", fixture_payload)
+        """
+        Upserts a canonical fixture record using canonical_key for deduplication.
+        If canonical_key exists in database, updates the fixture; otherwise inserts.
+        """
+        canonical_key = fixture_payload.get("canonical_key")
+        if canonical_key:
+            existing = self.get("football_fixtures", {"canonical_key": f"eq.{canonical_key}", "select": "id"})
+            if existing:
+                fixture_id = existing[0]["id"]
+                # Update existing record
+                update_url = f"{self.base_url}/football_fixtures?id=eq.{fixture_id}"
+                resp = self.client.patch(update_url, json=fixture_payload, headers={"Prefer": "return=representation"})
+                resp.raise_for_status()
+                return resp.json()[0]
+
+        return self.post("football_fixtures", fixture_payload)[0]
+
+    def get_prediction_queue(self, queue_day: Optional[int] = None, limit: int = 50) -> List[Dict[str, Any]]:
+        """
+        Retrieves fixtures currently in the four-day prediction queue.
+        Optionally filters by queue_day (0 to 4).
+        """
+        params: Dict[str, Any] = {
+            "select": "*",
+            "order": "target_kickoff_at.asc",
+            "limit": str(limit)
+        }
+        if queue_day is not None:
+            params["queue_day"] = f"eq.{queue_day}"
+        return self.get("football_prediction_queue", params)
 
     def record_fixture_source(self, fixture_id: str, source_id: str, provider_event_id: str, provider_data: Optional[Dict[str, Any]] = None) -> None:
         """Records source provenance for a fixture."""

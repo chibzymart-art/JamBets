@@ -5,7 +5,7 @@ Strictly classifies as VERIFIED on agreement, or CONFLICT on discrepancy.
 """
 
 from datetime import datetime, timezone
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any, Tuple, Optional
 from python.src.config import KICKOFF_TOLERANCE_MINUTES
 from python.src.football.models import CanonicalFixture, RawFixturePayload, DataFreshnessState, FixtureStatus
 
@@ -72,3 +72,19 @@ def merge_and_validate_fixture(
     canonical.freshness_state = DataFreshnessState.VERIFIED
     canonical.conflict_details = None
     return canonical
+
+
+class MultiSourceValidator:
+    """Class wrapper for multi-source validation and conflict detection."""
+
+    @staticmethod
+    def merge_and_validate(canonical: CanonicalFixture, incoming: RawFixturePayload) -> CanonicalFixture:
+        return merge_and_validate_fixture(canonical, incoming)
+
+    @staticmethod
+    def validate_fixture_pair(payload_a: RawFixturePayload, payload_b: RawFixturePayload) -> Tuple[CanonicalFixture, bool, Optional[Dict[str, Any]]]:
+        from python.src.football.identity import build_canonical_fixture
+        canon = build_canonical_fixture(payload_a)
+        merged = merge_and_validate_fixture(canon, payload_b)
+        is_valid = not merged.has_conflict
+        return merged, is_valid, merged.conflict_details

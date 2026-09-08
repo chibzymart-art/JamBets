@@ -116,19 +116,33 @@ class AcquisitionPipeline:
                 home_team_id = self.supabase.upsert_team(canonical.canonical_home_team)
                 away_team_id = self.supabase.upsert_team(canonical.canonical_away_team)
 
-                # Upsert fixture in Cloud Supabase
+                # Use FixtureEngine to compute 4-day prediction queue window & lifecycle metadata
+                from python.src.football.fixture_engine import FixtureEngine
+                engine = FixtureEngine()
+                queue_res = engine.compute_queue_window(canonical.kickoff_utc, now_utc)
+                in_queue = queue_res.is_eligible and (canonical.status.value == "scheduled")
+                queue_day = queue_res.queue_day if in_queue else None
+
+                # Upsert fixture in Cloud Supabase with canonical key and queue attributes
                 fixture_payload = {
                     "league_id": league_db_id,
                     "home_team_id": home_team_id,
                     "away_team_id": away_team_id,
                     "target_kickoff_at": canonical.kickoff_utc.isoformat(),
-                    "status": canonical.status.value
+                    "status": canonical.status.value,
+                    "canonical_key": canonical.canonical_key,
+                    "in_prediction_queue": in_queue,
+                    "queue_day": queue_day,
+                    "metadata": {
+                        "verified": not canonical.has_conflict,
+                        "queue_reason": queue_res.reason,
+                    }
                 }
                 
                 try:
-                    created_fixtures = self.supabase.upsert_fixture(fixture_payload)
-                    if created_fixtures:
-                        fixture_id = created_fixtures[0]["id"]
+                    created_fixture = self.supabase.upsert_fixture(fixture_payload)
+                    if created_fixture:
+                        fixture_id = created_fixture["id"] if isinstance(created_fixture, dict) else created_fixture[0]["id"]
                         metrics["supabase_records_written"] += 1
 
                         # Store Provenance for each source contributing to this fixture

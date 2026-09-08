@@ -59,4 +59,13 @@ def validate_not_stale(payload: RawFixturePayload) -> None:
     """Enforces strict rejection of stale payloads."""
     state, reason = evaluate_freshness(payload)
     if state == DataFreshnessState.STALE:
-        raise StaleDataError(f"Stale data rejected: {reason}")
+        raise StaleDataError(f"Rejected stale data: {reason}")
+
+
+class StaleDataChecker:
+    """Class wrapper for stale data checks."""
+
+    @staticmethod
+    def is_stale(payload: RawFixturePayload, now_utc: Optional[datetime] = None) -> Tuple[bool, DataFreshnessState]:
+        state, _ = evaluate_freshness(payload, now_utc)
+        return (state == DataFreshnessState.STALE), state

@@ -28,12 +28,15 @@ class DataFreshnessState(str, Enum):
     CONFLICTING = "conflicting"
 
 
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+
 class RawFixturePayload(BaseModel):
     """Raw extraction from an external data source adapter."""
     source_name: str
     provider_event_id: str
     league_code: str
-    season: str
+    season: str = "2026/2027"
     home_team_raw: str
     away_team_raw: str
     kickoff_time: datetime
@@ -43,6 +46,32 @@ class RawFixturePayload(BaseModel):
     venue: Optional[str] = None
     retrieved_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     raw_metadata: Dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="before")
+    @classmethod
+    def handle_aliases(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            if "home_team_name" in data and "home_team_raw" not in data:
+                data["home_team_raw"] = data["home_team_name"]
+            if "away_team_name" in data and "away_team_raw" not in data:
+                data["away_team_raw"] = data["away_team_name"]
+            if "scheduled_kickoff" in data and "kickoff_time" not in data:
+                data["kickoff_time"] = data["scheduled_kickoff"]
+            if "season" not in data:
+                data["season"] = "2026/2027"
+        return data
+
+    @property
+    def home_team_name(self) -> str:
+        return self.home_team_raw
+
+    @property
+    def away_team_name(self) -> str:
+        return self.away_team_raw
+
+    @property
+    def scheduled_kickoff(self) -> datetime:
+        return self.kickoff_time
 
 
 class CanonicalFixture(BaseModel):
