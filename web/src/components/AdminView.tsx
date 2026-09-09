@@ -446,7 +446,7 @@ export const AdminView: React.FC<AdminViewProps> = ({ currentUserProfile, onBack
                 </div>
               </div>
               <div className="mt-4 pt-3 border-t border-slate-100 text-[11px] text-slate-500">
-                Sources: {health.sources?.length || 3} active feeds monitored
+                Sources: {health.sources?.length ?? 0} active feeds monitored
               </div>
             </div>
 

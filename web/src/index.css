@@ -431,6 +431,105 @@ body {
   border-color: rgba(255, 255, 255, 0.2);
 }
 
+.sport-card.coming-soon {
+  opacity: 0.85;
+  background: #fafafa;
+}
+
+.sport-card.coming-soon:hover {
+  border-color: var(--border-subtle);
+  transform: none;
+}
+
+.sport-count-pill.coming-soon-pill {
+  background: #f1f5f9;
+  color: #64748b;
+  font-family: var(--font-body);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+/* =====================================================================
+   CLEAN HUMAN COMING SOON PANEL (UNAVAILABLE SPORTS)
+   ===================================================================== */
+.coming-soon-panel {
+  background: #ffffff;
+  border: 1px solid var(--border-subtle);
+  border-radius: 18px;
+  padding: 60px 24px;
+  text-align: center;
+  box-shadow: var(--shadow-xs);
+  margin-bottom: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.coming-soon-icon-circle {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: #f8fafc;
+  border: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 36px;
+  margin-bottom: 16px;
+}
+
+.coming-soon-title {
+  font-family: var(--font-heading);
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+
+.coming-soon-status-badge {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 9999px;
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  color: #475569;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  margin-bottom: 12px;
+}
+
+.coming-soon-desc {
+  font-size: 14px;
+  color: var(--text-secondary);
+  max-width: 480px;
+  margin: 0 auto 24px;
+  line-height: 1.5;
+}
+
+.coming-soon-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  border-radius: 10px;
+  background: #064e3b;
+  color: #ffffff;
+  border: 1px solid #047857;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.coming-soon-back-btn:hover {
+  background: #065f46;
+}
+
 /* =====================================================================
    DAILY VERIFIED SCORECARD SECTION
    ===================================================================== */

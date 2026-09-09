@@ -46,8 +46,21 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Sports Category Selector
+  interface SportAvailability {
+    isAvailable: boolean;
+    fixtureCount: number;
+    leagueCount: number;
+  }
+
+  // Sports Category Selector with Cloud Supabase Dynamic Availability
   const [selectedSport, setSelectedSport] = useState<string>('football');
+  const [sportsState, setSportsState] = useState<Record<string, SportAvailability>>({
+    football: { isAvailable: false, fixtureCount: 0, leagueCount: 0 },
+    american_football: { isAvailable: false, fixtureCount: 0, leagueCount: 0 },
+    basketball: { isAvailable: false, fixtureCount: 0, leagueCount: 0 },
+    tennis: { isAvailable: false, fixtureCount: 0, leagueCount: 0 },
+    cricket: { isAvailable: false, fixtureCount: 0, leagueCount: 0 }
+  });
 
   // Date Navigation State
   const [selectedDay, setSelectedDay] = useState<number | 'history' | 'yesterday' | 'all'>(0);
@@ -190,8 +203,9 @@ export default function App() {
     setError(null);
     const start = performance.now();
     try {
+      // Authoritative prediction queue with live match scores
       const queueQuery = supabase
-        .from('football_fixture_queue')
+        .from('football_prediction_queue')
         .select('*')
         .order('target_kickoff_at', { ascending: true });
 
@@ -230,22 +244,58 @@ export default function App() {
             .select('*')
             .eq('publication_status', 'published');
 
-      const [queueRes, simRes, leagueRes, jobRes, settleJobRes, predOrTeaserRes] = await Promise.all([
+      // Dynamically verify other candidate sports against Cloud Supabase
+      const otherCandidateSports = ['american_football', 'basketball', 'tennis', 'cricket'];
+      const otherSportsPromises = otherCandidateSports.map(async (sp) => {
+        try {
+          const { count, error: cErr } = await supabase
+            .from(`${sp}_fixtures`)
+            .select('*', { count: 'exact', head: true });
+          const hasData = !cErr && typeof count === 'number' && count > 0;
+          return {
+            sport: sp,
+            isAvailable: hasData,
+            fixtureCount: hasData ? count : 0,
+            leagueCount: 0
+          };
+        } catch {
+          return {
+            sport: sp,
+            isAvailable: false,
+            fixtureCount: 0,
+            leagueCount: 0
+          };
+        }
+      });
+
+      const [
+        queueRes,
+        simRes,
+        leagueRes,
+        jobRes,
+        settleJobRes,
+        predOrTeaserRes,
+        ...otherSportsResults
+      ] = await Promise.all([
         queueQuery,
         simQuery,
         leagueQuery,
         jobQuery,
         settleJobQuery,
-        predOrTeaserQuery
+        predOrTeaserQuery,
+        ...otherSportsPromises
       ]);
 
       const elapsed = Math.round(performance.now() - start);
       setLatencyMs(elapsed);
 
       if (queueRes.error) throw queueRes.error;
-      setFixtures(queueRes.data || []);
+      const returnedFixtures: QueueFixture[] = queueRes.data || [];
+      const returnedLeagues: LeagueRecord[] = leagueRes.data || [];
+
+      setFixtures(returnedFixtures);
       setSimulations(simRes.data || []);
-      if (leagueRes.data) setLeaguesList(leagueRes.data || []);
+      setLeaguesList(returnedLeagues);
       if (jobRes.data && jobRes.data.length > 0) setSchedulerJob(jobRes.data[0]);
       if (settleJobRes.data && settleJobRes.data.length > 0) setSettlementJob(settleJobRes.data[0]);
 
@@ -257,6 +307,24 @@ export default function App() {
         setTeasers(predOrTeaserRes.data || []);
       }
 
+      // Update dynamic sports state based exclusively on Cloud Supabase results
+      const nextSportsState: Record<string, SportAvailability> = {
+        football: {
+          isAvailable: returnedFixtures.length > 0,
+          fixtureCount: returnedFixtures.length,
+          leagueCount: returnedLeagues.length
+        }
+      };
+
+      otherSportsResults.forEach((r) => {
+        nextSportsState[r.sport] = {
+          isAvailable: r.isAvailable,
+          fixtureCount: r.fixtureCount,
+          leagueCount: r.leagueCount
+        };
+      });
+
+      setSportsState(nextSportsState);
       setLastRefreshed(new Date());
     } catch (err: any) {
       console.error('Error querying Cloud Supabase:', err);
@@ -320,7 +388,7 @@ export default function App() {
     return counts;
   }, [fixtures]);
 
-  // Dynamic Leagues for filter (enriched with football_leagues)
+  // Dynamic Leagues for filter (strictly leagues with active Cloud Supabase fixtures)
   const availableLeagues = useMemo(() => {
     const map = new Map<string, { code: string; name: string; count: number }>();
     leaguesList.forEach((l) => {
@@ -339,10 +407,80 @@ export default function App() {
         map.set(f.league_code, item);
       }
     });
-    return Array.from(map.values()).sort((a, b) => b.count - a.count);
+    return Array.from(map.values())
+      .filter((l) => l.count > 0)
+      .sort((a, b) => b.count - a.count);
   }, [leaguesList, fixtures]);
 
-  // Comprehensive Metrics Calculations
+  // Dynamic Sports Registry with Cloud Supabase Availability
+  const sportsList = useMemo(() => [
+    {
+      id: 'football',
+      name: 'Football',
+      icon: '⚽',
+      isAvailable: sportsState.football?.isAvailable ?? false,
+      fixtureCount: sportsState.football?.fixtureCount ?? 0,
+      leagueCount: sportsState.football?.leagueCount ?? 0,
+      statusLabel: sportsState.football?.isAvailable ? 'Available' : 'Coming Soon',
+      subtext: sportsState.football?.isAvailable
+        ? `${availableLeagues.length} Available League${availableLeagues.length === 1 ? '' : 's'}`
+        : 'Coming Soon'
+    },
+    {
+      id: 'american_football',
+      name: 'American Football',
+      icon: '🏈',
+      isAvailable: sportsState.american_football?.isAvailable ?? false,
+      fixtureCount: sportsState.american_football?.fixtureCount ?? 0,
+      leagueCount: sportsState.american_football?.leagueCount ?? 0,
+      statusLabel: sportsState.american_football?.isAvailable ? 'Available' : 'Coming Soon',
+      subtext: sportsState.american_football?.isAvailable
+        ? `${sportsState.american_football.leagueCount} Available Leagues`
+        : 'Coming Soon'
+    },
+    {
+      id: 'basketball',
+      name: 'Basketball',
+      icon: '🏀',
+      isAvailable: sportsState.basketball?.isAvailable ?? false,
+      fixtureCount: sportsState.basketball?.fixtureCount ?? 0,
+      leagueCount: sportsState.basketball?.leagueCount ?? 0,
+      statusLabel: sportsState.basketball?.isAvailable ? 'Available' : 'Coming Soon',
+      subtext: sportsState.basketball?.isAvailable
+        ? `${sportsState.basketball.leagueCount} Available Leagues`
+        : 'Coming Soon'
+    },
+    {
+      id: 'tennis',
+      name: 'Tennis',
+      icon: '🎾',
+      isAvailable: sportsState.tennis?.isAvailable ?? false,
+      fixtureCount: sportsState.tennis?.fixtureCount ?? 0,
+      leagueCount: sportsState.tennis?.leagueCount ?? 0,
+      statusLabel: sportsState.tennis?.isAvailable ? 'Available' : 'Coming Soon',
+      subtext: sportsState.tennis?.isAvailable
+        ? `${sportsState.tennis.leagueCount} Available Leagues`
+        : 'Coming Soon'
+    },
+    {
+      id: 'cricket',
+      name: 'Cricket',
+      icon: '🏏',
+      isAvailable: sportsState.cricket?.isAvailable ?? false,
+      fixtureCount: sportsState.cricket?.fixtureCount ?? 0,
+      leagueCount: sportsState.cricket?.leagueCount ?? 0,
+      statusLabel: sportsState.cricket?.isAvailable ? 'Available' : 'Coming Soon',
+      subtext: sportsState.cricket?.isAvailable
+        ? `${sportsState.cricket.leagueCount} Available Leagues`
+        : 'Coming Soon'
+    }
+  ], [sportsState, availableLeagues]);
+
+  const currentSportObj = useMemo(() => {
+    return sportsList.find((s) => s.id === selectedSport) || sportsList[0];
+  }, [sportsList, selectedSport]);
+
+  // Comprehensive Metrics Calculations (Strictly Cloud Supabase Derived — Zero Fallbacks)
   const scorecardStats = useMemo(() => {
     let allWon = 0;
     let allLost = 0;
@@ -384,13 +522,13 @@ export default function App() {
     });
 
     const allDecided = allWon + allLost;
-    const allWinRate = allDecided > 0 ? Math.round((allWon / allDecided) * 100) : 100;
+    const allWinRate = allDecided > 0 ? Math.round((allWon / allDecided) * 100) : 0;
 
     const bangerDecided = bangerWon + bangerLost;
-    const bangerWinRate = bangerDecided > 0 ? Math.round((bangerWon / bangerDecided) * 100) : 100;
+    const bangerWinRate = bangerDecided > 0 ? Math.round((bangerWon / bangerDecided) * 100) : 0;
 
     const topPickDecided = topPickWon + topPickLost;
-    const topPickWinRate = topPickDecided > 0 ? Math.round((topPickWon / topPickDecided) * 100) : 100;
+    const topPickWinRate = topPickDecided > 0 ? Math.round((topPickWon / topPickDecided) * 100) : 0;
 
     const liveCount = fixtures.filter((f) => f.status === 'live').length;
     const settledMatchesCount = fixtures.filter((f) => f.status === 'finished').length;
@@ -406,11 +544,13 @@ export default function App() {
       bangerWon,
       bangerLost,
       bangerPending,
+      bangerDecided,
       bangerWinRate,
       topPickTotal,
       topPickWon,
       topPickLost,
       topPickPending,
+      topPickDecided,
       topPickWinRate,
       liveCount,
       settledMatchesCount
@@ -760,84 +900,52 @@ export default function App() {
       <main className="app-container">
         {/* 2. TOP SPORT CATEGORIES HORIZONTAL SELECTOR BAR */}
         <div className="sport-categories-bar">
-          <div
-            className={`sport-card ${selectedSport === 'football' ? 'active' : ''}`}
-            onClick={() => setSelectedSport('football')}
-          >
-            <div className="sport-card-left">
-              <div className="sport-icon-circle">⚽</div>
-              <div className="sport-info-titles">
-                <span className="sport-title-text">Football</span>
-                <span className="sport-sub-text">16 European & World Leagues</span>
+          {sportsList.map((sp) => (
+            <div
+              key={sp.id}
+              className={`sport-card ${selectedSport === sp.id ? 'active' : ''} ${!sp.isAvailable ? 'coming-soon' : ''}`}
+              onClick={() => setSelectedSport(sp.id)}
+            >
+              <div className="sport-card-left">
+                <div className="sport-icon-circle">{sp.icon}</div>
+                <div className="sport-info-titles">
+                  <span className="sport-title-text">{sp.name}</span>
+                  <span className="sport-sub-text">{sp.subtext}</span>
+                </div>
               </div>
+              <span className={`sport-count-pill ${!sp.isAvailable ? 'coming-soon-pill' : ''}`}>
+                {sp.isAvailable ? sp.fixtureCount : 0}
+              </span>
             </div>
-            <span className="sport-count-pill">{fixtures.length || 218}</span>
-          </div>
-
-          <div
-            className={`sport-card ${selectedSport === 'american_football' ? 'active' : ''}`}
-            onClick={() => setSelectedSport('american_football')}
-          >
-            <div className="sport-card-left">
-              <div className="sport-icon-circle">🏈</div>
-              <div className="sport-info-titles">
-                <span className="sport-title-text">American Football</span>
-                <span className="sport-sub-text">NFL & NCAA Football</span>
-              </div>
-            </div>
-            <span className="sport-count-pill">88</span>
-          </div>
-
-          <div
-            className={`sport-card ${selectedSport === 'basketball' ? 'active' : ''}`}
-            onClick={() => setSelectedSport('basketball')}
-          >
-            <div className="sport-card-left">
-              <div className="sport-icon-circle">🏀</div>
-              <div className="sport-info-titles">
-                <span className="sport-title-text">Basketball</span>
-                <span className="sport-sub-text">NBA, EuroLeague & NCAA</span>
-              </div>
-            </div>
-            <span className="sport-count-pill">44</span>
-          </div>
-
-          <div
-            className={`sport-card ${selectedSport === 'tennis' ? 'active' : ''}`}
-            onClick={() => setSelectedSport('tennis')}
-          >
-            <div className="sport-card-left">
-              <div className="sport-icon-circle">🎾</div>
-              <div className="sport-info-titles">
-                <span className="sport-title-text">Tennis</span>
-                <span className="sport-sub-text">ATP & WTA Tournaments</span>
-              </div>
-            </div>
-            <span className="sport-count-pill">547</span>
-          </div>
-
-          <div
-            className={`sport-card ${selectedSport === 'cricket' ? 'active' : ''}`}
-            onClick={() => setSelectedSport('cricket')}
-          >
-            <div className="sport-card-left">
-              <div className="sport-icon-circle">🏏</div>
-              <div className="sport-info-titles">
-                <span className="sport-title-text">Cricket</span>
-                <span className="sport-sub-text">IPL, T20 & Test Cricket</span>
-              </div>
-            </div>
-            <span className="sport-count-pill">105</span>
-          </div>
+          ))}
         </div>
 
-        {/* 3. DAILY VERIFIED SCORECARD SECTION */}
+        {/* Dynamic Sport Availability: Coming Soon UX for unavailable sports */}
+        {!currentSportObj?.isAvailable ? (
+          <div className="coming-soon-panel">
+            <div className="coming-soon-icon-circle">{currentSportObj?.icon || '🏆'}</div>
+            <h2 className="coming-soon-title">{currentSportObj?.name || 'Sport'}</h2>
+            <span className="coming-soon-status-badge">Coming Soon</span>
+            <p className="coming-soon-desc">
+              No predictions are currently available for this sport.
+            </p>
+            <button
+              type="button"
+              className="coming-soon-back-btn"
+              onClick={() => setSelectedSport('football')}
+            >
+              ← Back to Football Predictions
+            </button>
+          </div>
+        ) : (
+          <>
+            {/* 3. DAILY VERIFIED SCORECARD SECTION */}
         <section className="daily-scorecard-section">
           <div className="scorecard-header-row">
             <div>
               <div className="scorecard-meta-tags">
                 <span className="tag-scorecard-verified">● Daily Verified Scorecard</span>
-                <span className="tag-scorecard-sport">● Football</span>
+                <span className="tag-scorecard-sport">● {currentSportObj.name}</span>
               </div>
               <h2 className="scorecard-title-main">
                 Today's Verified Performance ({watDateStr || 'Today'})
@@ -931,13 +1039,13 @@ export default function App() {
             <div className="hero-kpi-dark-card">
               <div className="hero-kpi-header">
                 <span className="hero-kpi-title">All Predictions Win Rate</span>
-                <span className="hero-kpi-pill-badge">{scorecardStats.allDecided || fixtures.length} Matches</span>
+                <span className="hero-kpi-pill-badge">{scorecardStats.allDecided} Matches</span>
               </div>
               <div className="hero-kpi-value-row">
-                {scorecardStats.allWinRate}% Win. {scorecardStats.allWon}/{scorecardStats.allDecided || 1}.
+                {scorecardStats.allWinRate}% Win. {scorecardStats.allWon}/{scorecardStats.allDecided}.
               </div>
               <div className="hero-kpi-sub-stats">
-                {scorecardStats.allWon} Won • {scorecardStats.allLost} Lost
+                {scorecardStats.allWon} Won • {scorecardStats.allLost} Lost • {scorecardStats.allPending} Pending
               </div>
             </div>
 
@@ -945,13 +1053,13 @@ export default function App() {
             <div className="hero-kpi-banger-card">
               <div className="hero-kpi-header">
                 <span className="hero-kpi-title">⭐ Daily Banger Win Rate</span>
-                <span className="hero-kpi-pill-badge">{scorecardStats.bangerTotal || 5} Bangers</span>
+                <span className="hero-kpi-pill-badge">{scorecardStats.bangerTotal} Bangers</span>
               </div>
               <div className="hero-kpi-value-row">
-                {scorecardStats.bangerWinRate}% Win. {scorecardStats.bangerWon}/{Math.max(1, scorecardStats.bangerWon + scorecardStats.bangerLost)}.
+                {scorecardStats.bangerWinRate}% Win. {scorecardStats.bangerWon}/{scorecardStats.bangerDecided}.
               </div>
               <div className="hero-kpi-sub-stats">
-                {scorecardStats.bangerWon} Won • {scorecardStats.bangerLost} Lost • {scorecardStats.bangerPending || 4} Pending
+                {scorecardStats.bangerWon} Won • {scorecardStats.bangerLost} Lost • {scorecardStats.bangerPending} Pending
               </div>
             </div>
 
@@ -959,13 +1067,13 @@ export default function App() {
             <div className="hero-kpi-toppick-card">
               <div className="hero-kpi-header">
                 <span className="hero-kpi-title">👑 Daily Top Pick Win Rate</span>
-                <span className="hero-kpi-pill-badge">{scorecardStats.topPickTotal || 12} Top Picks</span>
+                <span className="hero-kpi-pill-badge">{scorecardStats.topPickTotal} Top Picks</span>
               </div>
               <div className="hero-kpi-value-row">
-                {scorecardStats.topPickWinRate}% Win. {scorecardStats.topPickWon}/{Math.max(1, scorecardStats.topPickWon + scorecardStats.topPickLost)}.
+                {scorecardStats.topPickWinRate}% Win. {scorecardStats.topPickWon}/{scorecardStats.topPickDecided}.
               </div>
               <div className="hero-kpi-sub-stats">
-                {scorecardStats.topPickWon} Won • {scorecardStats.topPickLost} Lost • {scorecardStats.topPickPending || 11} Pending
+                {scorecardStats.topPickWon} Won • {scorecardStats.topPickLost} Lost • {scorecardStats.topPickPending} Pending
               </div>
             </div>
           </div>
@@ -974,14 +1082,14 @@ export default function App() {
           <div className="status-tiles-grid">
             <div className="status-tile">
               <div className="status-tile-label">Settled Matches</div>
-              <div className="status-tile-val">{scorecardStats.settledMatchesCount || 1}</div>
-              <div className="status-tile-sub">Today Verified</div>
+              <div className="status-tile-val">{scorecardStats.settledMatchesCount}</div>
+              <div className="status-tile-sub">Verified Full Time</div>
             </div>
 
             <div className="status-tile won">
               <div className="status-tile-label">Won Picks</div>
-              <div className="status-tile-val">{scorecardStats.allWon || 1}</div>
-              <div className="status-tile-sub">100% Verified Wins</div>
+              <div className="status-tile-val">{scorecardStats.allWon}</div>
+              <div className="status-tile-sub">Verified Wins</div>
             </div>
 
             <div className="status-tile lost">
@@ -993,12 +1101,12 @@ export default function App() {
             <div className="status-tile rate">
               <div className="status-tile-label">Day Win Rate</div>
               <div className="status-tile-val">{scorecardStats.allWinRate}%</div>
-              <div className="status-tile-sub">{scorecardStats.allWon || 1} of {scorecardStats.allDecided || 1} won</div>
+              <div className="status-tile-sub">{scorecardStats.allWon} of {scorecardStats.allDecided} won</div>
             </div>
 
             <div className="status-tile pending">
               <div className="status-tile-label">In-Play / Pending</div>
-              <div className="status-tile-val">{scorecardStats.allPending || 19} ({scorecardStats.liveCount} Live)</div>
+              <div className="status-tile-val">{scorecardStats.allPending} ({scorecardStats.liveCount} Live)</div>
               <div className="status-tile-sub">Auto-settles every 15 mins</div>
             </div>
           </div>
@@ -1012,7 +1120,7 @@ export default function App() {
             className={`league-pill-btn ${selectedLeague === 'all' ? 'active' : ''}`}
             onClick={() => setSelectedLeague('all')}
           >
-            All Football Leagues ({fixtures.length})
+            All {currentSportObj.name} Leagues ({fixtures.length})
           </button>
           {availableLeagues.map((lg) => (
             <button
@@ -1524,6 +1632,8 @@ export default function App() {
             </div>
           </aside>
         </div>
+        </>
+      )}
       </main>
 
       {/* FOOTER */}
