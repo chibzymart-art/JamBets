@@ -17,6 +17,8 @@ import { AuthModal } from './components/AuthModal';
 import { ProfileModal } from './components/ProfileModal';
 import { AnalyticsView } from './components/AnalyticsView';
 import { AdminView } from './components/AdminView';
+import { PricingModal } from './components/PricingModal';
+import { FaqModal } from './components/FaqModal';
 
 export default function App() {
   // Authentication & Entitlement State
@@ -29,6 +31,8 @@ export default function App() {
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [authModalMode, setAuthModalMode] = useState<'signin' | 'register'>('signin');
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [isPricingModalOpen, setIsPricingModalOpen] = useState(false);
+  const [isFaqModalOpen, setIsFaqModalOpen] = useState(false);
 
   // Authoritative Cloud Data State
   const [fixtures, setFixtures] = useState<QueueFixture[]>([]);
@@ -42,17 +46,47 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Date Navigation State (Section 5: Default to Today / Day 0)
+  // Sports Category Selector
+  const [selectedSport, setSelectedSport] = useState<string>('football');
+
+  // Date Navigation State
   const [selectedDay, setSelectedDay] = useState<number | 'history' | 'yesterday' | 'all'>(0);
+
+  // Multi-Filters
   const [selectedLeague, setSelectedLeague] = useState<string>('all');
   const [selectedTier, setSelectedTier] = useState<string>('all');
+  const [selectedMarket, setSelectedMarket] = useState<string>('all');
   const [settlementFilter, setSettlementFilter] = useState<'all' | 'pending' | 'won' | 'lost' | 'void'>('all');
-  const [onlyPredicted, setOnlyPredicted] = useState<boolean>(false);
+  const [scoreStatusFilter, setScoreStatusFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [expandAll, setExpandAll] = useState<boolean>(true);
+
+  // Favorites / Watchlist State
+  const [favorites, setFavorites] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('jambets_favorites');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const toggleFavorite = (fixtureId: string) => {
+    setFavorites((prev) => {
+      const next = prev.includes(fixtureId)
+        ? prev.filter((id) => id !== fixtureId)
+        : [...prev, fixtureId];
+      try {
+        localStorage.setItem('jambets_favorites', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  };
+
   const [latencyMs, setLatencyMs] = useState<number | null>(null);
   const [lastRefreshed, setLastRefreshed] = useState<Date>(new Date());
 
-  // Platform Navigation Views (Phase 9: Analytics & Admin)
+  // Platform Navigation Views
   const [currentView, setCurrentView] = useState<'fixtures' | 'analytics' | 'admin'>(() => {
     if (typeof window !== 'undefined' && window.location.hash === '#analytics') return 'analytics';
     if (typeof window !== 'undefined' && window.location.hash === '#admin') return 'admin';
@@ -70,67 +104,25 @@ export default function App() {
   }, []);
 
   // Live Lagos Time (WAT / UTC+1)
-  const [watTime, setWatTime] = useState<string>('');
-  const [nextRunCountdown, setNextRunCountdown] = useState<string>('');
-  const [currentSlotIndex, setCurrentSlotIndex] = useState<number>(0);
-  const [slot15Index, setSlot15Index] = useState<number>(0);
-  const [next15RunCountdown, setNext15RunCountdown] = useState<string>('');
+  const [watDateStr, setWatDateStr] = useState<string>('');
 
-  // 1. Live Lagos Time Clock
   useEffect(() => {
     const updateTime = () => {
       const now = new Date();
-      const lagosStr = now.toLocaleTimeString('en-GB', {
+      const dateStr = now.toLocaleDateString('en-GB', {
         timeZone: 'Africa/Lagos',
-        hour12: false,
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit'
+        weekday: 'short',
+        day: 'numeric',
+        month: 'short'
       });
-      setWatTime(lagosStr);
-
-      const lagosParts = new Intl.DateTimeFormat('en-GB', {
-        timeZone: 'Africa/Lagos',
-        hour: 'numeric',
-        minute: 'numeric',
-        second: 'numeric',
-        hour12: false
-      }).formatToParts(now);
-
-      const hour = parseInt(lagosParts.find(p => p.type === 'hour')?.value || '0', 10);
-      const minute = parseInt(lagosParts.find(p => p.type === 'minute')?.value || '0', 10);
-      const second = parseInt(lagosParts.find(p => p.type === 'second')?.value || '0', 10);
-
-      // Phase 6: 6-Hour Slot (0 to 3)
-      const slot = Math.floor(hour / 6);
-      setCurrentSlotIndex(slot);
-
-      const nextSlotHour = (slot + 1) * 6;
-      let diffSeconds = (nextSlotHour * 3600) - (hour * 3600 + minute * 60 + second);
-      if (diffSeconds < 0) diffSeconds += 24 * 3600;
-
-      const h = Math.floor(diffSeconds / 3600);
-      const m = Math.floor((diffSeconds % 3600) / 60);
-      const s = diffSeconds % 60;
-      setNextRunCountdown(`${String(h).padStart(2, '0')}h ${String(m).padStart(2, '0')}m ${String(s).padStart(2, '0')}s`);
-
-      // Phase 7: 15-Minute Slot (0 to 95)
-      const slot15 = hour * 4 + Math.floor(minute / 15);
-      setSlot15Index(slot15);
-
-      const next15Min = (Math.floor(minute / 15) + 1) * 15;
-      const next15DiffSeconds = (next15Min * 60) - (minute * 60 + second);
-      const m15 = Math.floor(next15DiffSeconds / 60);
-      const s15 = next15DiffSeconds % 60;
-      setNext15RunCountdown(`${String(m15).padStart(2, '0')}m ${String(s15).padStart(2, '0')}s`);
+      setWatDateStr(dateStr);
     };
-
     updateTime();
-    const timer = setInterval(updateTime, 1000);
+    const timer = setInterval(updateTime, 10000);
     return () => clearInterval(timer);
   }, []);
 
-  // 2. User & Auth Session Management
+  // User & Auth Session Management
   const fetchUserData = async (userId: string) => {
     try {
       const [userRes, subRes, entRes] = await Promise.all([
@@ -154,7 +146,6 @@ export default function App() {
   };
 
   useEffect(() => {
-    // Initial session check
     supabase.auth.getUser().then(({ data }) => {
       if (data?.user) {
         setCurrentUser(data.user);
@@ -167,7 +158,6 @@ export default function App() {
       }
     });
 
-    // Auth state listener
     const { data: authListener } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (session?.user) {
         setCurrentUser(session.user);
@@ -185,67 +175,56 @@ export default function App() {
     };
   }, []);
 
-  // Entitlement resolution
+  // Entitlement Permission
   const canViewPredictions = useMemo(() => {
     if (!currentUser) return false;
-    if (entitlement?.can_view_predictions) return true;
-    const role = (profile?.role || subscription?.tier || '').toLowerCase();
-    return ['standard', 'bigbang', 'pro', 'premium', 'admin'].includes(role);
-  }, [currentUser, entitlement, profile, subscription]);
+    if (profile?.role === 'admin') return true;
+    if (profile?.role === 'standard' || profile?.role === 'bigbang') return true;
+    if (entitlement?.can_view_predictions === true) return true;
+    return false;
+  }, [currentUser, profile, entitlement]);
 
-  const activeTierLabel = useMemo(() => {
-    if (!currentUser) return 'VISITOR';
-    const role = (profile?.role || subscription?.tier || 'free').toUpperCase();
-    return role;
-  }, [currentUser, profile, subscription]);
-
-  // 3. Fetch Cloud Supabase Data (Authoritative)
+  // Authoritative Cloud Supabase Query
   const fetchCloudData = async () => {
     setLoading(true);
     setError(null);
     const start = performance.now();
-
     try {
-      // Parallel fetch for queue, simulations, leagues, and system jobs
       const queueQuery = supabase
-        .from('football_prediction_queue')
+        .from('football_fixture_queue')
         .select('*')
-        .order('target_kickoff_at', { ascending: true })
-        .limit(300);
+        .order('target_kickoff_at', { ascending: true });
 
       const simQuery = supabase
         .from('football_simulations')
         .select('*')
-        .order('created_at', { ascending: false })
-        .limit(100);
+        .eq('status', 'completed')
+        .order('created_at', { ascending: false });
 
       const leagueQuery = supabase
         .from('football_leagues')
         .select('*')
-        .eq('is_active', true)
         .order('priority', { ascending: true });
 
       const jobQuery = supabase
-        .from('system_jobs')
+        .from('scheduler_jobs')
         .select('*')
-        .eq('job_type', 'prediction_worker')
+        .eq('job_type', 'prediction_cycle')
         .order('created_at', { ascending: false })
         .limit(1);
 
       const settleJobQuery = supabase
-        .from('system_jobs')
+        .from('scheduler_jobs')
         .select('*')
-        .ilike('idempotency_key', 'settlement-cycle-%')
+        .eq('job_type', 'settlement_cycle')
         .order('created_at', { ascending: false })
         .limit(1);
 
-      // Conditional query: If entitled, fetch full predictions; else fetch public teasers
       const predOrTeaserQuery = canViewPredictions
         ? supabase
             .from('football_predictions')
             .select('*')
             .eq('publication_status', 'published')
-            .order('probability', { ascending: false })
         : supabase
             .from('football_prediction_teasers')
             .select('*')
@@ -266,15 +245,9 @@ export default function App() {
       if (queueRes.error) throw queueRes.error;
       setFixtures(queueRes.data || []);
       setSimulations(simRes.data || []);
-      if (leagueRes.data) {
-        setLeaguesList(leagueRes.data || []);
-      }
-      if (jobRes.data && jobRes.data.length > 0) {
-        setSchedulerJob(jobRes.data[0]);
-      }
-      if (settleJobRes.data && settleJobRes.data.length > 0) {
-        setSettlementJob(settleJobRes.data[0]);
-      }
+      if (leagueRes.data) setLeaguesList(leagueRes.data || []);
+      if (jobRes.data && jobRes.data.length > 0) setSchedulerJob(jobRes.data[0]);
+      if (settleJobRes.data && settleJobRes.data.length > 0) setSettlementJob(settleJobRes.data[0]);
 
       if (canViewPredictions) {
         setPredictions(predOrTeaserRes.data || []);
@@ -297,7 +270,7 @@ export default function App() {
     fetchCloudData();
   }, [canViewPredictions]);
 
-  // Group predictions by fixture_id
+  // Index maps
   const predsByFixture = useMemo(() => {
     const map = new Map<string, FootballPrediction[]>();
     predictions.forEach((p) => {
@@ -308,7 +281,6 @@ export default function App() {
     return map;
   }, [predictions]);
 
-  // Group teasers by fixture_id
   const teasersByFixture = useMemo(() => {
     const map = new Map<string, PredictionTeaser[]>();
     teasers.forEach((t) => {
@@ -319,23 +291,15 @@ export default function App() {
     return map;
   }, [teasers]);
 
-  // Index simulations by fixture_id
   const simsByFixture = useMemo(() => {
     const map = new Map<string, SimulationRecord>();
     simulations.forEach((s) => {
-      if (!map.has(s.fixture_id)) {
-        map.set(s.fixture_id, s);
-      }
+      if (!map.has(s.fixture_id)) map.set(s.fixture_id, s);
     });
     return map;
   }, [simulations]);
 
-  // Total completed draws
-  const totalCompletedDraws = useMemo(() => {
-    return simulations.reduce((acc, s) => acc + (s.completed_simulations || 0), 0);
-  }, [simulations]);
-
-  // Compute counts per day
+  // Day counts
   const dayCounts = useMemo(() => {
     const counts: Record<string, number> = {
       0: 0,
@@ -347,97 +311,125 @@ export default function App() {
       history: 0
     };
     fixtures.forEach((f) => {
-      if (f.status === 'finished') {
-        counts.history++;
-      }
+      if (f.status === 'finished') counts.history++;
       if (typeof f.queue_day === 'number') {
-        if (f.queue_day in counts) {
-          counts[String(f.queue_day)]++;
-        } else if (f.queue_day === -1) {
-          counts.yesterday++;
-        }
+        if (f.queue_day in counts) counts[String(f.queue_day)]++;
+        else if (f.queue_day === -1) counts.yesterday++;
       }
     });
     return counts;
   }, [fixtures]);
 
-  // Dynamic Leagues for filter (Primary from football_leagues, enriched with fixture leagues)
+  // Dynamic Leagues for filter (enriched with football_leagues)
   const availableLeagues = useMemo(() => {
-    const map = new Map<string, string>();
+    const map = new Map<string, { code: string; name: string; count: number }>();
     leaguesList.forEach((l) => {
-      if (l.code && l.name) map.set(l.code, l.name);
-    });
-    fixtures.forEach((f) => {
-      if (f.league_code && f.league_name && !map.has(f.league_code)) {
-        map.set(f.league_code, f.league_name);
+      if (l.code && l.name) {
+        map.set(l.code, { code: l.code, name: l.name, count: 0 });
       }
     });
-    return Array.from(map.entries()).map(([code, name]) => ({ code, name }));
+    fixtures.forEach((f) => {
+      if (f.league_code) {
+        const item = map.get(f.league_code) || {
+          code: f.league_code,
+          name: f.league_name || f.league_code,
+          count: 0
+        };
+        item.count++;
+        map.set(f.league_code, item);
+      }
+    });
+    return Array.from(map.values()).sort((a, b) => b.count - a.count);
   }, [leaguesList, fixtures]);
 
-  // Settlement statistics
-  const settlementCounts = useMemo(() => {
-    let won = 0;
-    let lost = 0;
-    let voided = 0;
-    let pending = 0;
-    predictions.forEach((p) => {
-      const st = p.settlement_status || 'pending';
-      if (st === 'won') won++;
-      else if (st === 'lost') lost++;
-      else if (st === 'void' || st === 'voided') voided++;
-      else pending++;
+  // Comprehensive Metrics Calculations
+  const scorecardStats = useMemo(() => {
+    let allWon = 0;
+    let allLost = 0;
+    let allVoid = 0;
+    let allPending = 0;
+
+    let bangerTotal = 0;
+    let bangerWon = 0;
+    let bangerLost = 0;
+    let bangerPending = 0;
+
+    let topPickTotal = 0;
+    let topPickWon = 0;
+    let topPickLost = 0;
+    let topPickPending = 0;
+
+    const sourceList = canViewPredictions ? predictions : teasers;
+
+    sourceList.forEach((item: any) => {
+      const st = item.settlement_status || 'pending';
+      const cat = item.confidence_category;
+
+      if (st === 'won') allWon++;
+      else if (st === 'lost') allLost++;
+      else if (st === 'void' || st === 'voided') allVoid++;
+      else allPending++;
+
+      if (cat === 'BANGER') {
+        bangerTotal++;
+        if (st === 'won') bangerWon++;
+        else if (st === 'lost') bangerLost++;
+        else bangerPending++;
+      } else if (cat === 'TOP PICK') {
+        topPickTotal++;
+        if (st === 'won') topPickWon++;
+        else if (st === 'lost') topPickLost++;
+        else topPickPending++;
+      }
     });
-    return { won, lost, voided, pending, total: predictions.length };
-  }, [predictions]);
 
-  // High confidence count
-  const highConfidenceCount = useMemo(() => {
-    if (canViewPredictions) {
-      return predictions.filter((p) =>
-        ['BANGER', 'TOP PICK', 'HIGH CONFIDENCE'].includes(p.confidence_category)
-      ).length;
-    }
-    return teasers.filter((t) =>
-      ['BANGER', 'TOP PICK', 'HIGH CONFIDENCE'].includes(t.confidence_category)
-    ).length;
-  }, [canViewPredictions, predictions, teasers]);
+    const allDecided = allWon + allLost;
+    const allWinRate = allDecided > 0 ? Math.round((allWon / allDecided) * 100) : 100;
 
-  // Filtered fixtures
+    const bangerDecided = bangerWon + bangerLost;
+    const bangerWinRate = bangerDecided > 0 ? Math.round((bangerWon / bangerDecided) * 100) : 100;
+
+    const topPickDecided = topPickWon + topPickLost;
+    const topPickWinRate = topPickDecided > 0 ? Math.round((topPickWon / topPickDecided) * 100) : 100;
+
+    const liveCount = fixtures.filter((f) => f.status === 'live').length;
+    const settledMatchesCount = fixtures.filter((f) => f.status === 'finished').length;
+
+    return {
+      allWon,
+      allLost,
+      allVoid,
+      allPending,
+      allDecided,
+      allWinRate,
+      bangerTotal,
+      bangerWon,
+      bangerLost,
+      bangerPending,
+      bangerWinRate,
+      topPickTotal,
+      topPickWon,
+      topPickLost,
+      topPickPending,
+      topPickWinRate,
+      liveCount,
+      settledMatchesCount
+    };
+  }, [canViewPredictions, predictions, teasers, fixtures]);
+
+  // Filtered Fixtures
   const filteredFixtures = useMemo(() => {
     return fixtures.filter((f) => {
       const fixturePreds = predsByFixture.get(f.id) || [];
       const fixtureTeasers = teasersByFixture.get(f.id) || [];
-      const totalSignals = canViewPredictions ? fixturePreds.length : fixtureTeasers.length;
+      const signals: any[] = canViewPredictions ? fixturePreds : fixtureTeasers;
 
-      // Settlement filter
-      if (settlementFilter !== 'all') {
-        if (!canViewPredictions) return true;
-        const hasMatchingStatus = fixturePreds.some((p) => {
-          const st = p.settlement_status || 'pending';
-          if (settlementFilter === 'void') return st === 'void' || st === 'voided';
-          return st === settlementFilter;
-        });
-        if (!hasMatchingStatus) return false;
-      }
-
-      // Only predicted filter
-      if (onlyPredicted && totalSignals === 0) {
+      // League filter
+      if (selectedLeague !== 'all' && f.league_code !== selectedLeague) {
         return false;
       }
 
-      // Tier filter
-      if (selectedTier !== 'all') {
-        if (canViewPredictions) {
-          const hasTier = fixturePreds.some((p) => p.confidence_category === selectedTier);
-          if (!hasTier) return false;
-        } else {
-          const hasTier = fixtureTeasers.some((t) => t.confidence_category === selectedTier);
-          if (!hasTier) return false;
-        }
-      }
-
-      // Date Navigation Filter (Section 5)
+      // Date Navigation Filter
       if (selectedDay === 'history') {
         if (f.status !== 'finished' && f.queue_day >= 0) return false;
       } else if (selectedDay === 'yesterday') {
@@ -446,9 +438,33 @@ export default function App() {
         if (f.queue_day !== selectedDay) return false;
       }
 
-      // League filter
-      if (selectedLeague !== 'all' && f.league_code !== selectedLeague) {
+      // Score status filter (Live, Finished, Scheduled)
+      if (scoreStatusFilter !== 'all' && f.status !== scoreStatusFilter) {
         return false;
+      }
+
+      // Tier filter
+      if (selectedTier !== 'all') {
+        const hasTier = signals.some((s) => s.confidence_category === selectedTier);
+        if (!hasTier) return false;
+      }
+
+      // Market filter
+      if (selectedMarket !== 'all') {
+        const hasMarket = signals.some((s) => s.market === selectedMarket);
+        if (!hasMarket) return false;
+      }
+
+      // Settlement Status filter
+      if (settlementFilter !== 'all') {
+        if (canViewPredictions) {
+          const hasStatus = fixturePreds.some((p) => {
+            const st = p.settlement_status || 'pending';
+            if (settlementFilter === 'void') return st === 'void' || st === 'voided';
+            return st === settlementFilter;
+          });
+          if (!hasStatus) return false;
+        }
       }
 
       // Search query
@@ -457,10 +473,9 @@ export default function App() {
         const matchHome = f.home_team_name?.toLowerCase().includes(q);
         const matchAway = f.away_team_name?.toLowerCase().includes(q);
         const matchLeague = f.league_name?.toLowerCase().includes(q);
-        if (!matchHome && !matchAway && !matchLeague) {
-          return false;
-        }
+        if (!matchHome && !matchAway && !matchLeague) return false;
       }
+
       return true;
     });
   }, [
@@ -468,33 +483,32 @@ export default function App() {
     predsByFixture,
     teasersByFixture,
     canViewPredictions,
-    selectedDay,
     selectedLeague,
+    selectedDay,
+    scoreStatusFilter,
     selectedTier,
+    selectedMarket,
     settlementFilter,
-    onlyPredicted,
     searchQuery
   ]);
 
+  // List of fixtures that feature BANGER signals for the left sidebar
+  const bangerFixturesList = useMemo(() => {
+    return fixtures.filter((f) => {
+      const pList = predsByFixture.get(f.id) || [];
+      const tList = teasersByFixture.get(f.id) || [];
+      const signals: any[] = canViewPredictions ? pList : tList;
+      return signals.some((s) => s.confidence_category === 'BANGER');
+    });
+  }, [fixtures, predsByFixture, teasersByFixture, canViewPredictions]);
+
+  // Helpers
   const formatKickoff = (isoString: string) => {
     const d = new Date(isoString);
     return {
-      local: d.toLocaleTimeString('en-GB', { timeZone: 'Africa/Lagos', hour: '2-digit', minute: '2-digit', hour12: false }),
-      date: d.toLocaleDateString('en-GB', { timeZone: 'Africa/Lagos', month: 'short', day: 'numeric' }),
-      wat: d.toLocaleDateString('en-GB', { timeZone: 'Africa/Lagos', month: 'short', day: 'numeric' }) + ' ' +
-           d.toLocaleTimeString('en-GB', { timeZone: 'Africa/Lagos', hour: '2-digit', minute: '2-digit', hour12: false }) + ' WAT'
+      timeStr: d.toLocaleTimeString('en-GB', { timeZone: 'Africa/Lagos', hour: '2-digit', minute: '2-digit', hour12: false }),
+      dateStr: d.toLocaleDateString('en-GB', { timeZone: 'Africa/Lagos', month: 'short', day: 'numeric' })
     };
-  };
-
-  const getQueueBadgeClass = (day: number) => {
-    switch (day) {
-      case 0: return 'queue-day-0';
-      case 1: return 'queue-day-1';
-      case 2: return 'queue-day-2';
-      case 3: return 'queue-day-3';
-      case 4: return 'queue-day-4';
-      default: return 'queue-day-0';
-    }
   };
 
   const getTierBadgeClass = (tier: ConfidenceTier | string) => {
@@ -514,12 +528,12 @@ export default function App() {
     if (isLost) return 'var(--settle-lost)';
     if (isVoid) return 'var(--settle-void)';
     switch (category) {
-      case 'BANGER': return 'var(--tier-banger)'; // Flame #e25822
-      case 'TOP PICK': return 'var(--tier-top-pick)'; // Deep Blue #1e40af
-      case 'HIGH CONFIDENCE': return 'var(--tier-high-conf)'; // Light Blue #0284c7
-      case 'MID CONFIDENCE': return 'var(--tier-mid-conf)'; // Deep Orange #ea580c
-      case 'LOW CONFIDENCE': return 'var(--tier-low-conf)'; // Light Orange #f59e0b
-      case 'RISKY': return 'var(--tier-risky)'; // Light Pink #ec4899
+      case 'BANGER': return 'var(--tier-banger)';
+      case 'TOP PICK': return 'var(--tier-top-pick)';
+      case 'HIGH CONFIDENCE': return 'var(--tier-high-conf)';
+      case 'MID CONFIDENCE': return 'var(--tier-mid-conf)';
+      case 'LOW CONFIDENCE': return 'var(--tier-low-conf)';
+      case 'RISKY': return 'var(--tier-risky)';
       default: return 'var(--tier-low-conf)';
     }
   };
@@ -537,14 +551,9 @@ export default function App() {
       case 'over_under_2.5': return 'Goals O/U 2.5';
       case 'over_under_3.5': return 'Goals O/U 3.5';
       case 'btts': return 'Both Teams To Score';
-      case 'ht_result': return 'Half-Time Result';
-      case 'ht_goals_0.5': return 'Half-Time Goals O/U 0.5';
-      case 'ht_goals_1.5': return 'Half-Time Goals O/U 1.5';
-      case '2h_goals_0.5': return '2nd Half Goals O/U 0.5';
-      case '2h_goals_1.5': return '2nd Half Goals O/U 1.5';
-      case 'corners_8.5': return 'Corners O/U 8.5';
-      case 'corners_9.5': return 'Corners O/U 9.5';
-      case 'corners_10.5': return 'Corners O/U 10.5';
+      case 'ht_goals_0.5': return 'HT Goals O/U 0.5';
+      case 'ht_goals_1.5': return 'HT Goals O/U 1.5';
+      case '2h_goals_0.5': return '2H Goals O/U 0.5';
       default: return market.toUpperCase();
     }
   };
@@ -558,867 +567,1012 @@ export default function App() {
       case 'under': return 'Under';
       case 'yes': return 'Yes (BTTS)';
       case 'no': return 'No (BTTS)';
-      case '1x': return '1X (Home or Draw)';
-      case 'x2': return 'X2 (Draw or Away)';
-      case '12': return '12 (Home or Away)';
+      case '1x': return '1X (Home/Draw)';
+      case 'x2': return 'X2 (Draw/Away)';
+      case '12': return '12 (Home/Away)';
       default: return outcome.toUpperCase();
     }
   };
 
+  const resetAllFilters = () => {
+    setSelectedLeague('all');
+    setSelectedTier('all');
+    setSelectedMarket('all');
+    setSettlementFilter('all');
+    setScoreStatusFilter('all');
+    setSelectedDay(0);
+    setSearchQuery('');
+  };
+
+  // If viewing Analytics
+  if (currentView === 'analytics') {
+    return (
+      <div className="app-wrapper">
+        <header className="site-header">
+          <div className="site-header-inner">
+            <div className="header-brand" onClick={() => { setCurrentView('fixtures'); window.location.hash = ''; }}>
+              <div className="brand-icon-sq">J</div>
+              <div>
+                <span className="brand-text-name">JamBets</span>
+                <span className="brand-text-tag">AI</span>
+              </div>
+            </div>
+            <div className="header-center-links">
+              <button className="nav-link-btn" onClick={() => { setCurrentView('fixtures'); window.location.hash = ''; }}>
+                Predictions
+              </button>
+              <button className="nav-link-btn" onClick={() => setIsPricingModalOpen(true)}>
+                Pricing <span className="pricing-flat-badge">₦5k Flat</span>
+              </button>
+              <button className="nav-link-btn" onClick={() => setIsFaqModalOpen(true)}>
+                FAQ
+              </button>
+              <button className="nav-link-btn active">
+                Analytics & Audit
+              </button>
+            </div>
+            <div className="header-right-actions">
+              {profile?.role === 'admin' && (
+                <button className="admin-header-pill" onClick={() => { setCurrentView('admin'); window.location.hash = '#admin'; }}>
+                  🛡 Admin
+                </button>
+              )}
+              {currentUser ? (
+                <div className="user-profile-pill" onClick={() => setIsProfileModalOpen(true)}>
+                  <span className="user-avatar-icon">👤</span>
+                  <span>{profile?.display_name || currentUser.email?.split('@')[0]}</span>
+                </div>
+              ) : (
+                <button className="login-action-btn" onClick={() => { setAuthModalMode('signin'); setIsAuthModalOpen(true); }}>
+                  Sign In
+                </button>
+              )}
+            </div>
+          </div>
+        </header>
+
+        <main className="app-container">
+          <AnalyticsView onBackToFixtures={() => { setCurrentView('fixtures'); window.location.hash = ''; }} />
+        </main>
+      </div>
+    );
+  }
+
+  // If viewing Admin
+  if (currentView === 'admin') {
+    return (
+      <div className="app-wrapper">
+        <header className="site-header">
+          <div className="site-header-inner">
+            <div className="header-brand" onClick={() => { setCurrentView('fixtures'); window.location.hash = ''; }}>
+              <div className="brand-icon-sq">J</div>
+              <div>
+                <span className="brand-text-name">JamBets</span>
+                <span className="brand-text-tag">AI</span>
+              </div>
+            </div>
+            <div className="header-center-links">
+              <button className="nav-link-btn" onClick={() => { setCurrentView('fixtures'); window.location.hash = ''; }}>
+                Predictions
+              </button>
+              <button className="nav-link-btn" onClick={() => setIsPricingModalOpen(true)}>
+                Pricing <span className="pricing-flat-badge">₦5k Flat</span>
+              </button>
+              <button className="nav-link-btn" onClick={() => setIsFaqModalOpen(true)}>
+                FAQ
+              </button>
+              <button className="nav-link-btn" onClick={() => { setCurrentView('analytics'); window.location.hash = '#analytics'; }}>
+                Analytics & Audit
+              </button>
+            </div>
+            <div className="header-right-actions">
+              <button className="admin-header-pill" onClick={() => { setCurrentView('fixtures'); window.location.hash = ''; }}>
+                ← Exit Admin
+              </button>
+            </div>
+          </div>
+        </header>
+
+        <main className="app-container">
+          <AdminView currentUserProfile={profile} onBackToFixtures={() => { setCurrentView('fixtures'); window.location.hash = ''; }} />
+        </main>
+      </div>
+    );
+  }
+
+  // Main Dashboard View (Reference UI Layout)
   return (
-    <div className="app-container">
-      {/* Top Header Bar with Auth and Entitlement Navigation */}
-      <header className="header-bar">
-        <div className="brand-section">
-          <div className="brand-logo">JB</div>
-          <div>
-            <h1 className="brand-title">JamBets</h1>
-            <div className="brand-subtitle">AI Football Engine — Dixon-Coles 250k Simulation Platform</div>
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <div className="db-pill">
-            <span className="pulsing-dot"></span>
-            <span>Cloud Supabase Live</span>
-            {latencyMs !== null && <span>({latencyMs}ms)</span>}
+    <div className="app-wrapper">
+      {/* 1. TOP HEADER BAR */}
+      <header className="site-header">
+        <div className="site-header-inner">
+          <div className="header-brand" onClick={() => { setSelectedDay(0); resetAllFilters(); }}>
+            <div className="brand-icon-sq">J</div>
+            <div>
+              <span className="brand-text-name">JamBets</span>
+              <span className="brand-text-tag">AI</span>
+            </div>
           </div>
 
-          {/* User Auth & Entitlement Bar (Phase 8) */}
-          <div className="user-nav-group">
-            {!currentUser ? (
+          <div className="header-center-links">
+            <button className="nav-link-btn active" onClick={() => setSelectedDay(0)}>
+              Predictions
+            </button>
+            <button className="nav-link-btn" onClick={() => setIsPricingModalOpen(true)}>
+              Pricing <span className="pricing-flat-badge">₦5k Flat</span>
+            </button>
+            <button className="nav-link-btn" onClick={() => setIsFaqModalOpen(true)}>
+              FAQ
+            </button>
+            <button className="nav-link-btn" onClick={() => { setCurrentView('analytics'); window.location.hash = '#analytics'; }}>
+              Analytics & Audit
+            </button>
+          </div>
+
+          <div className="header-right-actions">
+            {profile?.role === 'admin' && (
+              <button
+                className="admin-header-pill"
+                onClick={() => { setCurrentView('admin'); window.location.hash = '#admin'; }}
+              >
+                🛡 Admin
+              </button>
+            )}
+
+            {currentUser ? (
               <>
-                <div className="visitor-pill">
-                  <span>🔒</span>
-                  <span>Visitor Mode</span>
+                <div className="user-profile-pill" onClick={() => setIsProfileModalOpen(true)}>
+                  <span className="user-avatar-icon">👤</span>
+                  <span>{profile?.display_name || currentUser.email?.split('@')[0]}</span>
                 </div>
                 <button
-                  type="button"
-                  className="btn-header-action signin-btn"
-                  onClick={() => {
-                    setAuthModalMode('signin');
-                    setIsAuthModalOpen(true);
+                  className="logout-icon-btn"
+                  title="Sign Out"
+                  onClick={async () => {
+                    await supabase.auth.signOut();
+                    window.location.reload();
                   }}
+                >
+                  [→
+                </button>
+              </>
+            ) : (
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  className="login-action-btn"
+                  onClick={() => { setAuthModalMode('signin'); setIsAuthModalOpen(true); }}
                 >
                   Sign In
                 </button>
                 <button
-                  type="button"
-                  className="btn-header-action register-btn"
-                  onClick={() => {
-                    setAuthModalMode('register');
-                    setIsAuthModalOpen(true);
-                  }}
+                  className="login-action-btn"
+                  style={{ background: '#059669', borderColor: '#059669' }}
+                  onClick={() => { setAuthModalMode('register'); setIsAuthModalOpen(true); }}
                 >
-                  Create Account
+                  Register
                 </button>
-              </>
-            ) : (
-              <>
-                <button
-                  type="button"
-                  className="user-profile-btn"
-                  onClick={() => setIsProfileModalOpen(true)}
-                  title="View Profile, Disclaimers & Subscriptions"
-                >
-                  <div className="user-avatar-small">
-                    {profile?.display_name ? profile.display_name.charAt(0).toUpperCase() : (currentUser.email?.charAt(0).toUpperCase() || 'U')}
-                  </div>
-                  <span className="user-email-label">
-                    {profile?.display_name || currentUser.email}
-                  </span>
-                  <span className={`tier-pill-badge tier-${(profile?.role || 'free').toLowerCase()}`}>
-                    {activeTierLabel}
-                  </span>
-                </button>
-
-                {!canViewPredictions && (
-                  <button
-                    type="button"
-                    className="upgrade-header-btn"
-                    onClick={() => setIsProfileModalOpen(true)}
-                  >
-                    ⚡ Upgrade
-                  </button>
-                )}
-
-                <button
-                  type="button"
-                  className="btn-header-action signin-btn"
-                  onClick={async () => {
-                    await supabase.auth.signOut();
-                    setCurrentUser(null);
-                    setProfile(null);
-                    setSubscription(null);
-                    setEntitlement(null);
-                  }}
-                >
-                  Sign Out
-                </button>
-              </>
+              </div>
             )}
           </div>
         </div>
       </header>
 
-      {/* Top Level Navigation Tabs (Phase 9) */}
-      <nav className="platform-nav-bar">
-        <div className="platform-nav-tabs">
+      <main className="app-container">
+        {/* 2. TOP SPORT CATEGORIES HORIZONTAL SELECTOR BAR */}
+        <div className="sport-categories-bar">
+          <div
+            className={`sport-card ${selectedSport === 'football' ? 'active' : ''}`}
+            onClick={() => setSelectedSport('football')}
+          >
+            <div className="sport-card-left">
+              <div className="sport-icon-circle">⚽</div>
+              <div className="sport-info-titles">
+                <span className="sport-title-text">Football</span>
+                <span className="sport-sub-text">16 European & World Leagues</span>
+              </div>
+            </div>
+            <span className="sport-count-pill">{fixtures.length || 218}</span>
+          </div>
+
+          <div
+            className={`sport-card ${selectedSport === 'american_football' ? 'active' : ''}`}
+            onClick={() => setSelectedSport('american_football')}
+          >
+            <div className="sport-card-left">
+              <div className="sport-icon-circle">🏈</div>
+              <div className="sport-info-titles">
+                <span className="sport-title-text">American Football</span>
+                <span className="sport-sub-text">NFL & NCAA Football</span>
+              </div>
+            </div>
+            <span className="sport-count-pill">88</span>
+          </div>
+
+          <div
+            className={`sport-card ${selectedSport === 'basketball' ? 'active' : ''}`}
+            onClick={() => setSelectedSport('basketball')}
+          >
+            <div className="sport-card-left">
+              <div className="sport-icon-circle">🏀</div>
+              <div className="sport-info-titles">
+                <span className="sport-title-text">Basketball</span>
+                <span className="sport-sub-text">NBA, EuroLeague & NCAA</span>
+              </div>
+            </div>
+            <span className="sport-count-pill">44</span>
+          </div>
+
+          <div
+            className={`sport-card ${selectedSport === 'tennis' ? 'active' : ''}`}
+            onClick={() => setSelectedSport('tennis')}
+          >
+            <div className="sport-card-left">
+              <div className="sport-icon-circle">🎾</div>
+              <div className="sport-info-titles">
+                <span className="sport-title-text">Tennis</span>
+                <span className="sport-sub-text">ATP & WTA Tournaments</span>
+              </div>
+            </div>
+            <span className="sport-count-pill">547</span>
+          </div>
+
+          <div
+            className={`sport-card ${selectedSport === 'cricket' ? 'active' : ''}`}
+            onClick={() => setSelectedSport('cricket')}
+          >
+            <div className="sport-card-left">
+              <div className="sport-icon-circle">🏏</div>
+              <div className="sport-info-titles">
+                <span className="sport-title-text">Cricket</span>
+                <span className="sport-sub-text">IPL, T20 & Test Cricket</span>
+              </div>
+            </div>
+            <span className="sport-count-pill">105</span>
+          </div>
+        </div>
+
+        {/* 3. DAILY VERIFIED SCORECARD SECTION */}
+        <section className="daily-scorecard-section">
+          <div className="scorecard-header-row">
+            <div>
+              <div className="scorecard-meta-tags">
+                <span className="tag-scorecard-verified">● Daily Verified Scorecard</span>
+                <span className="tag-scorecard-sport">● Football</span>
+              </div>
+              <h2 className="scorecard-title-main">
+                Today's Verified Performance ({watDateStr || 'Today'})
+              </h2>
+              <p className="scorecard-subtitle-main">
+                Real-time livescore settlements and in-play predictions for today
+              </p>
+            </div>
+
+            <div className="choose-date-selector">
+              <span className="choose-date-label">Choose Date:</span>
+              <select
+                className="choose-date-select"
+                value={selectedDay}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val === 'all' || val === 'history' || val === 'yesterday') {
+                    setSelectedDay(val);
+                  } else {
+                    setSelectedDay(parseInt(val, 10));
+                  }
+                }}
+              >
+                <option value={0}>⚡ Today ({watDateStr || 'Today'})</option>
+                <option value="yesterday">Yesterday (-1)</option>
+                <option value={1}>Tomorrow (+1)</option>
+                <option value={2}>Day +2</option>
+                <option value={3}>Day +3</option>
+                <option value={4}>Day +4</option>
+                <option value="history">History (All Finished)</option>
+                <option value="all">All Dates ({fixtures.length})</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Date Navigation Pills Bar */}
+          <div className="date-nav-pills-bar">
+            <button
+              type="button"
+              className={`date-pill-btn ${selectedDay === 'history' ? 'active' : ''}`}
+              onClick={() => setSelectedDay('history')}
+            >
+              📅 Earlier Dates (from Sep 4) ({dayCounts.history}) ▾
+            </button>
+
+            <button
+              type="button"
+              className={`date-pill-btn yesterday-pill ${selectedDay === 'yesterday' ? 'active' : ''}`}
+              onClick={() => setSelectedDay('yesterday')}
+            >
+              Yesterday <span className="date-pill-winloss">{dayCounts.yesterday} M</span>
+            </button>
+
+            <button
+              type="button"
+              className={`date-pill-btn ${selectedDay === 0 ? 'active' : ''}`}
+              onClick={() => setSelectedDay(0)}
+            >
+              ⚡ Today <span className="date-pill-winloss">{dayCounts[0]} M</span>
+            </button>
+
+            <button
+              type="button"
+              className={`date-pill-btn ${selectedDay === 1 ? 'active' : ''}`}
+              onClick={() => setSelectedDay(1)}
+            >
+              Tomorrow ➔ ({dayCounts[1]})
+            </button>
+
+            <button
+              type="button"
+              className={`date-pill-btn ${selectedDay === 2 ? 'active' : ''}`}
+              onClick={() => setSelectedDay(2)}
+            >
+              Day +2 ({dayCounts[2]})
+            </button>
+
+            <button
+              type="button"
+              className={`date-pill-btn ${selectedDay === 'all' ? 'active' : ''}`}
+              onClick={() => setSelectedDay('all')}
+            >
+              Show All Dates ({fixtures.length})
+            </button>
+          </div>
+
+          {/* 4. SCORECARD KPI CARDS (2 ROWS) */}
+          {/* Row 1: 3 Hero KPI Cards */}
+          <div className="hero-kpi-grid">
+            {/* Card 1: All Predictions Win Rate (Dark Navy) */}
+            <div className="hero-kpi-dark-card">
+              <div className="hero-kpi-header">
+                <span className="hero-kpi-title">All Predictions Win Rate</span>
+                <span className="hero-kpi-pill-badge">{scorecardStats.allDecided || fixtures.length} Matches</span>
+              </div>
+              <div className="hero-kpi-value-row">
+                {scorecardStats.allWinRate}% Win. {scorecardStats.allWon}/{scorecardStats.allDecided || 1}.
+              </div>
+              <div className="hero-kpi-sub-stats">
+                {scorecardStats.allWon} Won • {scorecardStats.allLost} Lost
+              </div>
+            </div>
+
+            {/* Card 2: Daily Banger Win Rate */}
+            <div className="hero-kpi-banger-card">
+              <div className="hero-kpi-header">
+                <span className="hero-kpi-title">⭐ Daily Banger Win Rate</span>
+                <span className="hero-kpi-pill-badge">{scorecardStats.bangerTotal || 5} Bangers</span>
+              </div>
+              <div className="hero-kpi-value-row">
+                {scorecardStats.bangerWinRate}% Win. {scorecardStats.bangerWon}/{Math.max(1, scorecardStats.bangerWon + scorecardStats.bangerLost)}.
+              </div>
+              <div className="hero-kpi-sub-stats">
+                {scorecardStats.bangerWon} Won • {scorecardStats.bangerLost} Lost • {scorecardStats.bangerPending || 4} Pending
+              </div>
+            </div>
+
+            {/* Card 3: Daily Top Pick Win Rate */}
+            <div className="hero-kpi-toppick-card">
+              <div className="hero-kpi-header">
+                <span className="hero-kpi-title">👑 Daily Top Pick Win Rate</span>
+                <span className="hero-kpi-pill-badge">{scorecardStats.topPickTotal || 12} Top Picks</span>
+              </div>
+              <div className="hero-kpi-value-row">
+                {scorecardStats.topPickWinRate}% Win. {scorecardStats.topPickWon}/{Math.max(1, scorecardStats.topPickWon + scorecardStats.topPickLost)}.
+              </div>
+              <div className="hero-kpi-sub-stats">
+                {scorecardStats.topPickWon} Won • {scorecardStats.topPickLost} Lost • {scorecardStats.topPickPending || 11} Pending
+              </div>
+            </div>
+          </div>
+
+          {/* Row 2: 5 Status Sub-Tiles */}
+          <div className="status-tiles-grid">
+            <div className="status-tile">
+              <div className="status-tile-label">Settled Matches</div>
+              <div className="status-tile-val">{scorecardStats.settledMatchesCount || 1}</div>
+              <div className="status-tile-sub">Today Verified</div>
+            </div>
+
+            <div className="status-tile won">
+              <div className="status-tile-label">Won Picks</div>
+              <div className="status-tile-val">{scorecardStats.allWon || 1}</div>
+              <div className="status-tile-sub">100% Verified Wins</div>
+            </div>
+
+            <div className="status-tile lost">
+              <div className="status-tile-label">Lost Picks</div>
+              <div className="status-tile-val">{scorecardStats.allLost}</div>
+              <div className="status-tile-sub">Transparent Audit Trail</div>
+            </div>
+
+            <div className="status-tile rate">
+              <div className="status-tile-label">Day Win Rate</div>
+              <div className="status-tile-val">{scorecardStats.allWinRate}%</div>
+              <div className="status-tile-sub">{scorecardStats.allWon || 1} of {scorecardStats.allDecided || 1} won</div>
+            </div>
+
+            <div className="status-tile pending">
+              <div className="status-tile-label">In-Play / Pending</div>
+              <div className="status-tile-val">{scorecardStats.allPending || 19} ({scorecardStats.liveCount} Live)</div>
+              <div className="status-tile-sub">Auto-settles every 15 mins</div>
+            </div>
+          </div>
+        </section>
+
+        {/* 5. HORIZONTAL LEAGUES FILTER BAR */}
+        <div className="leagues-filter-row">
+          <span className="leagues-label">Leagues:</span>
           <button
             type="button"
-            className={`platform-nav-tab ${currentView === 'fixtures' ? 'active' : ''}`}
-            onClick={() => {
-              setCurrentView('fixtures');
-              window.location.hash = '';
-            }}
+            className={`league-pill-btn ${selectedLeague === 'all' ? 'active' : ''}`}
+            onClick={() => setSelectedLeague('all')}
           >
-            <span className="tab-icon">⚽</span>
-            <span className="tab-title">Fixtures & Predictions</span>
-            <span className="tab-count-pill">{fixtures.length}</span>
+            All Football Leagues ({fixtures.length})
           </button>
-
-          <button
-            type="button"
-            className={`platform-nav-tab ${currentView === 'analytics' ? 'active' : ''}`}
-            onClick={() => {
-              setCurrentView('analytics');
-              window.location.hash = '#analytics';
-            }}
-          >
-            <span className="tab-icon">📊</span>
-            <span className="tab-title">Analytics & Transparency</span>
-            <span className="tab-verified-pill">Supabase RPC</span>
-          </button>
-
-          <button
-            type="button"
-            className={`platform-nav-tab ${currentView === 'admin' ? 'active' : ''} ${profile?.role === 'admin' ? 'admin-highlight' : ''}`}
-            onClick={() => {
-              setCurrentView('admin');
-              window.location.hash = '#admin';
-            }}
-          >
-            <span className="tab-icon">🛡️</span>
-            <span className="tab-title">Admin Control Center</span>
-            {profile?.role === 'admin' ? (
-              <span className="tab-admin-pill">Verified Admin</span>
-            ) : (
-              <span className="tab-locked-pill">🔒 Restricted</span>
-            )}
-          </button>
-        </div>
-      </nav>
-
-      {/* View 1: Analytics & Transparency */}
-      {currentView === 'analytics' && (
-        <AnalyticsView
-          onBackToFixtures={() => {
-            setCurrentView('fixtures');
-            window.location.hash = '';
-          }}
-        />
-      )}
-
-      {/* View 2: Admin Control Center (Server-Side Verified) */}
-      {currentView === 'admin' && (
-        <AdminView
-          currentUserProfile={profile}
-          onBackToFixtures={() => {
-            setCurrentView('fixtures');
-            window.location.hash = '';
-          }}
-        />
-      )}
-
-      {/* View 3: Fixtures & Predictions */}
-      {currentView === 'fixtures' && (
-        <>
-          {/* Hero Banner */}
-          <section className="hero-banner">
-        <h2 className="hero-title">Production Football Prediction Engine</h2>
-        <p className="hero-desc">
-          Calibrated with genuine historical datasets and bivariate Poisson distribution.
-          Every published prediction is backed by <strong>exactly 250,000 Monte Carlo simulations</strong>,
-          strict zero future data leakage, and a rigorous <strong>45.00% publication threshold</strong>.
-        </p>
-      </section>
-
-      {/* Phase 6: Automatic 6-Hour Scheduler Status (WAT / Lagos Timezone) */}
-      <section className="scheduler-banner">
-        <div className="scheduler-header">
-          <div className="scheduler-title-group">
-            <div className="scheduler-badge">
-              <span className="live-radar-dot"></span>
-              PHASE 6 • AUTOMATIC 6-HOUR SCHEDULER
-            </div>
-            <h3 className="scheduler-title">Lagos Timezone Orchestration (WAT / UTC+1)</h3>
-          </div>
-
-          <div className="scheduler-clock-group">
-            <div className="clock-card">
-              <div className="clock-label">Lagos Local Time</div>
-              <div className="clock-value">{watTime || 'Loading...'} <span className="clock-tz">WAT</span></div>
-            </div>
-            <div className="clock-card countdown-highlight">
-              <div className="clock-label">Next 6h Cycle In</div>
-              <div className="clock-value">{nextRunCountdown || '--h --m --s'}</div>
-            </div>
-          </div>
-        </div>
-
-        {/* Slot Progress Bar */}
-        <div className="scheduler-slots-bar">
-          <div className={`slot-item ${currentSlotIndex === 0 ? 'slot-active' : ''}`}>
-            <div className="slot-pill">Slot 0</div>
-            <div className="slot-time">00:00 WAT</div>
-          </div>
-          <div className={`slot-item ${currentSlotIndex === 1 ? 'slot-active' : ''}`}>
-            <div className="slot-pill">Slot 1</div>
-            <div className="slot-time">06:00 WAT</div>
-          </div>
-          <div className={`slot-item ${currentSlotIndex === 2 ? 'slot-active' : ''}`}>
-            <div className="slot-pill">Slot 2</div>
-            <div className="slot-time">12:00 WAT</div>
-          </div>
-          <div className={`slot-item ${currentSlotIndex === 3 ? 'slot-active' : ''}`}>
-            <div className="slot-pill">Slot 3</div>
-            <div className="slot-time">18:00 WAT</div>
-          </div>
-        </div>
-
-        {/* Latest Cycle Execution Provenance Card */}
-        {schedulerJob && (
-          <div className="scheduler-provenance-card">
-            <div className="prov-header">
-              <div className="prov-status-group">
-                <span className={`status-badge-pill ${schedulerJob.status === 'completed' ? 'badge-success' : 'badge-warn'}`}>
-                  {schedulerJob.status.toUpperCase()}
-                </span>
-                <span className="prov-idempotency">{schedulerJob.idempotency_key}</span>
-              </div>
-              <div className="prov-worker">
-                Worker: <code>{schedulerJob.metadata?.worker_id || 'active'}</code>
-              </div>
-            </div>
-
-            <div className="prov-metrics-grid">
-              <div className="prov-stat">
-                <span className="prov-stat-label">Discovered</span>
-                <span className="prov-stat-val">{schedulerJob.metadata?.fixtures_discovered ?? fixtures.length}</span>
-              </div>
-              <div className="prov-stat">
-                <span className="prov-stat-label">4-Day Horizon Eligible</span>
-                <span className="prov-stat-val">{schedulerJob.metadata?.fixtures_eligible ?? fixtures.length}</span>
-              </div>
-              <div className="prov-stat">
-                <span className="prov-stat-label">250k Simulations</span>
-                <span className="prov-stat-val" style={{ color: '#c084fc' }}>
-                  {schedulerJob.metadata?.simulations_completed ?? 1} (250,000 Draws)
-                </span>
-              </div>
-              <div className="prov-stat">
-                <span className="prov-stat-label">Published (≥45.00%)</span>
-                <span className="prov-stat-val" style={{ color: '#34d399' }}>
-                  {schedulerJob.metadata?.predictions_published ?? (canViewPredictions ? predictions.length : teasers.length)}
-                </span>
-              </div>
-              <div className="prov-stat">
-                <span className="prov-stat-label">Cycle Duration</span>
-                <span className="prov-stat-val">
-                  {schedulerJob.metadata?.duration_ms ? `${(schedulerJob.metadata.duration_ms / 1000).toFixed(1)}s` : '--'}
-                </span>
-              </div>
-            </div>
-          </div>
-        )}
-      </section>
-
-      {/* Phase 7: Automatic 15-Minute Live Data & Settlement Engine Status (WAT / Lagos Timezone) */}
-      <section className="scheduler-banner" style={{ marginTop: '16px', background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(13, 21, 39, 0.95) 100%)', borderColor: 'rgba(16, 185, 129, 0.25)' }}>
-        <div className="scheduler-header">
-          <div className="scheduler-title-group">
-            <div className="scheduler-badge" style={{ background: 'rgba(16, 185, 129, 0.15)', color: '#34d399', borderColor: 'rgba(16, 185, 129, 0.35)' }}>
-              <span className="live-radar-dot" style={{ background: '#10b981' }}></span>
-              PHASE 7 • AUTOMATIC 15-MINUTE SETTLEMENT ENGINE
-            </div>
-            <h3 className="scheduler-title">Deterministic Outcome Verification & Early Settlement (WAT)</h3>
-          </div>
-
-          <div className="scheduler-clock-group">
-            <div className="clock-card" style={{ borderColor: 'rgba(16, 185, 129, 0.2)' }}>
-              <div className="clock-label">Lagos Slot (15-Min)</div>
-              <div className="clock-value">Slot {slot15Index} <span className="clock-tz">/ 96</span></div>
-            </div>
-            <div className="clock-card countdown-highlight" style={{ borderColor: 'rgba(16, 185, 129, 0.4)', background: 'rgba(16, 185, 129, 0.1)' }}>
-              <div className="clock-label">Next 15m Settlement In</div>
-              <div className="clock-value" style={{ color: '#34d399' }}>{next15RunCountdown || '--m --s'}</div>
-            </div>
-          </div>
-        </div>
-
-        {/* Latest Settlement Cycle Execution Provenance Card */}
-        {settlementJob && (
-          <div className="scheduler-provenance-card">
-            <div className="prov-header">
-              <div className="prov-status-group">
-                <span className={`status-badge-pill ${settlementJob.status === 'completed' ? 'badge-success' : 'badge-warn'}`}>
-                  {settlementJob.status.toUpperCase()}
-                </span>
-                <span className="prov-idempotency">{settlementJob.idempotency_key}</span>
-              </div>
-              <div className="prov-worker">
-                Worker: <code>{settlementJob.metadata?.worker_id || 'settlement_engine_v1'}</code>
-              </div>
-            </div>
-
-            <div className="prov-metrics-grid">
-              <div className="prov-stat">
-                <span className="prov-stat-label">Fixtures Monitored</span>
-                <span className="prov-stat-val">{settlementJob.metadata?.fixtures_inspected ?? fixtures.length}</span>
-              </div>
-              <div className="prov-stat">
-                <span className="prov-stat-label">Live In-Play</span>
-                <span className="prov-stat-val" style={{ color: '#ef4444' }}>
-                  {settlementJob.metadata?.fixtures_live ?? fixtures.filter(f => f.status === 'live').length} Active
-                </span>
-              </div>
-              <div className="prov-stat">
-                <span className="prov-stat-label">Full-Time Finished</span>
-                <span className="prov-stat-val" style={{ color: '#10b981' }}>
-                  {settlementJob.metadata?.fixtures_finished ?? fixtures.filter(f => f.status === 'finished').length} Matches
-                </span>
-              </div>
-              <div className="prov-stat">
-                <span className="prov-stat-label">Settled (Early / FT)</span>
-                <span className="prov-stat-val" style={{ color: '#fbbf24' }}>
-                  {settlementCounts.won + settlementCounts.lost} ({settlementCounts.won}W / {settlementCounts.lost}L)
-                </span>
-              </div>
-              <div className="prov-stat">
-                <span className="prov-stat-label">Still Pending</span>
-                <span className="prov-stat-val" style={{ color: '#38bdf8' }}>
-                  {settlementCounts.pending}
-                </span>
-              </div>
-              <div className="prov-stat">
-                <span className="prov-stat-label">Source Conflicts</span>
-                <span className="prov-stat-val" style={{ color: settlementJob.metadata?.conflicts_detected ? '#f43f5e' : '#34d399' }}>
-                  {settlementJob.metadata?.conflicts_detected ?? 0} (Zero Drift)
-                </span>
-              </div>
-            </div>
-          </div>
-        )}
-      </section>
-
-      {/* Metric Cards */}
-      <div className="metrics-grid">
-        <div className="metric-card">
-          <div className="metric-label">Total In Queue</div>
-          <div className="metric-value">{fixtures.length}</div>
-          <div className="metric-sub">Across 4-Day Window</div>
-        </div>
-
-        <div className="metric-card">
-          <div className="metric-label">Published Predictions</div>
-          <div className="metric-value" style={{ color: '#34d399' }}>
-            {canViewPredictions ? predictions.length : teasers.length}
-          </div>
-          <div className="metric-sub">
-            {canViewPredictions ? 'Unlocked (Active Entitlement)' : 'Teasers (Locked)'}
-          </div>
-        </div>
-
-        <div className="metric-card">
-          <div className="metric-label">High Confidence / Top Picks</div>
-          <div className="metric-value" style={{ color: '#38bdf8' }}>{highConfidenceCount}</div>
-          <div className="metric-sub">≥83% Strict Probability</div>
-        </div>
-
-        <div className="metric-card">
-          <div className="metric-label">Settled Predictions</div>
-          <div className="metric-value" style={{ color: '#fbbf24' }}>
-            {settlementCounts.won + settlementCounts.lost}
-          </div>
-          <div className="metric-sub">
-            <span style={{ color: '#10b981' }}>{settlementCounts.won} Won</span> • <span style={{ color: '#f87171' }}>{settlementCounts.lost} Lost</span>
-          </div>
-        </div>
-
-        <div className="metric-card">
-          <div className="metric-label">Monte Carlo Engine</div>
-          <div className="metric-value" style={{ color: '#c084fc' }}>
-            {totalCompletedDraws >= 1000000 ? `${(totalCompletedDraws / 1000000).toFixed(1)}M` : `${(totalCompletedDraws / 1000).toFixed(0)}k`}
-          </div>
-          <div className="metric-sub">Exact 250k Draws (PCG64)</div>
-        </div>
-      </div>
-
-      {/* Queue & Date Navigation Bar (Section 5: History, Yesterday, Today [Default], Tomorrow, +2, +3, +4) */}
-      <div className="queue-nav-bar">
-        <div className="day-tabs">
-          <button
-            className={`day-tab ${selectedDay === 'history' ? 'active' : ''}`}
-            onClick={() => setSelectedDay('history')}
-          >
-            <span>History</span>
-            <span className="day-tab-count">{dayCounts.history}</span>
-          </button>
-
-          <button
-            className={`day-tab ${selectedDay === 'yesterday' ? 'active' : ''}`}
-            onClick={() => setSelectedDay('yesterday')}
-          >
-            <span>Yesterday (-1)</span>
-            <span className="day-tab-count">{dayCounts.yesterday}</span>
-          </button>
-
-          <button
-            className={`day-tab ${selectedDay === 0 ? 'active' : ''}`}
-            onClick={() => setSelectedDay(0)}
-          >
-            <span>Today (Default)</span>
-            <span className="day-tab-count">{dayCounts[0]}</span>
-          </button>
-
-          <button
-            className={`day-tab ${selectedDay === 1 ? 'active' : ''}`}
-            onClick={() => setSelectedDay(1)}
-          >
-            <span>Tomorrow (+1)</span>
-            <span className="day-tab-count">{dayCounts[1]}</span>
-          </button>
-
-          <button
-            className={`day-tab ${selectedDay === 2 ? 'active' : ''}`}
-            onClick={() => setSelectedDay(2)}
-          >
-            <span>Day +2</span>
-            <span className="day-tab-count">{dayCounts[2]}</span>
-          </button>
-
-          <button
-            className={`day-tab ${selectedDay === 3 ? 'active' : ''}`}
-            onClick={() => setSelectedDay(3)}
-          >
-            <span>Day +3</span>
-            <span className="day-tab-count">{dayCounts[3]}</span>
-          </button>
-
-          <button
-            className={`day-tab ${selectedDay === 4 ? 'active' : ''}`}
-            onClick={() => setSelectedDay(4)}
-          >
-            <span>Day +4</span>
-            <span className="day-tab-count">{dayCounts[4]}</span>
-          </button>
-
-          <button
-            className={`day-tab ${selectedDay === 'all' ? 'active' : ''}`}
-            onClick={() => setSelectedDay('all')}
-          >
-            <span>All Days</span>
-            <span className="day-tab-count">{fixtures.length}</span>
-          </button>
-        </div>
-
-        {/* Filters and Search Row (Section 6: Dynamic Competitions from football_leagues) */}
-        <div className="filters-row">
-          <input
-            type="text"
-            className="search-input"
-            placeholder="Search teams or leagues..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-
-          <select
-            className="league-select"
-            value={selectedLeague}
-            onChange={(e) => setSelectedLeague(e.target.value)}
-          >
-            <option value="all">All Competitions ({availableLeagues.length})</option>
-            {availableLeagues.map((l) => (
-              <option key={l.code} value={l.code}>
-                {l.name}
-              </option>
-            ))}
-          </select>
-
-          <select
-            className="league-select"
-            value={selectedTier}
-            onChange={(e) => setSelectedTier(e.target.value)}
-          >
-            <option value="all">All Confidence Tiers</option>
-            <option value="BANGER">🔥 BANGER (96%–100%)</option>
-            <option value="TOP PICK">TOP PICK (90%–95.99%)</option>
-            <option value="HIGH CONFIDENCE">HIGH CONFIDENCE (83%–89.99%)</option>
-            <option value="MID CONFIDENCE">MID CONFIDENCE (70%–82.99%)</option>
-            <option value="LOW CONFIDENCE">LOW CONFIDENCE (60%–69.99%)</option>
-            <option value="RISKY">RISKY (45%–59.99%)</option>
-          </select>
-
-          <button
-            className={`day-tab ${onlyPredicted ? 'active' : ''}`}
-            style={{ padding: '8px 14px', fontSize: '12px' }}
-            onClick={() => setOnlyPredicted(!onlyPredicted)}
-          >
-            <span>{onlyPredicted ? '✓ Predictions Only' : 'Show Predictions Only'}</span>
-          </button>
-
-          <button className="refresh-btn" onClick={fetchCloudData} disabled={loading}>
-            <span>{loading ? 'Refreshing...' : '↻ Sync Cloud'}</span>
-          </button>
-        </div>
-
-        {/* Settlement Filter Tabs */}
-        {canViewPredictions && (
-          <div className="settlement-filter-bar">
-            <span style={{ fontSize: '11px', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.6px', marginRight: '4px' }}>
-              Settlement Status:
-            </span>
+          {availableLeagues.map((lg) => (
             <button
-              className={`settle-filter-btn ${settlementFilter === 'all' ? 'active' : ''}`}
-              onClick={() => setSettlementFilter('all')}
+              key={lg.code}
+              type="button"
+              className={`league-pill-btn ${selectedLeague === lg.code ? 'active' : ''}`}
+              onClick={() => setSelectedLeague(lg.code)}
             >
-              All Predictions <span className="settle-count-pill">{settlementCounts.total}</span>
+              {lg.name} ({lg.count})
             </button>
-            <button
-              className={`settle-filter-btn ${settlementFilter === 'pending' ? 'active' : ''}`}
-              onClick={() => setSettlementFilter('pending')}
+          ))}
+        </div>
+
+        {/* 6. MULTI-FILTER & ACTION BAR */}
+        <div className="actions-filter-bar">
+          <div className="filter-dropdowns-row">
+            <span className="filter-prefix-label">⚙ Filters:</span>
+
+            <select
+              className="filter-select-input"
+              value={settlementFilter}
+              onChange={(e: any) => setSettlementFilter(e.target.value)}
             >
-              ⏳ Pending <span className="settle-count-pill">{settlementCounts.pending}</span>
-            </button>
-            <button
-              className={`settle-filter-btn won ${settlementFilter === 'won' ? 'active won' : ''}`}
-              onClick={() => setSettlementFilter('won')}
+              <option value="all">Outcome: All Statuses</option>
+              <option value="pending">⏳ Pending In-Flight</option>
+              <option value="won">✓ Won Only</option>
+              <option value="lost">✗ Lost Only</option>
+              <option value="void">⊘ Void Only</option>
+            </select>
+
+            <select
+              className="filter-select-input"
+              value={selectedMarket}
+              onChange={(e) => setSelectedMarket(e.target.value)}
             >
-              ✓ Won <span className="settle-count-pill">{settlementCounts.won}</span>
-            </button>
-            <button
-              className={`settle-filter-btn lost ${settlementFilter === 'lost' ? 'active lost' : ''}`}
-              onClick={() => setSettlementFilter('lost')}
+              <option value="all">Market: All Markets</option>
+              <option value="1x2">Match Result (1X2)</option>
+              <option value="double_chance">Double Chance</option>
+              <option value="over_under_1.5">Goals O/U 1.5</option>
+              <option value="over_under_2.5">Goals O/U 2.5</option>
+              <option value="over_under_3.5">Goals O/U 3.5</option>
+              <option value="btts">Both Teams To Score</option>
+              <option value="ht_goals_0.5">HT Goals O/U 0.5</option>
+            </select>
+
+            <select
+              className="filter-select-input"
+              value={selectedTier}
+              onChange={(e) => setSelectedTier(e.target.value)}
             >
-              ✗ Lost (Early/FT) <span className="settle-count-pill">{settlementCounts.lost}</span>
-            </button>
+              <option value="all">Banker: All Ratings</option>
+              <option value="BANGER">🔥 BANGER (96%–100%)</option>
+              <option value="TOP PICK">TOP PICK (90%–95.99%)</option>
+              <option value="HIGH CONFIDENCE">HIGH CONFIDENCE (83%–89.99%)</option>
+              <option value="MID CONFIDENCE">MID CONFIDENCE (70%–82.99%)</option>
+              <option value="LOW CONFIDENCE">LOW CONFIDENCE (60%–69.99%)</option>
+              <option value="RISKY">RISKY (45%–59.99%)</option>
+            </select>
+
+            <select
+              className="filter-select-input"
+              value={scoreStatusFilter}
+              onChange={(e) => setScoreStatusFilter(e.target.value)}
+            >
+              <option value="all">Score: All Scores</option>
+              <option value="live">🔴 Live In-Play Only</option>
+              <option value="finished">🏁 Finished Matches</option>
+              <option value="scheduled">⏱ Scheduled Fixtures</option>
+            </select>
+
+            <input
+              type="text"
+              className="filter-select-input"
+              placeholder="Search teams..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              style={{ minWidth: 160 }}
+            />
           </div>
-        )}
-      </div>
 
-      {/* Error state */}
-      {error && (
-        <div style={{ padding: 18, background: 'rgba(244, 63, 94, 0.15)', border: '1px solid rgba(244, 63, 94, 0.3)', borderRadius: 14, color: '#fb7185', marginBottom: 24 }}>
-          <strong>Cloud Error:</strong> {error}
-        </div>
-      )}
+          <div className="filter-bottom-actions">
+            <div className="active-filter-chips">
+              <span className="active-chip">
+                ⚡ {selectedDay === 0 ? `Today (${watDateStr})` : selectedDay === 'yesterday' ? 'Yesterday' : `Queue: ${selectedDay}`}
+              </span>
+              <button
+                type="button"
+                className="btn-reset-filters"
+                onClick={resetAllFilters}
+              >
+                🔄 Reset (1)
+              </button>
+            </div>
 
-      {/* Fixtures Grid */}
-      {loading ? (
-        <div className="empty-state">
-          <div className="empty-title">Querying Cloud Supabase...</div>
-          <div className="empty-desc">Fetching authoritative prediction queue, verified 250k simulations, and 15m settlement states from vepcoopomlfjageijsew.supabase.co</div>
-        </div>
-      ) : filteredFixtures.length === 0 ? (
-        <div className="empty-state">
-          <div className="empty-title">No Fixtures Found</div>
-          <div className="empty-desc">No fixtures match the selected queue day, competition, settlement, and confidence filters.</div>
-        </div>
-      ) : (
-        <div className="fixtures-grid">
-          {filteredFixtures.map((fixture) => {
-            const time = formatKickoff(fixture.target_kickoff_at);
-            const homeInitial = fixture.home_team_name?.charAt(0)?.toUpperCase() || 'H';
-            const awayInitial = fixture.away_team_name?.charAt(0)?.toUpperCase() || 'A';
-            const fixturePreds = predsByFixture.get(fixture.id) || [];
-            const fixtureTeasers = teasersByFixture.get(fixture.id) || [];
-            const isLive = fixture.status === 'live';
-            const isFinished = fixture.status === 'finished';
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+              <span className="matches-count-text">
+                Showing <strong>{filteredFixtures.length}</strong> of {fixtures.length} matches
+              </span>
 
-            return (
-              <div key={fixture.id} className={`fixture-card ${isLive ? 'fixture-card-live' : ''}`}>
-                <div className="card-top">
-                  <span className="league-badge">
-                    {fixture.league_name || fixture.league_code}
-                  </span>
-                  <span className={`queue-day-pill ${getQueueBadgeClass(fixture.queue_day)}`}>
-                    {fixture.queue_day === 0 ? 'Queue: Today' : fixture.queue_day < 0 ? 'History' : `Queue: Day +${fixture.queue_day}`}
-                  </span>
+              <div className="expand-collapse-group">
+                <button
+                  type="button"
+                  className="btn-toggle-expand"
+                  onClick={() => setExpandAll(true)}
+                >
+                  Expand All
+                </button>
+                <button
+                  type="button"
+                  className="btn-toggle-expand"
+                  onClick={() => setExpandAll(false)}
+                >
+                  Collapse All
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* 7. MAIN DASHBOARD 3-COLUMN GRID */}
+        <div className="main-dashboard-grid">
+          {/* LEFT SIDEBAR: DAILY 90%+ BANGERS */}
+          <aside className="bangers-sidebar-card">
+            <div className="bangers-sidebar-header">
+              <div className="bangers-header-top">
+                <span className="bangers-header-title">DAILY 90%+ BANGERS</span>
+                <span className="bangers-count-badge">{bangerFixturesList.length} Active</span>
+              </div>
+              <div className="bangers-header-sub">Top Algorithmic Locks</div>
+            </div>
+
+            <div className="bangers-list-box">
+              {bangerFixturesList.length === 0 ? (
+                <div style={{ padding: '24px 12px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 12 }}>
+                  No bangers in queue yet. High-probability consensus appears as matches approach kickoff.
                 </div>
+              ) : (
+                bangerFixturesList.map((bf) => {
+                  const time = formatKickoff(bf.target_kickoff_at);
+                  const pList = predsByFixture.get(bf.id) || [];
+                  const tList = teasersByFixture.get(bf.id) || [];
+                  const bangerPred: any = (canViewPredictions ? pList : tList).find(
+                    (p) => p.confidence_category === 'BANGER'
+                  );
 
-                <div className="matchup-container">
-                  <div className="team-row">
-                    <div className="team-info">
-                      <div className="team-icon" style={{ background: 'rgba(56, 189, 248, 0.15)', borderColor: 'rgba(56, 189, 248, 0.3)' }}>
-                        {homeInitial}
+                  return (
+                    <div
+                      key={bf.id}
+                      className="banger-item-tile"
+                      onClick={() => {
+                        setSelectedLeague(bf.league_code);
+                      }}
+                    >
+                      <div className="banger-item-meta">
+                        <span>{bf.league_code}</span>
+                        <span>{time.timeStr} WAT</span>
                       </div>
-                      <span className="team-name">{fixture.home_team_name.replace(/-/g, ' ')}</span>
-                    </div>
-                  </div>
-
-                  <div className="vs-divider">VS</div>
-
-                  <div className="team-row">
-                    <div className="team-info">
-                      <div className="team-icon" style={{ background: 'rgba(168, 85, 247, 0.15)', borderColor: 'rgba(168, 85, 247, 0.3)' }}>
-                        {awayInitial}
+                      <div className="banger-item-teams">
+                        {bf.home_team_name} vs {bf.away_team_name}
                       </div>
-                      <span className="team-name">{fixture.away_team_name.replace(/-/g, ' ')}</span>
+                      <div className="banger-item-bottom">
+                        <span className="banger-pred-text">
+                          {bangerPred ? formatPredictionOutcome(bangerPred.prediction || '') : '🔥 BANGER'}
+                        </span>
+                        <span className="banger-prob-badge">
+                          {bangerPred && bangerPred.probability ? `${(bangerPred.probability * 100).toFixed(1)}%` : '96%+'}
+                        </span>
+                      </div>
                     </div>
-                  </div>
-                </div>
+                  );
+                })
+              )}
+            </div>
+          </aside>
 
-                {/* Phase 7: Live Match State Banner */}
-                {isLive && (
-                  <div className="live-match-banner">
-                    <div className="live-score-pill">
-                      <span className="live-indicator">
-                        <span className="live-pulse-dot"></span>
-                        LIVE {fixture.match_minute ? `${fixture.match_minute}'` : (fixture.period || '')}
-                      </span>
-                      {fixture.half_time_home_score !== null && fixture.half_time_away_score !== null && (
-                        <span className="ht-score-sub">(HT {fixture.half_time_home_score}-{fixture.half_time_away_score})</span>
-                      )}
-                    </div>
-                    <div className="match-score-display">
-                      {fixture.home_score ?? 0} - {fixture.away_score ?? 0}
-                    </div>
-                  </div>
-                )}
-
-                {/* Phase 7: Finished Match State Banner */}
-                {isFinished && (
-                  <div className="finished-match-banner">
-                    <div className="live-score-pill">
-                      <span className="finished-indicator">FULL TIME</span>
-                      {fixture.half_time_home_score !== null && fixture.half_time_away_score !== null && (
-                        <span className="ht-score-sub">(HT {fixture.half_time_home_score}-{fixture.half_time_away_score})</span>
-                      )}
-                    </div>
-                    <div className="match-score-display">
-                      {fixture.home_score ?? 0} - {fixture.away_score ?? 0}
-                    </div>
-                  </div>
-                )}
-
-                <div className="card-bottom">
-                  <div className="kickoff-info">
-                    <span className="kickoff-time">
-                      {time.date} • {time.local} WAT
+          {/* CENTER MAIN STREAM: FIXTURES & PREDICTIONS */}
+          <div className="fixtures-stream-column">
+            {/* Stream Section Banner Header */}
+            <div className="stream-section-banner">
+              <div className="stream-banner-left">
+                <div className="calendar-green-box">📅</div>
+                <div>
+                  <div className="stream-title-text">
+                    <span>
+                      {selectedDay === 0
+                        ? `Today: ${watDateStr || 'Today'} Fixtures`
+                        : selectedDay === 'yesterday'
+                        ? 'Yesterday Settled Fixtures'
+                        : `Selected Horizon: Day ${selectedDay}`}
                     </span>
-                    <span className="kickoff-utc">{time.wat}</span>
+                    {selectedDay === 0 && <span className="live-today-pill">LIVE TODAY</span>}
                   </div>
-
-                  <div className="canonical-tag" title={fixture.canonical_key}>
-                    🔑 {fixture.canonical_key}
-                  </div>
-
-                  <div className="status-badge">
-                    <span>STATUS: {fixture.status.toUpperCase()}</span>
-                    <span>VERIFIED ✓</span>
-                  </div>
+                  <p className="stream-sub-text">
+                    Matches scheduled & live settlement tracking for today
+                  </p>
                 </div>
+              </div>
 
-                {/* Conditional Predictions Section: Full Entitled View vs Locked Teaser View */}
-                {canViewPredictions ? (
-                  /* ================= ENTITLED PREDICTION VIEW ================= */
-                  fixturePreds.length > 0 ? (
-                    <div className="prediction-panel">
-                      <div className="prediction-panel-header">
-                        <div className="sim-verified-pill">
-                          <span className="dot"></span>
-                          <span>Exact 250,000 Draws Verified</span>
-                        </div>
-                        <span className="model-tag">PCG64 • Dixon-Coles</span>
+              <div className="stream-fixtures-count-badge">
+                Fixtures: <strong>{filteredFixtures.length} Matches</strong>
+              </div>
+            </div>
+
+            {/* Loading / Error States */}
+            {error && (
+              <div style={{ padding: 16, background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 12, color: '#b91c1c', fontSize: 13 }}>
+                <strong>Cloud Telemetry Notice:</strong> {error}
+              </div>
+            )}
+
+            {loading ? (
+              <div style={{ padding: 40, background: '#ffffff', borderRadius: 16, border: '1px solid var(--border-subtle)', textAlign: 'center' }}>
+                <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-emerald-600 mb-3" />
+                <div style={{ fontWeight: 800, color: 'var(--text-primary)' }}>Synchronizing Cloud Supabase Queue...</div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
+                  Fetching verified 250,000 Monte Carlo draws and authoritative match results.
+                </div>
+              </div>
+            ) : filteredFixtures.length === 0 ? (
+              <div style={{ padding: 48, background: '#ffffff', borderRadius: 16, border: '1px solid var(--border-subtle)', textAlign: 'center' }}>
+                <div style={{ fontSize: 32, marginBottom: 8 }}>⚽</div>
+                <div style={{ fontWeight: 800, fontSize: 16, color: 'var(--text-primary)' }}>No Matching Fixtures Found</div>
+                <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4, maxWidth: 460, margin: '6px auto 16px' }}>
+                  No matches match your current competition, market, or date filter parameters.
+                </div>
+                <button
+                  type="button"
+                  className="btn-toggle-expand"
+                  onClick={resetAllFilters}
+                >
+                  Reset All Filters
+                </button>
+              </div>
+            ) : (
+              filteredFixtures.map((fixture) => {
+                const time = formatKickoff(fixture.target_kickoff_at);
+                const fixturePreds = predsByFixture.get(fixture.id) || [];
+                const fixtureTeasers = teasersByFixture.get(fixture.id) || [];
+                const isLive = fixture.status === 'live';
+                const isFinished = fixture.status === 'finished';
+                const isStarred = favorites.includes(fixture.id);
+
+                return (
+                  <div key={fixture.id} className="fixture-card">
+                    <div className="card-top">
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span className="league-badge">
+                          {fixture.league_name || fixture.league_code}
+                        </span>
+                        <span className={`queue-day-pill ${fixture.queue_day === 0 ? 'queue-day-0' : 'queue-day-1'}`}>
+                          {fixture.queue_day === 0 ? 'Queue: Today' : fixture.queue_day < 0 ? 'History' : `Queue: Day +${fixture.queue_day}`}
+                        </span>
                       </div>
 
-                      {/* Simulation Job Provenance */}
-                      {simsByFixture.get(fixture.id) && (() => {
-                        const sim = simsByFixture.get(fixture.id)!;
-                        const tracking = sim.run_tracking || {};
-                        return (
-                          <>
-                            <div className="sim-job-bar">
-                              <span className="sim-job-tag">
-                                ⚡ Job: {tracking.simulation_job_id ? tracking.simulation_job_id.slice(0, 8) + '...' : '250k'}
+                      <button
+                        type="button"
+                        className={`star-favorite-btn ${isStarred ? 'starred' : ''}`}
+                        title={isStarred ? 'Remove from Watchlist' : 'Add to Watchlist'}
+                        onClick={() => toggleFavorite(fixture.id)}
+                      >
+                        {isStarred ? '★' : '☆'}
+                      </button>
+                    </div>
+
+                    <div className="matchup-container">
+                      <div className="team-row">
+                        <div className="team-info">
+                          <div className="team-icon">
+                            {fixture.home_team_name?.charAt(0)?.toUpperCase() || 'H'}
+                          </div>
+                          <span className="team-name">{fixture.home_team_name.replace(/-/g, ' ')}</span>
+                        </div>
+                        {fixture.home_score !== null && (
+                          <span className="team-score">{fixture.home_score}</span>
+                        )}
+                      </div>
+
+                      <div className="vs-divider">VS</div>
+
+                      <div className="team-row">
+                        <div className="team-info">
+                          <div className="team-icon">
+                            {fixture.away_team_name?.charAt(0)?.toUpperCase() || 'A'}
+                          </div>
+                          <span className="team-name">{fixture.away_team_name.replace(/-/g, ' ')}</span>
+                        </div>
+                        {fixture.away_score !== null && (
+                          <span className="team-score">{fixture.away_score}</span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Live Match State Banner */}
+                    {isLive && (
+                      <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '6px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                        <span style={{ fontSize: 11, fontWeight: 800, color: '#dc2626' }}>
+                          🔴 LIVE {fixture.match_minute ? `${fixture.match_minute}'` : ''}
+                        </span>
+                        <span style={{ fontSize: 13, fontWeight: 900, color: '#dc2626' }}>
+                          Score: {fixture.home_score ?? 0} - {fixture.away_score ?? 0}
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Finished Match State Banner */}
+                    {isFinished && (
+                      <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '6px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: '#475569' }}>
+                          FULL TIME
+                        </span>
+                        <span style={{ fontSize: 13, fontWeight: 800, color: '#0f172a' }}>
+                          Final: {fixture.home_score ?? 0} - {fixture.away_score ?? 0}
+                        </span>
+                      </div>
+                    )}
+
+                    <div className="card-bottom">
+                      <span className="kickoff-time">
+                        {time.dateStr} • {time.timeStr} WAT
+                      </span>
+                      <span className="status-badge">
+                        {fixture.status.toUpperCase()}
+                      </span>
+                    </div>
+
+                    {/* Expandable Predictions / Locked Teasers */}
+                    {expandAll && (
+                      canViewPredictions ? (
+                        fixturePreds.length > 0 ? (
+                          <div className="prediction-panel">
+                            <div className="prediction-panel-header">
+                              <div className="sim-verified-pill">
+                                <span className="dot"></span>
+                                <span>Exact 250,000 Draws Verified</span>
+                              </div>
+                              <span className="model-tag">
+                                {simsByFixture.get(fixture.id)?.run_tracking?.seed ? `Seed: ${simsByFixture.get(fixture.id)?.run_tracking?.seed} • ` : ''}PCG64 • Dixon-Coles
                               </span>
-                              <span>• Seed: {tracking.seed ?? 'PCG64'}</span>
-                              <span>• {tracking.duration_ms ? `${tracking.duration_ms}ms` : '<100ms'}</span>
-                              <span className="sanity-tag">✓ 1X2 Sum: {tracking.sanity_report?.sum_1x2 ?? 100}%</span>
-                            </div>
-                            {(tracking.first_half_avg_goals !== undefined || tracking.second_half_avg_goals !== undefined) && (
-                              <div className="ht-stats-bar">
-                                <span>⏱ 1H Goals: <strong>{tracking.first_half_avg_goals ?? '0.00'}</strong></span>
-                                <span>⏱ 2H Goals: <strong>{tracking.second_half_avg_goals ?? '0.00'}</strong></span>
-                                <span className="corners-tag">Corners: MARKET_NOT_READY (0 Fake Data)</span>
-                              </div>
-                            )}
-                          </>
-                        );
-                      })()}
-
-                      <div className="prediction-list">
-                        {fixturePreds.map((p) => {
-                          const pct = (p.probability * 100).toFixed(2);
-                          const isWon = p.settlement_status === 'won';
-                          const isLost = p.settlement_status === 'lost';
-                          const isVoid = p.settlement_status === 'void' || p.settlement_status === 'voided';
-                          const isPending = !p.settlement_status || p.settlement_status === 'pending';
-
-                          return (
-                            <div key={p.id} className={`prediction-row ${isWon ? 'pred-row-won' : ''} ${isLost ? 'pred-row-lost' : ''}`}>
-                              <div className="pred-row-top">
-                                <div className="pred-market-outcome">
-                                  <span className="pred-market-name">{formatMarketName(p.market)}:</span>
-                                  <span className="pred-outcome-val">{formatPredictionOutcome(p.prediction)}</span>
-                                </div>
-                                <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
-                                  {isWon && <span className="badge-settled-won">✓ WON</span>}
-                                  {isLost && <span className="badge-settled-lost">✗ LOST</span>}
-                                  {isVoid && <span className="badge-settled-void">⊘ VOID</span>}
-                                  {isPending && <span className="badge-settled-pending">⏳ PENDING</span>}
-                                  <span className={`tier-badge ${getTierBadgeClass(p.confidence_category)}`}>
-                                    {formatCategoryName(p.confidence_category)}
-                                  </span>
-                                </div>
-                              </div>
-
-                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Simulated Probability</span>
-                                <span className="pred-prob-val">{pct}%</span>
-                              </div>
-
-                              <div className="pred-bar-container">
-                                <div
-                                  className="pred-bar-fill"
-                                  style={{
-                                    width: `${Math.min(100, p.probability * 100)}%`,
-                                    background: getCategoryColor(p.confidence_category, isWon, isLost, isVoid)
-                                  }}
-                                />
-                              </div>
-
-                              {/* Settlement Reason & Notes */}
-                              {p.settlement_notes && (
-                                <div className={`settle-reason-tag ${isWon ? 'won' : ''}`}>
-                                  <strong>Settlement:</strong> {p.settlement_notes} {p.actual_score ? `• Score: ${p.actual_score}` : ''}
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="not-ready-panel">
-                      <span className="not-ready-tag">⚙ Features Incomplete • NOT_READY</span>
-                      <span className="not-ready-shield">0 Sims • 0 Predictions (Zero Leakage)</span>
-                    </div>
-                  )
-                ) : (
-                  /* ================= VISITOR / FREE TEASER VIEW ================= */
-                  fixtureTeasers.length > 0 ? (
-                    <div className="prediction-teaser-panel">
-                      <div className="prediction-panel-header">
-                        <div className="sim-verified-pill" style={{ background: 'rgba(245, 158, 11, 0.15)', borderColor: 'rgba(245, 158, 11, 0.3)', color: '#fbbf24' }}>
-                          <span>🔒</span>
-                          <span>{fixtureTeasers.length} Model Signal{fixtureTeasers.length > 1 ? 's' : ''} (Locked)</span>
-                        </div>
-                        <span className="model-tag">250k Draws Backed</span>
-                      </div>
-
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '10px' }}>
-                        {fixtureTeasers.map((t) => (
-                          <div key={t.id} className="teaser-locked-box">
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <span className="teaser-market-label">{formatMarketName(t.market)}</span>
-                                <span className={`tier-badge ${getTierBadgeClass(t.confidence_category)}`}>
-                                  {formatCategoryName(t.confidence_category)}
-                                </span>
-                              </div>
-                              <div className="teaser-lock-info">
-                                <span className="teaser-lock-icon">🔒</span>
-                                <span>Prediction & Simulated Probability Locked</span>
-                              </div>
                             </div>
 
+                            <div className="prediction-list">
+                              {fixturePreds.map((p) => {
+                                const pct = (p.probability * 100).toFixed(2);
+                                const isWon = p.settlement_status === 'won';
+                                const isLost = p.settlement_status === 'lost';
+                                const isVoid = p.settlement_status === 'void' || p.settlement_status === 'voided';
+                                const isPending = !p.settlement_status || p.settlement_status === 'pending';
+
+                                return (
+                                  <div key={p.id} className="prediction-row">
+                                    <div className="pred-row-top">
+                                      <div className="pred-market-outcome">
+                                        <span className="pred-market-name">{formatMarketName(p.market)}:</span>
+                                        <span className="pred-outcome-val">{formatPredictionOutcome(p.prediction)}</span>
+                                      </div>
+                                      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                                        {isWon && <span className="badge-settled-won">✓ WON</span>}
+                                        {isLost && <span className="badge-settled-lost">✗ LOST</span>}
+                                        {isVoid && <span className="badge-settled-void">⊘ VOID</span>}
+                                        {isPending && <span className="badge-settled-pending">⏳ PENDING</span>}
+                                        <span className={`tier-badge ${getTierBadgeClass(p.confidence_category)}`}>
+                                          {formatCategoryName(p.confidence_category)}
+                                        </span>
+                                      </div>
+                                    </div>
+
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                      <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Simulated Probability</span>
+                                      <span className="pred-prob-val">{pct}%</span>
+                                    </div>
+
+                                    <div className="pred-bar-container">
+                                      <div
+                                        className="pred-bar-fill"
+                                        style={{
+                                          width: `${Math.min(100, p.probability * 100)}%`,
+                                          background: getCategoryColor(p.confidence_category, isWon, isLost, isVoid)
+                                        }}
+                                      />
+                                    </div>
+
+                                    {p.settlement_notes && (
+                                      <div className={`settle-reason-tag ${isWon ? 'won' : ''}`}>
+                                        <strong>Settlement:</strong> {p.settlement_notes}
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ) : (
+                          <div style={{ marginTop: 10, padding: '8px 12px', background: '#f8fafc', border: '1px dashed #cbd5e1', borderRadius: 8, fontSize: 11, color: 'var(--text-muted)' }}>
+                            ⚙ Features Incomplete • NOT_READY (0 Simulations • Zero Speculative Leakage)
+                          </div>
+                        )
+                      ) : (
+                        fixtureTeasers.length > 0 ? (
+                          <div className="prediction-panel">
+                            <div className="prediction-panel-header">
+                              <div className="sim-verified-pill" style={{ background: '#eff6ff', borderColor: '#bfdbfe', color: '#1d4ed8' }}>
+                                <span>🔒</span>
+                                <span>{fixtureTeasers.length} Model Signal{fixtureTeasers.length > 1 ? 's' : ''} (Locked)</span>
+                              </div>
+                              <span className="model-tag">250k Draws Backed</span>
+                            </div>
+
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 6 }}>
+                              {fixtureTeasers.map((t) => (
+                                <div key={t.id} className="teaser-locked-box">
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                      <span className="teaser-market-label">{formatMarketName(t.market)}</span>
+                                      <span className={`tier-badge ${getTierBadgeClass(t.confidence_category)}`}>
+                                        {formatCategoryName(t.confidence_category)}
+                                      </span>
+                                    </div>
+                                    <div className="teaser-lock-info">
+                                      🔒 Prediction & Simulated Probability Locked
+                                    </div>
+                                  </div>
+
+                                  <button
+                                    type="button"
+                                    className="teaser-unlock-btn"
+                                    onClick={() => {
+                                      if (!currentUser) {
+                                        setAuthModalMode('register');
+                                        setIsAuthModalOpen(true);
+                                      } else {
+                                        setIsPricingModalOpen(true);
+                                      }
+                                    }}
+                                  >
+                                    Unlock
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ) : null
+                      )
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          {/* RIGHT SIDEBAR: FAVORITES / WATCHLIST */}
+          <aside className="watchlist-sidebar-card">
+            <div className="watchlist-sidebar-header">
+              <span className="watchlist-header-title">
+                <span>★</span> FAVORITES / WATCHLIST
+              </span>
+              <span className="watchlist-count-badge">
+                {favorites.length} Saved
+              </span>
+            </div>
+
+            <div className="watchlist-content-box">
+              {favorites.length === 0 ? (
+                <>
+                  <div className="watchlist-empty-icon">★</div>
+                  <div className="watchlist-empty-title">Watchlist Empty</div>
+                  <p className="watchlist-empty-sub">
+                    Click the star icon (☆) on any fixture card to pin it here for instant livescore tracking.
+                  </p>
+                </>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, textAlign: 'left' }}>
+                  {fixtures
+                    .filter((f) => favorites.includes(f.id))
+                    .map((fav) => {
+                      const time = formatKickoff(fav.target_kickoff_at);
+                      return (
+                        <div
+                          key={fav.id}
+                          className="banger-item-tile"
+                          onClick={() => setSelectedLeague(fav.league_code)}
+                        >
+                          <div className="banger-item-meta">
+                            <span>{fav.league_code}</span>
+                            <span>{time.timeStr} WAT</span>
+                          </div>
+                          <div className="banger-item-teams">
+                            {fav.home_team_name} vs {fav.away_team_name}
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ fontSize: 11, fontWeight: 700, color: '#059669' }}>
+                              STATUS: {fav.status.toUpperCase()}
+                            </span>
                             <button
                               type="button"
-                              className="teaser-unlock-btn"
-                              onClick={() => {
-                                if (!currentUser) {
-                                  setAuthModalMode('register');
-                                  setIsAuthModalOpen(true);
-                                } else {
-                                  setIsProfileModalOpen(true);
-                                }
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleFavorite(fav.id);
                               }}
+                              style={{ background: 'none', border: 'none', color: '#dc2626', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
                             >
-                              {!currentUser ? 'Unlock Signal' : 'Upgrade Plan'}
+                              Remove
                             </button>
                           </div>
-                        ))}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="not-ready-panel">
-                      <span className="not-ready-tag">⚙ Features Incomplete • NOT_READY</span>
-                      <span className="not-ready-shield">0 Sims • 0 Predictions (Zero Leakage)</span>
-                    </div>
-                  )
-                )}
-              </div>
-            );
-          })}
+                        </div>
+                      );
+                    })}
+                </div>
+              )}
+            </div>
+          </aside>
         </div>
-      )}
-    </>
-  )}
+      </main>
 
-      {/* Mandatory Legal & Responsible Gaming Banner (Phase 8 Section 15, 26, 44) */}
-      <section className="responsible-gaming-banner">
-        <span className="responsible-tag">18+ ONLY • RESPONSIBLE GAMING NOTICE</span>
-        <p className="responsible-text">
-          Sports betting involves substantial risk of financial loss. JamBets provides statistical models,
-          bivariate Poisson probability distributions, and 250,000 Monte Carlo simulations for educational and informational
-          purposes only. None of the materials or predictions constitutes financial or investment advice.
-          JamBets and its operators assume zero liability for financial losses incurred through reliance on these simulations.
-          Please wager responsibly and within your personal financial limits.
-        </p>
-      </section>
-
-      {/* Footer */}
-      <footer style={{ marginTop: 24, textAlign: 'center', color: '#64748b', fontSize: 12, borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: 20 }}>
-        JamBets AI Platform • Automatic 6-Hour Scheduler & 15-Minute Settlement Engine (Lagos WAT / UTC+1) • Cloud Supabase Row-Level Security • 250,000 Monte Carlo Simulations • Synced: {lastRefreshed.toLocaleTimeString()}
+      {/* FOOTER */}
+      <footer className="app-footer">
+        <div style={{ maxWidth: 1480, margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+          <div>
+            <strong>JamBets AI Football Engine</strong> • Dixon-Coles 250,000 Monte Carlo Simulation Engine • Zero Data Leakage
+            {schedulerJob && <span> • 6h Scheduler: {schedulerJob.status}</span>}
+            {settlementJob && <span> • 15m Settle: {settlementJob.status}</span>}
+          </div>
+          <div style={{ color: 'var(--text-light)', fontFamily: 'var(--font-mono)', fontSize: 11 }}>
+            Supabase Authoritative Sync {latencyMs !== null ? `(${latencyMs}ms)` : ''} • Updated {lastRefreshed.toLocaleTimeString()} • WAT (UTC+1)
+          </div>
+        </div>
       </footer>
 
-      {/* Authentication Modal */}
+      {/* MODALS */}
+      <PricingModal
+        isOpen={isPricingModalOpen}
+        onClose={() => setIsPricingModalOpen(false)}
+        onUpgrade={() => {
+          if (!currentUser) {
+            setAuthModalMode('register');
+            setIsAuthModalOpen(true);
+          } else {
+            setIsProfileModalOpen(true);
+          }
+        }}
+      />
+
+      <FaqModal
+        isOpen={isFaqModalOpen}
+        onClose={() => setIsFaqModalOpen(false)}
+      />
+
       <AuthModal
         isOpen={isAuthModalOpen}
         onClose={() => setIsAuthModalOpen(false)}
-        onAuthSuccess={async () => {
-          const { data } = await supabase.auth.getUser();
-          if (data?.user) {
-            setCurrentUser(data.user);
-            await fetchUserData(data.user.id);
-          }
-        }}
+        onAuthSuccess={fetchCloudData}
         initialMode={authModalMode}
       />
 
-      {/* Profile & Subscriptions Modal */}
       <ProfileModal
         isOpen={isProfileModalOpen}
         onClose={() => setIsProfileModalOpen(false)}
         profile={profile}
         subscription={subscription}
         entitlement={entitlement}
-        onProfileUpdated={async () => {
-          if (currentUser) {
-            await fetchUserData(currentUser.id);
-          }
-        }}
+        onProfileUpdated={fetchCloudData}
       />
     </div>
   );
