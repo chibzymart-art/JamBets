@@ -509,6 +509,26 @@ export default function App() {
     }
   };
 
+  const getCategoryColor = (category: string, isWon?: boolean, isLost?: boolean, isVoid?: boolean) => {
+    if (isWon) return 'var(--settle-won)';
+    if (isLost) return 'var(--settle-lost)';
+    if (isVoid) return 'var(--settle-void)';
+    switch (category) {
+      case 'BANGER': return 'var(--tier-banger)'; // Flame #e25822
+      case 'TOP PICK': return 'var(--tier-top-pick)'; // Deep Blue #1e40af
+      case 'HIGH CONFIDENCE': return 'var(--tier-high-conf)'; // Light Blue #0284c7
+      case 'MID CONFIDENCE': return 'var(--tier-mid-conf)'; // Deep Orange #ea580c
+      case 'LOW CONFIDENCE': return 'var(--tier-low-conf)'; // Light Orange #f59e0b
+      case 'RISKY': return 'var(--tier-risky)'; // Light Pink #ec4899
+      default: return 'var(--tier-low-conf)';
+    }
+  };
+
+  const formatCategoryName = (category: string) => {
+    if (category === 'BANGER') return '🔥 BANGER';
+    return category;
+  };
+
   const formatMarketName = (market: string) => {
     switch (market) {
       case '1x2': return 'Match Result (1X2)';
@@ -1031,12 +1051,12 @@ export default function App() {
             onChange={(e) => setSelectedTier(e.target.value)}
           >
             <option value="all">All Confidence Tiers</option>
-            <option value="BANGER">BANGER (96–100%)</option>
-            <option value="TOP PICK">TOP PICK (90–95.99%)</option>
-            <option value="HIGH CONFIDENCE">HIGH CONFIDENCE (83–89.99%)</option>
-            <option value="MID CONFIDENCE">MID CONFIDENCE (70–82.99%)</option>
-            <option value="LOW CONFIDENCE">LOW CONFIDENCE (60–69.99%)</option>
-            <option value="RISKY">RISKY (45–59.99%)</option>
+            <option value="BANGER">🔥 BANGER (96%–100%)</option>
+            <option value="TOP PICK">TOP PICK (90%–95.99%)</option>
+            <option value="HIGH CONFIDENCE">HIGH CONFIDENCE (83%–89.99%)</option>
+            <option value="MID CONFIDENCE">MID CONFIDENCE (70%–82.99%)</option>
+            <option value="LOW CONFIDENCE">LOW CONFIDENCE (60%–69.99%)</option>
+            <option value="RISKY">RISKY (45%–59.99%)</option>
           </select>
 
           <button
@@ -1258,7 +1278,7 @@ export default function App() {
                                   {isVoid && <span className="badge-settled-void">⊘ VOID</span>}
                                   {isPending && <span className="badge-settled-pending">⏳ PENDING</span>}
                                   <span className={`tier-badge ${getTierBadgeClass(p.confidence_category)}`}>
-                                    {p.confidence_category}
+                                    {formatCategoryName(p.confidence_category)}
                                   </span>
                                 </div>
                               </div>
@@ -1273,20 +1293,7 @@ export default function App() {
                                   className="pred-bar-fill"
                                   style={{
                                     width: `${Math.min(100, p.probability * 100)}%`,
-                                    background:
-                                      isWon
-                                        ? '#10b981'
-                                        : isLost
-                                        ? '#ef4444'
-                                        : p.confidence_category === 'BANGER'
-                                        ? 'linear-gradient(90deg, #10b981, #f59e0b)'
-                                        : p.confidence_category === 'TOP PICK'
-                                        ? '#a855f7'
-                                        : p.confidence_category === 'HIGH CONFIDENCE'
-                                        ? '#38bdf8'
-                                        : p.confidence_category === 'MID CONFIDENCE'
-                                        ? '#f59e0b'
-                                        : '#64748b'
+                                    background: getCategoryColor(p.confidence_category, isWon, isLost, isVoid)
                                   }}
                                 />
                               </div>
@@ -1327,7 +1334,7 @@ export default function App() {
                               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                 <span className="teaser-market-label">{formatMarketName(t.market)}</span>
                                 <span className={`tier-badge ${getTierBadgeClass(t.confidence_category)}`}>
-                                  {t.confidence_category}
+                                  {formatCategoryName(t.confidence_category)}
                                 </span>
                               </div>
                               <div className="teaser-lock-info">
