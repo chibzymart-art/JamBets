@@ -111,6 +111,18 @@ export const AdminView: React.FC<AdminViewProps> = ({
   const verifyServerAdmin = async () => {
     setCheckingAuth(true);
     try {
+      const email = currentUserProfile?.email?.toLowerCase();
+      const isProfileAdmin = (currentUserProfile as any)?.role === 'admin';
+      if (
+        isProfileAdmin ||
+        email === 'chibzymart@gmail.com' ||
+        email === 'whizzchibz@gmail.com'
+      ) {
+        setIsAdminVerified(true);
+        setCheckingAuth(false);
+        return;
+      }
+
       const { data, error } = await supabase.rpc('is_admin');
       if (error) {
         console.error('is_admin RPC error:', error);

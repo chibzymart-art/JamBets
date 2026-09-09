@@ -350,17 +350,26 @@ export default function App() {
 
   // Strict RBAC: Check whether active user is an administrator
   const isAdmin = useMemo(() => {
-    return currentUser?.user_metadata?.role === 'admin' || profile?.role === 'admin';
+    if (!currentUser) return false;
+    const email = currentUser.email?.toLowerCase();
+    return (
+      currentUser.user_metadata?.role === 'admin' ||
+      (currentUser as any)?.app_metadata?.role === 'admin' ||
+      profile?.role === 'admin' ||
+      email === 'chibzymart@gmail.com' ||
+      email === 'whizzchibz@gmail.com'
+    );
   }, [currentUser, profile]);
 
   // Entitlement Permission
   const canViewPredictions = useMemo(() => {
     if (!currentUser) return false;
+    if (isAdmin) return true;
     if (profile?.role === 'admin') return true;
     if (profile?.role === 'standard' || profile?.role === 'bigbang') return true;
     if (entitlement?.can_view_predictions === true) return true;
     return false;
-  }, [currentUser, profile, entitlement]);
+  }, [currentUser, isAdmin, profile, entitlement]);
 
   const handleAuthSuccess = async () => {
     setIsAuthModalOpen(false);
@@ -444,10 +453,17 @@ export default function App() {
         .order('created_at', { ascending: false })
         .limit(1);
 
-      const predOrTeaserQuery = supabase
-        .from('football_predictions_paywall')
-        .select('*')
-        .eq('publication_status', 'published');
+      const isUserAdmin =
+        isAdmin ||
+        currentUser?.user_metadata?.role === 'admin' ||
+        (currentUser as any)?.app_metadata?.role === 'admin' ||
+        profile?.role === 'admin' ||
+        currentUser?.email?.toLowerCase() === 'chibzymart@gmail.com' ||
+        currentUser?.email?.toLowerCase() === 'whizzchibz@gmail.com';
+
+      const predOrTeaserQuery = isUserAdmin
+        ? supabase.from('football_predictions').select('*')
+        : supabase.from('football_predictions_paywall').select('*').eq('publication_status', 'published');
 
       // Dynamically verify other candidate sports against Cloud Supabase
       const otherCandidateSports = ['american_football', 'basketball', 'tennis', 'cricket'];
@@ -564,7 +580,7 @@ export default function App() {
 
   useEffect(() => {
     fetchCloudData();
-  }, [canViewPredictions]);
+  }, [canViewPredictions, isAdmin]);
 
   // Index maps
   const predsByFixture = useMemo(() => {
@@ -1181,7 +1197,7 @@ export default function App() {
           </div>
 
           <div className="header-right-actions">
-            {profile?.role === 'admin' && (
+            {isAdmin && (
               <Link
                 to="/admin"
                 className={`admin-header-pill ${location.pathname === '/admin' ? 'active-admin' : ''}`}
@@ -2062,7 +2078,7 @@ export default function App() {
                       title="Click to expand or collapse calibrated probabilistic simulation signals"
                     >
                       <div className="summary-left-group">
-                        {topSignal?.is_locked || topSignal?.confidence_category === 'LOCKED' || (!topSignal?.prediction && !fixture.status.match(/finished|settled/i)) ? (
+                        {!isAdmin && (topSignal?.is_locked || topSignal?.confidence_category === 'LOCKED' || (!topSignal?.prediction && !fixture.status.match(/finished|settled/i))) ? (
                           <div className="paywall-lock-badge-wrap">
                             <span className="paywall-locked-pill">
                               🔒 Premium Pick Locked (₦5,000/mo)
@@ -2148,7 +2164,7 @@ export default function App() {
                               const p = fixturePreds[0];
                               if (!p) return null;
 
-                              if (p.is_locked || p.confidence_category === 'LOCKED' || (!p.prediction && !fixture.status.match(/finished|settled/i))) {
+                              if (!isAdmin && (p.is_locked || p.confidence_category === 'LOCKED' || (!p.prediction && !fixture.status.match(/finished|settled/i)))) {
                                 return (
                                   <div className="paywall-card-expanded">
                                     <div className="paywall-card-content">
@@ -2507,7 +2523,7 @@ export default function App() {
           navigate('/dashboard/predictions');
           window.scrollTo({ top: 0, behavior: 'smooth' });
         }}
-        userRole={profile?.role}
+        userRole={isAdmin ? 'admin' : profile?.role}
       />
 
       {/* MODALS */}
