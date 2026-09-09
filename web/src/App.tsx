@@ -1844,7 +1844,7 @@ export default function App() {
                       <div className="summary-left-group">
                         {topSignal ? (
                           <span className={`top-signal-badge ${getTierBadgeClass(topSignal.confidence_category)}`}>
-                            {topSignal.confidence_category === 'BANGER' ? '🔥 ' : topSignal.confidence_category === 'TOP PICK' ? '👑 ' : '📊 '}
+                            {topSignal.confidence_category === 'BANGER' ? '🔥 ' : topSignal.confidence_category === 'TOP PICK' ? '👑 ' : '🎯 '}
                             {formatCategoryName(topSignal.confidence_category)}: {formatMarketName(topSignal.market)} ({formatPredictionOutcome(topSignal.prediction || '')})
                             {topSignal.probability ? ` - ${(topSignal.probability * 100).toFixed(1)}%` : ''}
                           </span>
@@ -1855,6 +1855,12 @@ export default function App() {
                         ) : (
                           <span className="summary-count-text">
                             ⏱ Monte Carlo Simulation Queued
+                          </span>
+                        )}
+
+                        {topSignal?.secondary_predictions && topSignal.secondary_predictions.length > 0 && (
+                          <span className="summary-secondary-chip" title="Alternative high-confidence markets evaluated in this simulation">
+                            +{topSignal.secondary_predictions.length} Secondary Picks
                           </span>
                         )}
 
@@ -1880,9 +1886,9 @@ export default function App() {
                         }}
                       >
                         {isCardExpanded ? (
-                          <>▲ Hide Breakdown ({signals.length})</>
+                          <>▲ Hide Breakdown</>
                         ) : (
-                          <>▼ View {signals.length} Signals (250k Sims)</>
+                          <>▼ View Sniper Breakdown {topSignal?.secondary_predictions?.length ? `(1 + ${topSignal.secondary_predictions.length} Picks)` : ''}</>
                         )}
                       </button>
                     </div>
@@ -1895,63 +1901,163 @@ export default function App() {
                             <div className="prediction-panel-header">
                               <div className="sim-verified-pill">
                                 <span className="dot"></span>
-                                <span>Exact 250,000 Draws Verified</span>
+                                <span>Exact 250,000 Draws Verified • Sniper Engine</span>
                               </div>
                               <span className="model-tag">
                                 {simsByFixture.get(fixture.id)?.run_tracking?.seed ? `Seed: ${simsByFixture.get(fixture.id)?.run_tracking?.seed} • ` : ''}PCG64 • Dixon-Coles
                               </span>
                             </div>
 
-                            <div className="prediction-list">
-                              {fixturePreds.map((p) => {
-                                const pct = (p.probability * 100).toFixed(2);
-                                const isWon = p.settlement_status === 'won';
-                                const isLost = p.settlement_status === 'lost';
-                                const isVoid = p.settlement_status === 'void' || p.settlement_status === 'voided';
-                                const isPending = !p.settlement_status || p.settlement_status === 'pending';
+                            {/* Primary Prediction Card */}
+                            {(() => {
+                              const p = fixturePreds[0];
+                              const pct = (p.probability * 100).toFixed(2);
+                              const isWon = p.settlement_status === 'won';
+                              const isLost = p.settlement_status === 'lost';
+                              const isVoid = p.settlement_status === 'void' || p.settlement_status === 'voided';
+                              const isPending = !p.settlement_status || p.settlement_status === 'pending';
 
-                                return (
-                                  <div key={p.id} className="prediction-row">
-                                    <div className="pred-row-top">
-                                      <div className="pred-market-outcome">
-                                        <span className="pred-market-name">{formatMarketName(p.market)}:</span>
-                                        <span className="pred-outcome-val">{formatPredictionOutcome(p.prediction)}</span>
-                                      </div>
-                                      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                                        {isWon && <span className="badge-settled-won">✓ WON</span>}
-                                        {isLost && <span className="badge-settled-lost">✗ LOST</span>}
-                                        {isVoid && <span className="badge-settled-void">⊘ VOID</span>}
-                                        {isPending && <span className="badge-settled-pending">⏳ PENDING</span>}
-                                        <span className={`tier-badge ${getTierBadgeClass(p.confidence_category)}`}>
-                                          {formatCategoryName(p.confidence_category)}
-                                        </span>
-                                      </div>
+                              return (
+                                <div className="sniper-primary-card">
+                                  <div className="sniper-primary-badge-row">
+                                    <span className="sniper-primary-title">
+                                      🎯 PRIMARY PREDICTION (TOP CONSENSUS)
+                                    </span>
+                                    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                                      {isWon && <span className="badge-settled-won">✓ WON</span>}
+                                      {isLost && <span className="badge-settled-lost">✗ LOST</span>}
+                                      {isVoid && <span className="badge-settled-void">⊘ VOID</span>}
+                                      {isPending && <span className="badge-settled-pending">⏳ PENDING</span>}
+                                      <span className={`tier-badge ${getTierBadgeClass(p.confidence_category)}`}>
+                                        {formatCategoryName(p.confidence_category)}
+                                      </span>
                                     </div>
-
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                      <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Simulated Probability</span>
-                                      <span className="pred-prob-val">{pct}%</span>
-                                    </div>
-
-                                    <div className="pred-bar-container">
-                                      <div
-                                        className="pred-bar-fill"
-                                        style={{
-                                          width: `${Math.min(100, p.probability * 100)}%`,
-                                          background: getCategoryColor(p.confidence_category, isWon, isLost, isVoid)
-                                        }}
-                                      />
-                                    </div>
-
-                                    {p.settlement_notes && (
-                                      <div className={`settle-reason-tag ${isWon ? 'won' : ''}`}>
-                                        <strong>Settlement:</strong> {p.settlement_notes}
-                                      </div>
-                                    )}
                                   </div>
-                                );
-                              })}
-                            </div>
+
+                                  <div className="sniper-primary-main">
+                                    <div className="sniper-market-outcome">
+                                      <span className="sniper-market-name">{formatMarketName(p.market)}</span>
+                                      <span className="sniper-outcome-val">{formatPredictionOutcome(p.prediction)}</span>
+                                    </div>
+                                    <div className="sniper-prob-group">
+                                      <span className="sniper-prob-val">{pct}%</span>
+                                      <span className="sniper-prob-label">Simulated Probability</span>
+                                    </div>
+                                  </div>
+
+                                  <div className="pred-bar-container" style={{ height: 8 }}>
+                                    <div
+                                      className="pred-bar-fill"
+                                      style={{
+                                        width: `${Math.min(100, p.probability * 100)}%`,
+                                        background: getCategoryColor(p.confidence_category, isWon, isLost, isVoid)
+                                      }}
+                                    />
+                                  </div>
+
+                                  {p.settlement_notes && (
+                                    <div className={`settle-reason-tag ${isWon ? 'won' : ''}`}>
+                                      <strong>Settlement:</strong> {p.settlement_notes}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })()}
+
+                            {/* Secondary Predictions Section (Top 2-4 alternative markets) */}
+                            {fixturePreds[0]?.secondary_predictions && fixturePreds[0].secondary_predictions.length > 0 && (
+                              <div className="secondary-predictions-section">
+                                <div className="secondary-predictions-header">
+                                  <span className="secondary-section-title">📦 SECONDARY OCCURRENCES (TOP 2-4 MARKETS)</span>
+                                  <span className="secondary-section-desc">Alternative high-probability outcomes evaluated from 250,000 simulations</span>
+                                </div>
+
+                                <div className="secondary-predictions-grid">
+                                  {fixturePreds[0].secondary_predictions.map((sec, idx) => {
+                                    const secTier = sec.confidence_tier || sec.confidence_category || 'MID CONFIDENCE';
+                                    const secProb = sec.probability ?? sec.prob ?? 0;
+                                    const secPct = (secProb * 100).toFixed(1);
+
+                                    return (
+                                      <div key={idx} className="secondary-pred-card">
+                                        <div className="secondary-card-top">
+                                          <div className="secondary-rank-market">
+                                            <span className="secondary-rank-badge">#{idx + 2}</span>
+                                            <span className="secondary-market-name">{formatMarketName(sec.market)}</span>
+                                          </div>
+                                          <span className={`tier-badge ${getTierBadgeClass(secTier)}`} style={{ fontSize: 9, padding: '1px 5px' }}>
+                                            {formatCategoryName(secTier)}
+                                          </span>
+                                        </div>
+
+                                        <div className="secondary-card-mid">
+                                          <span className="secondary-outcome-val">{formatPredictionOutcome(sec.prediction || '')}</span>
+                                          <span className="secondary-prob-val">{secPct}%</span>
+                                        </div>
+
+                                        <div className="pred-bar-container" style={{ height: 4 }}>
+                                          <div
+                                            className="pred-bar-fill"
+                                            style={{
+                                              width: `${Math.min(100, secProb * 100)}%`,
+                                              background: getCategoryColor(secTier as any, false, false, false)
+                                            }}
+                                          />
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Legacy multi-row fallback support if more rows exist */}
+                            {fixturePreds.length > 1 && (
+                              <div className="prediction-list" style={{ marginTop: 10 }}>
+                                {fixturePreds.slice(1).map((p) => {
+                                  const pct = (p.probability * 100).toFixed(2);
+                                  const isWon = p.settlement_status === 'won';
+                                  const isLost = p.settlement_status === 'lost';
+                                  const isVoid = p.settlement_status === 'void' || p.settlement_status === 'voided';
+                                  const isPending = !p.settlement_status || p.settlement_status === 'pending';
+
+                                  return (
+                                    <div key={p.id} className="prediction-row">
+                                      <div className="pred-row-top">
+                                        <div className="pred-market-outcome">
+                                          <span className="pred-market-name">{formatMarketName(p.market)}:</span>
+                                          <span className="pred-outcome-val">{formatPredictionOutcome(p.prediction)}</span>
+                                        </div>
+                                        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                                          {isWon && <span className="badge-settled-won">✓ WON</span>}
+                                          {isLost && <span className="badge-settled-lost">✗ LOST</span>}
+                                          {isVoid && <span className="badge-settled-void">⊘ VOID</span>}
+                                          {isPending && <span className="badge-settled-pending">⏳ PENDING</span>}
+                                          <span className={`tier-badge ${getTierBadgeClass(p.confidence_category)}`}>
+                                            {formatCategoryName(p.confidence_category)}
+                                          </span>
+                                        </div>
+                                      </div>
+
+                                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Simulated Probability</span>
+                                        <span className="pred-prob-val">{pct}%</span>
+                                      </div>
+
+                                      <div className="pred-bar-container">
+                                        <div
+                                          className="pred-bar-fill"
+                                          style={{
+                                            width: `${Math.min(100, p.probability * 100)}%`,
+                                            background: getCategoryColor(p.confidence_category, isWon, isLost, isVoid)
+                                          }}
+                                        />
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
                           </div>
                         ) : (
                           <div style={{ marginTop: 10, padding: '8px 12px', background: '#f8fafc', border: '1px dashed #cbd5e1', borderRadius: 8, fontSize: 11, color: 'var(--text-muted)' }}>

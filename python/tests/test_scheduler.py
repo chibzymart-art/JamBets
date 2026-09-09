@@ -353,7 +353,7 @@ class TestPredictionCycleScheduler(unittest.TestCase):
                 lambda_away=1.1,
                 alpha_home_attack=1.2,
                 alpha_away_attack=0.9,
-                prediction_cutoff=datetime.now(timezone.utc)
+                prediction_cutoff=kwargs.get("prediction_cutoff") or (now_wat - timedelta(hours=2)).astimezone(timezone.utc)
             )
 
         with patch.object(self.scheduler, "ensure_model_calibrated", return_value=None):

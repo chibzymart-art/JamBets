@@ -365,13 +365,24 @@ class PredictionCycleScheduler:
                     telemetry.fixtures_processed += 1
                     telemetry.simulations_completed += 1
                     telemetry.total_simulated_draws += 250000
-                    telemetry.predictions_published += len(res.qualifying_predictions)
+                    telemetry.predictions_published += res.persisted_predictions_count
 
                     sim = res.simulation_result
+                    primary = res.primary_prediction
                     print(f"      [SUCCESS] 250,000 Draws completed in {sim.duration_ms:.1f}ms (Job: {sim.job.simulation_job_id[:8]}...)", flush=True)
-                    print(f"      [PUBLISHED] {len(res.qualifying_predictions)} markets published (>=45.00%):", flush=True)
-                    for q in res.qualifying_predictions:
-                        print(f"        • [{q.confidence_tier:15}] {q.market_name:15} -> {q.outcome:12}: {q.probability_pct:.2f}%", flush=True)
+                    print(f"      [SNIPER PUBLISHED] 1 Primary row published with {len(res.secondary_predictions)} secondary markets:", flush=True)
+                    if primary:
+                        tier_str = str(getattr(primary, 'confidence_tier', ''))
+                        market_str = str(getattr(primary, 'market_name', ''))
+                        outcome_str = str(getattr(primary, 'outcome', ''))
+                        prob_val = getattr(primary, 'probability_pct', 0.0)
+                        try:
+                            prob_str = f"{float(prob_val):.2f}%"
+                        except (ValueError, TypeError):
+                            prob_str = f"{prob_val}%"
+                        print(f"        [PRIMARY] [{tier_str:15}] {market_str:15} -> {outcome_str:12}: {prob_str}", flush=True)
+                    for s in res.secondary_predictions:
+                        print(f"        [SECONDARY] [{s.get('confidence_tier'):15}] {s.get('market'):15} -> {s.get('prediction'):12}: {s.get('prob')}%", flush=True)
 
                 elif res.status == "SIMULATION_FAILED":
                     telemetry.fixtures_failed += 1

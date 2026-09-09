@@ -121,8 +121,9 @@ def run():
     pipeline.simulation_engine.model = model
 
     # 5. Fetch genuine upcoming fixtures from prediction queue
-    print("\n[STEP 4] Fetching genuine upcoming fixtures from prediction queue in Cloud Supabase...")
-    fixtures = supabase.get_prediction_queue(limit=25)
+    batch_limit = int(sys.argv[1]) if len(sys.argv) > 1 and sys.argv[1].isdigit() else 5
+    print(f"\n[STEP 4] Fetching {batch_limit} upcoming fixtures from prediction queue in Cloud Supabase...")
+    fixtures = supabase.get_prediction_queue(limit=batch_limit)
     print(f"  • Retrieved {len(fixtures)} candidate fixtures from prediction queue")
 
     # 6. Execute per-fixture isolated predictions
@@ -155,10 +156,17 @@ def run():
 
         if res.status == "PUBLISHED":
             published_count += 1
-            print(f"    Status: PUBLISHED ({len(res.qualifying_predictions)} qualifying predictions)")
+            primary = res.primary_prediction
+            print(f"    Status: PUBLISHED [SNIPER MODE: 1 Fixture = 1 Database Row]")
             print(f"    Simulations: {res.simulation_result.completed_simulations:,} iterations in {res.simulation_result.duration_ms:.1f}ms")
-            for q in res.qualifying_predictions[:4]:
-                print(f"      • [{q.confidence_tier:15}] {q.market_name:15} -> {q.outcome:12} : {q.probability_pct:.2f}%")
+            if primary:
+                print(f"    🎯 PRIMARY: [{primary.confidence_tier}] {primary.market_name} -> {primary.outcome} : {primary.probability_pct:.2f}%")
+            if res.secondary_predictions:
+                print(f"    📦 SECONDARY ({len(res.secondary_predictions)} markets):")
+                for s in res.secondary_predictions:
+                    prob_val = s.get('probability') if s.get('probability') is not None else s.get('prob', 0)
+                    prob_pct = prob_val * 100 if prob_val <= 1.0 else prob_val
+                    print(f"       • [{s.get('confidence_tier')}] {s.get('market')} -> {s.get('prediction')} : {prob_pct:.1f}%")
         elif res.status == "NOT_READY":
             not_ready_count += 1
             print(f"    Status: NOT_READY ({res.not_ready_reason})")

@@ -43,6 +43,16 @@ export type ConfidenceTier =
   | 'LOW CONFIDENCE'
   | 'RISKY';
 
+export interface SecondaryPrediction {
+  market: string;
+  prediction?: string;
+  probability: number;
+  prob?: number;
+  raw_probability?: number;
+  confidence_tier?: ConfidenceTier | string;
+  confidence_category?: ConfidenceTier | string;
+}
+
 export interface FootballPrediction {
   id: string;
   fixture_id: string;
@@ -59,6 +69,7 @@ export interface FootballPrediction {
   settled_at?: string | null;
   settlement_notes?: string | null;
   actual_score?: string | null;
+  secondary_predictions?: SecondaryPrediction[];
   metadata?: {
     simulation_job_id?: string;
     probability_pct?: number;
@@ -69,6 +80,7 @@ export interface FootballPrediction {
     away_attack?: number;
     lambda_home?: number;
     lambda_away?: number;
+    secondary_count?: number;
   };
   target_kickoff_at: string;
   created_at: string;
@@ -223,6 +235,7 @@ export interface PredictionTeaser {
   market: string;
   confidence_category: ConfidenceTier;
   publication_status: string;
+  secondary_predictions?: SecondaryPrediction[];
   target_kickoff_at: string;
   is_locked: boolean;
 }

@@ -35,9 +35,11 @@ class SupabaseClient:
 
     def post(self, table: str, data: Any, on_conflict: Optional[str] = None) -> List[Dict[str, Any]]:
         headers = dict(self.headers)
+        params = None
         if on_conflict:
             headers["Prefer"] = f"return=representation,resolution=merge-duplicates"
-        resp = self.client.post(f"/{table}", json=data, headers=headers)
+            params = {"on_conflict": on_conflict}
+        resp = self.client.post(f"/{table}", json=data, headers=headers, params=params)
         resp.raise_for_status()
         return resp.json() if resp.text else []
 

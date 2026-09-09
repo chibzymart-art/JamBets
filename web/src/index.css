@@ -1752,6 +1752,200 @@ body {
   border-color: #bbf7d0;
 }
 
+/* =====================================================================
+   SNIPER ENGINE: PRIMARY & SECONDARY PREDICTIONS
+   ===================================================================== */
+.summary-secondary-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  color: #334155;
+  padding: 2px 7px;
+  border-radius: 9999px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.sniper-primary-card {
+  background: #ffffff;
+  border: 1.5px solid #0f172a;
+  border-radius: 12px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+}
+
+.sniper-primary-badge-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.sniper-primary-title {
+  font-size: 11px;
+  font-weight: 800;
+  color: #0f172a;
+  letter-spacing: 0.5px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sniper-primary-main {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.sniper-market-outcome {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sniper-market-name {
+  font-size: 12px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+}
+
+.sniper-outcome-val {
+  font-size: 16px;
+  font-weight: 900;
+  color: #0f172a;
+}
+
+.sniper-prob-group {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.sniper-prob-val {
+  font-family: var(--font-mono);
+  font-size: 18px;
+  font-weight: 900;
+  color: #0f172a;
+}
+
+.sniper-prob-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+/* Secondary Occurrences Section */
+.secondary-predictions-section {
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.secondary-predictions-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 2px;
+}
+
+.secondary-section-title {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--text-secondary);
+  letter-spacing: 0.4px;
+}
+
+.secondary-section-desc {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.secondary-predictions-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 8px;
+}
+
+.secondary-pred-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: all 0.15s ease;
+}
+
+.secondary-pred-card:hover {
+  background: #ffffff;
+  border-color: #94a3b8;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.03);
+}
+
+.secondary-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+}
+
+.secondary-rank-market {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.secondary-rank-badge {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 800;
+  background: #e2e8f0;
+  color: #334155;
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+.secondary-market-name {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.secondary-card-mid {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.secondary-outcome-val {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.secondary-prob-val {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
 /* Teasers */
 .teaser-locked-box {
   background: var(--bg-secondary);

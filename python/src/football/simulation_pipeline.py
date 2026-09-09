@@ -26,6 +26,8 @@ class SimulationPipelineResult(BaseModel):
     status: str  # 'PUBLISHED', 'NOT_READY', 'SIMULATION_FAILED', 'NO_QUALIFYING_PREDICTIONS'
     contract: Optional[SimulationInputContract] = None
     simulation_result: Optional[SimulationRunResult] = None
+    primary_prediction: Optional[QualifyingPrediction] = None
+    secondary_predictions: List[Dict[str, Any]] = Field(default_factory=list)
     qualifying_predictions: List[QualifyingPrediction] = Field(default_factory=list)
     persisted_predictions_count: int = 0
     not_ready_reason: Optional[str] = None
@@ -33,7 +35,8 @@ class SimulationPipelineResult(BaseModel):
 
 class SimulationPipeline:
     """
-    Orchestrates per-fixture Phase 5 Monte Carlo simulation and persistence.
+    Orchestrates per-fixture Phase 5 Monte Carlo simulation and persistence in Sniper Mode.
+    Guarantees: 1 Fixture = Exactly 1 Database Row in Cloud Supabase.
     """
 
     def __init__(
@@ -58,7 +61,10 @@ class SimulationPipeline:
         seed: Optional[int] = None
     ) -> SimulationPipelineResult:
         """
-        Runs isolated 250,000 Monte Carlo simulation for a fixture and stores qualifying markets.
+        Runs isolated 250,000 Monte Carlo simulation for a fixture and stores qualifying markets in Sniper Mode:
+        - Primary prediction: market with absolute highest probability (>= 45%)
+        - Secondary predictions: top 2nd, 3rd, 4th highest probabilities formatted into JSONB array
+        - Exactly 1 row upserted per fixture
         """
         # 1. Feature Gate Verification
         if not features.is_ready:
@@ -112,15 +118,29 @@ class SimulationPipeline:
                 not_ready_reason=f"SIMULATION_GATE_FAILED (completed {sim_res.completed_simulations} < 250,000)"
             )
 
-        # 5. Extract Qualifying Market Predictions (>= 45.00%)
-        # Only ready markets are eligible for publication
+        # 5. Extract Qualifying Market Predictions (>= 45.00%) & Sort Descending
         ready_outcomes = [m for m in sim_res.market_outcomes if m.is_ready]
         qualifying = PublicationFilter.filter_market_outcomes(ready_outcomes)
 
+        # Sniper Mode Sorting: Highest probability first
+        qualifying.sort(key=lambda q: q.raw_probability, reverse=True)
+
+        primary = qualifying[0] if qualifying else None
+        secondary_list = [
+            {
+                "market": q.market_name,
+                "prediction": q.outcome,
+                "probability": round(float(q.raw_probability), 4),
+                "prob": round(float(q.probability_pct), 2),
+                "confidence_tier": q.confidence_tier
+            }
+            for q in qualifying[1:4]
+        ] if len(qualifying) > 1 else []
+
         persisted_count = 0
 
-        # 6. Persist Simulation Job & Qualifying Predictions to Cloud Supabase
-        if persist_to_supabase:
+        # 6. Persist Simulation Job & Single Sniper Prediction to Cloud Supabase
+        if persist_to_supabase and primary:
             try:
                 # Upsert simulation record in football_simulations
                 sim_payload = {
@@ -155,36 +175,37 @@ class SimulationPipeline:
                 created_sim = self.supabase.post("football_simulations", sim_payload)
                 sim_db_id = created_sim[0].get("id") if created_sim else None
 
-                # Persist qualifying predictions in football_predictions
-                for q in qualifying:
-                    pred_payload = {
-                        "fixture_id": fixture_id,
-                        "simulation_id": sim_db_id,
-                        "market": q.market_name,
-                        "prediction": q.outcome,
-                        "probability": round(float(q.raw_probability), 4),
-                        "confidence_category": q.confidence_tier,
-                        "publication_status": "published",
-                        "tier_required": q.tier_required,
-                        "source_data_version": dataset_version,
-                        "target_kickoff_at": kickoff_utc.isoformat(),
-                        "metadata": {
-                            "simulation_job_id": sim_res.job.simulation_job_id,
-                            "probability_pct": q.probability_pct,
-                            "simulations": 250000,
-                            "canonical_key": canonical_key,
-                            "model_version": self.model.model_version,
-                            "home_attack": features.alpha_home_attack,
-                            "away_attack": features.alpha_away_attack,
-                            "lambda_home": features.lambda_home,
-                            "lambda_away": features.lambda_away
-                        }
+                # Upsert single primary prediction with secondary_predictions payload
+                pred_payload = {
+                    "fixture_id": fixture_id,
+                    "simulation_id": sim_db_id,
+                    "market": primary.market_name,
+                    "prediction": primary.outcome,
+                    "probability": round(float(primary.raw_probability), 4),
+                    "confidence_category": primary.confidence_tier,
+                    "publication_status": "published",
+                    "tier_required": primary.tier_required,
+                    "source_data_version": dataset_version,
+                    "target_kickoff_at": kickoff_utc.isoformat(),
+                    "secondary_predictions": secondary_list,
+                    "metadata": {
+                        "simulation_job_id": sim_res.job.simulation_job_id,
+                        "probability_pct": primary.probability_pct,
+                        "simulations": 250000,
+                        "canonical_key": canonical_key,
+                        "model_version": self.model.model_version,
+                        "home_attack": features.alpha_home_attack,
+                        "away_attack": features.alpha_away_attack,
+                        "lambda_home": features.lambda_home,
+                        "lambda_away": features.lambda_away,
+                        "secondary_count": len(secondary_list)
                     }
-                    self.supabase.post("football_predictions", pred_payload)
-                    persisted_count += 1
+                }
+                self.supabase.post("football_predictions", pred_payload, on_conflict="fixture_id")
+                persisted_count = 1
 
             except Exception as exc:
-                print(f"[ERROR] Failed to persist Phase 5 simulation for {canonical_key}: {exc}")
+                print(f"[ERROR] Failed to persist Phase 5 sniper prediction for {canonical_key}: {exc}")
 
         status_result = "PUBLISHED" if qualifying else "NO_QUALIFYING_PREDICTIONS"
 
@@ -194,6 +215,8 @@ class SimulationPipeline:
             status=status_result,
             contract=contract,
             simulation_result=sim_res,
+            primary_prediction=primary,
+            secondary_predictions=secondary_list,
             qualifying_predictions=qualifying,
             persisted_predictions_count=persisted_count
         )
