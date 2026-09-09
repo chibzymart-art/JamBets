@@ -253,6 +253,7 @@ export interface LeagueRecord {
   country: string;
   is_active?: boolean;
   priority?: number;
+  tier?: string;
 }
 
 export interface TierPerformanceMetrics {

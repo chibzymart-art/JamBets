@@ -19,6 +19,8 @@ import { AnalyticsView } from './components/AnalyticsView';
 import { AdminView } from './components/AdminView';
 import { PricingModal } from './components/PricingModal';
 import { FaqModal } from './components/FaqModal';
+import { HeroSection } from './components/HeroSection';
+import { NavigationFooter } from './components/NavigationFooter';
 
 export default function App() {
   // Authentication & Entitlement State
@@ -1112,109 +1114,23 @@ export default function App() {
     setSearchQuery('');
   };
 
-  // If viewing Analytics
-  if (currentView === 'analytics') {
-    return (
-      <div className="app-wrapper">
-        <header className="site-header">
-          <div className="site-header-inner">
-            <div className="header-brand" onClick={() => { setCurrentView('fixtures'); window.location.hash = ''; }}>
-              <div className="brand-icon-sq">J</div>
-              <div>
-                <span className="brand-text-name">JamBets</span>
-                <span className="brand-text-tag">AI</span>
-              </div>
-            </div>
-            <div className="header-center-links">
-              <button className="nav-link-btn" onClick={() => { setCurrentView('fixtures'); window.location.hash = ''; }}>
-                Predictions
-              </button>
-              <button className="nav-link-btn" onClick={() => setIsPricingModalOpen(true)}>
-                Pricing <span className="pricing-flat-badge">₦5k Flat</span>
-              </button>
-              <button className="nav-link-btn" onClick={() => setIsFaqModalOpen(true)}>
-                FAQ
-              </button>
-              <button className="nav-link-btn active">
-                Analytics & Audit
-              </button>
-            </div>
-            <div className="header-right-actions">
-              {profile?.role === 'admin' && (
-                <button className="admin-header-pill" onClick={() => { setCurrentView('admin'); window.location.hash = '#admin'; }}>
-                  🛡 Admin
-                </button>
-              )}
-              {currentUser ? (
-                <div className="user-profile-pill" onClick={() => setIsProfileModalOpen(true)}>
-                  <span className="user-avatar-icon">👤</span>
-                  <span>{profile?.display_name || currentUser.email?.split('@')[0]}</span>
-                </div>
-              ) : (
-                <button className="login-action-btn" onClick={() => { setAuthModalMode('signin'); setIsAuthModalOpen(true); }}>
-                  Sign In
-                </button>
-              )}
-            </div>
-          </div>
-        </header>
-
-        <main className="app-container">
-          <AnalyticsView onBackToFixtures={() => { setCurrentView('fixtures'); window.location.hash = ''; }} />
-        </main>
-      </div>
-    );
-  }
-
-  // If viewing Admin
-  if (currentView === 'admin') {
-    return (
-      <div className="app-wrapper">
-        <header className="site-header">
-          <div className="site-header-inner">
-            <div className="header-brand" onClick={() => { setCurrentView('fixtures'); window.location.hash = ''; }}>
-              <div className="brand-icon-sq">J</div>
-              <div>
-                <span className="brand-text-name">JamBets</span>
-                <span className="brand-text-tag">AI</span>
-              </div>
-            </div>
-            <div className="header-center-links">
-              <button className="nav-link-btn" onClick={() => { setCurrentView('fixtures'); window.location.hash = ''; }}>
-                Predictions
-              </button>
-              <button className="nav-link-btn" onClick={() => setIsPricingModalOpen(true)}>
-                Pricing <span className="pricing-flat-badge">₦5k Flat</span>
-              </button>
-              <button className="nav-link-btn" onClick={() => setIsFaqModalOpen(true)}>
-                FAQ
-              </button>
-              <button className="nav-link-btn" onClick={() => { setCurrentView('analytics'); window.location.hash = '#analytics'; }}>
-                Analytics & Audit
-              </button>
-            </div>
-            <div className="header-right-actions">
-              <button className="admin-header-pill" onClick={() => { setCurrentView('fixtures'); window.location.hash = ''; }}>
-                ← Exit Admin
-              </button>
-            </div>
-          </div>
-        </header>
-
-        <main className="app-container">
-          <AdminView currentUserProfile={profile} onBackToFixtures={() => { setCurrentView('fixtures'); window.location.hash = ''; }} />
-        </main>
-      </div>
-    );
-  }
-
-  // Main Dashboard View (Reference UI Layout)
+  // Unified Platform View (Header, Top Regulatory Notice & Footer on all pages)
   return (
     <div className="app-wrapper">
+      {/* 0. PINNED UNIVERSAL REGULATORY BANNER (ALL PAGES) */}
+      <aside className="regulatory-top-banner" role="alert" aria-label="Strict Regulatory Notice">
+        <div className="regulatory-top-banner-inner">
+          <span className="regulatory-top-icon" aria-hidden="true">⚠️</span>
+          <p className="regulatory-top-text">
+            <strong>STRICT REGULATORY NOTICE:</strong> Predictions are probabilistic estimates derived from mathematical simulations for informational purposes only. They are not guarantees of outcomes, and JamBets does not place bets on anyone's behalf. Sports predictive modeling entails variance and uncertainty; please make decisions responsibly. JamBets will not take responsibility for any financial losses. This is STRICTLY FOR EDUCATIONAL purposes only and NOT FINANCIAL OR INVESTMENT ADVICE.
+          </p>
+        </div>
+      </aside>
+
       {/* 1. TOP HEADER BAR */}
       <header className="site-header">
         <div className="site-header-inner">
-          <div className="header-brand" onClick={() => resetAllFilters()}>
+          <div className="header-brand" onClick={() => { setCurrentView('fixtures'); window.location.hash = ''; resetAllFilters(); }}>
             <div className="brand-icon-sq">J</div>
             <div>
               <span className="brand-text-name">JamBets</span>
@@ -1223,7 +1139,10 @@ export default function App() {
           </div>
 
           <div className="header-center-links">
-            <button className="nav-link-btn active" onClick={() => resetAllFilters()}>
+            <button
+              className={`nav-link-btn ${currentView === 'fixtures' ? 'active' : ''}`}
+              onClick={() => { setCurrentView('fixtures'); window.location.hash = ''; }}
+            >
               Predictions
             </button>
             <button className="nav-link-btn" onClick={() => setIsPricingModalOpen(true)}>
@@ -1232,18 +1151,37 @@ export default function App() {
             <button className="nav-link-btn" onClick={() => setIsFaqModalOpen(true)}>
               FAQ
             </button>
-            <button className="nav-link-btn" onClick={() => { setCurrentView('analytics'); window.location.hash = '#analytics'; }}>
+            <button
+              className={`nav-link-btn ${currentView === 'analytics' ? 'active' : ''}`}
+              onClick={() => { setCurrentView('analytics'); window.location.hash = '#analytics'; }}
+            >
               Analytics & Audit
             </button>
           </div>
 
           <div className="header-right-actions">
-            {profile?.role === 'admin' && (
+            {profile?.role === 'admin' ? (
               <button
-                className="admin-header-pill"
-                onClick={() => { setCurrentView('admin'); window.location.hash = '#admin'; }}
+                className={`admin-header-pill ${currentView === 'admin' ? 'active-admin' : ''}`}
+                onClick={() => {
+                  if (currentView === 'admin') {
+                    setCurrentView('fixtures');
+                    window.location.hash = '';
+                  } else {
+                    setCurrentView('admin');
+                    window.location.hash = '#admin';
+                  }
+                }}
               >
-                🛡 Admin
+                {currentView === 'admin' ? '← Exit Admin' : '🛡 Admin'}
+              </button>
+            ) : (
+              <button
+                className="admin-header-pill guest-admin-btn"
+                onClick={() => { setCurrentView('admin'); window.location.hash = '#admin'; }}
+                title="Admin Command Deck"
+              >
+                ⚡ Admin
               </button>
             )}
 
@@ -1286,6 +1224,45 @@ export default function App() {
       </header>
 
       <main className="app-container">
+        {/* VIEW 1: ANALYTICS VIEW */}
+        {currentView === 'analytics' && (
+          <AnalyticsView onBackToFixtures={() => { setCurrentView('fixtures'); window.location.hash = ''; }} />
+        )}
+
+        {/* VIEW 2: GEN-Z ADMIN COMMAND DECK */}
+        {currentView === 'admin' && (
+          <AdminView
+            currentUserProfile={profile}
+            onBackToFixtures={() => { setCurrentView('fixtures'); window.location.hash = ''; }}
+            onOpenAuthModal={() => { setAuthModalMode('signin'); setIsAuthModalOpen(true); }}
+          />
+        )}
+
+        {/* VIEW 3: MAIN FIXTURES & PREDICTIONS VIEW WITH HERO SECTION */}
+        {currentView === 'fixtures' && (
+          <>
+            <HeroSection
+              onStartFree={() => {
+                if (!currentUser) {
+                  setAuthModalMode('register');
+                  setIsAuthModalOpen(true);
+                } else {
+                  const target = document.getElementById('fixtures-view-section');
+                  target?.scrollIntoView({ behavior: 'smooth' });
+                }
+              }}
+              onSeePlans={() => setIsPricingModalOpen(true)}
+              onSelectSport={(sportId) => setSelectedSport(sportId)}
+              selectedSport={selectedSport}
+              modelWinRate={93.7}
+              settledCount={680}
+              onScrollToFixtures={() => {
+                const target = document.getElementById('fixtures-view-section');
+                target?.scrollIntoView({ behavior: 'smooth' });
+              }}
+            />
+
+            <div id="fixtures-view-section">
         {/* Phase 4.6 & RBAC: Admin Engine Controls & Automation Overrides (Strictly locked to authenticated Admins) */}
         {isAdmin && (
           <section className="admin-engine-bar" aria-label="Engine Automation Controls">
@@ -2445,23 +2422,58 @@ export default function App() {
             </div>
           </aside>
         </div>
-        </>
-      )}
-      </main>
-
-      {/* FOOTER */}
-      <footer className="app-footer">
-        <div style={{ maxWidth: 1480, margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
-          <div>
-            <strong>JamBets AI Football Engine</strong> • Dixon-Coles 250,000 Monte Carlo Simulation Engine • Zero Data Leakage
-            {schedulerJob && <span> • 6h Scheduler: {schedulerJob.status}</span>}
-            {settlementJob && <span> • 15m Settle: {settlementJob.status}</span>}
-          </div>
-          <div style={{ color: 'var(--text-light)', fontFamily: 'var(--font-mono)', fontSize: 11 }}>
-            Supabase Authoritative Sync {latencyMs !== null ? `(${latencyMs}ms)` : ''} • Updated {lastRefreshed.toLocaleTimeString()} • WAT (UTC+1)
-          </div>
+            </>
+          )}
         </div>
-      </footer>
+      </>
+    )}
+  </main>
+
+      {/* GLOBAL INTERACTIVE NAVIGATION FOOTER (ALL PAGES) */}
+      <NavigationFooter
+        onSelectDate={(date) => {
+          setSelectedDate(date);
+          if (currentView !== 'fixtures') {
+            setCurrentView('fixtures');
+            window.location.hash = '';
+          }
+          const target = document.getElementById('fixtures-view-section');
+          target?.scrollIntoView({ behavior: 'smooth' });
+        }}
+        onOpenPricing={() => setIsPricingModalOpen(true)}
+        onOpenFaq={() => setIsFaqModalOpen(true)}
+        onOpenAllLeagues={() => setIsAllLeaguesModalOpen(true)}
+        onOpenProfileOrAuth={() => {
+          if (currentUser) {
+            setIsProfileModalOpen(true);
+          } else {
+            setAuthModalMode('signin');
+            setIsAuthModalOpen(true);
+          }
+        }}
+        onFilterTier={(tier) => {
+          setSelectedTier(tier);
+          if (currentView !== 'fixtures') {
+            setCurrentView('fixtures');
+            window.location.hash = '';
+          }
+          const target = document.getElementById('fixtures-view-section');
+          target?.scrollIntoView({ behavior: 'smooth' });
+        }}
+        onNavigateView={(view) => {
+          setCurrentView(view);
+          window.location.hash = view === 'fixtures' ? '' : `#${view}`;
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }}
+        watDateStr={watDateStr}
+        latencyMs={latencyMs}
+        todayDate={dynamicDateTabs.todayIso}
+        yesterdayDate={dynamicDateTabs.yesterdayIso}
+        tomorrowDate={dynamicDateTabs.tomorrowIso}
+        schedulerJob={schedulerJob}
+        settlementJob={settlementJob}
+        lastRefreshed={lastRefreshed}
+      />
 
       {/* MODALS */}
       <PricingModal
