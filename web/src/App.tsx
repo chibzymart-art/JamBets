@@ -62,8 +62,24 @@ export default function App() {
     cricket: { isAvailable: false, fixtureCount: 0, leagueCount: 0 }
   });
 
-  // Calendar-Grounded Date Navigation State (Strictly Africa/Lagos Kickoff Dates)
-  const [selectedDate, setSelectedDate] = useState<string>('2026-09-08');
+  // Calendar-Grounded Date Navigation State (Strictly Africa/Lagos Kickoff Dates - Dynamically Initialized)
+  const [selectedDate, setSelectedDate] = useState<string>(() => {
+    try {
+      const now = new Date();
+      const lagosParts = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Africa/Lagos',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      }).format(now);
+      const [y, m, d] = lagosParts.split('-').map(Number);
+      // Default to yesterday (where settled/verified predictions exist)
+      const yesterday = new Date(Date.UTC(y, m - 1, d - 1, 12, 0, 0));
+      return yesterday.toISOString().split('T')[0];
+    } catch {
+      return '2026-09-08';
+    }
+  });
   const [expandedFixtures, setExpandedFixtures] = useState<Set<string>>(new Set());
   const [isAllLeaguesModalOpen, setIsAllLeaguesModalOpen] = useState(false);
 
@@ -392,21 +408,101 @@ export default function App() {
     }
   };
 
-  // Extract available calendar dates strictly from target_kickoff_at in Africa/Lagos
-  const availableDates = useMemo(() => {
-    const map = new Map<string, number>();
+  // Dynamic Lagos (WAT / UTC+1) relative calendar dates
+  // Strictly dynamic: Yesterday, Today, Tomorrow, date, date
+  const dynamicDateTabs = useMemo(() => {
+    // Map fixture counts by WAT kickoff date
+    const fixtureCountByDate = new Map<string, number>();
     fixtures.forEach((f) => {
       const d = getFixtureWatDate(f.target_kickoff_at);
       if (d) {
-        map.set(d, (map.get(d) || 0) + 1);
+        fixtureCountByDate.set(d, (fixtureCountByDate.get(d) || 0) + 1);
       }
     });
-    const sorted = Array.from(map.keys()).sort();
-    return sorted.map((dateStr) => ({
-      dateStr,
-      formatted: formatWatDateDisplay(dateStr),
-      count: map.get(dateStr) || 0
-    }));
+
+    // Current date in Africa/Lagos (WAT / UTC+1)
+    const now = new Date();
+    const lagosParts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Africa/Lagos',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    }).format(now);
+    const [curYear, curMonth, curDay] = lagosParts.split('-').map(Number);
+
+    const getDateDetails = (offsetDays: number) => {
+      const d = new Date(Date.UTC(curYear, curMonth - 1, curDay + offsetDays, 12, 0, 0));
+      const iso = d.toISOString().split('T')[0];
+      const formatted = d.toLocaleDateString('en-GB', {
+        timeZone: 'UTC',
+        weekday: 'short',
+        day: 'numeric',
+        month: 'short'
+      }).replace(',', '');
+      return { iso, formatted, count: fixtureCountByDate.get(iso) || 0 };
+    };
+
+    const yesterday = getDateDetails(-1);
+    const today = getDateDetails(0);
+    const tomorrow = getDateDetails(1);
+
+    // Collect upcoming future dates dynamically from queue (or default to +2, +3 days)
+    const fixedIsos = new Set([yesterday.iso, today.iso, tomorrow.iso]);
+    const extraDatesFromQueue = Array.from(fixtureCountByDate.keys())
+      .filter((d) => !fixedIsos.has(d) && d > today.iso)
+      .sort();
+
+    const futureDateIsos = extraDatesFromQueue.length > 0
+      ? extraDatesFromQueue.slice(0, 2)
+      : [getDateDetails(2).iso, getDateDetails(3).iso];
+
+    const futureDates = futureDateIsos.map((iso, idx) => {
+      const [y, m, d] = iso.split('-').map(Number);
+      const dt = new Date(Date.UTC(y, m - 1, d, 12, 0, 0));
+      const formatted = dt.toLocaleDateString('en-GB', {
+        timeZone: 'UTC',
+        weekday: 'short',
+        day: 'numeric',
+        month: 'short'
+      }).replace(',', '');
+      return {
+        id: iso,
+        label: formatted,
+        subLabel: `Day +${idx + 2}`,
+        count: fixtureCountByDate.get(iso) || 0
+      };
+    });
+
+    return {
+      all: {
+        id: 'all',
+        label: 'Show All Dates',
+        subLabel: `${fixtures.length} matches`,
+        count: fixtures.length
+      },
+      yesterday: {
+        id: yesterday.iso,
+        label: 'Yesterday',
+        subLabel: yesterday.formatted,
+        count: yesterday.count
+      },
+      today: {
+        id: today.iso,
+        label: 'Today',
+        subLabel: today.formatted,
+        count: today.count
+      },
+      tomorrow: {
+        id: tomorrow.iso,
+        label: 'Tomorrow',
+        subLabel: tomorrow.formatted,
+        count: tomorrow.count
+      },
+      futureDates,
+      todayIso: today.iso,
+      yesterdayIso: yesterday.iso,
+      tomorrowIso: tomorrow.iso
+    };
   }, [fixtures]);
 
   // All 30 Leagues with fixture counts in the current dataset (Alphabetical)
@@ -990,14 +1086,30 @@ export default function App() {
               <div className="scorecard-meta-tags">
                 <span className="tag-scorecard-verified">● Daily Verified Scorecard</span>
                 <span className="tag-scorecard-sport">● {currentSportObj.name}</span>
+                {watDateStr && <span className="tag-scorecard-sport">● WAT Live Date: {watDateStr}</span>}
               </div>
               <h2 className="scorecard-title-main">
                 {selectedDate === 'all'
-                  ? 'All Queue Dates Performance (698 Matches)'
-                  : `${formatWatDateDisplay(selectedDate)} Performance (${watDateStr || 'Today'})`}
+                  ? `All Queue Dates Performance (${dynamicDateTabs.all.count} Matches)`
+                  : selectedDate === dynamicDateTabs.yesterday.id
+                  ? `Yesterday's Verified Performance (${dynamicDateTabs.yesterday.subLabel})`
+                  : selectedDate === dynamicDateTabs.today.id
+                  ? `Today's Verified Performance (${dynamicDateTabs.today.subLabel})`
+                  : selectedDate === dynamicDateTabs.tomorrow.id
+                  ? `Tomorrow's Upcoming Predictions (${dynamicDateTabs.tomorrow.subLabel})`
+                  : `${formatWatDateDisplay(selectedDate)} Performance`}
               </h2>
               <p className="scorecard-subtitle-main">
-                Real-time livescore settlements and Dixon-Coles Monte Carlo predictions for {selectedDate === 'all' ? 'all dates' : formatWatDateDisplay(selectedDate)}
+                Real-time livescore settlements and Dixon-Coles Monte Carlo predictions for{' '}
+                {selectedDate === 'all'
+                  ? 'all dates'
+                  : selectedDate === dynamicDateTabs.yesterday.id
+                  ? `Yesterday (${dynamicDateTabs.yesterday.subLabel})`
+                  : selectedDate === dynamicDateTabs.today.id
+                  ? `Today (${dynamicDateTabs.today.subLabel})`
+                  : selectedDate === dynamicDateTabs.tomorrow.id
+                  ? `Tomorrow (${dynamicDateTabs.tomorrow.subLabel})`
+                  : formatWatDateDisplay(selectedDate)}
               </p>
             </div>
 
@@ -1008,36 +1120,93 @@ export default function App() {
                 value={selectedDate}
                 onChange={(e) => setSelectedDate(e.target.value)}
               >
-                <option value="all">Show All Dates ({fixtures.length} matches)</option>
-                {availableDates.map((ad) => (
-                  <option key={ad.dateStr} value={ad.dateStr}>
-                    {ad.formatted} ({ad.count} matches)
+                <option value="all">Show All Dates ({dynamicDateTabs.all.count} matches)</option>
+                <option value={dynamicDateTabs.yesterday.id}>
+                  Yesterday — {dynamicDateTabs.yesterday.subLabel} ({dynamicDateTabs.yesterday.count} matches)
+                </option>
+                <option value={dynamicDateTabs.today.id}>
+                  Today — {dynamicDateTabs.today.subLabel} ({dynamicDateTabs.today.count} matches)
+                </option>
+                <option value={dynamicDateTabs.tomorrow.id}>
+                  Tomorrow — {dynamicDateTabs.tomorrow.subLabel} ({dynamicDateTabs.tomorrow.count} matches)
+                </option>
+                {dynamicDateTabs.futureDates.map((fd) => (
+                  <option key={fd.id} value={fd.id}>
+                    {fd.label} ({fd.count} matches)
                   </option>
                 ))}
               </select>
             </div>
           </div>
 
-          {/* Date Navigation Pills Bar (Strictly Calendar Grounded) */}
+          {/* Date Navigation Pills Bar (Strictly Dynamic Calendar Grounded) */}
           <div className="date-nav-pills-bar">
+            {/* Pill 1: Show All Dates */}
             <button
               type="button"
               className={`date-pill-btn ${selectedDate === 'all' ? 'active' : ''}`}
               onClick={() => setSelectedDate('all')}
             >
-              Show All Dates ({fixtures.length})
+              <span className="date-pill-main-row">
+                Show All Dates ({dynamicDateTabs.all.count})
+              </span>
+              <span className="date-pill-sub-label">Full Queue</span>
             </button>
 
-            {availableDates.map((ad) => {
-              const isSelected = selectedDate === ad.dateStr;
+            {/* Pill 2: Yesterday (with date indication under it) */}
+            <button
+              type="button"
+              className={`date-pill-btn yesterday-pill ${selectedDate === dynamicDateTabs.yesterday.id ? 'active' : ''}`}
+              onClick={() => setSelectedDate(dynamicDateTabs.yesterday.id)}
+            >
+              <span className="date-pill-main-row">
+                Yesterday
+                <span className="date-pill-winloss">{dynamicDateTabs.yesterday.count} M</span>
+              </span>
+              <span className="date-pill-sub-label">{dynamicDateTabs.yesterday.subLabel}</span>
+            </button>
+
+            {/* Pill 3: Today (with date indication under it) */}
+            <button
+              type="button"
+              className={`date-pill-btn ${selectedDate === dynamicDateTabs.today.id ? 'active' : ''}`}
+              onClick={() => setSelectedDate(dynamicDateTabs.today.id)}
+            >
+              <span className="date-pill-main-row">
+                Today
+                <span className="date-pill-winloss">{dynamicDateTabs.today.count} M</span>
+              </span>
+              <span className="date-pill-sub-label">{dynamicDateTabs.today.subLabel}</span>
+            </button>
+
+            {/* Pill 4: Tomorrow */}
+            <button
+              type="button"
+              className={`date-pill-btn ${selectedDate === dynamicDateTabs.tomorrow.id ? 'active' : ''}`}
+              onClick={() => setSelectedDate(dynamicDateTabs.tomorrow.id)}
+            >
+              <span className="date-pill-main-row">
+                Tomorrow
+                <span className="date-pill-winloss">{dynamicDateTabs.tomorrow.count} M</span>
+              </span>
+              <span className="date-pill-sub-label">{dynamicDateTabs.tomorrow.subLabel}</span>
+            </button>
+
+            {/* Pills 5 & 6: date, date */}
+            {dynamicDateTabs.futureDates.map((fd) => {
+              const isSelected = selectedDate === fd.id;
               return (
                 <button
-                  key={ad.dateStr}
+                  key={fd.id}
                   type="button"
                   className={`date-pill-btn ${isSelected ? 'active' : ''}`}
-                  onClick={() => setSelectedDate(ad.dateStr)}
+                  onClick={() => setSelectedDate(fd.id)}
                 >
-                  📅 {ad.formatted} <span className="date-pill-winloss">{ad.count} M</span>
+                  <span className="date-pill-main-row">
+                    {fd.label}
+                    <span className="date-pill-winloss">{fd.count} M</span>
+                  </span>
+                  <span className="date-pill-sub-label">{fd.subLabel}</span>
                 </button>
               );
             })}
@@ -1276,7 +1445,15 @@ export default function App() {
           <div className="filter-bottom-actions">
             <div className="active-filter-chips">
               <span className="active-chip">
-                📅 {selectedDate === 'all' ? 'All Dates' : formatWatDateDisplay(selectedDate)}
+                📅 {selectedDate === 'all'
+                  ? 'All Dates'
+                  : selectedDate === dynamicDateTabs.yesterday.id
+                  ? `Yesterday (${dynamicDateTabs.yesterday.subLabel})`
+                  : selectedDate === dynamicDateTabs.today.id
+                  ? `Today (${dynamicDateTabs.today.subLabel})`
+                  : selectedDate === dynamicDateTabs.tomorrow.id
+                  ? `Tomorrow (${dynamicDateTabs.tomorrow.subLabel})`
+                  : formatWatDateDisplay(selectedDate)}
               </span>
               <button
                 type="button"
@@ -1401,9 +1578,15 @@ export default function App() {
                     <span>
                       {selectedDate === 'all'
                         ? 'All Queue Dates Fixtures'
+                        : selectedDate === dynamicDateTabs.yesterday.id
+                        ? `Yesterday's Fixtures (${dynamicDateTabs.yesterday.subLabel})`
+                        : selectedDate === dynamicDateTabs.today.id
+                        ? `Today's Fixtures (${dynamicDateTabs.today.subLabel})`
+                        : selectedDate === dynamicDateTabs.tomorrow.id
+                        ? `Tomorrow's Fixtures (${dynamicDateTabs.tomorrow.subLabel})`
                         : `${formatWatDateDisplay(selectedDate)} Fixtures`}
                     </span>
-                    {selectedDate === getFixtureWatDate(new Date().toISOString()) && (
+                    {selectedDate === dynamicDateTabs.today.id && (
                       <span className="live-today-pill">LIVE TODAY</span>
                     )}
                   </div>

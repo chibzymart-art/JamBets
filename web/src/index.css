@@ -634,25 +634,26 @@ body {
 }
 
 .date-pill-btn {
-  padding: 8px 16px;
-  border-radius: 9999px;
+  padding: 7px 16px;
+  border-radius: 12px;
   background: #ffffff;
   border: 1px solid var(--border-subtle);
   font-family: var(--font-heading);
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-secondary);
   cursor: pointer;
   white-space: nowrap;
   display: inline-flex;
+  flex-direction: column;
   align-items: center;
-  gap: 8px;
+  justify-content: center;
+  gap: 2px;
   transition: all 0.15s ease;
+  min-width: 104px;
 }
 
 .date-pill-btn:hover {
   border-color: var(--border-strong);
   color: var(--text-primary);
+  transform: translateY(-1px);
 }
 
 .date-pill-btn.active {
@@ -660,7 +661,7 @@ body {
   border-color: #059669;
   color: #ffffff;
   font-weight: 700;
-  box-shadow: 0 2px 4px rgba(5, 150, 105, 0.2);
+  box-shadow: 0 3px 6px rgba(5, 150, 105, 0.25);
 }
 
 .date-pill-btn.yesterday-pill {
@@ -669,12 +670,36 @@ body {
   color: #1e40af;
 }
 
-.date-pill-winloss {
+.date-pill-btn.yesterday-pill.active {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #ffffff;
+}
+
+.date-pill-main-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.date-pill-sub-label {
   font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.date-pill-btn.active .date-pill-sub-label {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.date-pill-winloss {
+  font-size: 10px;
   font-weight: 800;
   padding: 1px 6px;
-  border-radius: 6px;
-  background: rgba(0, 0, 0, 0.08);
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.07);
 }
 
 .date-pill-btn.active .date-pill-winloss {
