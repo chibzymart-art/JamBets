@@ -124,6 +124,120 @@ export default function App() {
     return 'fixtures';
   });
 
+  // Phase 4.6: Admin Engine Trigger State & Poller Listener
+  const [adminTaskStatus, setAdminTaskStatus] = useState<{
+    type: 'prediction' | 'settlement' | null;
+    status: 'idle' | 'pending' | 'running' | 'completed' | 'failed';
+    message?: string;
+    taskId?: string;
+  }>({ type: null, status: 'idle' });
+
+  const triggerAdminTask = async (taskName: 'RUN_PREDICTIONS' | 'RUN_SETTLEMENTS') => {
+    const type = taskName === 'RUN_PREDICTIONS' ? 'prediction' : 'settlement';
+    setAdminTaskStatus({
+      type,
+      status: 'pending',
+      message: `Queueing ${taskName}...`
+    });
+
+    try {
+      const { data, error: insertErr } = await supabase
+        .from('admin_tasks')
+        .insert({
+          task_name: taskName,
+          status: 'PENDING',
+          metadata: {
+            triggered_by: 'admin_ui_override',
+            user_id: currentUser?.id || 'anonymous_admin',
+            timestamp: new Date().toISOString()
+          }
+        })
+        .select()
+        .single();
+
+      if (insertErr || !data) {
+        throw new Error(insertErr?.message || 'Failed to insert admin task');
+      }
+
+      const taskId = data.id;
+      setAdminTaskStatus({
+        type,
+        status: 'pending',
+        taskId,
+        message: `Task queued (PENDING). Waiting for backend poller...`
+      });
+
+      // Poll task status until complete or failed (up to 2 minutes)
+      const startTime = Date.now();
+      const interval = setInterval(async () => {
+        try {
+          const { data: updatedTask } = await supabase
+            .from('admin_tasks')
+            .select('*')
+            .eq('id', taskId)
+            .single();
+
+          if (updatedTask) {
+            const currentStatus = updatedTask.status;
+            if (currentStatus === 'RUNNING') {
+              setAdminTaskStatus({
+                type,
+                status: 'running',
+                taskId,
+                message: `Backend poller active: ${taskName} is RUNNING...`
+              });
+            } else if (currentStatus === 'COMPLETED') {
+              clearInterval(interval);
+              setAdminTaskStatus({
+                type,
+                status: 'completed',
+                taskId,
+                message: `✅ ${taskName} completed successfully! Data refreshed.`
+              });
+              await fetchCloudData();
+              setTimeout(() => {
+                setAdminTaskStatus({ type: null, status: 'idle' });
+              }, 6000);
+            } else if (currentStatus === 'FAILED') {
+              clearInterval(interval);
+              setAdminTaskStatus({
+                type,
+                status: 'failed',
+                taskId,
+                message: `❌ ${taskName} failed: ${updatedTask.error_message || 'Unknown error'}`
+              });
+              setTimeout(() => {
+                setAdminTaskStatus({ type: null, status: 'idle' });
+              }, 8000);
+            }
+          }
+
+          if (Date.now() - startTime > 360000) {
+            clearInterval(interval);
+            setAdminTaskStatus({
+              type,
+              status: 'failed',
+              message: 'Task poll timeout (360s). Check background process.'
+            });
+          }
+        } catch (pollErr) {
+          console.error('Error polling admin task:', pollErr);
+        }
+      }, 2500);
+
+    } catch (err: any) {
+      console.error('Failed to trigger admin task:', err);
+      setAdminTaskStatus({
+        type,
+        status: 'failed',
+        message: `Failed to trigger ${taskName}: ${err.message || err}`
+      });
+      setTimeout(() => {
+        setAdminTaskStatus({ type: null, status: 'idle' });
+      }, 5000);
+    }
+  };
+
   useEffect(() => {
     const handleHash = () => {
       if (window.location.hash === '#analytics') setCurrentView('analytics');
@@ -1139,6 +1253,50 @@ export default function App() {
       </header>
 
       <main className="app-container">
+        {/* Phase 4.6: Admin Engine Controls & Automation Overrides */}
+        <section className="admin-engine-bar" aria-label="Engine Automation Controls">
+          <div className="admin-engine-header-row">
+            <div className="admin-engine-title-group">
+              <span className="admin-badge-live">⚡ AUTOMATION & ENGINE CONTROLS</span>
+              <span className="admin-engine-sub">Cloud Supabase Task Queue (30s Poller / Midnight Primary / 6:00 AM WAT Retry)</span>
+            </div>
+            {adminTaskStatus.status !== 'idle' && (
+              <div className={`admin-task-banner status-${adminTaskStatus.status}`}>
+                <span className="admin-spinner-dot" />
+                <span className="admin-task-msg">{adminTaskStatus.message}</span>
+              </div>
+            )}
+          </div>
+          <div className="admin-engine-actions">
+            <button
+              type="button"
+              id="btn-run-prediction-engine"
+              className={`admin-engine-btn btn-prediction ${adminTaskStatus.type === 'prediction' && (adminTaskStatus.status === 'pending' || adminTaskStatus.status === 'running') ? 'loading' : ''}`}
+              disabled={adminTaskStatus.status === 'pending' || adminTaskStatus.status === 'running'}
+              onClick={() => triggerAdminTask('RUN_PREDICTIONS')}
+            >
+              {adminTaskStatus.type === 'prediction' && (adminTaskStatus.status === 'pending' || adminTaskStatus.status === 'running') ? (
+                <>⏳ Running Prediction Engine...</>
+              ) : (
+                <>⚡ Run Prediction Engine</>
+              )}
+            </button>
+            <button
+              type="button"
+              id="btn-run-settlement-engine"
+              className={`admin-engine-btn btn-settlement ${adminTaskStatus.type === 'settlement' && (adminTaskStatus.status === 'pending' || adminTaskStatus.status === 'running') ? 'loading' : ''}`}
+              disabled={adminTaskStatus.status === 'pending' || adminTaskStatus.status === 'running'}
+              onClick={() => triggerAdminTask('RUN_SETTLEMENTS')}
+            >
+              {adminTaskStatus.type === 'settlement' && (adminTaskStatus.status === 'pending' || adminTaskStatus.status === 'running') ? (
+                <>⏳ Running Settlement Engine...</>
+              ) : (
+                <>⚡ Run Settlement Engine</>
+              )}
+            </button>
+          </div>
+        </section>
+
         {/* 2. TOP SPORT CATEGORIES HORIZONTAL SELECTOR BAR */}
         <div className="sport-categories-bar">
           {sportsList.map((sp) => (

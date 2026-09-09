@@ -6,7 +6,7 @@ canonical fixtures, provenance records, and conflict audits.
 
 import os
 import httpx
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Dict, Any, List, Optional
 from dotenv import load_dotenv
 
@@ -101,6 +101,68 @@ class SupabaseClient:
         if queue_day is not None:
             params["queue_day"] = f"eq.{queue_day}"
         return self.get("football_prediction_queue", params)
+
+    def get_forward_prediction_queue(
+        self,
+        ref_time_utc: Optional[datetime] = None,
+        max_days: int = 4,
+        limit: int = 100
+    ) -> List[Dict[str, Any]]:
+        """
+        Retrieves fixtures strictly forward-looking from ref_time_utc:
+        target_kickoff_at > ref_time_utc AND target_kickoff_at <= ref_time_utc + max_days.
+        Past or live matches are strictly excluded.
+        """
+        if ref_time_utc is None:
+            ref_time_utc = datetime.now(timezone.utc)
+        elif ref_time_utc.tzinfo is None:
+            ref_time_utc = ref_time_utc.replace(tzinfo=timezone.utc)
+
+        now_iso = ref_time_utc.isoformat()
+        max_time_utc = ref_time_utc + timedelta(days=max_days)
+
+        # Query post-ref_time fixtures from Cloud Supabase
+        params: Dict[str, Any] = {
+            "select": "*",
+            "target_kickoff_at": f"gt.{now_iso}",
+            "order": "target_kickoff_at.asc",
+            "limit": str(limit)
+        }
+        try:
+            records = self.get("football_prediction_queue", params)
+        except Exception:
+            records = self.get("football_fixtures", params)
+
+        # Strict Python temporal filter
+        filtered = []
+        for r in records:
+            kickoff_str = r.get("target_kickoff_at")
+            if not kickoff_str:
+                continue
+            try:
+                k_utc = datetime.fromisoformat(kickoff_str.replace("Z", "+00:00"))
+                if ref_time_utc < k_utc <= max_time_utc:
+                    filtered.append(r)
+            except Exception:
+                continue
+        return filtered
+
+    def update_fixture_status(self, fixture_id: str, status: str, reason: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """Updates the status (e.g. data_unavailable) of a fixture."""
+        payload: Dict[str, Any] = {"status": status}
+        records = self.patch("football_fixtures", payload, {"id": f"eq.{fixture_id}"})
+        if reason:
+            try:
+                self.record_audit_log(
+                    actor_type="prediction_engine",
+                    action="fixture_status_updated",
+                    resource_type="football_fixtures",
+                    resource_id=fixture_id,
+                    details={"new_status": status, "reason": reason}
+                )
+            except Exception:
+                pass
+        return records[0] if records else None
 
     def record_fixture_source(self, fixture_id: str, source_id: str, provider_event_id: str, provider_data: Optional[Dict[str, Any]] = None) -> None:
         """Records source provenance for a fixture."""
@@ -253,7 +315,57 @@ class SupabaseClient:
         id_list = ",".join(pred_ids)
         return self.get("football_settlements", {"prediction_id": f"in.({id_list})"})
 
+    def get_pending_admin_tasks(self) -> List[Dict[str, Any]]:
+        """Retrieves pending admin override tasks ordered by creation time."""
+        params = {
+            "status": "eq.PENDING",
+            "order": "created_at.asc",
+            "limit": "10"
+        }
+        try:
+            return self.get("admin_tasks", params)
+        except Exception as exc:
+            print(f"[WARN] Error querying admin_tasks: {exc}")
+            return []
+
+    def update_admin_task(
+        self,
+        task_id: str,
+        status: str,
+        metadata: Optional[Dict[str, Any]] = None,
+        error_message: Optional[str] = None
+    ) -> Optional[Dict[str, Any]]:
+        """Updates status, metadata, and error message of an admin task."""
+        payload: Dict[str, Any] = {
+            "status": status,
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }
+        if metadata is not None:
+            payload["metadata"] = metadata
+        if error_message is not None:
+            payload["error_message"] = error_message
+
+        records = self.patch("admin_tasks", payload, {"id": f"eq.{task_id}"})
+        return records[0] if records else None
+
+    def create_admin_task(
+        self,
+        task_name: str,
+        metadata: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """Creates a new admin task with PENDING status."""
+        payload = {
+            "task_name": task_name,
+            "status": "PENDING",
+            "metadata": metadata or {},
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }
+        res = self.post("admin_tasks", payload)
+        return res[0] if res else {}
+
 
 # Alias for explicit domain naming
 CloudSupabaseClient = SupabaseClient
+
 

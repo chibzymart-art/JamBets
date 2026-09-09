@@ -16,6 +16,7 @@ import sys
 import time
 import uuid
 import signal
+import threading
 from datetime import datetime, timezone, timedelta
 from typing import Dict, Any, List, Optional, Tuple
 from pydantic import BaseModel, Field
@@ -99,9 +100,10 @@ class PredictionCycleScheduler:
     @classmethod
     def get_wat_slot(cls, ref_time: Optional[datetime] = None) -> Tuple[int, datetime, datetime, str]:
         """
-        Computes the current Lagos Timezone (WAT, UTC+1) 6-hour slot, nominal time,
-        next scheduled nominal time, and deterministic idempotency key.
-
+        Computes the current Lagos Timezone (WAT, UTC+1) scheduling slot.
+        Slot 0: 00:00 WAT (Midnight Primary Run)
+        Slot 1: 06:00 WAT (6:00 AM Retry Fallback)
+        Slot 2: 12:00 WAT, Slot 3: 18:00 WAT
         Returns:
             (slot_index, nominal_slot_wat, next_nominal_wat, idempotency_key)
         """
@@ -121,6 +123,36 @@ class PredictionCycleScheduler:
         idempotency_key = f"prediction-cycle-{date_str}-slot{slot}-wat"
 
         return slot, slot_nominal_wat, next_nominal_wat, idempotency_key
+
+    @classmethod
+    def get_next_run_wat(cls, ref_time: Optional[datetime] = None) -> Tuple[str, datetime, str]:
+        """
+        Calculates the next scheduled run in Lagos Timezone (WAT):
+        - Midnight Primary Run (00:00 WAT)
+        - 6:00 AM WAT Retry Fallback (06:00 WAT)
+        """
+        if ref_time is None:
+            ref_time = datetime.now(timezone.utc)
+        elif ref_time.tzinfo is None:
+            ref_time = ref_time.replace(tzinfo=timezone.utc)
+
+        ref_wat = ref_time.astimezone(LAGOS_TZ)
+        today = ref_wat.date()
+
+        run_midnight = datetime(today.year, today.month, today.day, 0, 0, 0, tzinfo=LAGOS_TZ)
+        run_retry = datetime(today.year, today.month, today.day, 6, 0, 0, tzinfo=LAGOS_TZ)
+        next_midnight = run_midnight + timedelta(days=1)
+
+        if ref_wat < run_retry:
+            target = run_retry
+            run_type = "0600-retry"
+        else:
+            target = next_midnight
+            run_type = "midnight-primary"
+
+        date_str = target.strftime("%Y-%m-%d")
+        idempotency_key = f"prediction-cycle-{date_str}-{run_type}-wat"
+        return run_type, target, idempotency_key
 
     def check_missed_cycles(self, ref_time: Optional[datetime] = None) -> Optional[str]:
         """
@@ -190,7 +222,13 @@ class PredictionCycleScheduler:
           - >= 45.00% publication filter & 6 confidence tiers
           - Supabase persistence & audit logging
         """
-        start_time_utc = datetime.now(timezone.utc)
+        if ref_time is not None:
+            if ref_time.tzinfo is None:
+                start_time_utc = ref_time.replace(tzinfo=timezone.utc)
+            else:
+                start_time_utc = ref_time.astimezone(timezone.utc)
+        else:
+            start_time_utc = datetime.now(timezone.utc)
         start_perf = time.perf_counter()
 
         slot, slot_nominal_wat, next_nominal_wat, idempotency_key = self.get_wat_slot(ref_time)
@@ -245,14 +283,21 @@ class PredictionCycleScheduler:
             self.ensure_model_calibrated()
             self.lock.heartbeat(job_id)
 
-            # 3. Discover Fixtures from Cloud Supabase 4-Day Queue
-            print("[STEP 2] Discovering candidate fixtures from Cloud Supabase...", flush=True)
-            candidate_fixtures = self.supabase.get_prediction_queue(limit=limit_fixtures)
+            # 3. Discover Fixtures strictly forward-looking from Cloud Supabase (target_kickoff_at >= NOW())
+            print("[STEP 2] Discovering candidate fixtures strictly forward-looking from Cloud Supabase...", flush=True)
+            if hasattr(self.supabase, "get_forward_prediction_queue"):
+                candidate_fixtures = self.supabase.get_forward_prediction_queue(
+                    ref_time_utc=start_time_utc,
+                    max_days=MAX_PREDICTION_WINDOW_DAYS,
+                    limit=limit_fixtures
+                )
+            else:
+                candidate_fixtures = self.supabase.get_prediction_queue(limit=limit_fixtures)
             telemetry.fixtures_discovered = len(candidate_fixtures)
-            print(f"  • Retrieved {len(candidate_fixtures)} candidate fixtures in queue", flush=True)
+            print(f"  • Retrieved {len(candidate_fixtures)} strictly future candidate fixtures in queue", flush=True)
 
             # 4. Filter Fixture Eligibility & Enforce 4-Day Horizon in WAT
-            print("[STEP 3] Validating 4-day horizon & eligibility rules in WAT...", flush=True)
+            print("[STEP 3] Validating 4-day horizon & forward eligibility rules in WAT...", flush=True)
             eligible_fixtures = []
             now_wat = start_time_utc.astimezone(LAGOS_TZ)
 
@@ -276,6 +321,12 @@ class PredictionCycleScheduler:
                     telemetry.fixtures_skipped += 1
                     continue
 
+                # Rule: Strict temporal isolation - must not be in the past
+                if kickoff_utc < start_time_utc:
+                    telemetry.fixtures_skipped += 1
+                    telemetry.errors.append({"fixture_id": f_id, "error": "STRICT_FORWARD_ISOLATION_EXCLUDED_PAST_MATCH"})
+                    continue
+
                 # Rule: 4-day maximum horizon in WAT (day 0 to day 4)
                 delta_days = (kickoff_wat.date() - now_wat.date()).days
                 if delta_days < 0 or delta_days > MAX_PREDICTION_WINDOW_DAYS:
@@ -292,10 +343,10 @@ class PredictionCycleScheduler:
                 eligible_fixtures.append((f, kickoff_utc))
 
             telemetry.fixtures_eligible = len(eligible_fixtures)
-            print(f"  • {len(eligible_fixtures)} fixtures eligible for Phase 4/5 pipeline", flush=True)
+            print(f"  • {len(eligible_fixtures)} fixtures eligible for forward-looking Phase 4/5 pipeline", flush=True)
 
-            # 5. Per-Fixture Isolated Execution Loop
-            print("[STEP 4] Executing isolated per-fixture prediction & simulation pipeline...", flush=True)
+            # 5. Per-Fixture Isolated Execution Loop with Rate-Limiting & DATA_UNAVAILABLE Handling
+            print("[STEP 4] Executing isolated per-fixture prediction & simulation pipeline (2.5s rate-limit delay)...", flush=True)
 
             for idx, (f, kickoff_utc) in enumerate(eligible_fixtures, 1):
                 f_id = f.get("id")
@@ -324,12 +375,24 @@ class PredictionCycleScheduler:
                     telemetry.fixtures_failed += 1
                     telemetry.errors.append({"fixture_id": f_id, "error": f"FEATURE_EXTRACTION_ERROR: {exc}"})
                     print(f"      [FAILED] Feature extraction exception: {exc}", flush=True)
+                    try:
+                        self.supabase.update_fixture_status(f_id, "data_unavailable", reason=f"FEATURE_EXTRACTION_ERROR: {exc}")
+                        print(f"      [DATA_UNAVAILABLE] Fixture {f_id} status marked as 'data_unavailable'", flush=True)
+                    except Exception as patch_exc:
+                        print(f"      [WARN] Could not update status: {patch_exc}", flush=True)
+                    time.sleep(2.5)
                     continue
 
                 # Step C: Check Feature Gate
                 if not features.is_ready:
                     telemetry.fixtures_skipped += 1
                     print(f"      [GATE] NOT_READY: {features.not_ready_reason} (0 Sims, 0 Predictions)", flush=True)
+                    try:
+                        self.supabase.update_fixture_status(f_id, "data_unavailable", reason=f"NOT_READY: {features.not_ready_reason}")
+                        print(f"      [DATA_UNAVAILABLE] Fixture {f_id} status marked as 'data_unavailable'", flush=True)
+                    except Exception as patch_exc:
+                        print(f"      [WARN] Could not update status: {patch_exc}", flush=True)
+                    time.sleep(2.5)
                     continue
 
                 # Step D, E & F: Phase 5 Simulation & Publication Pipeline with Transient Retry
@@ -358,6 +421,12 @@ class PredictionCycleScheduler:
                     telemetry.fixtures_failed += 1
                     telemetry.errors.append({"fixture_id": f_id, "error": f"PIPELINE_RETRY_EXHAUSTED: {last_err}"})
                     print(f"      [FAILED] Retries exhausted for {canonical_key}", flush=True)
+                    try:
+                        self.supabase.update_fixture_status(f_id, "data_unavailable", reason=f"PIPELINE_RETRY_EXHAUSTED: {last_err}")
+                        print(f"      [DATA_UNAVAILABLE] Fixture {f_id} status marked as 'data_unavailable'", flush=True)
+                    except Exception as patch_exc:
+                        print(f"      [WARN] Could not update status: {patch_exc}", flush=True)
+                    time.sleep(2.5)
                     continue
 
                 # Check Pipeline Result
@@ -388,9 +457,18 @@ class PredictionCycleScheduler:
                     telemetry.fixtures_failed += 1
                     telemetry.errors.append({"fixture_id": f_id, "error": res.not_ready_reason})
                     print(f"      [GATE] SIMULATION FAILED: {res.not_ready_reason}", flush=True)
+                    try:
+                        self.supabase.update_fixture_status(f_id, "data_unavailable", reason=f"SIMULATION_FAILED: {res.not_ready_reason}")
+                        print(f"      [DATA_UNAVAILABLE] Fixture {f_id} status marked as 'data_unavailable'", flush=True)
+                    except Exception as patch_exc:
+                        print(f"      [WARN] Could not update status: {patch_exc}", flush=True)
                 else:
                     telemetry.fixtures_skipped += 1
                     print(f"      [STATUS] {res.status}", flush=True)
+
+                # Strict Rate-Limiting delay between each fixture
+                print(f"      [RATE-LIMIT] Enforcing 2.5s delay before next fixture...", flush=True)
+                time.sleep(2.5)
 
             # 6. Finalize Cycle Telemetry
             duration_ms = (time.perf_counter() - start_perf) * 1000.0
@@ -465,35 +543,124 @@ class PredictionCycleScheduler:
             )
             return telemetry
 
+class AdminTaskPoller(threading.Thread):
+    """
+    Lightweight background worker polling Cloud Supabase admin_tasks every 30 seconds
+    to execute manual engine override triggers on demand from the React UI.
+    """
+    def __init__(self, scheduler: "PredictionCycleScheduler", poll_interval: float = 30.0):
+        super().__init__(daemon=True, name="AdminTaskPoller")
+        self.scheduler = scheduler
+        self.poll_interval = poll_interval
+        self._stop_event = threading.Event()
+
+    def stop(self):
+        self._stop_event.set()
+
+    def run(self):
+        print(f"[POLLER] Admin task poller thread started (polling every {self.poll_interval}s)...", flush=True)
+        while not self._stop_event.is_set():
+            try:
+                self.poll_and_execute()
+            except Exception as exc:
+                print(f"[POLLER ERROR] Error during admin task check: {exc}", flush=True)
+
+            self._stop_event.wait(self.poll_interval)
+        print("[POLLER] Admin task poller thread stopped.", flush=True)
+
+    def poll_and_execute(self):
+        pending_tasks = self.scheduler.supabase.get_pending_admin_tasks()
+        if not pending_tasks:
+            return
+
+        for task in pending_tasks:
+            task_id = task["id"]
+            task_name = task.get("task_name", "").upper().strip()
+            print(f"\n[POLLER] Found PENDING admin task: {task_name} (ID: {task_id})", flush=True)
+
+            # Mark as RUNNING
+            self.scheduler.supabase.update_admin_task(task_id, status="RUNNING")
+
+            try:
+                if task_name in ("RUN_PREDICTIONS", "RUN_PREDICTION_ENGINE"):
+                    print("[POLLER] Executing forward-looking prediction cycle (forced override)...", flush=True)
+                    telemetry = self.scheduler.execute_cycle(force=True)
+                    status = "COMPLETED" if telemetry.status in ("COMPLETED", "SKIPPED") else "FAILED"
+                    self.scheduler.supabase.update_admin_task(
+                        task_id=task_id,
+                        status=status,
+                        metadata={
+                            "cycle_id": telemetry.cycle_id,
+                            "processed": telemetry.fixtures_processed,
+                            "published": telemetry.predictions_published,
+                            "skipped": telemetry.fixtures_skipped,
+                            "failed": telemetry.fixtures_failed,
+                            "duration_ms": telemetry.duration_ms
+                        }
+                    )
+                    print(f"[POLLER] Admin task {task_name} finished with status: {status}", flush=True)
+
+                elif task_name in ("RUN_SETTLEMENTS", "RUN_SETTLEMENT_ENGINE"):
+                    print("[POLLER] Executing settlement cycle (backward-looking override)...", flush=True)
+                    from python.src.football.settlement_scheduler import SettlementScheduler
+                    settler = SettlementScheduler(supabase_client=self.scheduler.supabase)
+                    result = settler.run_settlement_cycle()
+                    self.scheduler.supabase.update_admin_task(
+                        task_id=task_id,
+                        status="COMPLETED",
+                        metadata=result
+                    )
+                    print(f"[POLLER] Admin task {task_name} finished successfully", flush=True)
+
+                else:
+                    self.scheduler.supabase.update_admin_task(
+                        task_id=task_id,
+                        status="FAILED",
+                        error_message=f"Unknown task_name: {task_name}"
+                    )
+            except Exception as exc:
+                print(f"[POLLER ERROR] Failed executing admin task {task_name}: {exc}", flush=True)
+                self.scheduler.supabase.update_admin_task(
+                    task_id=task_id,
+                    status="FAILED",
+                    error_message=str(exc)
+                )
+
+
     def run_daemon(self) -> None:
         """
-        Runs the scheduler daemon indefinitely, executing prediction cycles every 6 hours
-        aligned to Lagos Timezone (WAT: 00:00, 06:00, 12:00, 18:00 WAT).
+        Runs the scheduler daemon indefinitely:
+        1. Launches 30-second AdminTaskPoller background worker.
+        2. Aligns daily primary runs to Midnight (00:00 WAT) and 6:00 AM WAT retry fallback.
         """
         def handle_signal(signum, frame):
             print("\n[INFO] Scheduler daemon received termination signal. Shutting down gracefully...", flush=True)
             self._shutdown_requested = True
+            if poller:
+                poller.stop()
 
         signal.signal(signal.SIGINT, handle_signal)
         signal.signal(signal.SIGTERM, handle_signal)
 
-        print(f"[DAEMON] JamBets 6-Hour Football Prediction Scheduler Daemon started (Lagos Timezone — WAT).", flush=True)
+        print(f"[DAEMON] JamBets Football Prediction Scheduler Daemon started (Lagos Timezone — WAT).", flush=True)
+        print(f"         Primary Schedule: Midnight (00:00 WAT). Fallback Retry: 6:00 AM WAT.", flush=True)
 
-        # On startup: Check missed cycles and run current cycle
+        # 1. Start Admin Task Poller (30s polling)
+        poller = AdminTaskPoller(scheduler=self, poll_interval=30.0)
+        poller.start()
+
+        # 2. Check missed cycles on startup
         missed = self.check_missed_cycles()
         if missed:
             print(f"[DAEMON ALERT] {missed}", flush=True)
 
-        # Run immediate cycle on startup
-        self.execute_cycle()
-
-        # Continuous 6-Hour Loop
+        # 3. Continuous scheduling loop aligned to Midnight and 6 AM retry
         while not self._shutdown_requested:
-            _, _, next_nominal_wat, _ = self.get_wat_slot()
+            run_type, next_nominal_wat, _ = self.get_next_run_wat()
             now_wat = datetime.now(timezone.utc).astimezone(LAGOS_TZ)
             sleep_seconds = max(1.0, (next_nominal_wat - now_wat).total_seconds())
 
-            print(f"[DAEMON] Next scheduled cycle at {next_nominal_wat.strftime('%Y-%m-%d %H:%M:%S WAT')} (sleeping {int(sleep_seconds)}s)...", flush=True)
+            print(f"[DAEMON] Next scheduled cycle: [{run_type}] at {next_nominal_wat.strftime('%Y-%m-%d %H:%M:%S WAT')} (sleeping {int(sleep_seconds)}s)...", flush=True)
 
             # Sleep in chunks to allow responsive termination
             chunk = 10.0
@@ -503,22 +670,42 @@ class PredictionCycleScheduler:
                 elapsed += chunk
 
             if not self._shutdown_requested:
-                self.execute_cycle()
+                res = self.execute_cycle()
+                # If primary midnight run failed, log alert
+                if run_type == "midnight-primary" and res.status == "FAILED":
+                    print("[DAEMON ALERT] Midnight primary cycle failed. 06:00 AM retry fallback will trigger.", flush=True)
 
+        poller.stop()
+        poller.join(timeout=5.0)
         print("[DAEMON] Scheduler daemon stopped.", flush=True)
 
 
 def main():
     import argparse
-    parser = argparse.ArgumentParser(description="JamBets 6-Hour Football Prediction Scheduler (WAT)")
-    parser.add_argument("--run-once", action="store_true", help="Execute single prediction cycle and exit")
-    parser.add_argument("--daemon", action="store_true", help="Run continuous 6-hour scheduler daemon")
+    parser = argparse.ArgumentParser(description="JamBets Football Prediction Scheduler (WAT)")
+    parser.add_argument("--run-once", action="store_true", help="Execute single forward prediction cycle and exit")
+    parser.add_argument("--daemon", action="store_true", help="Run continuous scheduler daemon with 30s admin poller")
+    parser.add_argument("--poll", action="store_true", help="Run 30-second admin tasks poller worker directly")
+    parser.add_argument("--poll-interval", type=float, default=30.0, help="Poller interval in seconds (default: 30.0)")
     parser.add_argument("--force", action="store_true", help="Force cycle execution even if already completed")
     args = parser.parse_args()
 
     scheduler = PredictionCycleScheduler()
 
-    if args.daemon:
+    if args.poll:
+        print("[POLLER] Starting standalone 30s admin tasks poller...", flush=True)
+        poller = AdminTaskPoller(scheduler=scheduler, poll_interval=args.poll_interval)
+        poller.start()
+        try:
+            while True:
+                time.sleep(1.0)
+        except KeyboardInterrupt:
+            print("\n[POLLER] Stopping poller...", flush=True)
+            poller.stop()
+            poller.join()
+            sys.exit(0)
+
+    elif args.daemon:
         scheduler.run_daemon()
     else:
         # Default or --run-once
@@ -528,3 +715,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
