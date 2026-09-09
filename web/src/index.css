@@ -86,6 +86,12 @@
   --tier-risky-border: #f472b6;
   --tier-risky-text: #be185d;
 
+  /* 🛡 NO SAFE BANKER: Neutral Slate Protection */
+  --tier-no-banker: #64748b;
+  --tier-no-banker-bg: #f8fafc;
+  --tier-no-banker-border: #cbd5e1;
+  --tier-no-banker-text: #475569;
+
   /* ===================================================================
      STRICT SETTLEMENT TOKENS
      =================================================================== */
@@ -1690,6 +1696,12 @@ body {
   background: var(--tier-risky-bg);
   border-color: var(--tier-risky-border);
   color: var(--tier-risky-text);
+}
+
+.tier-no-banker {
+  background: var(--tier-no-banker-bg);
+  border-color: var(--tier-no-banker-border);
+  color: var(--tier-no-banker-text);
 }
 
 /* Settlement Badges */

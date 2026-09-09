@@ -873,13 +873,15 @@ export default function App() {
   };
 
   const getTierBadgeClass = (tier: ConfidenceTier | string) => {
-    switch (tier) {
+    const t = (tier || '').toUpperCase();
+    switch (t) {
       case 'BANGER': return 'tier-banger';
       case 'TOP PICK': return 'tier-top-pick';
       case 'HIGH CONFIDENCE': return 'tier-high-conf';
       case 'MID CONFIDENCE': return 'tier-mid-conf';
       case 'LOW CONFIDENCE': return 'tier-low-conf';
       case 'RISKY': return 'tier-risky';
+      case 'NO_SAFE_BANKER': return 'tier-no-banker';
       default: return 'tier-low-conf';
     }
   };
@@ -888,33 +890,50 @@ export default function App() {
     if (isWon) return 'var(--settle-won)';
     if (isLost) return 'var(--settle-lost)';
     if (isVoid) return 'var(--settle-void)';
-    switch (category) {
+    const c = (category || '').toUpperCase();
+    switch (c) {
       case 'BANGER': return 'var(--tier-banger)';
       case 'TOP PICK': return 'var(--tier-top-pick)';
       case 'HIGH CONFIDENCE': return 'var(--tier-high-conf)';
       case 'MID CONFIDENCE': return 'var(--tier-mid-conf)';
       case 'LOW CONFIDENCE': return 'var(--tier-low-conf)';
       case 'RISKY': return 'var(--tier-risky)';
+      case 'NO_SAFE_BANKER': return 'var(--tier-no-banker)';
       default: return 'var(--tier-low-conf)';
     }
   };
 
   const formatCategoryName = (category: string) => {
-    if (category === 'BANGER') return '🔥 BANGER';
+    const c = (category || '').toUpperCase();
+    if (c === 'BANGER') return '🔥 BANGER';
+    if (c === 'TOP PICK') return '👑 TOP PICK';
+    if (c === 'NO_SAFE_BANKER') return '🛡 NO SAFE BANKER';
     return category;
   };
 
   const formatMarketName = (market: string) => {
-    switch (market) {
+    switch (market.toLowerCase()) {
       case '1x2': return 'Match Result (1X2)';
       case 'double_chance': return 'Double Chance';
+      case 'over_under_0.5': return 'Goals O/U 0.5';
       case 'over_under_1.5': return 'Goals O/U 1.5';
       case 'over_under_2.5': return 'Goals O/U 2.5';
       case 'over_under_3.5': return 'Goals O/U 3.5';
-      case 'btts': return 'Both Teams To Score';
+      case 'over_under_4.5': return 'Goals O/U 4.5';
+      case 'home_goals_0.5': return 'Home Goals O/U 0.5';
+      case 'away_goals_0.5': return 'Away Goals O/U 0.5';
+      case 'btts':
+      case 'both_teams_to_score': return 'Both Teams To Score';
+      case 'ht_result': return 'Half Time Result';
       case 'ht_goals_0.5': return 'HT Goals O/U 0.5';
       case 'ht_goals_1.5': return 'HT Goals O/U 1.5';
       case '2h_goals_0.5': return '2H Goals O/U 0.5';
+      case '2h_goals_1.5': return '2H Goals O/U 1.5';
+      case 'corners':
+      case 'corners_8.5': return 'Corners O/U 8.5';
+      case 'corners_9.5': return 'Corners O/U 9.5';
+      case 'corners_10.5': return 'Corners O/U 10.5';
+      case 'no_safe_banker': return 'Banker Requirement (≥80%)';
       default: return market.toUpperCase();
     }
   };
@@ -931,6 +950,7 @@ export default function App() {
       case '1x': return '1X (Home/Draw)';
       case 'x2': return 'X2 (Draw/Away)';
       case '12': return '12 (Home/Away)';
+      case 'skip': return 'SKIP (Protected Pass)';
       default: return outcome.toUpperCase();
     }
   };
@@ -1844,9 +1864,15 @@ export default function App() {
                       <div className="summary-left-group">
                         {topSignal ? (
                           <span className={`top-signal-badge ${getTierBadgeClass(topSignal.confidence_category)}`}>
-                            {topSignal.confidence_category === 'BANGER' ? '🔥 ' : topSignal.confidence_category === 'TOP PICK' ? '👑 ' : '🎯 '}
-                            {formatCategoryName(topSignal.confidence_category)}: {formatMarketName(topSignal.market)} ({formatPredictionOutcome(topSignal.prediction || '')})
-                            {topSignal.probability ? ` - ${(topSignal.probability * 100).toFixed(1)}%` : ''}
+                            {topSignal.confidence_category === 'NO_SAFE_BANKER' || topSignal.market === 'NO_SAFE_BANKER' ? (
+                              <>🛡 NO SAFE BANKER: Pass / Volatile Toss-Up (No market ≥80%)</>
+                            ) : (
+                              <>
+                                {topSignal.confidence_category === 'BANGER' ? '🔥 ' : topSignal.confidence_category === 'TOP PICK' ? '👑 ' : '🎯 '}
+                                {formatCategoryName(topSignal.confidence_category)}: {formatMarketName(topSignal.market)} ({formatPredictionOutcome(topSignal.prediction || '')})
+                                {topSignal.probability ? ` - ${(topSignal.probability * 100).toFixed(1)}%` : ''}
+                              </>
+                            )}
                           </span>
                         ) : signals.length > 0 ? (
                           <span className="summary-count-text">
@@ -1916,12 +1942,52 @@ export default function App() {
                               const isLost = p.settlement_status === 'lost';
                               const isVoid = p.settlement_status === 'void' || p.settlement_status === 'voided';
                               const isPending = !p.settlement_status || p.settlement_status === 'pending';
+                              const isNoBanker = p.market === 'NO_SAFE_BANKER' || p.confidence_category === 'NO_SAFE_BANKER' || p.prediction === 'SKIP';
+
+                              if (isNoBanker) {
+                                return (
+                                  <div className="sniper-primary-card" style={{ borderColor: 'var(--tier-no-banker-border)', background: 'var(--tier-no-banker-bg)' }}>
+                                    <div className="sniper-primary-badge-row">
+                                      <span className="sniper-primary-title" style={{ color: 'var(--tier-no-banker-text)' }}>
+                                        🛡 VOLATILE TOSS-UP — ANTI-LOSS PROTECTION
+                                      </span>
+                                      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                                        {isVoid && <span className="badge-settled-void">⊘ VOID</span>}
+                                        <span className="tier-badge tier-no-banker">
+                                          🛡 NO SAFE BANKER
+                                        </span>
+                                      </div>
+                                    </div>
+
+                                    <div className="sniper-primary-main">
+                                      <div className="sniper-market-outcome">
+                                        <span className="sniper-market-name">Banker Standard (≥ 80.00%)</span>
+                                        <span className="sniper-outcome-val" style={{ color: '#475569' }}>SKIP / PASS MATCH</span>
+                                      </div>
+                                      <div className="sniper-prob-group">
+                                        <span className="sniper-prob-val" style={{ color: '#64748b' }}>PROTECTED</span>
+                                        <span className="sniper-prob-label">Anti-Loss Guard</span>
+                                      </div>
+                                    </div>
+
+                                    <div style={{ padding: '8px 12px', background: '#ffffff', borderRadius: 6, border: '1px solid #e2e8f0', fontSize: 12, color: '#475569', lineHeight: 1.5, marginTop: 4 }}>
+                                      ⚠️ <strong>Sniper Protection:</strong> No single market in this fixture achieved the strict <strong>≥ 80.00% banker certainty floor</strong> across 250,000 simulations. JamBets advises passing on this match to protect capital.
+                                    </div>
+
+                                    {p.settlement_notes && (
+                                      <div className={`settle-reason-tag ${isWon ? 'won' : ''}`}>
+                                        <strong>Settlement:</strong> {p.settlement_notes}
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              }
 
                               return (
                                 <div className="sniper-primary-card">
                                   <div className="sniper-primary-badge-row">
                                     <span className="sniper-primary-title">
-                                      🎯 PRIMARY PREDICTION (TOP CONSENSUS)
+                                      🎯 PRIMARY PREDICTION (TOP BANKER)
                                     </span>
                                     <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                                       {isWon && <span className="badge-settled-won">✓ WON</span>}
@@ -1968,7 +2034,7 @@ export default function App() {
                             {fixturePreds[0]?.secondary_predictions && fixturePreds[0].secondary_predictions.length > 0 && (
                               <div className="secondary-predictions-section">
                                 <div className="secondary-predictions-header">
-                                  <span className="secondary-section-title">📦 SECONDARY OCCURRENCES (TOP 2-4 MARKETS)</span>
+                                  <span className="secondary-section-title">📦 SECONDARY SIGNALS (QUALIFYING ≥60% LEANS — MAX 4)</span>
                                   <span className="secondary-section-desc">Alternative high-probability outcomes evaluated from 250,000 simulations</span>
                                 </div>
 
@@ -1977,12 +2043,15 @@ export default function App() {
                                     const secTier = sec.confidence_tier || sec.confidence_category || 'MID CONFIDENCE';
                                     const secProb = sec.probability ?? sec.prob ?? 0;
                                     const secPct = (secProb * 100).toFixed(1);
+                                    const isNoBanker = fixturePreds[0].market === 'NO_SAFE_BANKER';
 
                                     return (
                                       <div key={idx} className="secondary-pred-card">
                                         <div className="secondary-card-top">
                                           <div className="secondary-rank-market">
-                                            <span className="secondary-rank-badge">#{idx + 2}</span>
+                                            <span className="secondary-rank-badge">
+                                              {isNoBanker ? `Lean #${idx + 1}` : `#${idx + 2}`}
+                                            </span>
                                             <span className="secondary-market-name">{formatMarketName(sec.market)}</span>
                                           </div>
                                           <span className={`tier-badge ${getTierBadgeClass(secTier)}`} style={{ fontSize: 9, padding: '1px 5px' }}>

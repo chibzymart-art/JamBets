@@ -121,21 +121,50 @@ class SimulationPipeline:
         # 5. Extract Qualifying Market Predictions (>= 45.00%) & Sort Descending
         ready_outcomes = [m for m in sim_res.market_outcomes if m.is_ready]
         qualifying = PublicationFilter.filter_market_outcomes(ready_outcomes)
-
-        # Sniper Mode Sorting: Highest probability first
         qualifying.sort(key=lambda q: q.raw_probability, reverse=True)
 
-        primary = qualifying[0] if qualifying else None
-        secondary_list = [
-            {
-                "market": q.market_name,
-                "prediction": q.outcome,
-                "probability": round(float(q.raw_probability), 4),
-                "prob": round(float(q.probability_pct), 2),
-                "confidence_tier": q.confidence_tier
-            }
-            for q in qualifying[1:4]
-        ] if len(qualifying) > 1 else []
+        # Sniper Mode Banker Floor: >= 80.00% (raw_probability >= 0.8000)
+        has_banker = len(qualifying) > 0 and qualifying[0].raw_probability >= 0.8000
+
+        if has_banker:
+            primary = qualifying[0]
+            secondary_candidates = [q for q in qualifying[1:] if q.raw_probability >= 0.6000]
+            secondary_list = [
+                {
+                    "market": q.market_name,
+                    "prediction": q.outcome,
+                    "probability": round(float(q.raw_probability), 4),
+                    "prob": round(float(q.probability_pct), 2),
+                    "confidence_tier": q.confidence_tier,
+                    "tier": q.confidence_tier
+                }
+                for q in secondary_candidates[:4]
+            ]
+        else:
+            top_prob = round(float(qualifying[0].raw_probability), 4) if qualifying else 0.0
+            top_prob_pct = round(float(qualifying[0].probability_pct), 2) if qualifying else 0.0
+            primary = QualifyingPrediction(
+                market_name="NO_SAFE_BANKER",
+                outcome="SKIP",
+                probability_pct=top_prob_pct,
+                raw_probability=top_prob,
+                confidence_tier="NO_SAFE_BANKER",
+                publication_status="published",
+                tier_required="free",
+                is_qualifying=True
+            )
+            secondary_candidates = [q for q in qualifying if q.raw_probability >= 0.6000]
+            secondary_list = [
+                {
+                    "market": q.market_name,
+                    "prediction": q.outcome,
+                    "probability": round(float(q.raw_probability), 4),
+                    "prob": round(float(q.probability_pct), 2),
+                    "confidence_tier": q.confidence_tier,
+                    "tier": q.confidence_tier
+                }
+                for q in secondary_candidates[:4]
+            ]
 
         persisted_count = 0
 
@@ -187,6 +216,7 @@ class SimulationPipeline:
                     "tier_required": primary.tier_required,
                     "source_data_version": dataset_version,
                     "target_kickoff_at": kickoff_utc.isoformat(),
+                    "simulations_count": 250000,
                     "secondary_predictions": secondary_list,
                     "metadata": {
                         "simulation_job_id": sim_res.job.simulation_job_id,
@@ -198,7 +228,8 @@ class SimulationPipeline:
                         "away_attack": features.alpha_away_attack,
                         "lambda_home": features.lambda_home,
                         "lambda_away": features.lambda_away,
-                        "secondary_count": len(secondary_list)
+                        "secondary_count": len(secondary_list),
+                        "has_safe_banker": has_banker
                     }
                 }
                 self.supabase.post("football_predictions", pred_payload, on_conflict="fixture_id")

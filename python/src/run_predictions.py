@@ -160,7 +160,10 @@ def run():
             print(f"    Status: PUBLISHED [SNIPER MODE: 1 Fixture = 1 Database Row]")
             print(f"    Simulations: {res.simulation_result.completed_simulations:,} iterations in {res.simulation_result.duration_ms:.1f}ms")
             if primary:
-                print(f"    🎯 PRIMARY: [{primary.confidence_tier}] {primary.market_name} -> {primary.outcome} : {primary.probability_pct:.2f}%")
+                if primary.market_name == "NO_SAFE_BANKER":
+                    print(f"    🛡 PRIMARY: [{primary.confidence_tier}] VOLATILE TOSS-UP -> SKIP MATCH (No market hit >= 80% banker floor)")
+                else:
+                    print(f"    🎯 PRIMARY: [{primary.confidence_tier}] {primary.market_name} -> {primary.outcome} : {primary.probability_pct:.2f}% (BANKER >= 80%)")
             if res.secondary_predictions:
                 print(f"    📦 SECONDARY ({len(res.secondary_predictions)} markets):")
                 for s in res.secondary_predictions:

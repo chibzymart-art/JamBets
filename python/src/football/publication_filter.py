@@ -14,8 +14,8 @@ from python.src.football.simulation_engine import MarketOutcome
 class QualifyingPrediction(BaseModel):
     market_name: str
     outcome: str
-    probability_pct: float = Field(ge=45.0, le=100.0)
-    raw_probability: float = Field(ge=0.4500, le=1.0000)
+    probability_pct: float = Field(ge=0.0, le=100.0)
+    raw_probability: float = Field(ge=0.0, le=1.0000)
     confidence_tier: str
     publication_status: str = "published"
     tier_required: str = "free"

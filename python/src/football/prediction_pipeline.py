@@ -111,34 +111,53 @@ class PredictionPipeline:
 
         # 5. Extract Qualifying Predictions (>= 45.00%) & Sort Descending
         qualifying = PublicationFilter.filter_market_outcomes(sim_res.market_outcomes)
-
-        if not qualifying:
-            return FixturePredictionResult(
-                fixture_id=fixture_id,
-                canonical_key=canonical_key,
-                status="NO_QUALIFYING_PREDICTIONS",
-                feature_snapshot=features,
-                simulation_result=sim_res,
-                qualifying_predictions=[]
-            )
-
-        # Sniper Mode Sorting: Highest probability first
         qualifying.sort(key=lambda q: q.raw_probability, reverse=True)
 
-        # Primary Extraction [0]: Highest probability (must be >= 45%)
-        primary = qualifying[0]
+        # Sniper Mode Banker Floor: >= 80.00% (raw_probability >= 0.8000)
+        has_banker = len(qualifying) > 0 and qualifying[0].raw_probability >= 0.8000
 
-        # Secondary Extraction [1:4]: Top 2nd, 3rd, 4th highest probability occurrences
-        secondary_list = [
-            {
-                "market": q.market_name,
-                "prediction": q.outcome,
-                "probability": round(float(q.raw_probability), 4),
-                "prob": round(float(q.probability_pct), 2),
-                "confidence_tier": q.confidence_tier
-            }
-            for q in qualifying[1:4]
-        ]
+        if has_banker:
+            primary = qualifying[0]
+            # Secondary predictions: remaining qualifying markets with probability >= 60.00%, capped at 4
+            secondary_candidates = [q for q in qualifying[1:] if q.raw_probability >= 0.6000]
+            secondary_list = [
+                {
+                    "market": q.market_name,
+                    "prediction": q.outcome,
+                    "probability": round(float(q.raw_probability), 4),
+                    "prob": round(float(q.probability_pct), 2),
+                    "confidence_tier": q.confidence_tier,
+                    "tier": q.confidence_tier
+                }
+                for q in secondary_candidates[:4]
+            ]
+        else:
+            # Volatile / Toss-Up Fixture: Protect users with NO_SAFE_BANKER / SKIP
+            top_prob = round(float(qualifying[0].raw_probability), 4) if qualifying else 0.0
+            top_prob_pct = round(float(qualifying[0].probability_pct), 2) if qualifying else 0.0
+            primary = QualifyingPrediction(
+                market_name="NO_SAFE_BANKER",
+                outcome="SKIP",
+                probability_pct=top_prob_pct,
+                raw_probability=top_prob,
+                confidence_tier="NO_SAFE_BANKER",
+                publication_status="published",
+                tier_required="free",
+                is_qualifying=True
+            )
+            # Secondary predictions for unbankered game: any markets >= 60.00%, up to 4
+            secondary_candidates = [q for q in qualifying if q.raw_probability >= 0.6000]
+            secondary_list = [
+                {
+                    "market": q.market_name,
+                    "prediction": q.outcome,
+                    "probability": round(float(q.raw_probability), 4),
+                    "prob": round(float(q.probability_pct), 2),
+                    "confidence_tier": q.confidence_tier,
+                    "tier": q.confidence_tier
+                }
+                for q in secondary_candidates[:4]
+            ]
 
         persisted_count = 0
 
@@ -179,6 +198,7 @@ class PredictionPipeline:
                     "tier_required": primary.tier_required,
                     "source_data_version": "v1.0.0",
                     "target_kickoff_at": kickoff_utc.isoformat(),
+                    "simulations_count": 250000,
                     "secondary_predictions": secondary_list,
                     "metadata": {
                         "probability_pct": primary.probability_pct,
@@ -189,7 +209,8 @@ class PredictionPipeline:
                         "away_attack": features.alpha_away_attack,
                         "lambda_home": features.lambda_home,
                         "lambda_away": features.lambda_away,
-                        "secondary_count": len(secondary_list)
+                        "secondary_count": len(secondary_list),
+                        "has_safe_banker": has_banker
                     }
                 }
                 self.supabase.post("football_predictions", pred_payload, on_conflict="fixture_id")

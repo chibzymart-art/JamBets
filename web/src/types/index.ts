@@ -41,7 +41,9 @@ export type ConfidenceTier =
   | 'HIGH CONFIDENCE'
   | 'MID CONFIDENCE'
   | 'LOW CONFIDENCE'
-  | 'RISKY';
+  | 'RISKY'
+  | 'NO_SAFE_BANKER'
+  | 'no_safe_banker';
 
 export interface SecondaryPrediction {
   market: string;
@@ -58,6 +60,7 @@ export interface FootballPrediction {
   fixture_id: string;
   simulation_id?: string;
   simulation_run_id?: string;
+  simulations_count?: number;
   market: string;
   prediction: string;
   probability: number;

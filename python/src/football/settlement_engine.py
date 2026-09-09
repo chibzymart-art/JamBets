@@ -133,8 +133,17 @@ class SettlementEngine:
         # =====================================================================
 
         # --- 1. Over / Under Goals Markets ---
-        if market in ("over_under_1.5", "over_under_2.5", "over_under_3.5"):
-            threshold = 1.5 if "1.5" in market else (2.5 if "2.5" in market else 3.5)
+        if market in ("over_under_0.5", "over_under_1.5", "over_under_2.5", "over_under_3.5", "over_under_4.5"):
+            if "0.5" in market:
+                threshold = 0.5
+            elif "1.5" in market:
+                threshold = 1.5
+            elif "2.5" in market:
+                threshold = 2.5
+            elif "3.5" in market:
+                threshold = 3.5
+            else:
+                threshold = 4.5
 
             if outcome in ("over", "o"):
                 # Early mathematical guarantee: minimum possible final total already satisfies threshold
@@ -206,6 +215,83 @@ class SettlementEngine:
                         status=SettlementStatus.PENDING,
                         actual_score=score_str,
                         notes=f"In-play {score_str}: {total_goals} goals, max allowed <{threshold}"
+                    )
+
+        # --- 1B. Team-Specific Goals Markets (Home / Away Over/Under 0.5) ---
+        elif market in ("home_goals_0.5", "away_goals_0.5"):
+            is_home_target = (market == "home_goals_0.5")
+            team_goals = h if is_home_target else a
+            team_label = "Home" if is_home_target else "Away"
+            threshold = 0.5
+
+            if outcome in ("over", "o"):
+                if team_goals > threshold:
+                    return SettlementDecision(
+                        prediction_id=pred_id,
+                        fixture_id=fixture_id,
+                        market=market,
+                        prediction=outcome,
+                        status=SettlementStatus.WON,
+                        settled_at=now,
+                        actual_score=score_str,
+                        is_early_settlement=not is_finished,
+                        notes=f"{team_label} Over {threshold} satisfied: {team_label} scored {team_goals} (score {score_str})"
+                    )
+                elif is_finished:
+                    return SettlementDecision(
+                        prediction_id=pred_id,
+                        fixture_id=fixture_id,
+                        market=market,
+                        prediction=outcome,
+                        status=SettlementStatus.LOST,
+                        settled_at=now,
+                        actual_score=score_str,
+                        notes=f"{team_label} Over {threshold} failed: {team_label} scored {team_goals} (final {score_str})"
+                    )
+                else:
+                    return SettlementDecision(
+                        prediction_id=pred_id,
+                        fixture_id=fixture_id,
+                        market=market,
+                        prediction=outcome,
+                        status=SettlementStatus.PENDING,
+                        actual_score=score_str,
+                        notes=f"In-play {score_str}: {team_label} goals {team_goals}, needs >{threshold}"
+                    )
+
+            elif outcome in ("under", "u"):
+                if team_goals > threshold:
+                    return SettlementDecision(
+                        prediction_id=pred_id,
+                        fixture_id=fixture_id,
+                        market=market,
+                        prediction=outcome,
+                        status=SettlementStatus.LOST,
+                        settled_at=now,
+                        actual_score=score_str,
+                        is_early_settlement=not is_finished,
+                        notes=f"{team_label} Under {threshold} exceeded: {team_label} scored {team_goals} (score {score_str})"
+                    )
+                elif is_finished:
+                    return SettlementDecision(
+                        prediction_id=pred_id,
+                        fixture_id=fixture_id,
+                        market=market,
+                        prediction=outcome,
+                        status=SettlementStatus.WON,
+                        settled_at=now,
+                        actual_score=score_str,
+                        notes=f"{team_label} Under {threshold} satisfied: {team_label} scored {team_goals} (final {score_str})"
+                    )
+                else:
+                    return SettlementDecision(
+                        prediction_id=pred_id,
+                        fixture_id=fixture_id,
+                        market=market,
+                        prediction=outcome,
+                        status=SettlementStatus.PENDING,
+                        actual_score=score_str,
+                        notes=f"In-play {score_str}: {team_label} goals {team_goals}, max allowed <{threshold}"
                     )
 
         # --- 2. Both Teams To Score (BTTS / GG) ---
@@ -533,6 +619,19 @@ class SettlementEngine:
                     actual_score=f"Corners:{corners_total}",
                     notes=f"In-play corners: {corners_total}, awaiting completion"
                 )
+
+        # --- 8. No Safe Banker (Protected Pass / Skip) ---
+        elif market.lower() in ("no_safe_banker", "skip"):
+            return SettlementDecision(
+                prediction_id=pred_id,
+                fixture_id=fixture_id,
+                market=market,
+                prediction=outcome,
+                status=SettlementStatus.VOID,
+                settled_at=now,
+                actual_score=score_str,
+                notes="VOID: Fixture marked NO_SAFE_BANKER (Protected Skip) - Zero speculative risk."
+            )
 
         # Fallback default: remain pending
         return SettlementDecision(
