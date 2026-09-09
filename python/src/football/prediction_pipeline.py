@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional, Tuple
 from pydantic import BaseModel
 
+from python.src.football.ai_summary import AISimulationSummarizer
 from python.src.football.historical_dataset import HistoricalDatasetBuilder, DatasetMetadata
 from python.src.football.prematch_features import (
     PreMatchFeatureEngine,
@@ -41,6 +42,7 @@ class FixturePredictionResult(BaseModel):
     p_sim_primary: Optional[float] = None
     p_market_primary: Optional[float] = None
     is_consensus_banker: bool = False
+    ai_summary: Optional[str] = None
     not_ready_reason: Optional[str] = None
     persisted_predictions_count: int = 0
 
@@ -60,18 +62,20 @@ class PredictionPipeline:
         sportybet: Optional[SportyBetAdapter] = None,
         google_news: Optional[GoogleNewsAdapter] = None,
     ):
+        self.supabase = supabase or CloudSupabaseClient()
         self.dataset = dataset or HistoricalDatasetBuilder()
         self.fotmob = fotmob or FotMobAdapter()
         self.sportybet = sportybet or SportyBetAdapter()
         self.google_news = google_news or GoogleNewsAdapter()
         self.feature_engine = PreMatchFeatureEngine(
             dataset=self.dataset,
+            supabase=self.supabase,
             fotmob=self.fotmob,
             google_news=self.google_news
         )
         self.model = DixonColesModel()
         self.simulation_engine = MonteCarloSimulationEngine(self.model)
-        self.supabase = supabase or CloudSupabaseClient()
+        self.ai_summarizer = AISimulationSummarizer()
 
     def process_single_fixture(
         self,
@@ -208,13 +212,13 @@ class PredictionPipeline:
                 p_market = round(p_sim * 0.98, 4)
 
         # CONSENSUS GATING CRITERIA:
-        # Both P_sim >= 0.8200 (82%) AND P_market >= 0.8000 (80%)
-        is_consensus_banker = (p_sim >= 0.8200) and (p_market is not None and p_market >= 0.8000)
+        # Both P_sim >= 0.8000 (80%) AND P_market >= 0.7800 (78%) for Elite Consensus Banker
+        is_consensus_banker = (p_sim >= 0.8000) and (p_market is not None and p_market >= 0.7800)
 
-        if is_consensus_banker and primary_candidate:
+        if primary_candidate:
             primary = primary_candidate
-            # Secondary predictions: other qualifying markets >= 60.00%, capped at 4
-            secondary_candidates = [q for q in qualifying[1:] if q.raw_probability >= 0.6000]
+            # Secondary predictions: other qualifying markets >= 55.00%, capped at 4
+            secondary_candidates = [q for q in qualifying[1:] if q.raw_probability >= 0.5500]
             secondary_list = [
                 {
                     "market": q.market_name,
@@ -223,12 +227,11 @@ class PredictionPipeline:
                     "prob": round(float(q.probability_pct), 2),
                     "confidence_tier": q.confidence_tier,
                     "tier": q.confidence_tier,
-                    "consensus_verified": True
+                    "consensus_verified": is_consensus_banker
                 }
                 for q in secondary_candidates[:4]
             ]
         else:
-            # Divergence or Sub-80% Market: Protect capital with NO_SAFE_BANKER / SKIP
             top_prob = round(p_sim, 4)
             top_prob_pct = round(p_sim * 100.0, 2)
             primary = QualifyingPrediction(
@@ -239,27 +242,33 @@ class PredictionPipeline:
                 confidence_tier="NO_SAFE_BANKER",
                 publication_status="published",
                 tier_required="free",
-                is_qualifying=True
+                is_qualifying=False
             )
-            # Secondary predictions for unbankered game: any markets >= 60.00%, up to 4
-            secondary_candidates = [q for q in qualifying if q.raw_probability >= 0.6000]
-            secondary_list = [
-                {
-                    "market": q.market_name,
-                    "prediction": q.outcome,
-                    "probability": round(float(q.raw_probability), 4),
-                    "prob": round(float(q.probability_pct), 2),
-                    "confidence_tier": q.confidence_tier,
-                    "tier": q.confidence_tier,
-                    "consensus_verified": False
-                }
-                for q in secondary_candidates[:4]
-            ]
+            secondary_list = []
+
+        # -------------------------------------------------------------
+        # 5. AI Simulation Intelligence Summary
+        # -------------------------------------------------------------
+        ai_summary_text = self.ai_summarizer.generate_summary(
+            home_team=home_team_canonical,
+            away_team=away_team_canonical,
+            league_code=league_code,
+            lambda_home=features.lambda_home,
+            lambda_away=features.lambda_away,
+            sim_result=sim_res,
+            primary_market=primary.market_name,
+            primary_outcome=primary.outcome,
+            primary_prob_pct=primary.probability_pct,
+            confidence_tier=primary.confidence_tier,
+            secondary_predictions=secondary_list,
+            is_consensus_banker=is_consensus_banker,
+            data_tier=features.data_tier_used
+        )
 
         persisted_count = 0
 
         # -------------------------------------------------------------
-        # 5. Persist to Cloud Supabase: Exactly ONE row per fixture
+        # 6. Persist to Cloud Supabase: Exactly ONE row per fixture
         # -------------------------------------------------------------
         if persist_to_supabase:
             try:
@@ -283,7 +292,8 @@ class PredictionPipeline:
                         "btts_yes_pct": sim_res.btts_yes_pct,
                         "p_sim": p_sim,
                         "p_market": p_market,
-                        "consensus_verified": is_consensus_banker
+                        "consensus_verified": is_consensus_banker,
+                        "ai_summary": ai_summary_text
                     }
                 }
                 created_sim = self.supabase.post("football_simulations", sim_payload)
@@ -319,12 +329,13 @@ class PredictionPipeline:
                         "injury_debuff_home": features.squad_injury_debuff_home,
                         "injury_debuff_away": features.squad_injury_debuff_away,
                         "secondary_count": len(secondary_list),
-                        "has_safe_banker": is_consensus_banker
+                        "has_safe_banker": is_consensus_banker,
+                        "ai_summary": ai_summary_text
                     }
                 }
                 self.supabase.post("football_predictions", pred_payload, on_conflict="fixture_id")
 
-                # Update fixture status to 'predicted' (or ensure it's not pending)
+                # Update fixture status to 'scheduled' (ensure it's not marked data_unavailable)
                 self.supabase.patch("football_fixtures", {"status": "scheduled"}, {"id": f"eq.{fixture_id}"})
                 persisted_count = 1
 
@@ -343,5 +354,6 @@ class PredictionPipeline:
             p_sim_primary=p_sim,
             p_market_primary=p_market,
             is_consensus_banker=is_consensus_banker,
+            ai_summary=ai_summary_text,
             persisted_predictions_count=persisted_count
         )

@@ -8042,6 +8042,71 @@ body {
   color: #ffffff;
 }
 
+/* ==========================================================================
+   AI SIMULATION INTELLIGENCE CARD
+   ========================================================================== */
+.ai-simulation-card {
+  margin-top: 14px;
+  padding: 14px 18px;
+  background: linear-gradient(135deg, rgba(30, 27, 75, 0.03) 0%, rgba(79, 70, 229, 0.06) 100%);
+  border: 1px solid rgba(99, 102, 241, 0.25);
+  border-radius: 12px;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 4px 16px -2px rgba(99, 102, 241, 0.08);
+  transition: all 0.2s ease;
+}
+
+.ai-simulation-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 4px;
+  height: 100%;
+  background: linear-gradient(180deg, #6366f1 0%, #a855f7 100%);
+}
+
+.ai-simulation-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ai-simulation-badge {
+  font-family: var(--font-heading);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: #4f46e5;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ai-simulation-status {
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+  background: #f1f5f9;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  border: 1px solid #e2e8f0;
+}
+
+.ai-simulation-text {
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: #1e293b;
+  margin: 0;
+  font-weight: 500;
+}
+
+
 
 
 

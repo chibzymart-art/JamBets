@@ -325,38 +325,40 @@ class MonteCarloSimulationEngine:
                 corners_simulated = True
                 corners_avg = round(float(np.mean(tot_corners)), 2)
 
-        # 8. Deterministic Market Extraction (Discrete integer comparisons)
+        # 8. Deterministic Market Extraction (Vectorized SIMD integer operations)
         n = float(completed_count)
 
-        # 1X2 Match Result
-        hw_hits = int(np.sum(home_goals > away_goals))
-        dr_hits = int(np.sum(home_goals == away_goals))
-        aw_hits = int(np.sum(home_goals < away_goals))
+        # 1X2 Match Result & Double Chance (computed via goal difference vector)
+        diff = home_goals - away_goals
+        hw_hits = int(np.count_nonzero(diff > 0))
+        dr_hits = int(np.count_nonzero(diff == 0))
+        aw_hits = int(completed_count - hw_hits - dr_hits)
 
         p_hw = round((hw_hits / n) * 100.0, 4)
         p_dr = round((dr_hits / n) * 100.0, 4)
         p_aw = round((aw_hits / n) * 100.0, 4)
 
-        # Double Chance
-        dc_1x_hits = int(np.sum(home_goals >= away_goals))
-        dc_x2_hits = int(np.sum(away_goals >= home_goals))
-        dc_12_hits = int(np.sum(home_goals != away_goals))
+        # Double Chance exact combinations
+        dc_1x_hits = hw_hits + dr_hits
+        dc_x2_hits = aw_hits + dr_hits
+        dc_12_hits = hw_hits + aw_hits
 
         p_1x = round((dc_1x_hits / n) * 100.0, 4)
         p_x2 = round((dc_x2_hits / n) * 100.0, 4)
         p_12 = round((dc_12_hits / n) * 100.0, 4)
 
-        # Full-Time Goals (O/U 0.5, 1.5, 2.5, 3.5, 4.5)
-        o05_hits = int(np.sum(tot_ft >= 1))
-        u05_hits = int(np.sum(tot_ft == 0))
-        o15_hits = int(np.sum(tot_ft >= 2))
-        u15_hits = int(np.sum(tot_ft <= 1))
-        o25_hits = int(np.sum(tot_ft >= 3))
-        u25_hits = int(np.sum(tot_ft <= 2))
-        o35_hits = int(np.sum(tot_ft >= 4))
-        u35_hits = int(np.sum(tot_ft <= 3))
-        o45_hits = int(np.sum(tot_ft >= 5))
-        u45_hits = int(np.sum(tot_ft <= 4))
+        # Full-Time Goals (Vectorized bincount single-pass)
+        ft_counts = np.bincount(tot_ft, minlength=12)
+        u05_hits = int(ft_counts[0])
+        o05_hits = int(completed_count - u05_hits)
+        u15_hits = int(ft_counts[0] + ft_counts[1])
+        o15_hits = int(completed_count - u15_hits)
+        u25_hits = int(u15_hits + ft_counts[2])
+        o25_hits = int(completed_count - u25_hits)
+        u35_hits = int(u25_hits + ft_counts[3])
+        o35_hits = int(completed_count - u35_hits)
+        u45_hits = int(u35_hits + ft_counts[4])
+        o45_hits = int(completed_count - u45_hits)
 
         p_o05 = round((o05_hits / n) * 100.0, 4)
         p_u05 = round((u05_hits / n) * 100.0, 4)
@@ -369,11 +371,14 @@ class MonteCarloSimulationEngine:
         p_o45 = round((o45_hits / n) * 100.0, 4)
         p_u45 = round((u45_hits / n) * 100.0, 4)
 
-        # Team Specific Totals (Home / Away Over/Under 0.5)
-        home_o05_hits = int(np.sum(home_goals >= 1))
-        home_u05_hits = int(np.sum(home_goals == 0))
-        away_o05_hits = int(np.sum(away_goals >= 1))
-        away_u05_hits = int(np.sum(away_goals == 0))
+        # Team Specific Totals & BTTS (Vectorized booleans)
+        home_scored = home_goals > 0
+        away_scored = away_goals > 0
+
+        home_o05_hits = int(np.count_nonzero(home_scored))
+        home_u05_hits = int(completed_count - home_o05_hits)
+        away_o05_hits = int(np.count_nonzero(away_scored))
+        away_u05_hits = int(completed_count - away_o05_hits)
 
         p_home_o05 = round((home_o05_hits / n) * 100.0, 4)
         p_home_u05 = round((home_u05_hits / n) * 100.0, 4)
@@ -381,28 +386,30 @@ class MonteCarloSimulationEngine:
         p_away_u05 = round((away_u05_hits / n) * 100.0, 4)
 
         # Both Teams To Score (BTTS)
-        btts_yes_hits = int(np.sum((home_goals >= 1) & (away_goals >= 1)))
-        btts_no_hits = int(np.sum((home_goals == 0) | (away_goals == 0)))
+        btts_yes_hits = int(np.count_nonzero(home_scored & away_scored))
+        btts_no_hits = int(completed_count - btts_yes_hits)
 
         p_btts_yes = round((btts_yes_hits / n) * 100.0, 4)
         p_btts_no = round((btts_no_hits / n) * 100.0, 4)
 
-        # Half-Time Goals (O/U 0.5, 1.5)
-        o05_1h_hits = int(np.sum(tot_1h >= 1))
-        u05_1h_hits = int(np.sum(tot_1h == 0))
-        o15_1h_hits = int(np.sum(tot_1h >= 2))
-        u15_1h_hits = int(np.sum(tot_1h <= 1))
+        # Half-Time Goals (Vectorized bincount)
+        ht_counts = np.bincount(tot_1h, minlength=6)
+        u05_1h_hits = int(ht_counts[0])
+        o05_1h_hits = int(completed_count - u05_1h_hits)
+        u15_1h_hits = int(ht_counts[0] + ht_counts[1])
+        o15_1h_hits = int(completed_count - u15_1h_hits)
 
         p_o05_1h = round((o05_1h_hits / n) * 100.0, 4)
         p_u05_1h = round((u05_1h_hits / n) * 100.0, 4)
         p_o15_1h = round((o15_1h_hits / n) * 100.0, 4)
         p_u15_1h = round((u15_1h_hits / n) * 100.0, 4)
 
-        # Second-Half Goals (O/U 0.5, 1.5)
-        o05_2h_hits = int(np.sum(tot_2h >= 1))
-        u05_2h_hits = int(np.sum(tot_2h == 0))
-        o15_2h_hits = int(np.sum(tot_2h >= 2))
-        u15_2h_hits = int(np.sum(tot_2h <= 1))
+        # Second-Half Goals (Vectorized bincount)
+        h2_counts = np.bincount(tot_2h, minlength=6)
+        u05_2h_hits = int(h2_counts[0])
+        o05_2h_hits = int(completed_count - u05_2h_hits)
+        u15_2h_hits = int(h2_counts[0] + h2_counts[1])
+        o15_2h_hits = int(completed_count - u15_2h_hits)
 
         p_o05_2h = round((o05_2h_hits / n) * 100.0, 4)
         p_u05_2h = round((u05_2h_hits / n) * 100.0, 4)
@@ -500,16 +507,12 @@ class MonteCarloSimulationEngine:
             p_o05_2h=p_o05_2h, p_u05_2h=p_u05_2h
         )
 
-        # 10. Compute Top Scoreline Distribution
-        scoreline_counts: Dict[str, int] = {}
-        sample_size = min(50000, completed_count)
-        for h, a in zip(home_goals[:sample_size], away_goals[:sample_size]):
-            score_key = f"{h}-{a}"
-            scoreline_counts[score_key] = scoreline_counts.get(score_key, 0) + 1
-
+        # 10. Compute Top Scoreline Distribution (Vectorized across all 250,000 simulations)
+        score_counts = np.bincount(sampled_indices, minlength=len(flat_p))
+        top_indices = np.argsort(score_counts)[::-1][:6]
         top_scorelines = {
-            k: round((v / float(sample_size)) * 100.0, 2)
-            for k, v in sorted(scoreline_counts.items(), key=lambda item: item[1], reverse=True)[:6]
+            f"{idx // self.MAX_GOALS_GRID}-{idx % self.MAX_GOALS_GRID}": round((float(score_counts[idx]) / n) * 100.0, 2)
+            for idx in top_indices if score_counts[idx] > 0
         }
 
         end_dt = datetime.now(timezone.utc)

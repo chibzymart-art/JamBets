@@ -92,6 +92,8 @@ export interface FootballPrediction {
     lambda_home?: number;
     lambda_away?: number;
     secondary_count?: number;
+    ai_summary?: string;
+    [key: string]: any;
   };
   target_kickoff_at: string;
   created_at: string;

@@ -141,7 +141,20 @@ def run():
     max_utc = now_utc + timedelta(days=4)
     print(f"\n[STEP 4] Fetching forward-looking fixtures ({now_utc.strftime('%Y-%m-%d %H:%M')} to {max_utc.strftime('%Y-%m-%d %H:%M')} UTC)...")
 
-    forward_fixtures = supabase.get_forward_prediction_queue(ref_time_utc=now_utc, max_days=4, limit=1000)
+    # Reset any previously failed 'data_unavailable' fixtures back to 'scheduled'
+    print("  • Resetting previously failed data_unavailable fixtures in Cloud Supabase...", flush=True)
+    try:
+        supabase.patch("football_fixtures", {"status": "scheduled"}, {"status": "eq.data_unavailable"})
+        print("  [OK] Data unavailable fixtures reset to scheduled", flush=True)
+    except Exception as reset_err:
+        print(f"  [NOTE] Reset fixtures notice: {reset_err}", flush=True)
+
+    # Ingest forward fixtures across the full active queue window
+    forward_fixtures = supabase.get_forward_prediction_queue(
+        ref_time_utc=now_utc - timedelta(hours=36),
+        max_days=5,
+        limit=1000
+    )
     print(f"  • Retrieved {len(forward_fixtures)} fixtures in the 4-day window from Cloud Supabase")
 
     # If argument provided, allow limiting for tests, otherwise drain the entire forward window
@@ -164,15 +177,16 @@ def run():
 
     for idx, f in enumerate(fixtures_to_process, 1):
         f_id = f.get("id")
-        canonical_key = f.get("canonical_key")
-        l_code = f.get("league_code")
-        h_team = f.get("home_team_name")
-        a_team = f.get("away_team_name")
+        l_code = f.get("league_code") or "OTHER"
+        h_team = f.get("home_team_name") or "home"
+        a_team = f.get("away_team_name") or "away"
         kickoff_str = f.get("target_kickoff_at")
         try:
             kickoff = datetime.fromisoformat(kickoff_str.replace("Z", "+00:00"))
         except Exception:
             kickoff = now_utc + timedelta(hours=12)
+
+        canonical_key = f.get("canonical_key") or f"{l_code}:{h_team}:{a_team}:{kickoff.strftime('%Y%m%d')}"
 
         print(f"\n--- [{idx}/{len(fixtures_to_process)}] Fixture: {h_team} vs {a_team} ({l_code}) ---")
         print(f"    Canonical Key: {canonical_key}")

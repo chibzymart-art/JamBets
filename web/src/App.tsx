@@ -355,7 +355,8 @@ export default function App() {
       (currentUser as any)?.app_metadata?.role === 'admin' ||
       profile?.role === 'admin' ||
       email === 'chibzymart@gmail.com' ||
-      email === 'whizzchibz@gmail.com'
+      email === 'whizzchibz@gmail.com' ||
+      email === 'chibuezeamuchie@gmail.com'
     );
   }, [currentUser, profile]);
 
@@ -458,7 +459,8 @@ export default function App() {
         (currentUser as any)?.app_metadata?.role === 'admin' ||
         profile?.role === 'admin' ||
         currentUser?.email?.toLowerCase() === 'chibzymart@gmail.com' ||
-        currentUser?.email?.toLowerCase() === 'whizzchibz@gmail.com';
+        currentUser?.email?.toLowerCase() === 'whizzchibz@gmail.com' ||
+        currentUser?.email?.toLowerCase() === 'chibuezeamuchie@gmail.com';
 
       const predOrTeaserQuery = isUserAdmin
         ? supabase.from('football_predictions').select('*').limit(2000)

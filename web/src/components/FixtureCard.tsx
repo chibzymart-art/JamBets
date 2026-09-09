@@ -218,6 +218,21 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
     return [];
   }, [prediction?.secondary_predictions]);
 
+  // Extract AI Simulation Intelligence Summary
+  const aiSummary = React.useMemo(() => {
+    if (!prediction?.metadata) return null;
+    if (typeof prediction.metadata === 'object' && prediction.metadata.ai_summary) {
+      return prediction.metadata.ai_summary;
+    }
+    if (typeof prediction.metadata === 'string') {
+      try {
+        const parsed = JSON.parse(prediction.metadata);
+        return parsed.ai_summary || null;
+      } catch {}
+    }
+    return null;
+  }, [prediction?.metadata]);
+
   const isWon = prediction?.settlement_status === 'won';
   const isLost = prediction?.settlement_status === 'lost';
   const isVoid = prediction?.settlement_status === 'void' || prediction?.settlement_status === 'voided';
@@ -595,6 +610,23 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
                       );
                     })}
                   </div>
+                </div>
+              )}
+
+              {/* AI SIMULATION INTELLIGENCE ANALYSIS */}
+              {aiSummary && (
+                <div className="ai-simulation-card">
+                  <div className="ai-simulation-header">
+                    <span className="ai-simulation-badge">
+                      ✨ AI SIMULATION INTELLIGENCE (250,000 DRAWS)
+                    </span>
+                    <span className="ai-simulation-status">
+                      Synthesized Analysis
+                    </span>
+                  </div>
+                  <p className="ai-simulation-text">
+                    {aiSummary}
+                  </p>
                 </div>
               )}
             </div>

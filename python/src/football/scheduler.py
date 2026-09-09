@@ -88,7 +88,7 @@ class PredictionCycleScheduler:
         self.max_retries = max_retries
 
         # Sub-pipelines
-        self.feature_engine = PreMatchFeatureEngine(dataset=self.dataset)
+        self.feature_engine = PreMatchFeatureEngine(dataset=self.dataset, supabase=self.supabase)
         self.simulation_engine = MonteCarloSimulationEngine(model=self.model)
         self.pipeline = SimulationPipeline(
             model=self.model,
