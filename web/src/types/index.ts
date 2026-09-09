@@ -43,7 +43,8 @@ export type ConfidenceTier =
   | 'LOW CONFIDENCE'
   | 'RISKY'
   | 'NO_SAFE_BANKER'
-  | 'no_safe_banker';
+  | 'no_safe_banker'
+  | 'LOCKED';
 
 export interface SecondaryPrediction {
   market: string;
@@ -62,12 +63,13 @@ export interface FootballPrediction {
   simulation_run_id?: string;
   simulations_count?: number;
   market: string;
-  prediction: string;
-  probability: number;
+  prediction: string | null;
+  probability: number | null;
   confidence_category: ConfidenceTier;
   publication_status: string;
   tier_required: string;
   source_data_version: string;
+  is_locked?: boolean;
   settlement_status?: 'pending' | 'won' | 'lost' | 'void' | 'voided' | 'conflict';
   settled_at?: string | null;
   settlement_notes?: string | null;

@@ -1,304 +1,224 @@
 import React from 'react';
-import { SchedulerJob, SettlementJob } from '../types';
+import { Link } from 'react-router-dom';
 
 interface NavigationFooterProps {
-  onSelectDate: (date: string) => void;
-  onOpenPricing: () => void;
-  onOpenFaq: () => void;
-  onOpenAllLeagues: () => void;
-  onOpenProfileOrAuth: () => void;
-  onFilterTier: (tier: string) => void;
-  onNavigateView: (view: 'fixtures' | 'analytics' | 'admin') => void;
-  watDateStr: string;
-  latencyMs: number | null;
-  todayDate: string;
-  yesterdayDate: string;
-  tomorrowDate: string;
-  schedulerJob?: SchedulerJob | null;
-  settlementJob?: SettlementJob | null;
-  lastRefreshed?: Date;
+  onOpenAuthModal?: (mode: 'signin' | 'register') => void;
+  onOpenFaqModal?: () => void;
+  onOpenLeaguesModal?: () => void;
+  onSelectDateFilter?: (date: string) => void;
+  userRole?: string;
 }
 
 export const NavigationFooter: React.FC<NavigationFooterProps> = ({
-  onSelectDate,
-  onOpenPricing,
-  onOpenFaq,
-  onOpenAllLeagues,
-  onOpenProfileOrAuth,
-  onFilterTier,
-  onNavigateView,
-  watDateStr,
-  latencyMs,
-  todayDate,
-  yesterdayDate,
-  tomorrowDate,
-  schedulerJob,
-  settlementJob,
-  lastRefreshed
+  onOpenAuthModal,
+  onOpenFaqModal,
+  onOpenLeaguesModal,
+  userRole
 }) => {
-  const scrollToTop = () => {
+  const currentYear = new Date().getFullYear();
+
+  const handleScrollToTop = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   return (
-    <footer className="site-navigation-footer" aria-label="JamBets Global Navigation & Compliance">
-      {/* 1. Universal Regulatory Disclaimer Box (Pinned across all pages) */}
-      <div className="regulatory-disclaimer-box">
-        <div className="regulatory-disclaimer-content">
-          <span className="regulatory-warning-icon">⚠️</span>
-          <div className="regulatory-text-group">
-            <strong className="regulatory-lead">STRICT REGULATORY & FINANCIAL NOTICE:</strong>
-            <span>
-              Predictions are probabilistic estimates derived from Dixon-Coles mathematical simulations for informational and educational purposes only. They are not guarantees of sports outcomes, and JamBets does not accept bets or place wagers on anyone's behalf. Predictive sports modeling entails variance and inherent risk; always make decisions responsibly. JamBets accepts zero liability for financial losses. This platform is strictly for research and statistical analysis and NOT financial or betting advice.
-            </span>
+    <footer className="jambets-global-footer" role="contentinfo" aria-label="Platform Directory and Compliance Footer">
+      {/* Pinned Regulatory Notice Banner (Green & Red Brand Theme) */}
+      <div className="footer-regulatory-alert-box">
+        <div className="regulatory-alert-inner">
+          <div className="regulatory-badge-icon">⚠️</div>
+          <div className="regulatory-alert-text">
+            <strong>STRICT REGULATORY & FINANCIAL INDEMNITY NOTICE:</strong> Predictions are probabilistic estimates
+            derived from quantitative mathematical modeling for informational and research purposes only. They are not
+            guarantees of sports outcomes, and JamBets does not accept wagers or place bets on anyone's behalf. Sports predictive
+            modeling entails variance and inherent risk; always make decisions responsibly. JamBets accepts zero liability for
+            financial losses. Strictly 18+ only.
           </div>
         </div>
       </div>
 
-      {/* 2. Main Multi-Column Links Section */}
-      <div className="footer-links-container">
-        {/* Brand Column */}
-        <div className="footer-brand-column">
-          <div className="footer-brand-row">
-            <span className="footer-brand-badge">JB</span>
-            <span className="footer-brand-name">JamBets</span>
+      {/* Main Multi-Column Links Container */}
+      <div className="footer-main-links-container">
+        {/* Brand & Identity Column */}
+        <div className="footer-brand-col">
+          <div className="footer-brand-header">
+            <div className="brand-logo-mark">JB</div>
+            <span className="brand-title-text">JamBets</span>
           </div>
-          <p className="footer-brand-tagline">
-            Next-generation mathematical football simulation engine. 250,000 Monte Carlo iterations per fixture. Real-time 15-minute automated settlement ledger. Zero human tampering.
+          <p className="footer-brand-bio">
+            Next-generation mathematical sports analytics platform. Rigorous bivariate modeling, verified post-match settlement
+            ledgers, and transparent performance tracking.
           </p>
-          <div className="footer-brand-metrics">
-            <div className="footer-metric-pill">
-              <span className="dot-pulse-green" />
-              <span>Cloud Supabase Engine Online</span>
-            </div>
-            <div className="footer-metric-pill">
-              <span>{watDateStr ? `WAT Live: ${watDateStr}` : 'Africa/Lagos Timezone'}</span>
-            </div>
+          <div className="footer-status-pill-row">
+            <span className="footer-live-badge">
+              <span className="status-live-dot" />
+              <span>Platform Operational</span>
+            </span>
+            <span className="footer-wat-clock">WAT (UTC+1)</span>
           </div>
         </div>
 
-        {/* Column 1: Platforms & Predictions */}
-        <div className="footer-links-col">
-          <h4 className="footer-col-title">Predictions & Horizon</h4>
-          <ul className="footer-links-list">
+        {/* Column 2: Predictions & Horizon */}
+        <div className="footer-nav-col">
+          <h4 className="footer-col-heading">PREDICTIONS & HORIZON</h4>
+          <ul className="footer-nav-list">
             <li>
-              <button
-                type="button"
-                className="footer-link-btn"
-                onClick={() => { onNavigateView('fixtures'); onSelectDate(todayDate); scrollToTop(); }}
-              >
-                📅 Today's Verified Predictions
-              </button>
+              <Link to="/dashboard/predictions" className="footer-nav-link">
+                📅 Match Predictions Schedule
+              </Link>
+            </li>
+            <li>
+              <Link to="/dashboard/predictions" className="footer-nav-link">
+                ✓ Settled Match Win Ledger
+              </Link>
+            </li>
+            <li>
+              <Link to="/dashboard/predictions" className="footer-nav-link">
+                🎯 Daily Banker Picks Radar
+              </Link>
+            </li>
+            <li>
+              <Link to="/dashboard/predictions" className="footer-nav-link">
+                🗓 4-Day Horizon Forward Queue
+              </Link>
             </li>
             <li>
               <button
                 type="button"
-                className="footer-link-btn"
-                onClick={() => { onNavigateView('fixtures'); onSelectDate(yesterdayDate); scrollToTop(); }}
+                className="footer-link-button"
+                onClick={onOpenLeaguesModal}
               >
-                ✓ Yesterday's Settled Matches
-              </button>
-            </li>
-            <li>
-              <button
-                type="button"
-                className="footer-link-btn"
-                onClick={() => { onNavigateView('fixtures'); onSelectDate(tomorrowDate); scrollToTop(); }}
-              >
-                🔮 Tomorrow's Upcoming Banker Picks
-              </button>
-            </li>
-            <li>
-              <button
-                type="button"
-                className="footer-link-btn"
-                onClick={() => { onNavigateView('fixtures'); onSelectDate('all'); scrollToTop(); }}
-              >
-                📊 4-Day Horizon Complete Queue
-              </button>
-            </li>
-            <li>
-              <button
-                type="button"
-                className="footer-link-btn"
-                onClick={onOpenAllLeagues}
-              >
-                🏛 Browse All 30 Leagues Directory
+                🏛 Browse 30 World Leagues Directory
               </button>
             </li>
           </ul>
         </div>
 
-        {/* Column 2: Analytics & Models */}
-        <div className="footer-links-col">
-          <h4 className="footer-col-title">Analytics & Modeling</h4>
-          <ul className="footer-links-list">
+        {/* Column 3: Analytics & Modeling */}
+        <div className="footer-nav-col">
+          <h4 className="footer-col-heading">ANALYTICS & MODELING</h4>
+          <ul className="footer-nav-list">
+            <li>
+              <Link to="/#accuracy" className="footer-nav-link">
+                📈 Historical Win Rate Ledger
+              </Link>
+            </li>
+            <li>
+              <Link to="/dashboard/predictions" className="footer-nav-link">
+                ⭐ Consensus Radar (90%+ Confidence)
+              </Link>
+            </li>
             <li>
               <button
                 type="button"
-                className="footer-link-btn"
-                onClick={() => { onNavigateView('analytics'); scrollToTop(); }}
+                className="footer-link-button"
+                onClick={onOpenFaqModal}
               >
-                📈 Win Rate & Transparency Ledger
+                📐 Bivariate Poisson Methodology
               </button>
             </li>
             <li>
               <button
                 type="button"
-                className="footer-link-btn"
-                onClick={() => { onNavigateView('fixtures'); onFilterTier('BANGER'); scrollToTop(); }}
+                className="footer-link-button"
+                onClick={onOpenFaqModal}
               >
-                ⭐ 96%+ BANGER Consensus Radar
-              </button>
-            </li>
-            <li>
-              <button
-                type="button"
-                className="footer-link-btn"
-                onClick={() => { onNavigateView('fixtures'); onFilterTier('TOP PICK'); scrollToTop(); }}
-              >
-                👑 90%+ Daily Top Picks
-              </button>
-            </li>
-            <li>
-              <button
-                type="button"
-                className="footer-link-btn"
-                onClick={onOpenFaq}
-              >
-                📐 Dixon-Coles Poisson Methodology
-              </button>
-            </li>
-            <li>
-              <button
-                type="button"
-                className="footer-link-btn"
-                onClick={onOpenFaq}
-              >
-                🛡 250,000 Monte Carlo Simulation Specs
+                🛡 Quantitative Model Architecture
               </button>
             </li>
           </ul>
         </div>
 
-        {/* Column 3: Pricing & Subscriptions */}
-        <div className="footer-links-col">
-          <h4 className="footer-col-title">Plans & Access</h4>
-          <ul className="footer-links-list">
+        {/* Column 4: Plans & Access */}
+        <div className="footer-nav-col">
+          <h4 className="footer-col-heading">PLANS & ACCESS</h4>
+          <ul className="footer-nav-list">
             <li>
-              <button
-                type="button"
-                className="footer-link-btn highlight"
-                onClick={onOpenPricing}
-              >
-                ⚡ Flat Rate ₦5,000 / Month
-              </button>
+              <Link to="/subscription" className="footer-nav-link font-bold text-emerald">
+                ⚡ Standard Plan — ₦5,000 / mo
+              </Link>
             </li>
             <li>
-              <button
-                type="button"
-                className="footer-link-btn"
-                onClick={onOpenPricing}
-              >
-                Standard Subscription
-              </button>
+              <Link to="/subscription" className="footer-nav-link font-bold text-amber">
+                👑 BigBang VIP — ₦10,000 / mo
+              </Link>
             </li>
             <li>
-              <button
-                type="button"
-                className="footer-link-btn"
-                onClick={onOpenPricing}
-              >
-                BigBang VIP Pro Pass
-              </button>
+              <Link to="/subscription" className="footer-nav-link">
+                🎁 Free Tier (Historical Archive)
+              </Link>
             </li>
             <li>
-              <button
-                type="button"
-                className="footer-link-btn"
-                onClick={onOpenPricing}
-              >
-                Free Tier Teaser Previews
-              </button>
-            </li>
-            <li>
-              <button
-                type="button"
-                className="footer-link-btn"
-                onClick={onOpenPricing}
-              >
-                🔒 Secure Paystack Checkout Gateway
-              </button>
+              <span className="footer-nav-static">
+                🔒 Secure Paystack Payment Gateway
+              </span>
             </li>
           </ul>
         </div>
 
-        {/* Column 4: Governance & Portal */}
-        <div className="footer-links-col">
-          <h4 className="footer-col-title">Account & Governance</h4>
-          <ul className="footer-links-list">
+        {/* Column 5: Account & Governance */}
+        <div className="footer-nav-col">
+          <h4 className="footer-col-heading">ACCOUNT & GOVERNANCE</h4>
+          <ul className="footer-nav-list">
             <li>
               <button
                 type="button"
-                className="footer-link-btn"
-                onClick={onOpenProfileOrAuth}
+                className="footer-link-button"
+                onClick={() => onOpenAuthModal?.('signin')}
               >
-                👤 Member Account Settings & Security
+                👤 Member Sign-In & Security
               </button>
             </li>
             <li>
               <button
                 type="button"
-                className="footer-link-btn"
-                onClick={onOpenFaq}
+                className="footer-link-button"
+                onClick={onOpenFaqModal}
               >
-                ❓ Frequently Asked Questions (FAQ)
+                ❓ Frequently Asked Questions
               </button>
             </li>
             <li>
               <button
                 type="button"
-                className="footer-link-btn"
-                onClick={onOpenProfileOrAuth}
+                className="footer-link-button"
+                onClick={onOpenFaqModal}
               >
-                🛡 Legal Disclaimers & Compliance Record
+                🛡 Legal Disclaimers & Compliance
               </button>
             </li>
             <li>
-              <button
-                type="button"
-                className="footer-link-btn"
-                onClick={onOpenFaq}
-              >
-                🎲 Responsible Gaming Code (18+)
-              </button>
+              <span className="footer-nav-static">
+                🔞 Strict Responsible Gaming (18+)
+              </span>
             </li>
-            <li>
-              <button
-                type="button"
-                className="footer-link-btn admin-link"
-                onClick={() => { onNavigateView('admin'); scrollToTop(); }}
-              >
-                ⚙ Admin & System Health Portal
-              </button>
-            </li>
+
+            {/* STRICT OPSEC CONDITIONAL: ONLY ADMINS SEE ADMIN LINK */}
+            {userRole === 'admin' && (
+              <li>
+                <Link to="/admin" className="footer-nav-link text-purple font-bold">
+                  🛡 Admin Command Deck
+                </Link>
+              </li>
+            )}
           </ul>
         </div>
       </div>
 
-      {/* 3. Bottom Copyright & Technical Telemetry Bar */}
-      <div className="footer-bottom-telemetry-bar">
-        <div className="telemetry-left">
-          <span>© 2026 JamBets Predictive Analytics Platform. Dixon-Coles 250,000 Monte Carlo Simulation Engine.</span>
-          {schedulerJob && <span> • 6h Scheduler: {schedulerJob.status}</span>}
-          {settlementJob && <span> • 15m Settle: {settlementJob.status}</span>}
+      {/* Bottom Copyright and Telemetry Strip */}
+      <div className="footer-bottom-strip">
+        <div className="footer-bottom-left">
+          <span>© {currentYear} JamBets Quantitative Sports Analytics. All rights reserved.</span>
         </div>
-        <div className="telemetry-right">
-          <span>Authoritative Sync: {latencyMs !== null ? `${latencyMs}ms` : 'Online'}</span>
-          <span className="telemetry-separator">•</span>
-          <span>Updated {lastRefreshed ? lastRefreshed.toLocaleTimeString() : watDateStr}</span>
-          <span className="telemetry-separator">•</span>
-          <span className="badge-wat-time">WAT (UTC+1)</span>
+        <div className="footer-bottom-right">
+          <button
+            type="button"
+            className="btn-footer-scroll-top"
+            onClick={handleScrollToTop}
+            aria-label="Scroll back to top of page"
+          >
+            ↑ Back to Top
+          </button>
         </div>
       </div>
     </footer>

@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { Routes, Route, Navigate, useNavigate, useLocation, Link } from 'react-router-dom';
 import { supabase } from './lib/supabase';
 import {
   QueueFixture,
@@ -19,10 +20,13 @@ import { AnalyticsView } from './components/AnalyticsView';
 import { AdminView } from './components/AdminView';
 import { PricingModal } from './components/PricingModal';
 import { FaqModal } from './components/FaqModal';
-import { HeroSection } from './components/HeroSection';
 import { NavigationFooter } from './components/NavigationFooter';
+import { LandingPage } from './pages/Landing';
+import { SubscriptionPage } from './pages/Subscription';
 
 export default function App() {
+  const navigate = useNavigate();
+  const location = useLocation();
   // Authentication & Entitlement State
   const [currentUser, setCurrentUser] = useState<any | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -42,8 +46,8 @@ export default function App() {
   const [teasers, setTeasers] = useState<PredictionTeaser[]>([]);
   const [simulations, setSimulations] = useState<SimulationRecord[]>([]);
   const [leaguesList, setLeaguesList] = useState<LeagueRecord[]>([]);
-  const [schedulerJob, setSchedulerJob] = useState<SchedulerJob | null>(null);
-  const [settlementJob, setSettlementJob] = useState<SettlementJob | null>(null);
+  const [, setSchedulerJob] = useState<SchedulerJob | null>(null);
+  const [, setSettlementJob] = useState<SettlementJob | null>(null);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -116,15 +120,8 @@ export default function App() {
     });
   };
 
-  const [latencyMs, setLatencyMs] = useState<number | null>(null);
-  const [lastRefreshed, setLastRefreshed] = useState<Date>(new Date());
-
-  // Platform Navigation Views
-  const [currentView, setCurrentView] = useState<'fixtures' | 'analytics' | 'admin'>(() => {
-    if (typeof window !== 'undefined' && window.location.hash === '#analytics') return 'analytics';
-    if (typeof window !== 'undefined' && window.location.hash === '#admin') return 'admin';
-    return 'fixtures';
-  });
+  const [, setLatencyMs] = useState<number | null>(null);
+  const [, setLastRefreshed] = useState<Date>(new Date());
 
   // Phase 4.6: Admin Engine Trigger State & Poller Listener
   const [adminTaskStatus, setAdminTaskStatus] = useState<{
@@ -242,13 +239,14 @@ export default function App() {
 
   useEffect(() => {
     const handleHash = () => {
-      if (window.location.hash === '#analytics') setCurrentView('analytics');
-      else if (window.location.hash === '#admin') setCurrentView('admin');
-      else setCurrentView('fixtures');
+      if (window.location.hash === '#analytics') navigate('/analytics');
+      else if (window.location.hash === '#admin') navigate('/admin');
+      else if (window.location.hash === '#fixtures') navigate('/dashboard/predictions');
     };
+    handleHash();
     window.addEventListener('hashchange', handleHash);
     return () => window.removeEventListener('hashchange', handleHash);
-  }, []);
+  }, [navigate]);
 
   // Live Lagos Time (WAT / UTC+1)
   const [watDateStr, setWatDateStr] = useState<string>('');
@@ -364,6 +362,30 @@ export default function App() {
     return false;
   }, [currentUser, profile, entitlement]);
 
+  const handleAuthSuccess = async () => {
+    setIsAuthModalOpen(false);
+    await fetchCloudData();
+    try {
+      const { data } = await supabase.auth.getUser();
+      if (data?.user) {
+        const { data: userRec } = await supabase
+          .from('users')
+          .select('role')
+          .eq('id', data.user.id)
+          .single();
+
+        const role = userRec?.role || 'free';
+        if (role === 'standard' || role === 'bigbang' || role === 'admin') {
+          navigate('/dashboard/predictions');
+        } else {
+          navigate('/subscription');
+        }
+      }
+    } catch {
+      navigate('/subscription');
+    }
+  };
+
   // Authoritative Cloud Supabase Query
   const fetchCloudData = async () => {
     setLoading(true);
@@ -422,15 +444,10 @@ export default function App() {
         .order('created_at', { ascending: false })
         .limit(1);
 
-      const predOrTeaserQuery = canViewPredictions
-        ? supabase
-            .from('football_predictions')
-            .select('*')
-            .eq('publication_status', 'published')
-        : supabase
-            .from('football_prediction_teasers')
-            .select('*')
-            .eq('publication_status', 'published');
+      const predOrTeaserQuery = supabase
+        .from('football_predictions_paywall')
+        .select('*')
+        .eq('publication_status', 'published');
 
       // Dynamically verify other candidate sports against Cloud Supabase
       const otherCandidateSports = ['american_football', 'basketball', 'tennis', 'cricket'];
@@ -515,13 +532,8 @@ export default function App() {
       if (jobRes.data && jobRes.data.length > 0) setSchedulerJob(jobRes.data[0]);
       if (settleJobRes.data && settleJobRes.data.length > 0) setSettlementJob(settleJobRes.data[0]);
 
-      if (canViewPredictions) {
-        setPredictions(predOrTeaserRes.data || []);
-        setTeasers([]);
-      } else {
-        setPredictions([]);
-        setTeasers(predOrTeaserRes.data || []);
-      }
+      setPredictions((predOrTeaserRes.data || []) as FootballPrediction[]);
+      setTeasers([]);
 
       // Update dynamic sports state based exclusively on Cloud Supabase results
       const nextSportsState: Record<string, SportAvailability> = {
@@ -1130,59 +1142,52 @@ export default function App() {
       {/* 1. TOP HEADER BAR */}
       <header className="site-header">
         <div className="site-header-inner">
-          <div className="header-brand" onClick={() => { setCurrentView('fixtures'); window.location.hash = ''; resetAllFilters(); }}>
+          <Link to="/" className="header-brand" onClick={() => resetAllFilters()}>
             <div className="brand-icon-sq">J</div>
             <div>
               <span className="brand-text-name">JamBets</span>
-              <span className="brand-text-tag">AI</span>
+              <span className="brand-text-tag">Analytics</span>
             </div>
-          </div>
+          </Link>
 
           <div className="header-center-links">
-            <button
-              className={`nav-link-btn ${currentView === 'fixtures' ? 'active' : ''}`}
-              onClick={() => { setCurrentView('fixtures'); window.location.hash = ''; }}
+            <Link
+              to="/"
+              className={`nav-link-btn ${location.pathname === '/' ? 'active' : ''}`}
+            >
+              Overview
+            </Link>
+            <Link
+              to="/dashboard/predictions"
+              className={`nav-link-btn ${location.pathname.startsWith('/dashboard') ? 'active' : ''}`}
             >
               Predictions
-            </button>
-            <button className="nav-link-btn" onClick={() => setIsPricingModalOpen(true)}>
-              Pricing <span className="pricing-flat-badge">₦5k Flat</span>
-            </button>
-            <button className="nav-link-btn" onClick={() => setIsFaqModalOpen(true)}>
-              FAQ
-            </button>
-            <button
-              className={`nav-link-btn ${currentView === 'analytics' ? 'active' : ''}`}
-              onClick={() => { setCurrentView('analytics'); window.location.hash = '#analytics'; }}
+            </Link>
+            <Link
+              to="/subscription"
+              className={`nav-link-btn ${location.pathname === '/subscription' ? 'active' : ''}`}
+            >
+              Pricing & Plans <span className="pricing-flat-badge">₦5,000/mo</span>
+            </Link>
+            <Link
+              to="/analytics"
+              className={`nav-link-btn ${location.pathname === '/analytics' ? 'active' : ''}`}
             >
               Analytics & Audit
+            </Link>
+            <button className="nav-link-btn" onClick={() => setIsFaqModalOpen(true)}>
+              FAQ
             </button>
           </div>
 
           <div className="header-right-actions">
-            {profile?.role === 'admin' ? (
-              <button
-                className={`admin-header-pill ${currentView === 'admin' ? 'active-admin' : ''}`}
-                onClick={() => {
-                  if (currentView === 'admin') {
-                    setCurrentView('fixtures');
-                    window.location.hash = '';
-                  } else {
-                    setCurrentView('admin');
-                    window.location.hash = '#admin';
-                  }
-                }}
+            {profile?.role === 'admin' && (
+              <Link
+                to="/admin"
+                className={`admin-header-pill ${location.pathname === '/admin' ? 'active-admin' : ''}`}
               >
-                {currentView === 'admin' ? '← Exit Admin' : '🛡 Admin'}
-              </button>
-            ) : (
-              <button
-                className="admin-header-pill guest-admin-btn"
-                onClick={() => { setCurrentView('admin'); window.location.hash = '#admin'; }}
-                title="Admin Command Deck"
-              >
-                ⚡ Admin
-              </button>
+                🛡 Admin Deck
+              </Link>
             )}
 
             {currentUser ? (
@@ -1224,52 +1229,77 @@ export default function App() {
       </header>
 
       <main className="app-container">
-        {/* VIEW 1: ANALYTICS VIEW */}
-        {currentView === 'analytics' && (
-          <AnalyticsView onBackToFixtures={() => { setCurrentView('fixtures'); window.location.hash = ''; }} />
-        )}
-
-        {/* VIEW 2: GEN-Z ADMIN COMMAND DECK */}
-        {currentView === 'admin' && (
-          <AdminView
-            currentUserProfile={profile}
-            onBackToFixtures={() => { setCurrentView('fixtures'); window.location.hash = ''; }}
-            onOpenAuthModal={() => { setAuthModalMode('signin'); setIsAuthModalOpen(true); }}
-          />
-        )}
-
-        {/* VIEW 3: MAIN FIXTURES & PREDICTIONS VIEW WITH HERO SECTION */}
-        {currentView === 'fixtures' && (
-          <>
-            <HeroSection
-              onStartFree={() => {
-                if (!currentUser) {
-                  setAuthModalMode('register');
+        <Routes>
+          {/* ROUTE 1: DEDICATED HERO LANDING PAGE */}
+          <Route
+            path="/"
+            element={
+              <LandingPage
+                onOpenAuth={(mode) => {
+                  setAuthModalMode(mode);
                   setIsAuthModalOpen(true);
-                } else {
-                  const target = document.getElementById('fixtures-view-section');
-                  target?.scrollIntoView({ behavior: 'smooth' });
-                }
-              }}
-              onSeePlans={() => setIsPricingModalOpen(true)}
-              onSelectSport={(sportId) => setSelectedSport(sportId)}
-              selectedSport={selectedSport}
-              modelWinRate={93.7}
-              settledCount={680}
-              onScrollToFixtures={() => {
-                const target = document.getElementById('fixtures-view-section');
-                target?.scrollIntoView({ behavior: 'smooth' });
-              }}
-            />
+                }}
+                currentUser={currentUser}
+                userRole={profile?.role}
+                onOpenFaq={() => setIsFaqModalOpen(true)}
+              />
+            }
+          />
 
-            <div id="fixtures-view-section">
+          {/* ROUTE 2: NGN SUBSCRIPTION PAGE */}
+          <Route
+            path="/subscription"
+            element={
+              <SubscriptionPage
+                currentUser={currentUser}
+                userRole={profile?.role}
+                onOpenAuth={(mode) => {
+                  setAuthModalMode(mode);
+                  setIsAuthModalOpen(true);
+                }}
+              />
+            }
+          />
+
+          {/* ROUTE 3: ANALYTICS & AUDIT */}
+          <Route
+            path="/analytics"
+            element={
+              <AnalyticsView onBackToFixtures={() => navigate('/dashboard/predictions')} />
+            }
+          />
+
+          {/* ROUTE 4: ADMIN COMMAND DECK (STRICTLY GATED) */}
+          <Route
+            path="/admin"
+            element={
+              isAdmin ? (
+                <AdminView
+                  currentUserProfile={profile}
+                  onBackToFixtures={() => navigate('/dashboard/predictions')}
+                  onOpenAuthModal={() => {
+                    setAuthModalMode('signin');
+                    setIsAuthModalOpen(true);
+                  }}
+                />
+              ) : (
+                <Navigate to="/" replace />
+              )
+            }
+          />
+
+          {/* ROUTE 5: PREDICTIONS FIXTURE DASHBOARD */}
+          <Route
+            path="/dashboard/predictions"
+            element={
+              <div id="fixtures-view-section">
         {/* Phase 4.6 & RBAC: Admin Engine Controls & Automation Overrides (Strictly locked to authenticated Admins) */}
         {isAdmin && (
           <section className="admin-engine-bar" aria-label="Engine Automation Controls">
             <div className="admin-engine-header-row">
               <div className="admin-engine-title-group">
                 <span className="admin-badge-live">⚡ AUTOMATION & ENGINE CONTROLS</span>
-                <span className="admin-engine-sub">Cloud Supabase Task Queue (30s Poller / Midnight Primary / 6:00 AM WAT Retry)</span>
+                <span className="admin-engine-sub">Automated Processing Pipeline (30s Poller / Midnight Primary / 6:00 AM WAT Retry)</span>
               </div>
               {adminTaskStatus.status !== 'idle' && (
                 <div className={`admin-task-banner status-${adminTaskStatus.status}`}>
@@ -1371,7 +1401,7 @@ export default function App() {
                   : `${formatWatDateDisplay(selectedDate)} Performance`}
               </h2>
               <p className="scorecard-subtitle-main">
-                Real-time livescore settlements and Dixon-Coles Monte Carlo predictions for{' '}
+                Real-time livescore settlements and calibrated bivariate Poisson predictions for{' '}
                 {selectedDate === 'all'
                   ? 'all dates'
                   : selectedDate === dynamicDateTabs.yesterday.id
@@ -1616,7 +1646,7 @@ export default function App() {
             type="button"
             className="btn-browse-all-leagues"
             onClick={() => setIsAllLeaguesModalOpen(true)}
-            title="Browse all 30 Cloud Supabase leagues in directory"
+            title="Browse all 30 leagues in directory"
           >
             🏛 Browse All 30 Leagues (30)
           </button>
@@ -1882,9 +1912,9 @@ export default function App() {
             {loading ? (
               <div style={{ padding: 40, background: '#ffffff', borderRadius: 16, border: '1px solid var(--border-subtle)', textAlign: 'center' }}>
                 <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-emerald-600 mb-3" />
-                <div style={{ fontWeight: 800, color: 'var(--text-primary)' }}>Synchronizing Cloud Supabase Queue...</div>
+                <div style={{ fontWeight: 800, color: 'var(--text-primary)' }}>Synchronizing Global Prediction Queue...</div>
                 <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
-                  Fetching verified 250,000 Monte Carlo draws and authoritative match results.
+                  Fetching verified mathematical simulations and authoritative match results.
                 </div>
               </div>
             ) : filteredFixtures.length === 0 ? (
@@ -2029,10 +2059,19 @@ export default function App() {
                           return next;
                         });
                       }}
-                      title="Click to expand or collapse 250,000 Monte Carlo simulation signals"
+                      title="Click to expand or collapse calibrated probabilistic simulation signals"
                     >
                       <div className="summary-left-group">
-                        {topSignal ? (
+                        {topSignal?.is_locked || topSignal?.confidence_category === 'LOCKED' || (!topSignal?.prediction && !fixture.status.match(/finished|settled/i)) ? (
+                          <div className="paywall-lock-badge-wrap">
+                            <span className="paywall-locked-pill">
+                              🔒 Premium Pick Locked (₦5,000/mo)
+                            </span>
+                            <Link to="/subscription" className="paywall-unlock-link-btn" onClick={(e) => e.stopPropagation()}>
+                              Unlock Pick →
+                            </Link>
+                          </div>
+                        ) : topSignal ? (
                           <span className={`top-signal-badge ${getTierBadgeClass(topSignal.confidence_category)}`}>
                             {topSignal.confidence_category === 'NO_SAFE_BANKER' || topSignal.market === 'NO_SAFE_BANKER' ? (
                               <>🛡 NO SAFE BANKER: Pass / Volatile Toss-Up (No market ≥80%)</>
@@ -2046,11 +2085,11 @@ export default function App() {
                           </span>
                         ) : signals.length > 0 ? (
                           <span className="summary-count-text">
-                            📊 {signals.length} Monte Carlo Predictions
+                            📊 {signals.length} Quantitative Picks
                           </span>
                         ) : (
                           <span className="summary-count-text">
-                            ⏱ Monte Carlo Simulation Queued
+                            ⏱ Probability Simulation Queued
                           </span>
                         )}
 
@@ -2107,7 +2146,29 @@ export default function App() {
                             {/* Primary Prediction Card */}
                             {(() => {
                               const p = fixturePreds[0];
-                              const pct = (p.probability * 100).toFixed(2);
+                              if (!p) return null;
+
+                              if (p.is_locked || p.confidence_category === 'LOCKED' || (!p.prediction && !fixture.status.match(/finished|settled/i))) {
+                                return (
+                                  <div className="paywall-card-expanded">
+                                    <div className="paywall-card-content">
+                                      <div className="paywall-card-icon">🔒</div>
+                                      <div className="paywall-card-text">
+                                        <h4>Premium Mathematical Prediction & Odds Probability Locked</h4>
+                                        <p>
+                                          Banker consensus (80%+), Top Pick, and Banger (96%+) signals are protected for active subscribers.
+                                          Upgrade to Standard (₦5,000/mo) or BigBang VIP (₦10,000/mo) to unlock this pick and all live matches.
+                                        </p>
+                                      </div>
+                                      <Link to="/subscription" className="btn-paywall-unlock">
+                                        ⚡ Unlock with Standard Plan (₦5,000/mo)
+                                      </Link>
+                                    </div>
+                                  </div>
+                                );
+                              }
+
+                              const pct = ((p.probability ?? 0) * 100).toFixed(2);
                               const isWon = p.settlement_status === 'won';
                               const isLost = p.settlement_status === 'lost';
                               const isVoid = p.settlement_status === 'void' || p.settlement_status === 'voided';
@@ -2173,7 +2234,7 @@ export default function App() {
                                   <div className="sniper-primary-main">
                                     <div className="sniper-market-outcome">
                                       <span className="sniper-market-name">{formatMarketName(p.market)}</span>
-                                      <span className="sniper-outcome-val">{formatPredictionOutcome(p.prediction)}</span>
+                                      <span className="sniper-outcome-val">{formatPredictionOutcome(p.prediction || '')}</span>
                                     </div>
                                     <div className="sniper-prob-group">
                                       <span className="sniper-prob-val">{pct}%</span>
@@ -2185,7 +2246,7 @@ export default function App() {
                                     <div
                                       className="pred-bar-fill"
                                       style={{
-                                        width: `${Math.min(100, p.probability * 100)}%`,
+                                        width: `${Math.min(100, (p.probability ?? 0) * 100)}%`,
                                         background: getCategoryColor(p.confidence_category, isWon, isLost, isVoid)
                                       }}
                                     />
@@ -2254,7 +2315,7 @@ export default function App() {
                             {fixturePreds.length > 1 && (
                               <div className="prediction-list" style={{ marginTop: 10 }}>
                                 {fixturePreds.slice(1).map((p) => {
-                                  const pct = (p.probability * 100).toFixed(2);
+                                  const pct = ((p.probability ?? 0) * 100).toFixed(2);
                                   const isWon = p.settlement_status === 'won';
                                   const isLost = p.settlement_status === 'lost';
                                   const isVoid = p.settlement_status === 'void' || p.settlement_status === 'voided';
@@ -2265,7 +2326,7 @@ export default function App() {
                                       <div className="pred-row-top">
                                         <div className="pred-market-outcome">
                                           <span className="pred-market-name">{formatMarketName(p.market)}:</span>
-                                          <span className="pred-outcome-val">{formatPredictionOutcome(p.prediction)}</span>
+                                          <span className="pred-outcome-val">{formatPredictionOutcome(p.prediction || '')}</span>
                                         </div>
                                         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                                           {isWon && <span className="badge-settled-won">✓ WON</span>}
@@ -2287,7 +2348,7 @@ export default function App() {
                                         <div
                                           className="pred-bar-fill"
                                           style={{
-                                            width: `${Math.min(100, p.probability * 100)}%`,
+                                            width: `${Math.min(100, (p.probability ?? 0) * 100)}%`,
                                             background: getCategoryColor(p.confidence_category, isWon, isLost, isVoid)
                                           }}
                                         />
@@ -2425,54 +2486,28 @@ export default function App() {
             </>
           )}
         </div>
-      </>
-    )}
-  </main>
+            }
+          />
+
+          {/* FALLBACK ROUTE */}
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </main>
 
       {/* GLOBAL INTERACTIVE NAVIGATION FOOTER (ALL PAGES) */}
       <NavigationFooter
-        onSelectDate={(date) => {
+        onOpenAuthModal={(mode) => {
+          setAuthModalMode(mode);
+          setIsAuthModalOpen(true);
+        }}
+        onOpenFaqModal={() => setIsFaqModalOpen(true)}
+        onOpenLeaguesModal={() => setIsAllLeaguesModalOpen(true)}
+        onSelectDateFilter={(date) => {
           setSelectedDate(date);
-          if (currentView !== 'fixtures') {
-            setCurrentView('fixtures');
-            window.location.hash = '';
-          }
-          const target = document.getElementById('fixtures-view-section');
-          target?.scrollIntoView({ behavior: 'smooth' });
-        }}
-        onOpenPricing={() => setIsPricingModalOpen(true)}
-        onOpenFaq={() => setIsFaqModalOpen(true)}
-        onOpenAllLeagues={() => setIsAllLeaguesModalOpen(true)}
-        onOpenProfileOrAuth={() => {
-          if (currentUser) {
-            setIsProfileModalOpen(true);
-          } else {
-            setAuthModalMode('signin');
-            setIsAuthModalOpen(true);
-          }
-        }}
-        onFilterTier={(tier) => {
-          setSelectedTier(tier);
-          if (currentView !== 'fixtures') {
-            setCurrentView('fixtures');
-            window.location.hash = '';
-          }
-          const target = document.getElementById('fixtures-view-section');
-          target?.scrollIntoView({ behavior: 'smooth' });
-        }}
-        onNavigateView={(view) => {
-          setCurrentView(view);
-          window.location.hash = view === 'fixtures' ? '' : `#${view}`;
+          navigate('/dashboard/predictions');
           window.scrollTo({ top: 0, behavior: 'smooth' });
         }}
-        watDateStr={watDateStr}
-        latencyMs={latencyMs}
-        todayDate={dynamicDateTabs.todayIso}
-        yesterdayDate={dynamicDateTabs.yesterdayIso}
-        tomorrowDate={dynamicDateTabs.tomorrowIso}
-        schedulerJob={schedulerJob}
-        settlementJob={settlementJob}
-        lastRefreshed={lastRefreshed}
+        userRole={profile?.role}
       />
 
       {/* MODALS */}
@@ -2497,7 +2532,7 @@ export default function App() {
       <AuthModal
         isOpen={isAuthModalOpen}
         onClose={() => setIsAuthModalOpen(false)}
-        onAuthSuccess={fetchCloudData}
+        onAuthSuccess={handleAuthSuccess}
         initialMode={authModalMode}
       />
 
@@ -2550,7 +2585,7 @@ export default function App() {
             </div>
             <div style={{ padding: '14px 24px', borderTop: '1px solid var(--border-subtle)', background: '#f8fafc', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                30 authoritative leagues synchronized from Cloud Supabase
+                30 authoritative leagues synchronized with verified schedule data
               </span>
               <button
                 type="button"
