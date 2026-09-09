@@ -15,6 +15,8 @@ import {
 } from './types';
 import { AuthModal } from './components/AuthModal';
 import { ProfileModal } from './components/ProfileModal';
+import { AnalyticsView } from './components/AnalyticsView';
+import { AdminView } from './components/AdminView';
 
 export default function App() {
   // Authentication & Entitlement State
@@ -49,6 +51,23 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [latencyMs, setLatencyMs] = useState<number | null>(null);
   const [lastRefreshed, setLastRefreshed] = useState<Date>(new Date());
+
+  // Platform Navigation Views (Phase 9: Analytics & Admin)
+  const [currentView, setCurrentView] = useState<'fixtures' | 'analytics' | 'admin'>(() => {
+    if (typeof window !== 'undefined' && window.location.hash === '#analytics') return 'analytics';
+    if (typeof window !== 'undefined' && window.location.hash === '#admin') return 'admin';
+    return 'fixtures';
+  });
+
+  useEffect(() => {
+    const handleHash = () => {
+      if (window.location.hash === '#analytics') setCurrentView('analytics');
+      else if (window.location.hash === '#admin') setCurrentView('admin');
+      else setCurrentView('fixtures');
+    };
+    window.addEventListener('hashchange', handleHash);
+    return () => window.removeEventListener('hashchange', handleHash);
+  }, []);
 
   // Live Lagos Time (WAT / UTC+1)
   const [watTime, setWatTime] = useState<string>('');
@@ -622,8 +641,80 @@ export default function App() {
         </div>
       </header>
 
-      {/* Hero Banner */}
-      <section className="hero-banner">
+      {/* Top Level Navigation Tabs (Phase 9) */}
+      <nav className="platform-nav-bar">
+        <div className="platform-nav-tabs">
+          <button
+            type="button"
+            className={`platform-nav-tab ${currentView === 'fixtures' ? 'active' : ''}`}
+            onClick={() => {
+              setCurrentView('fixtures');
+              window.location.hash = '';
+            }}
+          >
+            <span className="tab-icon">⚽</span>
+            <span className="tab-title">Fixtures & Predictions</span>
+            <span className="tab-count-pill">{fixtures.length}</span>
+          </button>
+
+          <button
+            type="button"
+            className={`platform-nav-tab ${currentView === 'analytics' ? 'active' : ''}`}
+            onClick={() => {
+              setCurrentView('analytics');
+              window.location.hash = '#analytics';
+            }}
+          >
+            <span className="tab-icon">📊</span>
+            <span className="tab-title">Analytics & Transparency</span>
+            <span className="tab-verified-pill">Supabase RPC</span>
+          </button>
+
+          <button
+            type="button"
+            className={`platform-nav-tab ${currentView === 'admin' ? 'active' : ''} ${profile?.role === 'admin' ? 'admin-highlight' : ''}`}
+            onClick={() => {
+              setCurrentView('admin');
+              window.location.hash = '#admin';
+            }}
+          >
+            <span className="tab-icon">🛡️</span>
+            <span className="tab-title">Admin Control Center</span>
+            {profile?.role === 'admin' ? (
+              <span className="tab-admin-pill">Verified Admin</span>
+            ) : (
+              <span className="tab-locked-pill">🔒 Restricted</span>
+            )}
+          </button>
+        </div>
+      </nav>
+
+      {/* View 1: Analytics & Transparency */}
+      {currentView === 'analytics' && (
+        <AnalyticsView
+          onBackToFixtures={() => {
+            setCurrentView('fixtures');
+            window.location.hash = '';
+          }}
+        />
+      )}
+
+      {/* View 2: Admin Control Center (Server-Side Verified) */}
+      {currentView === 'admin' && (
+        <AdminView
+          currentUserProfile={profile}
+          onBackToFixtures={() => {
+            setCurrentView('fixtures');
+            window.location.hash = '';
+          }}
+        />
+      )}
+
+      {/* View 3: Fixtures & Predictions */}
+      {currentView === 'fixtures' && (
+        <>
+          {/* Hero Banner */}
+          <section className="hero-banner">
         <h2 className="hero-title">Production Football Prediction Engine</h2>
         <p className="hero-desc">
           Calibrated with genuine historical datasets and bivariate Poisson distribution.
@@ -1275,6 +1366,8 @@ export default function App() {
           })}
         </div>
       )}
+    </>
+  )}
 
       {/* Mandatory Legal & Responsible Gaming Banner (Phase 8 Section 15, 26, 44) */}
       <section className="responsible-gaming-banner">

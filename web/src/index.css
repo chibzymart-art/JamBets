@@ -2064,3 +2064,117 @@ body {
   margin: 0 auto;
 }
 
+/* Phase 9 Platform Navigation & Audit Styling */
+.platform-nav-bar {
+  margin-bottom: 28px;
+  padding: 8px 12px;
+  background: rgba(13, 21, 39, 0.7);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.25);
+}
+
+.platform-nav-tabs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.platform-nav-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.platform-nav-tab {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 18px;
+  border-radius: 12px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: #94a3b8;
+  font-family: var(--font-heading);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.platform-nav-tab:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.1);
+  transform: translateY(-1px);
+}
+
+.platform-nav-tab.active {
+  color: #ffffff;
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.15), rgba(16, 185, 129, 0.15));
+  border-color: rgba(56, 189, 248, 0.4);
+  box-shadow: 0 0 16px rgba(56, 189, 248, 0.2);
+}
+
+.platform-nav-tab.active.admin-highlight {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.15), rgba(168, 85, 247, 0.15));
+  border-color: rgba(239, 68, 68, 0.4);
+  box-shadow: 0 0 16px rgba(239, 68, 68, 0.2);
+}
+
+.tab-icon {
+  font-size: 16px;
+}
+
+.tab-title {
+  letter-spacing: -0.2px;
+}
+
+.tab-count-pill {
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #cbd5e1;
+}
+
+.tab-verified-pill {
+  padding: 2px 8px;
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 10px;
+  background: rgba(16, 185, 129, 0.15);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  color: #34d399;
+  text-transform: uppercase;
+}
+
+.tab-admin-pill {
+  padding: 2px 8px;
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 10px;
+  background: rgba(239, 68, 68, 0.2);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  color: #f87171;
+  text-transform: uppercase;
+}
+
+.tab-locked-pill {
+  padding: 2px 8px;
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 10px;
+  background: rgba(100, 116, 139, 0.2);
+  border: 1px solid rgba(100, 116, 139, 0.3);
+  color: #94a3b8;
+}
+
+.glass-panel {
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+

@@ -235,3 +235,116 @@ export interface LeagueRecord {
   is_active?: boolean;
   priority?: number;
 }
+
+export interface TierPerformanceMetrics {
+  total_decided: number;
+  won: number;
+  lost: number;
+  pending: number;
+  voided: number;
+  conflict: number;
+  win_rate_pct: number;
+}
+
+export interface DailyPerformanceRecord {
+  date: string;
+  decided: number;
+  won: number;
+  lost: number;
+  pending: number;
+  voided: number;
+  win_rate_pct: number;
+  loss_rate_pct: number;
+}
+
+export interface PlatformAnalytics {
+  total_eligible_published: number;
+  total_decided: number;
+  total_won: number;
+  total_lost: number;
+  total_pending: number;
+  total_voided: number;
+  total_conflict: number;
+  overall_win_rate_pct: number;
+  overall_loss_rate_pct: number;
+  tier_performance: {
+    banger: TierPerformanceMetrics;
+    top_pick: TierPerformanceMetrics;
+    high_confidence: TierPerformanceMetrics;
+    mid_confidence: TierPerformanceMetrics;
+    low_confidence: TierPerformanceMetrics;
+    risky: TierPerformanceMetrics;
+  };
+  daily_performance: DailyPerformanceRecord[];
+  treatment_rules: {
+    pending: string;
+    voided_cancelled: string;
+    conflicts: string;
+  };
+  computed_at: string;
+}
+
+export interface SourceHealth {
+  source_name: string;
+  status: 'active' | 'error' | 'warning';
+  error_count: number;
+  last_checked: string | null;
+}
+
+export interface SystemHealthStatus {
+  scrapers: {
+    status: 'healthy' | 'degraded' | 'error';
+    stale_fixtures_count: number;
+    last_sync_timestamp: string | null;
+  };
+  sources: SourceHealth[];
+  phase6_scheduler: {
+    status: string;
+    job_id: string | null;
+    started_at: string | null;
+    completed_at: string | null;
+    error_message: string | null;
+    metadata: Record<string, any> | null;
+  };
+  phase7_settlement: {
+    status: string;
+    job_id: string | null;
+    started_at: string | null;
+    completed_at: string | null;
+    error_message: string | null;
+    metadata: Record<string, any> | null;
+  };
+  conflicts: {
+    active_conflicts_count: number;
+    conflicts_list: any[];
+  };
+  stale_data: {
+    stale_live_fixtures: number;
+    stale_fixtures_sample: any[];
+  };
+  simulation_integrity: {
+    incomplete_simulations_count: number;
+    incomplete_list: any[];
+  };
+  settlement_failures: {
+    failed_settlements_count: number;
+    failures_list: any[];
+  };
+  evaluated_at: string;
+}
+
+export interface AuditRecord {
+  id: string;
+  actor_id: string | null;
+  actor_email?: string | null;
+  actor_role?: string | null;
+  action: string;
+  affected_table: string;
+  affected_record_id: string | null;
+  previous_state: any;
+  new_state: any;
+  reason: string;
+  ip_address?: string | null;
+  user_agent?: string | null;
+  created_at: string;
+}
