@@ -2421,3 +2421,85 @@ body {
   transform: translateY(-1px);
 }
 
+/* =====================================================================
+   LEAGUE GROUP SECTION HEADERS
+   ===================================================================== */
+.league-group-container {
+  margin-bottom: 24px;
+}
+
+.league-group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  background: #f8fafc;
+  border: 1px solid var(--border-subtle, #e2e8f0);
+  border-radius: 12px;
+  margin-bottom: 12px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+}
+
+.league-group-title-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.league-group-trophy-icon {
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: #ffffff;
+  border: 1px solid var(--border-subtle, #e2e8f0);
+  border-radius: 8px;
+  box-shadow: var(--shadow-xs);
+}
+
+.league-group-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.league-group-name {
+  font-family: var(--font-heading);
+  font-size: 13.5px;
+  font-weight: 800;
+  color: var(--text-primary);
+  letter-spacing: -0.2px;
+  text-transform: uppercase;
+}
+
+.league-group-country-badge {
+  font-size: 11px;
+  font-weight: 600;
+  color: #475569;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  padding: 2px 8px;
+  border-radius: 9999px;
+}
+
+.league-group-match-count {
+  font-size: 11px;
+  font-weight: 700;
+  color: #047857;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  padding: 3px 10px;
+  border-radius: 9999px;
+  white-space: nowrap;
+}
+
+.league-group-matches-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+

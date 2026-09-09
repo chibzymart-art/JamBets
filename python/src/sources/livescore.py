@@ -62,12 +62,21 @@ class LiveScoreAdapter(BaseSourceAdapter):
                         stage_country = (stage.get("Cnm") or "").lower().replace(" ", "-")
                         stage_name = (stage.get("Snm") or "").lower().replace(" ", "-")
 
-                        # Match against league configuration keywords
-                        is_match = (
+                        # Strict country & stage validation to prevent cross-country misclassification
+                        country_matches = (
                             league.livescore_country in stage_country or
+                            stage_country in league.livescore_country or
+                            league.country.lower() in stage_country
+                        )
+                        stage_matches = (
                             league.livescore_stage in stage_name or
+                            stage_name in league.livescore_stage or
                             league.name.lower() in stage_name.lower()
                         )
+                        if league.country.lower() in ("europe", "south america", "international"):
+                            is_match = (league.livescore_country in stage_country) or stage_matches
+                        else:
+                            is_match = country_matches and stage_matches
                         if not is_match:
                             continue
 

@@ -221,10 +221,31 @@ export default function App() {
     setError(null);
     const start = performance.now();
     try {
-      // Authoritative prediction queue with live match scores
+      // Authoritative fixtures query joining leagues and teams using foreign keys
       const queueQuery = supabase
-        .from('football_prediction_queue')
-        .select('*')
+        .from('football_fixtures')
+        .select(`
+          id,
+          canonical_key,
+          target_kickoff_at,
+          status,
+          queue_day,
+          in_prediction_queue,
+          home_score,
+          away_score,
+          match_minute,
+          period,
+          half_time_home_score,
+          half_time_away_score,
+          corners_home,
+          corners_away,
+          created_at,
+          updated_at,
+          league:football_leagues!inner(id, name, code, country),
+          home_team:football_teams!football_fixtures_home_team_id_fkey(id, name),
+          away_team:football_teams!football_fixtures_away_team_id_fkey(id, name)
+        `)
+        .eq('in_prediction_queue', true)
         .order('target_kickoff_at', { ascending: true });
 
       const simQuery = supabase
@@ -308,7 +329,35 @@ export default function App() {
       setLatencyMs(elapsed);
 
       if (queueRes.error) throw queueRes.error;
-      const returnedFixtures: QueueFixture[] = queueRes.data || [];
+      const rawFixtures = queueRes.data || [];
+      const returnedFixtures: QueueFixture[] = rawFixtures.map((f: any) => ({
+        id: f.id,
+        canonical_key: f.canonical_key,
+        target_kickoff_at: f.target_kickoff_at,
+        status: f.status,
+        queue_day: f.queue_day,
+        in_prediction_queue: f.in_prediction_queue,
+        home_score: f.home_score,
+        away_score: f.away_score,
+        match_minute: f.match_minute,
+        period: f.period,
+        half_time_home_score: f.half_time_home_score,
+        half_time_away_score: f.half_time_away_score,
+        corners_home: f.corners_home,
+        corners_away: f.corners_away,
+        postponed_at: f.postponed_at || null,
+        cancelled_at: f.cancelled_at || null,
+        created_at: f.created_at || new Date().toISOString(),
+        updated_at: f.updated_at || new Date().toISOString(),
+        league_id: f.league?.id || f.league_id,
+        league_name: f.league?.name || f.league_name || 'Other Competitions',
+        league_code: f.league?.code || f.league_code || 'OTHER',
+        league_country: f.league?.country || f.league_country || '',
+        home_team_id: f.home_team?.id || f.home_team_id,
+        home_team_name: f.home_team?.name || f.home_team_name || 'Home Team',
+        away_team_id: f.away_team?.id || f.away_team_id,
+        away_team_name: f.away_team?.name || f.away_team_name || 'Away Team'
+      }));
       const returnedLeagues: LeagueRecord[] = leagueRes.data || [];
 
       setFixtures(returnedFixtures);
@@ -388,7 +437,13 @@ export default function App() {
   // Date extraction strictly in Africa/Lagos (WAT / UTC+1)
   const getFixtureWatDate = (targetKickoffIso: string) => {
     try {
-      return new Date(targetKickoffIso).toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
+      const d = new Date(targetKickoffIso);
+      return new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Africa/Lagos',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      }).format(d);
     } catch {
       return '';
     }
@@ -771,6 +826,32 @@ export default function App() {
     settlementFilter,
     searchQuery
   ]);
+
+  // Group filtered fixtures by League Name using reduce
+  const fixturesByLeague = useMemo(() => {
+    const map = filteredFixtures.reduce<Map<string, {
+      leagueId: string;
+      leagueName: string;
+      leagueCode: string;
+      leagueCountry: string;
+      fixtures: QueueFixture[];
+    }>>((acc, f) => {
+      const key = f.league_name || 'Other Competitions';
+      if (!acc.has(key)) {
+        acc.set(key, {
+          leagueId: f.league_id || key,
+          leagueName: f.league_name || 'Other Competitions',
+          leagueCode: f.league_code || 'OTHER',
+          leagueCountry: f.league_country || '',
+          fixtures: []
+        });
+      }
+      acc.get(key)!.fixtures.push(f);
+      return acc;
+    }, new Map());
+
+    return Array.from(map.values()).sort((a, b) => a.leagueName.localeCompare(b.leagueName));
+  }, [filteredFixtures]);
 
   // List of fixtures that feature BANGER signals for the left sidebar
   const bangerFixturesList = useMemo(() => {
@@ -1632,7 +1713,23 @@ export default function App() {
                 </button>
               </div>
             ) : (
-              filteredFixtures.map((fixture) => {
+              fixturesByLeague.map(({ leagueId, leagueName, leagueCountry, fixtures: leagueMatches }) => (
+                <div key={leagueId} className="league-group-container">
+                  <div className="league-group-header">
+                    <div className="league-group-title-left">
+                      <span className="league-group-trophy-icon">🏆</span>
+                      <div className="league-group-info">
+                        <span className="league-group-name">{leagueName}</span>
+                        {leagueCountry && (
+                          <span className="league-group-country-badge">📍 {leagueCountry}</span>
+                        )}
+                      </div>
+                    </div>
+                    <span className="league-group-match-count">{leagueMatches.length} Matches</span>
+                  </div>
+
+                  <div className="league-group-matches-list">
+                    {leagueMatches.map((fixture) => {
                 const time = formatKickoff(fixture.target_kickoff_at);
                 const fixturePreds = predsByFixture.get(fixture.id) || [];
                 const fixtureTeasers = teasersByFixture.get(fixture.id) || [];
@@ -1911,6 +2008,10 @@ export default function App() {
                   </div>
                 );
               })
+            }
+                  </div>
+                </div>
+              ))
             )}
           </div>
 
