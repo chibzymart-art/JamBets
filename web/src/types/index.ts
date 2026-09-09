@@ -2,7 +2,7 @@ export interface QueueFixture {
   id: string;
   canonical_key: string;
   target_kickoff_at: string;
-  status: 'scheduled' | 'live' | 'finished' | 'postponed' | 'cancelled';
+  status: 'scheduled' | 'live' | 'finished' | 'postponed' | 'cancelled' | 'data_unavailable' | string;
   queue_day: number;
   in_prediction_queue: boolean;
   home_score?: number | null;
@@ -37,14 +37,19 @@ export interface DayTab {
 
 export type ConfidenceTier =
   | 'BANGER'
+  | 'TOP_PICK'
   | 'TOP PICK'
+  | 'HIGH_CONFIDENCE'
   | 'HIGH CONFIDENCE'
+  | 'MID_CONFIDENCE'
   | 'MID CONFIDENCE'
+  | 'LOW_CONFIDENCE'
   | 'LOW CONFIDENCE'
   | 'RISKY'
   | 'NO_SAFE_BANKER'
   | 'no_safe_banker'
-  | 'LOCKED';
+  | 'LOCKED'
+  | 'HIDDEN';
 
 export interface SecondaryPrediction {
   market: string;
@@ -54,6 +59,7 @@ export interface SecondaryPrediction {
   raw_probability?: number;
   confidence_tier?: ConfidenceTier | string;
   confidence_category?: ConfidenceTier | string;
+  consensus_verified?: boolean;
 }
 
 export interface FootballPrediction {

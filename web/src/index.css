@@ -7860,6 +7860,189 @@ body {
   color: #ffffff;
 }
 
+/* =====================================================================
+   6-TIER CONFIDENCE BADGES & ICONS
+   ===================================================================== */
+.tier-badge.tier-banger {
+  background: #fff7ed;
+  border-color: #f97316;
+  color: #ea580c;
+  font-weight: 800;
+}
+
+.tier-badge.tier-top-pick {
+  background: #fefce8;
+  border-color: #f59e0b;
+  color: #d97706;
+  font-weight: 800;
+}
+
+.tier-badge.tier-high-conf {
+  background: #f0fdf4;
+  border-color: #22c55e;
+  color: #16a34a;
+  font-weight: 800;
+}
+
+.tier-badge.tier-mid-conf {
+  background: #eff6ff;
+  border-color: #3b82f6;
+  color: #2563eb;
+  font-weight: 800;
+}
+
+.tier-badge.tier-low-conf {
+  background: #fef9c3;
+  border-color: #eab308;
+  color: #ca8a04;
+  font-weight: 800;
+}
+
+.tier-badge.tier-risky {
+  background: #fff7ed;
+  border-color: #fb923c;
+  color: #9a3412;
+  font-weight: 800;
+}
+
+.tier-badge.tier-no-banker {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+  color: #64748b;
+  font-weight: 800;
+}
+
+.tier-badge.tier-locked {
+  background: #faf5ff;
+  border-color: #c4b5fd;
+  color: #7c3aed;
+  font-weight: 800;
+}
+
+/* =====================================================================
+   DATA UNAVAILABLE — ZERO-HALLUCINATION BADGE & CARD
+   ===================================================================== */
+.data-unavailable-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  color: #475569;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 6px;
+}
+
+.data-unavailable-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 16px 20px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  margin-top: 10px;
+}
+
+.data-unavailable-icon {
+  font-size: 24px;
+}
+
+.data-unavailable-info h4 {
+  font-size: 13px;
+  font-weight: 800;
+  color: #334155;
+  margin: 0 0 4px;
+}
+
+.data-unavailable-info p {
+  font-size: 12px;
+  color: #64748b;
+  line-height: 1.5;
+  margin: 0;
+}
+
+/* =====================================================================
+   PAYWALL UI (BLURRED PREVIEW OVERLAY)
+   ===================================================================== */
+.paywall-lock-container {
+  position: relative;
+  border-radius: 12px;
+  overflow: hidden;
+  margin-top: 10px;
+  border: 1px dashed #cbd5e1;
+}
+
+.paywall-blurred-backdrop {
+  filter: blur(5px);
+  opacity: 0.55;
+  user-select: none;
+  pointer-events: none;
+}
+
+.paywall-overlay-prompt {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(15, 23, 42, 0.75);
+  backdrop-filter: blur(4px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 24px;
+  z-index: 2;
+}
+
+.paywall-overlay-prompt .paywall-lock-icon {
+  font-size: 32px;
+  margin-bottom: 8px;
+}
+
+.paywall-overlay-prompt h4 {
+  font-family: var(--font-heading);
+  font-size: 16px;
+  font-weight: 800;
+  color: #ffffff;
+  margin: 0 0 6px;
+}
+
+.paywall-overlay-prompt p {
+  font-size: 12px;
+  color: #cbd5e1;
+  max-width: 420px;
+  line-height: 1.5;
+  margin: 0 0 16px;
+}
+
+.btn-paywall-unlock-prominent {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: linear-gradient(135deg, #059669 0%, #10b981 100%);
+  color: #ffffff;
+  font-family: var(--font-heading);
+  font-size: 14px;
+  font-weight: 800;
+  padding: 10px 24px;
+  border-radius: 8px;
+  text-decoration: none;
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.4);
+  transition: all 0.2s;
+}
+
+.btn-paywall-unlock-prominent:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(16, 185, 129, 0.6);
+  color: #ffffff;
+}
+
+
 
 
 

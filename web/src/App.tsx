@@ -4,14 +4,9 @@ import { supabase } from './lib/supabase';
 import {
   QueueFixture,
   FootballPrediction,
-  ConfidenceTier,
-  SimulationRecord,
-  SchedulerJob,
-  SettlementJob,
   UserProfile,
   UserSubscription,
   UserEntitlement,
-  PredictionTeaser,
   LeagueRecord
 } from './types';
 import { AuthModal } from './components/AuthModal';
@@ -21,6 +16,7 @@ import { AdminView } from './components/AdminView';
 import { PricingModal } from './components/PricingModal';
 import { FaqModal } from './components/FaqModal';
 import { NavigationFooter } from './components/NavigationFooter';
+import { FixtureCard, formatPredictionOutcome } from './components/FixtureCard';
 import { LandingPage } from './pages/Landing';
 import { SubscriptionPage } from './pages/Subscription';
 
@@ -43,11 +39,7 @@ export default function App() {
   // Authoritative Cloud Data State
   const [fixtures, setFixtures] = useState<QueueFixture[]>([]);
   const [predictions, setPredictions] = useState<FootballPrediction[]>([]);
-  const [teasers, setTeasers] = useState<PredictionTeaser[]>([]);
-  const [simulations, setSimulations] = useState<SimulationRecord[]>([]);
   const [leaguesList, setLeaguesList] = useState<LeagueRecord[]>([]);
-  const [, setSchedulerJob] = useState<SchedulerJob | null>(null);
-  const [, setSettlementJob] = useState<SettlementJob | null>(null);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -68,22 +60,18 @@ export default function App() {
     cricket: { isAvailable: false, fixtureCount: 0, leagueCount: 0 }
   });
 
-  // Calendar-Grounded Date Navigation State (Strictly Africa/Lagos Kickoff Dates - Dynamically Initialized)
+  // Calendar-Grounded Date Navigation State (Strictly Africa/Lagos Kickoff Dates - Default to Today)
   const [selectedDate, setSelectedDate] = useState<string>(() => {
     try {
       const now = new Date();
-      const lagosParts = new Intl.DateTimeFormat('en-CA', {
+      return new Intl.DateTimeFormat('en-CA', {
         timeZone: 'Africa/Lagos',
         year: 'numeric',
         month: '2-digit',
         day: '2-digit'
       }).format(now);
-      const [y, m, d] = lagosParts.split('-').map(Number);
-      // Default to yesterday (where settled/verified predictions exist)
-      const yesterday = new Date(Date.UTC(y, m - 1, d - 1, 12, 0, 0));
-      return yesterday.toISOString().split('T')[0];
     } catch {
-      return '2026-09-08';
+      return new Date().toISOString().split('T')[0];
     }
   });
   const [expandedFixtures, setExpandedFixtures] = useState<Set<string>>(new Set());
@@ -96,7 +84,17 @@ export default function App() {
   const [settlementFilter, setSettlementFilter] = useState<'all' | 'pending' | 'won' | 'lost' | 'void'>('all');
   const [scoreStatusFilter, setScoreStatusFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [expandAll, setExpandAll] = useState<boolean>(true);
+  const toggleFixtureExpand = (fixtureId: string) => {
+    setExpandedFixtures((prev) => {
+      const next = new Set(prev);
+      if (next.has(fixtureId)) {
+        next.delete(fixtureId);
+      } else {
+        next.add(fixtureId);
+      }
+      return next;
+    });
+  };
 
   // Favorites / Watchlist State
   const [favorites, setFavorites] = useState<string[]>(() => {
@@ -426,7 +424,8 @@ export default function App() {
           away_team:football_teams!football_fixtures_away_team_id_fkey(id, name)
         `)
         .eq('in_prediction_queue', true)
-        .order('target_kickoff_at', { ascending: true });
+        .order('target_kickoff_at', { ascending: true })
+        .limit(2000);
 
       const simQuery = supabase
         .from('football_simulations')
@@ -462,8 +461,8 @@ export default function App() {
         currentUser?.email?.toLowerCase() === 'whizzchibz@gmail.com';
 
       const predOrTeaserQuery = isUserAdmin
-        ? supabase.from('football_predictions').select('*')
-        : supabase.from('football_predictions_paywall').select('*').eq('publication_status', 'published');
+        ? supabase.from('football_predictions').select('*').limit(2000)
+        : supabase.from('football_predictions_paywall').select('*').eq('publication_status', 'published').limit(2000);
 
       // Dynamically verify other candidate sports against Cloud Supabase
       const otherCandidateSports = ['american_football', 'basketball', 'tennis', 'cricket'];
@@ -491,10 +490,10 @@ export default function App() {
 
       const [
         queueRes,
-        simRes,
+        _simRes,
         leagueRes,
-        jobRes,
-        settleJobRes,
+        _jobRes,
+        _settleJobRes,
         predOrTeaserRes,
         ...otherSportsResults
       ] = await Promise.all([
@@ -543,13 +542,8 @@ export default function App() {
       const returnedLeagues: LeagueRecord[] = leagueRes.data || [];
 
       setFixtures(returnedFixtures);
-      setSimulations(simRes.data || []);
       setLeaguesList(returnedLeagues);
-      if (jobRes.data && jobRes.data.length > 0) setSchedulerJob(jobRes.data[0]);
-      if (settleJobRes.data && settleJobRes.data.length > 0) setSettlementJob(settleJobRes.data[0]);
-
       setPredictions((predOrTeaserRes.data || []) as FootballPrediction[]);
-      setTeasers([]);
 
       // Update dynamic sports state based exclusively on Cloud Supabase results
       const nextSportsState: Record<string, SportAvailability> = {
@@ -592,24 +586,6 @@ export default function App() {
     });
     return map;
   }, [predictions]);
-
-  const teasersByFixture = useMemo(() => {
-    const map = new Map<string, PredictionTeaser[]>();
-    teasers.forEach((t) => {
-      const list = map.get(t.fixture_id) || [];
-      list.push(t);
-      map.set(t.fixture_id, list);
-    });
-    return map;
-  }, [teasers]);
-
-  const simsByFixture = useMemo(() => {
-    const map = new Map<string, SimulationRecord>();
-    simulations.forEach((s) => {
-      if (!map.has(s.fixture_id)) map.set(s.fixture_id, s);
-    });
-    return map;
-  }, [simulations]);
 
   // Date extraction strictly in Africa/Lagos (WAT / UTC+1)
   const getFixtureWatDate = (targetKickoffIso: string) => {
@@ -859,7 +835,7 @@ export default function App() {
     let topPickLost = 0;
     let topPickPending = 0;
 
-    const sourceList = canViewPredictions ? predictions : teasers;
+    const sourceList = predictions;
 
     // Filter predictions to only those matching current date filter if not 'all'
     const activeFixtureIds = new Set(
@@ -930,14 +906,13 @@ export default function App() {
       liveCount,
       settledMatchesCount
     };
-  }, [canViewPredictions, predictions, teasers, fixtures, selectedDate]);
+  }, [canViewPredictions, predictions, fixtures, selectedDate]);
 
   // Filtered Fixtures
   const filteredFixtures = useMemo(() => {
     return fixtures.filter((f) => {
       const fixturePreds = predsByFixture.get(f.id) || [];
-      const fixtureTeasers = teasersByFixture.get(f.id) || [];
-      const signals: any[] = canViewPredictions ? fixturePreds : fixtureTeasers;
+      const signals: any[] = fixturePreds;
 
       // League filter
       if (selectedLeague !== 'all' && f.league_code !== selectedLeague) {
@@ -993,7 +968,6 @@ export default function App() {
   }, [
     fixtures,
     predsByFixture,
-    teasersByFixture,
     canViewPredictions,
     selectedLeague,
     selectedDate,
@@ -1034,11 +1008,9 @@ export default function App() {
   const bangerFixturesList = useMemo(() => {
     return fixtures.filter((f) => {
       const pList = predsByFixture.get(f.id) || [];
-      const tList = teasersByFixture.get(f.id) || [];
-      const signals: any[] = canViewPredictions ? pList : tList;
-      return signals.some((s) => s.confidence_category === 'BANGER');
+      return pList.some((s) => s.confidence_category === 'BANGER');
     });
-  }, [fixtures, predsByFixture, teasersByFixture, canViewPredictions]);
+  }, [fixtures, predsByFixture]);
 
   // Helpers
   const formatKickoff = (isoString: string) => {
@@ -1049,89 +1021,6 @@ export default function App() {
     };
   };
 
-  const getTierBadgeClass = (tier: ConfidenceTier | string) => {
-    const t = (tier || '').toUpperCase();
-    switch (t) {
-      case 'BANGER': return 'tier-banger';
-      case 'TOP PICK': return 'tier-top-pick';
-      case 'HIGH CONFIDENCE': return 'tier-high-conf';
-      case 'MID CONFIDENCE': return 'tier-mid-conf';
-      case 'LOW CONFIDENCE': return 'tier-low-conf';
-      case 'RISKY': return 'tier-risky';
-      case 'NO_SAFE_BANKER': return 'tier-no-banker';
-      default: return 'tier-low-conf';
-    }
-  };
-
-  const getCategoryColor = (category: string, isWon?: boolean, isLost?: boolean, isVoid?: boolean) => {
-    if (isWon) return 'var(--settle-won)';
-    if (isLost) return 'var(--settle-lost)';
-    if (isVoid) return 'var(--settle-void)';
-    const c = (category || '').toUpperCase();
-    switch (c) {
-      case 'BANGER': return 'var(--tier-banger)';
-      case 'TOP PICK': return 'var(--tier-top-pick)';
-      case 'HIGH CONFIDENCE': return 'var(--tier-high-conf)';
-      case 'MID CONFIDENCE': return 'var(--tier-mid-conf)';
-      case 'LOW CONFIDENCE': return 'var(--tier-low-conf)';
-      case 'RISKY': return 'var(--tier-risky)';
-      case 'NO_SAFE_BANKER': return 'var(--tier-no-banker)';
-      default: return 'var(--tier-low-conf)';
-    }
-  };
-
-  const formatCategoryName = (category: string) => {
-    const c = (category || '').toUpperCase();
-    if (c === 'BANGER') return '🔥 BANGER';
-    if (c === 'TOP PICK') return '👑 TOP PICK';
-    if (c === 'NO_SAFE_BANKER') return '🛡 NO SAFE BANKER';
-    return category;
-  };
-
-  const formatMarketName = (market: string) => {
-    switch (market.toLowerCase()) {
-      case '1x2': return 'Match Result (1X2)';
-      case 'double_chance': return 'Double Chance';
-      case 'over_under_0.5': return 'Goals O/U 0.5';
-      case 'over_under_1.5': return 'Goals O/U 1.5';
-      case 'over_under_2.5': return 'Goals O/U 2.5';
-      case 'over_under_3.5': return 'Goals O/U 3.5';
-      case 'over_under_4.5': return 'Goals O/U 4.5';
-      case 'home_goals_0.5': return 'Home Goals O/U 0.5';
-      case 'away_goals_0.5': return 'Away Goals O/U 0.5';
-      case 'btts':
-      case 'both_teams_to_score': return 'Both Teams To Score';
-      case 'ht_result': return 'Half Time Result';
-      case 'ht_goals_0.5': return 'HT Goals O/U 0.5';
-      case 'ht_goals_1.5': return 'HT Goals O/U 1.5';
-      case '2h_goals_0.5': return '2H Goals O/U 0.5';
-      case '2h_goals_1.5': return '2H Goals O/U 1.5';
-      case 'corners':
-      case 'corners_8.5': return 'Corners O/U 8.5';
-      case 'corners_9.5': return 'Corners O/U 9.5';
-      case 'corners_10.5': return 'Corners O/U 10.5';
-      case 'no_safe_banker': return 'Banker Requirement (≥80%)';
-      default: return market.toUpperCase();
-    }
-  };
-
-  const formatPredictionOutcome = (outcome: string) => {
-    switch (outcome.toLowerCase()) {
-      case 'home': return 'Home Win';
-      case 'draw': return 'Draw';
-      case 'away': return 'Away Win';
-      case 'over': return 'Over';
-      case 'under': return 'Under';
-      case 'yes': return 'Yes (BTTS)';
-      case 'no': return 'No (BTTS)';
-      case '1x': return '1X (Home/Draw)';
-      case 'x2': return 'X2 (Draw/Away)';
-      case '12': return '12 (Home/Away)';
-      case 'skip': return 'SKIP (Protected Pass)';
-      default: return outcome.toUpperCase();
-    }
-  };
-
   const resetAllFilters = () => {
     setSelectedLeague('all');
     setSelectedTier('all');
@@ -1139,7 +1028,6 @@ export default function App() {
     setSettlementFilter('all');
     setScoreStatusFilter('all');
     setSelectedDate('all');
-    setSearchQuery('');
   };
 
   // Unified Platform View (Header, Top Regulatory Notice & Footer on all pages)
@@ -1791,7 +1679,6 @@ export default function App() {
                   type="button"
                   className="btn-toggle-expand"
                   onClick={() => {
-                    setExpandAll(true);
                     setExpandedFixtures(new Set(fixtures.map((f) => f.id)));
                   }}
                 >
@@ -1801,7 +1688,6 @@ export default function App() {
                   type="button"
                   className="btn-toggle-expand"
                   onClick={() => {
-                    setExpandAll(false);
                     setExpandedFixtures(new Set());
                   }}
                 >
@@ -1833,9 +1719,8 @@ export default function App() {
                 bangerFixturesList.map((bf) => {
                   const time = formatKickoff(bf.target_kickoff_at);
                   const pList = predsByFixture.get(bf.id) || [];
-                  const tList = teasersByFixture.get(bf.id) || [];
-                  const bangerPred: any = (canViewPredictions ? pList : tList).find(
-                    (p) => p.confidence_category === 'BANGER'
+                  const bangerPred: any = pList.find(
+                    (p: any) => p.confidence_category === 'BANGER'
                   );
 
                   return (
@@ -1965,472 +1850,19 @@ export default function App() {
                   </div>
 
                   <div className="league-group-matches-list">
-                    {leagueMatches.map((fixture) => {
-                const time = formatKickoff(fixture.target_kickoff_at);
-                const fixturePreds = predsByFixture.get(fixture.id) || [];
-                const fixtureTeasers = teasersByFixture.get(fixture.id) || [];
-                const isLive = fixture.status === 'live';
-                const isFinished = fixture.status === 'finished';
-                const isStarred = favorites.includes(fixture.id);
-
-                const signals = canViewPredictions ? fixturePreds : fixtureTeasers;
-                const topSignal: any = signals.find((s: any) => s.confidence_category === 'BANGER') ||
-                  signals.find((s: any) => s.confidence_category === 'TOP PICK') ||
-                  signals[0];
-                const isCardExpanded = expandAll || expandedFixtures.has(fixture.id);
-                const wonCount = fixturePreds.filter((p) => p.settlement_status === 'won').length;
-                const lostCount = fixturePreds.filter((p) => p.settlement_status === 'lost').length;
-
-                return (
-                  <div key={fixture.id} id={`fixture-${fixture.id}`} className="fixture-card">
-                    <div className="card-top">
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span className="league-badge">
-                          {fixture.league_name || fixture.league_code}
-                        </span>
-                        <span className="queue-day-pill queue-day-0">
-                          📅 {time.dateStr}
-                        </span>
-                      </div>
-
-                      <button
-                        type="button"
-                        className={`star-favorite-btn ${isStarred ? 'starred' : ''}`}
-                        title={isStarred ? 'Remove from Watchlist' : 'Add to Watchlist'}
-                        onClick={() => toggleFavorite(fixture.id)}
-                      >
-                        {isStarred ? '★' : '☆'}
-                      </button>
-                    </div>
-
-                    <div className="matchup-container">
-                      <div className="team-row">
-                        <div className="team-info">
-                          <div className="team-icon">
-                            {fixture.home_team_name?.charAt(0)?.toUpperCase() || 'H'}
-                          </div>
-                          <span className="team-name">{fixture.home_team_name.replace(/-/g, ' ')}</span>
-                        </div>
-                        {fixture.home_score !== null && (
-                          <span className="team-score">{fixture.home_score}</span>
-                        )}
-                      </div>
-
-                      <div className="vs-divider">VS</div>
-
-                      <div className="team-row">
-                        <div className="team-info">
-                          <div className="team-icon">
-                            {fixture.away_team_name?.charAt(0)?.toUpperCase() || 'A'}
-                          </div>
-                          <span className="team-name">{fixture.away_team_name.replace(/-/g, ' ')}</span>
-                        </div>
-                        {fixture.away_score !== null && (
-                          <span className="team-score">{fixture.away_score}</span>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Live Match State Banner */}
-                    {isLive && (
-                      <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '6px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                        <span style={{ fontSize: 11, fontWeight: 800, color: '#dc2626' }}>
-                          🔴 LIVE {fixture.match_minute ? `${fixture.match_minute}'` : ''}
-                        </span>
-                        <span style={{ fontSize: 13, fontWeight: 900, color: '#dc2626' }}>
-                          Score: {fixture.home_score ?? 0} - {fixture.away_score ?? 0}
-                        </span>
-                      </div>
-                    )}
-
-                    {/* Finished Match State Banner */}
-                    {isFinished && (
-                      <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '6px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                        <span style={{ fontSize: 11, fontWeight: 700, color: '#475569' }}>
-                          FULL TIME
-                        </span>
-                        <span style={{ fontSize: 13, fontWeight: 800, color: '#0f172a' }}>
-                          Final: {fixture.home_score ?? 0} - {fixture.away_score ?? 0}
-                        </span>
-                      </div>
-                    )}
-
-                    <div className="card-bottom">
-                      <span className="kickoff-time">
-                        {time.dateStr} • {time.timeStr} WAT
-                      </span>
-                      <span className="status-badge">
-                        {fixture.status.toUpperCase()}
-                      </span>
-                    </div>
-
-                    {/* Per-Prediction Summary Expansion Banner */}
-                    <div
-                      className="fixture-prediction-summary"
-                      onClick={() => {
-                        setExpandedFixtures((prev) => {
-                          const next = new Set(prev);
-                          if (next.has(fixture.id)) next.delete(fixture.id);
-                          else next.add(fixture.id);
-                          return next;
-                        });
-                      }}
-                      title="Click to expand or collapse calibrated probabilistic simulation signals"
-                    >
-                      <div className="summary-left-group">
-                        {!isAdmin && (topSignal?.is_locked || topSignal?.confidence_category === 'LOCKED' || (!topSignal?.prediction && !fixture.status.match(/finished|settled/i))) ? (
-                          <div className="paywall-lock-badge-wrap">
-                            <span className="paywall-locked-pill">
-                              🔒 Premium Pick Locked (₦5,000/mo)
-                            </span>
-                            <Link to="/subscription" className="paywall-unlock-link-btn" onClick={(e) => e.stopPropagation()}>
-                              Unlock Pick →
-                            </Link>
-                          </div>
-                        ) : topSignal ? (
-                          <span className={`top-signal-badge ${getTierBadgeClass(topSignal.confidence_category)}`}>
-                            {topSignal.confidence_category === 'NO_SAFE_BANKER' || topSignal.market === 'NO_SAFE_BANKER' ? (
-                              <>🛡 NO SAFE BANKER: Pass / Volatile Toss-Up (No market ≥80%)</>
-                            ) : (
-                              <>
-                                {topSignal.confidence_category === 'BANGER' ? '🔥 ' : topSignal.confidence_category === 'TOP PICK' ? '👑 ' : '🎯 '}
-                                {formatCategoryName(topSignal.confidence_category)}: {formatMarketName(topSignal.market)} ({formatPredictionOutcome(topSignal.prediction || '')})
-                                {topSignal.probability ? ` - ${(topSignal.probability * 100).toFixed(1)}%` : ''}
-                              </>
-                            )}
-                          </span>
-                        ) : signals.length > 0 ? (
-                          <span className="summary-count-text">
-                            📊 {signals.length} Quantitative Picks
-                          </span>
-                        ) : (
-                          <span className="summary-count-text">
-                            ⏱ Probability Simulation Queued
-                          </span>
-                        )}
-
-                        {topSignal?.secondary_predictions && topSignal.secondary_predictions.length > 0 && (
-                          <span className="summary-secondary-chip" title="Alternative high-confidence markets evaluated in this simulation">
-                            +{topSignal.secondary_predictions.length} Secondary Picks
-                          </span>
-                        )}
-
-                        {(wonCount > 0 || lostCount > 0) && (
-                          <span className="summary-settle-chip">
-                            {wonCount > 0 && <span style={{ color: '#16a34a' }}>✓ {wonCount} Won </span>}
-                            {lostCount > 0 && <span style={{ color: '#dc2626' }}>✗ {lostCount} Lost</span>}
-                          </span>
-                        )}
-                      </div>
-
-                      <button
-                        type="button"
-                        className={`btn-expand-summary ${isCardExpanded ? 'expanded' : ''}`}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setExpandedFixtures((prev) => {
-                            const next = new Set(prev);
-                            if (next.has(fixture.id)) next.delete(fixture.id);
-                            else next.add(fixture.id);
-                            return next;
-                          });
-                        }}
-                      >
-                        {isCardExpanded ? (
-                          <>▲ Hide Breakdown</>
-                        ) : (
-                          <>▼ View Sniper Breakdown {topSignal?.secondary_predictions?.length ? `(1 + ${topSignal.secondary_predictions.length} Picks)` : ''}</>
-                        )}
-                      </button>
-                    </div>
-
-                    {/* Expandable Predictions / Locked Teasers */}
-                    {isCardExpanded && (
-                      canViewPredictions ? (
-                        fixturePreds.length > 0 ? (
-                          <div className="prediction-panel">
-                            <div className="prediction-panel-header">
-                              <div className="sim-verified-pill">
-                                <span className="dot"></span>
-                                <span>Exact 250,000 Draws Verified • Sniper Engine</span>
-                              </div>
-                              <span className="model-tag">
-                                {simsByFixture.get(fixture.id)?.run_tracking?.seed ? `Seed: ${simsByFixture.get(fixture.id)?.run_tracking?.seed} • ` : ''}PCG64 • Dixon-Coles
-                              </span>
-                            </div>
-
-                            {/* Primary Prediction Card */}
-                            {(() => {
-                              const p = fixturePreds[0];
-                              if (!p) return null;
-
-                              if (!isAdmin && (p.is_locked || p.confidence_category === 'LOCKED' || (!p.prediction && !fixture.status.match(/finished|settled/i)))) {
-                                return (
-                                  <div className="paywall-card-expanded">
-                                    <div className="paywall-card-content">
-                                      <div className="paywall-card-icon">🔒</div>
-                                      <div className="paywall-card-text">
-                                        <h4>Premium Mathematical Prediction & Odds Probability Locked</h4>
-                                        <p>
-                                          Banker consensus (80%+), Top Pick, and Banger (96%+) signals are protected for active subscribers.
-                                          Upgrade to Standard (₦5,000/mo) or BigBang VIP (₦10,000/mo) to unlock this pick and all live matches.
-                                        </p>
-                                      </div>
-                                      <Link to="/subscription" className="btn-paywall-unlock">
-                                        ⚡ Unlock with Standard Plan (₦5,000/mo)
-                                      </Link>
-                                    </div>
-                                  </div>
-                                );
-                              }
-
-                              const pct = ((p.probability ?? 0) * 100).toFixed(2);
-                              const isWon = p.settlement_status === 'won';
-                              const isLost = p.settlement_status === 'lost';
-                              const isVoid = p.settlement_status === 'void' || p.settlement_status === 'voided';
-                              const isPending = !p.settlement_status || p.settlement_status === 'pending';
-                              const isNoBanker = p.market === 'NO_SAFE_BANKER' || p.confidence_category === 'NO_SAFE_BANKER' || p.prediction === 'SKIP';
-
-                              if (isNoBanker) {
-                                return (
-                                  <div className="sniper-primary-card" style={{ borderColor: 'var(--tier-no-banker-border)', background: 'var(--tier-no-banker-bg)' }}>
-                                    <div className="sniper-primary-badge-row">
-                                      <span className="sniper-primary-title" style={{ color: 'var(--tier-no-banker-text)' }}>
-                                        🛡 VOLATILE TOSS-UP — ANTI-LOSS PROTECTION
-                                      </span>
-                                      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                                        {isVoid && <span className="badge-settled-void">⊘ VOID</span>}
-                                        <span className="tier-badge tier-no-banker">
-                                          🛡 NO SAFE BANKER
-                                        </span>
-                                      </div>
-                                    </div>
-
-                                    <div className="sniper-primary-main">
-                                      <div className="sniper-market-outcome">
-                                        <span className="sniper-market-name">Banker Standard (≥ 80.00%)</span>
-                                        <span className="sniper-outcome-val" style={{ color: '#475569' }}>SKIP / PASS MATCH</span>
-                                      </div>
-                                      <div className="sniper-prob-group">
-                                        <span className="sniper-prob-val" style={{ color: '#64748b' }}>PROTECTED</span>
-                                        <span className="sniper-prob-label">Anti-Loss Guard</span>
-                                      </div>
-                                    </div>
-
-                                    <div style={{ padding: '8px 12px', background: '#ffffff', borderRadius: 6, border: '1px solid #e2e8f0', fontSize: 12, color: '#475569', lineHeight: 1.5, marginTop: 4 }}>
-                                      ⚠️ <strong>Sniper Protection:</strong> No single market in this fixture achieved the strict <strong>≥ 80.00% banker certainty floor</strong> across 250,000 simulations. JamBets advises passing on this match to protect capital.
-                                    </div>
-
-                                    {p.settlement_notes && (
-                                      <div className={`settle-reason-tag ${isWon ? 'won' : ''}`}>
-                                        <strong>Settlement:</strong> {p.settlement_notes}
-                                      </div>
-                                    )}
-                                  </div>
-                                );
-                              }
-
-                              return (
-                                <div className="sniper-primary-card">
-                                  <div className="sniper-primary-badge-row">
-                                    <span className="sniper-primary-title">
-                                      🎯 PRIMARY PREDICTION (TOP BANKER)
-                                    </span>
-                                    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                                      {isWon && <span className="badge-settled-won">✓ WON</span>}
-                                      {isLost && <span className="badge-settled-lost">✗ LOST</span>}
-                                      {isVoid && <span className="badge-settled-void">⊘ VOID</span>}
-                                      {isPending && <span className="badge-settled-pending">⏳ PENDING</span>}
-                                      <span className={`tier-badge ${getTierBadgeClass(p.confidence_category)}`}>
-                                        {formatCategoryName(p.confidence_category)}
-                                      </span>
-                                    </div>
-                                  </div>
-
-                                  <div className="sniper-primary-main">
-                                    <div className="sniper-market-outcome">
-                                      <span className="sniper-market-name">{formatMarketName(p.market)}</span>
-                                      <span className="sniper-outcome-val">{formatPredictionOutcome(p.prediction || '')}</span>
-                                    </div>
-                                    <div className="sniper-prob-group">
-                                      <span className="sniper-prob-val">{pct}%</span>
-                                      <span className="sniper-prob-label">Simulated Probability</span>
-                                    </div>
-                                  </div>
-
-                                  <div className="pred-bar-container" style={{ height: 8 }}>
-                                    <div
-                                      className="pred-bar-fill"
-                                      style={{
-                                        width: `${Math.min(100, (p.probability ?? 0) * 100)}%`,
-                                        background: getCategoryColor(p.confidence_category, isWon, isLost, isVoid)
-                                      }}
-                                    />
-                                  </div>
-
-                                  {p.settlement_notes && (
-                                    <div className={`settle-reason-tag ${isWon ? 'won' : ''}`}>
-                                      <strong>Settlement:</strong> {p.settlement_notes}
-                                    </div>
-                                  )}
-                                </div>
-                              );
-                            })()}
-
-                            {/* Secondary Predictions Section (Top 2-4 alternative markets) */}
-                            {fixturePreds[0]?.secondary_predictions && fixturePreds[0].secondary_predictions.length > 0 && (
-                              <div className="secondary-predictions-section">
-                                <div className="secondary-predictions-header">
-                                  <span className="secondary-section-title">📦 SECONDARY SIGNALS (QUALIFYING ≥60% LEANS — MAX 4)</span>
-                                  <span className="secondary-section-desc">Alternative high-probability outcomes evaluated from 250,000 simulations</span>
-                                </div>
-
-                                <div className="secondary-predictions-grid">
-                                  {fixturePreds[0].secondary_predictions.map((sec, idx) => {
-                                    const secTier = sec.confidence_tier || sec.confidence_category || 'MID CONFIDENCE';
-                                    const secProb = sec.probability ?? sec.prob ?? 0;
-                                    const secPct = (secProb * 100).toFixed(1);
-                                    const isNoBanker = fixturePreds[0].market === 'NO_SAFE_BANKER';
-
-                                    return (
-                                      <div key={idx} className="secondary-pred-card">
-                                        <div className="secondary-card-top">
-                                          <div className="secondary-rank-market">
-                                            <span className="secondary-rank-badge">
-                                              {isNoBanker ? `Lean #${idx + 1}` : `#${idx + 2}`}
-                                            </span>
-                                            <span className="secondary-market-name">{formatMarketName(sec.market)}</span>
-                                          </div>
-                                          <span className={`tier-badge ${getTierBadgeClass(secTier)}`} style={{ fontSize: 9, padding: '1px 5px' }}>
-                                            {formatCategoryName(secTier)}
-                                          </span>
-                                        </div>
-
-                                        <div className="secondary-card-mid">
-                                          <span className="secondary-outcome-val">{formatPredictionOutcome(sec.prediction || '')}</span>
-                                          <span className="secondary-prob-val">{secPct}%</span>
-                                        </div>
-
-                                        <div className="pred-bar-container" style={{ height: 4 }}>
-                                          <div
-                                            className="pred-bar-fill"
-                                            style={{
-                                              width: `${Math.min(100, secProb * 100)}%`,
-                                              background: getCategoryColor(secTier as any, false, false, false)
-                                            }}
-                                          />
-                                        </div>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              </div>
-                            )}
-
-                            {/* Legacy multi-row fallback support if more rows exist */}
-                            {fixturePreds.length > 1 && (
-                              <div className="prediction-list" style={{ marginTop: 10 }}>
-                                {fixturePreds.slice(1).map((p) => {
-                                  const pct = ((p.probability ?? 0) * 100).toFixed(2);
-                                  const isWon = p.settlement_status === 'won';
-                                  const isLost = p.settlement_status === 'lost';
-                                  const isVoid = p.settlement_status === 'void' || p.settlement_status === 'voided';
-                                  const isPending = !p.settlement_status || p.settlement_status === 'pending';
-
-                                  return (
-                                    <div key={p.id} className="prediction-row">
-                                      <div className="pred-row-top">
-                                        <div className="pred-market-outcome">
-                                          <span className="pred-market-name">{formatMarketName(p.market)}:</span>
-                                          <span className="pred-outcome-val">{formatPredictionOutcome(p.prediction || '')}</span>
-                                        </div>
-                                        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                                          {isWon && <span className="badge-settled-won">✓ WON</span>}
-                                          {isLost && <span className="badge-settled-lost">✗ LOST</span>}
-                                          {isVoid && <span className="badge-settled-void">⊘ VOID</span>}
-                                          {isPending && <span className="badge-settled-pending">⏳ PENDING</span>}
-                                          <span className={`tier-badge ${getTierBadgeClass(p.confidence_category)}`}>
-                                            {formatCategoryName(p.confidence_category)}
-                                          </span>
-                                        </div>
-                                      </div>
-
-                                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Simulated Probability</span>
-                                        <span className="pred-prob-val">{pct}%</span>
-                                      </div>
-
-                                      <div className="pred-bar-container">
-                                        <div
-                                          className="pred-bar-fill"
-                                          style={{
-                                            width: `${Math.min(100, (p.probability ?? 0) * 100)}%`,
-                                            background: getCategoryColor(p.confidence_category, isWon, isLost, isVoid)
-                                          }}
-                                        />
-                                      </div>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            )}
-                          </div>
-                        ) : (
-                          <div style={{ marginTop: 10, padding: '8px 12px', background: '#f8fafc', border: '1px dashed #cbd5e1', borderRadius: 8, fontSize: 11, color: 'var(--text-muted)' }}>
-                            ⚙ Features Incomplete • NOT_READY (0 Simulations • Zero Speculative Leakage)
-                          </div>
-                        )
-                      ) : (
-                        fixtureTeasers.length > 0 ? (
-                          <div className="prediction-panel">
-                            <div className="prediction-panel-header">
-                              <div className="sim-verified-pill" style={{ background: '#eff6ff', borderColor: '#bfdbfe', color: '#1d4ed8' }}>
-                                <span>🔒</span>
-                                <span>{fixtureTeasers.length} Model Signal{fixtureTeasers.length > 1 ? 's' : ''} (Locked)</span>
-                              </div>
-                              <span className="model-tag">250k Draws Backed</span>
-                            </div>
-
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 6 }}>
-                              {fixtureTeasers.map((t) => (
-                                <div key={t.id} className="teaser-locked-box">
-                                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                      <span className="teaser-market-label">{formatMarketName(t.market)}</span>
-                                      <span className={`tier-badge ${getTierBadgeClass(t.confidence_category)}`}>
-                                        {formatCategoryName(t.confidence_category)}
-                                      </span>
-                                    </div>
-                                    <div className="teaser-lock-info">
-                                      🔒 Prediction & Simulated Probability Locked
-                                    </div>
-                                  </div>
-
-                                  <button
-                                    type="button"
-                                    className="teaser-unlock-btn"
-                                    onClick={() => {
-                                      if (!currentUser) {
-                                        setAuthModalMode('register');
-                                        setIsAuthModalOpen(true);
-                                      } else {
-                                        setIsPricingModalOpen(true);
-                                      }
-                                    }}
-                                  >
-                                    Unlock
-                                  </button>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        ) : null
-                      )
-                    )}
-                  </div>
-                );
-              })
-            }
+                    {leagueMatches.map((fixture) => (
+                      <FixtureCard
+                        key={fixture.id}
+                        fixture={fixture}
+                        prediction={predsByFixture.get(fixture.id)?.[0] || null}
+                        isAdmin={isAdmin}
+                        canViewPredictions={canViewPredictions}
+                        isStarred={favorites.includes(fixture.id)}
+                        onToggleFavorite={toggleFavorite}
+                        isExpanded={expandedFixtures.has(fixture.id)}
+                        onToggleExpand={() => toggleFixtureExpand(fixture.id)}
+                      />
+                    ))}
                   </div>
                 </div>
               ))
