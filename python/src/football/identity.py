@@ -38,6 +38,7 @@ TEAM_ALIASES: Dict[str, str] = {
     "fulham": "fulham",
     "everton": "everton",
     "nottingham forest": "nottingham-forest",
+    "nottm forest": "nottingham-forest",
     "west ham united": "west-ham-united",
     "west ham": "west-ham-united",
     "wolverhampton wanderers": "wolverhampton-wanderers",
@@ -79,6 +80,7 @@ TEAM_ALIASES: Dict[str, str] = {
     "atalanta": "atalanta",
 
     # Bundesliga
+    "bayern": "bayern-munich",
     "bayern munich": "bayern-munich",
     "bayern munchen": "bayern-munich",
     "borussia dortmund": "borussia-dortmund",
@@ -97,35 +99,76 @@ TEAM_ALIASES: Dict[str, str] = {
 }
 
 
-def normalize_team_name(raw_name: str) -> str:
+try:
+    from rapidfuzz import fuzz, process
+    HAS_RAPIDFUZZ = True
+except ImportError:
+    import difflib
+    HAS_RAPIDFUZZ = False
+
+
+def resolve_fuzzy_team_name(raw_name: str, min_confidence: float = 85.0) -> Tuple[str, float]:
     """
-    Cleans, strips accents, removes common punctuation, and maps
-    raw provider team names to a canonical slug.
+    Resolves raw team name to canonical identity using Rapidfuzz (or Levenshtein ratio >= 85%).
+    Cross-checks across alias tables and canonical slugs.
     """
     if not raw_name:
-        return "unknown"
-    # Normalize unicode (decompose accented characters)
+        return "unknown", 0.0
+
     normalized = unicodedata.normalize("NFKD", raw_name)
     cleaned = "".join(c for c in normalized if not unicodedata.combining(c))
     cleaned = cleaned.lower().strip()
-    # Remove punctuation
     cleaned = re.sub(r"[^\w\s-]", "", cleaned)
     cleaned = re.sub(r"\s+", " ", cleaned).strip()
 
-    # Check direct dictionary alias
+    # 1. Exact match in aliases
     if cleaned in TEAM_ALIASES:
-        return TEAM_ALIASES[cleaned]
+        return TEAM_ALIASES[cleaned], 100.0
 
-    # Strip common football club prefixes and suffixes (fc, cf, afc, etc.)
-    stripped = re.sub(r"\b(fc|cf|afc|sc|ac)\b", "", cleaned).strip()
+    # 2. Strip club abbreviations (fc, afc, football club, etc.)
+    stripped = re.sub(r"\b(football club|fc|cf|afc|sc|ac|kv|sv|fk|sk)\b", "", cleaned).strip()
     stripped = re.sub(r"\s+", " ", stripped).strip()
-
     if stripped in TEAM_ALIASES:
-        return TEAM_ALIASES[stripped]
+        return TEAM_ALIASES[stripped], 98.0
 
-    # Otherwise produce slug format
+    # 3. Rapidfuzz / Levenshtein matching against all known alias keys
+    candidates = list(TEAM_ALIASES.keys())
+    target_to_eval = stripped if stripped else cleaned
+
+    best_match_key = None
+    best_score = 0.0
+
+    if HAS_RAPIDFUZZ:
+        match_result = process.extractOne(
+            target_to_eval,
+            candidates,
+            scorer=fuzz.token_sort_ratio
+        )
+        if match_result:
+            best_match_key, best_score, _ = match_result
+    else:
+        # Fallback using difflib SequenceMatcher
+        for cand in candidates:
+            score = difflib.SequenceMatcher(None, target_to_eval, cand).ratio() * 100.0
+            if score > best_score:
+                best_score = score
+                best_match_key = cand
+
+    if best_match_key and best_score >= min_confidence:
+        return TEAM_ALIASES[best_match_key], float(best_score)
+
+    # 4. Fallback slug
     slug = re.sub(r"\s+", "-", stripped if stripped else cleaned)
-    return slug
+    return slug, 0.0
+
+
+def normalize_team_name(raw_name: str) -> str:
+    """
+    Cleans, strips accents, removes common punctuation, and maps
+    raw provider team names to a canonical slug using fuzzy resolution (>= 85%).
+    """
+    resolved_canonical, confidence = resolve_fuzzy_team_name(raw_name, min_confidence=85.0)
+    return resolved_canonical
 
 
 def generate_canonical_key(league_code: str, home_team: str, away_team: str, kickoff: datetime) -> str:

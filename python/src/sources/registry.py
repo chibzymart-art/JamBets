@@ -6,8 +6,12 @@ Manages registered source adapters, priority routing, circuit breaking, and heal
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
 from python.src.sources.base import BaseSourceAdapter
+from python.src.sources.fotmob import FotMobAdapter
 from python.src.sources.espn import ESPNAdapter
 from python.src.sources.livescore import LiveScoreAdapter
+from python.src.sources.flashscore import FlashscoreAdapter
+from python.src.sources.sportybet import SportyBetAdapter
+from python.src.sources.google_news import GoogleNewsAdapter
 
 
 class SourceRegistry:
@@ -15,9 +19,13 @@ class SourceRegistry:
         self._adapters: Dict[str, BaseSourceAdapter] = {}
         self._health_stats: Dict[str, Dict] = {}
 
-        # Register default approved providers
-        self.register(ESPNAdapter(), priority=10)
-        self.register(LiveScoreAdapter(), priority=20)
+        # Register default approved providers with Phase 4.7 priority ordering
+        self.register(FotMobAdapter(), priority=10)
+        self.register(ESPNAdapter(), priority=20)
+        self.register(LiveScoreAdapter(), priority=30)
+        self.register(FlashscoreAdapter(), priority=40)
+        self.register(SportyBetAdapter(), priority=50)
+        self.register(GoogleNewsAdapter(), priority=60)
 
     def register(self, adapter: BaseSourceAdapter, priority: int = 100) -> None:
         self._adapters[adapter.slug] = adapter

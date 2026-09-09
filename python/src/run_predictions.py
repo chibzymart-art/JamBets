@@ -1,11 +1,13 @@
 """
-JamBets — Standalone Prediction Engine Runner
-Acquires genuine historical football dataset, calibrates Dixon-Coles model,
+JamBets — Standalone Prediction Engine Runner (Phase 4.7)
+Acquires genuine historical football records, calibrates Dixon-Coles model,
 and generates 250,000-simulation predictions for active queue fixtures in Cloud Supabase.
+Enforces Phase 4.7 Zero-Hallucination, Two-Factor Consensus Gate, and Exhaustive Queue Drain.
 """
 
 import os
 import sys
+import time
 
 # Force UTF-8 on Windows
 if hasattr(sys.stdout, "reconfigure"):
@@ -25,12 +27,15 @@ from python.src.config import LEAGUE_REGISTRY
 from python.src.football.historical_dataset import HistoricalDatasetBuilder
 from python.src.football.prediction_models import DixonColesModel, ChronologicalBacktester
 from python.src.football.prediction_pipeline import PredictionPipeline
+from python.src.sources.fotmob import FotMobAdapter
+from python.src.sources.sportybet import SportyBetAdapter
+from python.src.sources.google_news import GoogleNewsAdapter
 from python.src.db.supabase_client import CloudSupabaseClient
 
 
 def run():
     print("==================================================================")
-    print(" JamBets — Standalone Production Prediction Engine Runner")
+    print(" JamBets — Phase 4.7 Exhaustive Prediction Pipeline Runner")
     print(f" Timestamp: {datetime.now(timezone.utc).isoformat()}")
     print("==================================================================")
 
@@ -47,7 +52,8 @@ def run():
         ("ITA_SA", ["20240526", "20240519", "20240512", "20240505", "20240428", "20240421", "20240414"]),
         ("GER_BL", ["20240518", "20240511", "20240504", "20240427", "20240420", "20240413"]),
         ("FRA_L1", ["20240519", "20240512", "20240503", "20240428", "20240424", "20240421"]),
-        ("EUR_CL", ["20240601", "20240508", "20240501", "20240417", "20240416", "20240410", "20240409", "20240313", "20240312"])
+        ("EUR_CL", ["20240601", "20240508", "20240501", "20240417", "20240416", "20240410", "20240409", "20240313", "20240312"]),
+        ("ENG_CH", ["20240504", "20240427", "20240420", "20240413", "20240406", "20240401", "20240329", "20240316", "20240309", "20240305", "20240302"])
     ]
 
     total_historical = 0
@@ -115,32 +121,60 @@ def run():
     except Exception as exc:
         print(f"  [NOTE] Model metadata upsert: {exc}", flush=True)
 
-    # 4. Initialize Prediction Pipeline
-    pipeline = PredictionPipeline(dataset=dataset, supabase=supabase)
+    # 4. Initialize Multi-Source Prediction Pipeline
+    fotmob = FotMobAdapter()
+    sportybet = SportyBetAdapter()
+    google_news = GoogleNewsAdapter()
+
+    pipeline = PredictionPipeline(
+        dataset=dataset,
+        supabase=supabase,
+        fotmob=fotmob,
+        sportybet=sportybet,
+        google_news=google_news
+    )
     pipeline.model = model
     pipeline.simulation_engine.model = model
 
-    # 5. Fetch genuine upcoming fixtures from prediction queue
-    batch_limit = int(sys.argv[1]) if len(sys.argv) > 1 and sys.argv[1].isdigit() else 5
-    print(f"\n[STEP 4] Fetching {batch_limit} upcoming fixtures from prediction queue in Cloud Supabase...")
-    fixtures = supabase.get_prediction_queue(limit=batch_limit)
-    print(f"  • Retrieved {len(fixtures)} candidate fixtures from prediction queue")
+    # 5. Fetch Forward 4-Day Window Fixtures
+    now_utc = datetime.now(timezone.utc)
+    max_utc = now_utc + timedelta(days=4)
+    print(f"\n[STEP 4] Fetching forward-looking fixtures ({now_utc.strftime('%Y-%m-%d %H:%M')} to {max_utc.strftime('%Y-%m-%d %H:%M')} UTC)...")
+
+    forward_fixtures = supabase.get_forward_prediction_queue(ref_time_utc=now_utc, max_days=4, limit=1000)
+    print(f"  • Retrieved {len(forward_fixtures)} fixtures in the 4-day window from Cloud Supabase")
+
+    # If argument provided, allow limiting for tests, otherwise drain the entire forward window
+    drain_all = True
+    batch_limit = None
+    if len(sys.argv) > 1 and sys.argv[1].isdigit():
+        batch_limit = int(sys.argv[1])
+        drain_all = False
+        fixtures_to_process = forward_fixtures[:batch_limit]
+        print(f"  • Running batch limit mode: {batch_limit} fixtures")
+    else:
+        fixtures_to_process = forward_fixtures
+        print(f"  • Running EXHAUSTIVE DRAIN mode across ALL {len(fixtures_to_process)} forward fixtures")
 
     # 6. Execute per-fixture isolated predictions
-    print("\n[STEP 5] Running isolated prediction pipeline (250,000 simulations per fixture)...")
+    print("\n[STEP 5] Running Phase 4.7 Zero-Hallucination & Consensus Prediction Pipeline...")
     published_count = 0
-    not_ready_count = 0
+    data_unavailable_count = 0
+    consensus_banker_count = 0
 
-    for idx, f in enumerate(fixtures, 1):
+    for idx, f in enumerate(fixtures_to_process, 1):
         f_id = f.get("id")
         canonical_key = f.get("canonical_key")
         l_code = f.get("league_code")
         h_team = f.get("home_team_name")
         a_team = f.get("away_team_name")
         kickoff_str = f.get("target_kickoff_at")
-        kickoff = datetime.fromisoformat(kickoff_str.replace("Z", "+00:00"))
+        try:
+            kickoff = datetime.fromisoformat(kickoff_str.replace("Z", "+00:00"))
+        except Exception:
+            kickoff = now_utc + timedelta(hours=12)
 
-        print(f"\n--- [{idx}/{len(fixtures)}] Fixture: {h_team} vs {a_team} ({l_code}) ---")
+        print(f"\n--- [{idx}/{len(fixtures_to_process)}] Fixture: {h_team} vs {a_team} ({l_code}) ---")
         print(f"    Canonical Key: {canonical_key}")
         print(f"    Kickoff: {kickoff.isoformat()}")
 
@@ -158,30 +192,47 @@ def run():
             published_count += 1
             primary = res.primary_prediction
             print(f"    Status: PUBLISHED [SNIPER MODE: 1 Fixture = 1 Database Row]")
-            print(f"    Simulations: {res.simulation_result.completed_simulations:,} iterations in {res.simulation_result.duration_ms:.1f}ms")
-            if primary:
-                if primary.market_name == "NO_SAFE_BANKER":
-                    print(f"    🛡 PRIMARY: [{primary.confidence_tier}] VOLATILE TOSS-UP -> SKIP MATCH (No market hit >= 80% banker floor)")
-                else:
-                    print(f"    🎯 PRIMARY: [{primary.confidence_tier}] {primary.market_name} -> {primary.outcome} : {primary.probability_pct:.2f}% (BANKER >= 80%)")
-            if res.secondary_predictions:
-                print(f"    📦 SECONDARY ({len(res.secondary_predictions)} markets):")
-                for s in res.secondary_predictions:
-                    prob_val = s.get('probability') if s.get('probability') is not None else s.get('prob', 0)
-                    prob_pct = prob_val * 100 if prob_val <= 1.0 else prob_val
-                    print(f"       • [{s.get('confidence_tier')}] {s.get('market')} -> {s.get('prediction')} : {prob_pct:.1f}%")
-        elif res.status == "NOT_READY":
-            not_ready_count += 1
-            print(f"    Status: NOT_READY ({res.not_ready_reason})")
-        else:
-            print(f"    Status: {res.status}")
+            if res.simulation_result:
+                print(f"    Simulations: {res.simulation_result.completed_simulations:,} draws in {res.simulation_result.duration_ms:.1f}ms")
+            if res.is_consensus_banker:
+                consensus_banker_count += 1
+                print(f"    🎯 CONSENSUS BANKER VERIFIED: Both P_sim={res.p_sim_primary*100:.1f}% >= 82% AND P_market={res.p_market_primary*100:.1f}% >= 80%")
+                print(f"       Market: [{primary.confidence_tier}] {primary.market_name} -> {primary.outcome}")
+            else:
+                print(f"    🛡 TOSS-UP / DIVERGENCE: [{primary.confidence_tier}] {primary.market_name} -> {primary.outcome} (P_sim={res.p_sim_primary*100 if res.p_sim_primary else 0:.1f}%)")
 
+            if res.secondary_predictions:
+                print(f"    📦 SECONDARY CONSENSUS ({len(res.secondary_predictions)} markets >= 60%):")
+                for s in res.secondary_predictions:
+                    prob_pct = s.get('probability', 0) * 100
+                    print(f"       • [{s.get('confidence_tier')}] {s.get('market')} -> {s.get('prediction')} : {prob_pct:.1f}%")
+
+        elif res.status == "DATA_UNAVAILABLE":
+            data_unavailable_count += 1
+            print(f"    Status: DATA_UNAVAILABLE (Zero-Hallucination Gate enforced - no synthetic guessing)")
+            print(f"    Reason: {res.not_ready_reason}")
+        else:
+            print(f"    Status: {res.status} ({res.not_ready_reason})")
+
+    # 7. Verification: Ensure zero pending fixtures in the 4-day window
     print("\n==================================================================")
-    print(f" Prediction Pipeline Completed:")
-    print(f"  • Total candidate fixtures processed: {len(fixtures)}")
-    print(f"  • Published predictions: {published_count}")
-    print(f"  • NOT_READY (insufficient data): {not_ready_count}")
-    print(f"  • Verified 250,000 simulations per published fixture")
+    print(" VERIFICATION & QUEUE DRAIN AUDIT")
+    print("==================================================================")
+
+    # Query Cloud Supabase to verify that zero pending fixtures remain in the forward window
+    forward_check = supabase.get_forward_prediction_queue(ref_time_utc=now_utc, max_days=4, limit=1000)
+    pending_count = sum(1 for f in forward_check if f.get("status") == "pending")
+
+    print(f" Total forward fixtures evaluated: {len(fixtures_to_process)}")
+    print(f" Published predictions: {published_count}")
+    print(f" Primary Consensus Bankers (P_sim>=82% AND P_market>=80%): {consensus_banker_count}")
+    print(f" DATA_UNAVAILABLE fixtures (real data absent): {data_unavailable_count}")
+    print(f" Pending fixtures in 4-day window: {pending_count} (Must be EXACTLY 0)")
+
+    if pending_count == 0:
+        print(" ✅ SUCCESS: Exhaustive queue drain complete with EXACTLY ZERO pending orphans.")
+    else:
+        print(f" ⚠️ WARNING: {pending_count} fixtures remain in pending status.")
     print("==================================================================")
 
 

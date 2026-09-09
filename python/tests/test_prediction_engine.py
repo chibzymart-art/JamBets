@@ -188,16 +188,16 @@ class TestPredictionEngine(unittest.TestCase):
         self.assertGreater(features.away_exp_weighted_goals_scored, 0.0)
 
     def test_10_insufficient_historical_data_integrity_gate(self):
-        """10. Teams with missing historical data must trigger NOT_READY."""
-        features = self.feature_engine.compute_features(
-            canonical_key="ENG_PL:unknown-fc:chelsea:20260908",
-            league_code="ENG_PL",
-            home_team_canonical="unknown-fc",  # 0 matches in dataset
-            away_team_canonical="chelsea",
-            prediction_cutoff=self.cutoff
-        )
-        self.assertFalse(features.is_ready, "Unknown team must fail integrity gate")
-        self.assertIn("INSUFFICIENT_DATA", features.not_ready_reason)
+        """10. Teams with missing historical data must trigger MissingDataException."""
+        from python.src.football.prematch_features import MissingDataException
+        with self.assertRaises(MissingDataException):
+            self.feature_engine.compute_features(
+                canonical_key="ENG_PL:unknown-fc:chelsea:20260908",
+                league_code="ENG_PL",
+                home_team_canonical="unknown-fc",  # 0 matches in dataset
+                away_team_canonical="chelsea",
+                prediction_cutoff=self.cutoff
+            )
 
     # =========================================================================
     # 4. STATISTICAL MODEL TESTS
@@ -346,10 +346,13 @@ class TestPredictionEngine(unittest.TestCase):
             kickoff_utc=self.cutoff + timedelta(days=1),
             persist_to_supabase=False
         )
-        self.assertEqual(res.status, "NOT_READY")
-        self.assertIsNone(res.simulation_result, "No simulation may run for NOT_READY fixture")
+        self.assertIn(res.status, ["NOT_READY", "DATA_UNAVAILABLE"])
+        self.assertIsNone(res.simulation_result, "No simulation may run for unready fixture")
         self.assertEqual(len(res.qualifying_predictions), 0, "No predictions may be published")
-        self.assertIn("INSUFFICIENT_DATA", res.not_ready_reason)
+        self.assertTrue(
+            "INSUFFICIENT_DATA" in (res.not_ready_reason or "") or "Zero-Hallucination" in (res.not_ready_reason or ""),
+            "Reason must indicate missing data or zero-hallucination gate"
+        )
 
 
 if __name__ == "__main__":

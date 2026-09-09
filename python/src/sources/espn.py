@@ -16,7 +16,9 @@ class ESPNAdapter(BaseSourceAdapter):
         super().__init__(
             name="ESPN",
             slug="espn",
-            base_url="https://site.api.espn.com/apis/site/v2/sports/soccer"
+            base_url="https://site.api.espn.com/apis/site/v2/sports/soccer",
+            rate_limit_delay_seconds=1.5,
+            max_retries=3
         )
 
     def _map_espn_status(self, espn_status_name: str) -> FixtureStatus:
@@ -40,12 +42,8 @@ class ESPNAdapter(BaseSourceAdapter):
         dt_str = date_to.strftime("%Y%m%d")
         url = f"{self.base_url}/{league.espn_slug}/scoreboard?dates={df_str}-{dt_str}"
 
-        try:
-            resp = self.client.get(url, timeout=12.0)
-            resp.raise_for_status()
-            data = resp.json()
-        except Exception as e:
-            # Respect failure handling without corrupting state
+        data = self.get_json_with_retry(url)
+        if not data:
             return []
 
         results: List[RawFixturePayload] = []
