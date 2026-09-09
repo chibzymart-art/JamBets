@@ -62,8 +62,10 @@ export default function App() {
     cricket: { isAvailable: false, fixtureCount: 0, leagueCount: 0 }
   });
 
-  // Date Navigation State
-  const [selectedDay, setSelectedDay] = useState<number | 'history' | 'yesterday' | 'all'>(0);
+  // Calendar-Grounded Date Navigation State (Strictly Africa/Lagos Kickoff Dates)
+  const [selectedDate, setSelectedDate] = useState<string>('2026-09-08');
+  const [expandedFixtures, setExpandedFixtures] = useState<Set<string>>(new Set());
+  const [isAllLeaguesModalOpen, setIsAllLeaguesModalOpen] = useState(false);
 
   // Multi-Filters
   const [selectedLeague, setSelectedLeague] = useState<string>('all');
@@ -218,7 +220,7 @@ export default function App() {
       const leagueQuery = supabase
         .from('football_leagues')
         .select('*')
-        .order('priority', { ascending: true });
+        .order('name', { ascending: true });
 
       const jobQuery = supabase
         .from('scheduler_jobs')
@@ -367,50 +369,82 @@ export default function App() {
     return map;
   }, [simulations]);
 
-  // Day counts
-  const dayCounts = useMemo(() => {
-    const counts: Record<string, number> = {
-      0: 0,
-      1: 0,
-      2: 0,
-      3: 0,
-      4: 0,
-      yesterday: 0,
-      history: 0
-    };
+  // Date extraction strictly in Africa/Lagos (WAT / UTC+1)
+  const getFixtureWatDate = (targetKickoffIso: string) => {
+    try {
+      return new Date(targetKickoffIso).toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
+    } catch {
+      return '';
+    }
+  };
+
+  const formatWatDateDisplay = (dateStr: string) => {
+    try {
+      const [year, month, day] = dateStr.split('-').map(Number);
+      const d = new Date(year, month - 1, day, 12, 0, 0);
+      return d.toLocaleDateString('en-GB', {
+        weekday: 'short',
+        day: 'numeric',
+        month: 'short'
+      });
+    } catch {
+      return dateStr;
+    }
+  };
+
+  // Extract available calendar dates strictly from target_kickoff_at in Africa/Lagos
+  const availableDates = useMemo(() => {
+    const map = new Map<string, number>();
     fixtures.forEach((f) => {
-      if (f.status === 'finished') counts.history++;
-      if (typeof f.queue_day === 'number') {
-        if (f.queue_day in counts) counts[String(f.queue_day)]++;
-        else if (f.queue_day === -1) counts.yesterday++;
+      const d = getFixtureWatDate(f.target_kickoff_at);
+      if (d) {
+        map.set(d, (map.get(d) || 0) + 1);
       }
     });
-    return counts;
+    const sorted = Array.from(map.keys()).sort();
+    return sorted.map((dateStr) => ({
+      dateStr,
+      formatted: formatWatDateDisplay(dateStr),
+      count: map.get(dateStr) || 0
+    }));
   }, [fixtures]);
 
-  // Dynamic Leagues for filter (strictly leagues with active Cloud Supabase fixtures)
-  const availableLeagues = useMemo(() => {
-    const map = new Map<string, { code: string; name: string; count: number }>();
+  // All 30 Leagues with fixture counts in the current dataset (Alphabetical)
+  const allLeaguesWithCounts = useMemo(() => {
+    const map = new Map<string, { id: string; code: string; name: string; country: string; count: number }>();
     leaguesList.forEach((l) => {
-      if (l.code && l.name) {
-        map.set(l.code, { code: l.code, name: l.name, count: 0 });
+      if (l.code) {
+        map.set(l.code, {
+          id: l.id,
+          code: l.code,
+          name: l.name || l.code,
+          country: l.country || '',
+          count: 0
+        });
       }
     });
     fixtures.forEach((f) => {
       if (f.league_code) {
         const item = map.get(f.league_code) || {
+          id: f.league_id || f.league_code,
           code: f.league_code,
           name: f.league_name || f.league_code,
+          country: '',
           count: 0
         };
         item.count++;
         map.set(f.league_code, item);
       }
     });
-    return Array.from(map.values())
+    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [leaguesList, fixtures]);
+
+  // Active leagues with matches in current queue (sorted by match count descending)
+  const availableLeagues = useMemo(() => {
+    return allLeaguesWithCounts
       .filter((l) => l.count > 0)
       .sort((a, b) => b.count - a.count);
-  }, [leaguesList, fixtures]);
+  }, [allLeaguesWithCounts]);
 
   // Dynamic Sports Registry with Cloud Supabase Availability
   const sportsList = useMemo(() => [
@@ -499,7 +533,16 @@ export default function App() {
 
     const sourceList = canViewPredictions ? predictions : teasers;
 
+    // Filter predictions to only those matching current date filter if not 'all'
+    const activeFixtureIds = new Set(
+      (selectedDate === 'all'
+        ? fixtures
+        : fixtures.filter((f) => getFixtureWatDate(f.target_kickoff_at) === selectedDate)
+      ).map((f) => f.id)
+    );
+
     sourceList.forEach((item: any) => {
+      if (!activeFixtureIds.has(item.fixture_id)) return;
       const st = item.settlement_status || 'pending';
       const cat = item.confidence_category;
 
@@ -530,8 +573,12 @@ export default function App() {
     const topPickDecided = topPickWon + topPickLost;
     const topPickWinRate = topPickDecided > 0 ? Math.round((topPickWon / topPickDecided) * 100) : 0;
 
-    const liveCount = fixtures.filter((f) => f.status === 'live').length;
-    const settledMatchesCount = fixtures.filter((f) => f.status === 'finished').length;
+    const scopedFixtures = selectedDate === 'all'
+      ? fixtures
+      : fixtures.filter((f) => getFixtureWatDate(f.target_kickoff_at) === selectedDate);
+
+    const liveCount = scopedFixtures.filter((f) => f.status === 'live').length;
+    const settledMatchesCount = scopedFixtures.filter((f) => f.status === 'finished').length;
 
     return {
       allWon,
@@ -555,7 +602,7 @@ export default function App() {
       liveCount,
       settledMatchesCount
     };
-  }, [canViewPredictions, predictions, teasers, fixtures]);
+  }, [canViewPredictions, predictions, teasers, fixtures, selectedDate]);
 
   // Filtered Fixtures
   const filteredFixtures = useMemo(() => {
@@ -569,13 +616,10 @@ export default function App() {
         return false;
       }
 
-      // Date Navigation Filter
-      if (selectedDay === 'history') {
-        if (f.status !== 'finished' && f.queue_day >= 0) return false;
-      } else if (selectedDay === 'yesterday') {
-        if (f.queue_day !== -1 && !(f.status === 'finished' && f.queue_day < 0)) return false;
-      } else if (selectedDay !== 'all') {
-        if (f.queue_day !== selectedDay) return false;
+      // Date Navigation Filter (Ground truth: Africa/Lagos kickoff date)
+      if (selectedDate !== 'all') {
+        const fDate = getFixtureWatDate(f.target_kickoff_at);
+        if (fDate !== selectedDate) return false;
       }
 
       // Score status filter (Live, Finished, Scheduled)
@@ -624,7 +668,7 @@ export default function App() {
     teasersByFixture,
     canViewPredictions,
     selectedLeague,
-    selectedDay,
+    selectedDate,
     scoreStatusFilter,
     selectedTier,
     selectedMarket,
@@ -720,7 +764,7 @@ export default function App() {
     setSelectedMarket('all');
     setSettlementFilter('all');
     setScoreStatusFilter('all');
-    setSelectedDay(0);
+    setSelectedDate('all');
     setSearchQuery('');
   };
 
@@ -826,7 +870,7 @@ export default function App() {
       {/* 1. TOP HEADER BAR */}
       <header className="site-header">
         <div className="site-header-inner">
-          <div className="header-brand" onClick={() => { setSelectedDay(0); resetAllFilters(); }}>
+          <div className="header-brand" onClick={() => resetAllFilters()}>
             <div className="brand-icon-sq">J</div>
             <div>
               <span className="brand-text-name">JamBets</span>
@@ -835,7 +879,7 @@ export default function App() {
           </div>
 
           <div className="header-center-links">
-            <button className="nav-link-btn active" onClick={() => setSelectedDay(0)}>
+            <button className="nav-link-btn active" onClick={() => resetAllFilters()}>
               Predictions
             </button>
             <button className="nav-link-btn" onClick={() => setIsPricingModalOpen(true)}>
@@ -948,10 +992,12 @@ export default function App() {
                 <span className="tag-scorecard-sport">● {currentSportObj.name}</span>
               </div>
               <h2 className="scorecard-title-main">
-                Today's Verified Performance ({watDateStr || 'Today'})
+                {selectedDate === 'all'
+                  ? 'All Queue Dates Performance (698 Matches)'
+                  : `${formatWatDateDisplay(selectedDate)} Performance (${watDateStr || 'Today'})`}
               </h2>
               <p className="scorecard-subtitle-main">
-                Real-time livescore settlements and in-play predictions for today
+                Real-time livescore settlements and Dixon-Coles Monte Carlo predictions for {selectedDate === 'all' ? 'all dates' : formatWatDateDisplay(selectedDate)}
               </p>
             </div>
 
@@ -959,84 +1005,57 @@ export default function App() {
               <span className="choose-date-label">Choose Date:</span>
               <select
                 className="choose-date-select"
-                value={selectedDay}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  if (val === 'all' || val === 'history' || val === 'yesterday') {
-                    setSelectedDay(val);
-                  } else {
-                    setSelectedDay(parseInt(val, 10));
-                  }
-                }}
+                value={selectedDate}
+                onChange={(e) => setSelectedDate(e.target.value)}
               >
-                <option value={0}>⚡ Today ({watDateStr || 'Today'})</option>
-                <option value="yesterday">Yesterday (-1)</option>
-                <option value={1}>Tomorrow (+1)</option>
-                <option value={2}>Day +2</option>
-                <option value={3}>Day +3</option>
-                <option value={4}>Day +4</option>
-                <option value="history">History (All Finished)</option>
-                <option value="all">All Dates ({fixtures.length})</option>
+                <option value="all">Show All Dates ({fixtures.length} matches)</option>
+                {availableDates.map((ad) => (
+                  <option key={ad.dateStr} value={ad.dateStr}>
+                    {ad.formatted} ({ad.count} matches)
+                  </option>
+                ))}
               </select>
             </div>
           </div>
 
-          {/* Date Navigation Pills Bar */}
+          {/* Date Navigation Pills Bar (Strictly Calendar Grounded) */}
           <div className="date-nav-pills-bar">
             <button
               type="button"
-              className={`date-pill-btn ${selectedDay === 'history' ? 'active' : ''}`}
-              onClick={() => setSelectedDay('history')}
-            >
-              📅 Earlier Dates (from Sep 4) ({dayCounts.history}) ▾
-            </button>
-
-            <button
-              type="button"
-              className={`date-pill-btn yesterday-pill ${selectedDay === 'yesterday' ? 'active' : ''}`}
-              onClick={() => setSelectedDay('yesterday')}
-            >
-              Yesterday <span className="date-pill-winloss">{dayCounts.yesterday} M</span>
-            </button>
-
-            <button
-              type="button"
-              className={`date-pill-btn ${selectedDay === 0 ? 'active' : ''}`}
-              onClick={() => setSelectedDay(0)}
-            >
-              ⚡ Today <span className="date-pill-winloss">{dayCounts[0]} M</span>
-            </button>
-
-            <button
-              type="button"
-              className={`date-pill-btn ${selectedDay === 1 ? 'active' : ''}`}
-              onClick={() => setSelectedDay(1)}
-            >
-              Tomorrow ➔ ({dayCounts[1]})
-            </button>
-
-            <button
-              type="button"
-              className={`date-pill-btn ${selectedDay === 2 ? 'active' : ''}`}
-              onClick={() => setSelectedDay(2)}
-            >
-              Day +2 ({dayCounts[2]})
-            </button>
-
-            <button
-              type="button"
-              className={`date-pill-btn ${selectedDay === 'all' ? 'active' : ''}`}
-              onClick={() => setSelectedDay('all')}
+              className={`date-pill-btn ${selectedDate === 'all' ? 'active' : ''}`}
+              onClick={() => setSelectedDate('all')}
             >
               Show All Dates ({fixtures.length})
             </button>
+
+            {availableDates.map((ad) => {
+              const isSelected = selectedDate === ad.dateStr;
+              return (
+                <button
+                  key={ad.dateStr}
+                  type="button"
+                  className={`date-pill-btn ${isSelected ? 'active' : ''}`}
+                  onClick={() => setSelectedDate(ad.dateStr)}
+                >
+                  📅 {ad.formatted} <span className="date-pill-winloss">{ad.count} M</span>
+                </button>
+              );
+            })}
           </div>
 
-          {/* 4. SCORECARD KPI CARDS (2 ROWS) */}
+          {/* 4. SCORECARD KPI CARDS (2 ROWS) - ALL INTERACTIVELY CLICKABLE */}
           {/* Row 1: 3 Hero KPI Cards */}
           <div className="hero-kpi-grid">
             {/* Card 1: All Predictions Win Rate (Dark Navy) */}
-            <div className="hero-kpi-dark-card">
+            <div
+              className={`hero-kpi-dark-card hero-kpi-clickable ${selectedTier === 'all' && settlementFilter === 'all' && scoreStatusFilter === 'all' ? 'active-filter' : ''}`}
+              onClick={() => {
+                setSelectedTier('all');
+                setSettlementFilter('all');
+                setScoreStatusFilter('all');
+              }}
+              title="Click to reset filters and view all predictions"
+            >
               <div className="hero-kpi-header">
                 <span className="hero-kpi-title">All Predictions Win Rate</span>
                 <span className="hero-kpi-pill-badge">{scorecardStats.allDecided} Matches</span>
@@ -1050,7 +1069,11 @@ export default function App() {
             </div>
 
             {/* Card 2: Daily Banger Win Rate */}
-            <div className="hero-kpi-banger-card">
+            <div
+              className={`hero-kpi-banger-card hero-kpi-clickable ${selectedTier === 'BANGER' ? 'active-filter' : ''}`}
+              onClick={() => setSelectedTier(selectedTier === 'BANGER' ? 'all' : 'BANGER')}
+              title="Click to filter by 90%+ Banger Locks"
+            >
               <div className="hero-kpi-header">
                 <span className="hero-kpi-title">⭐ Daily Banger Win Rate</span>
                 <span className="hero-kpi-pill-badge">{scorecardStats.bangerTotal} Bangers</span>
@@ -1064,7 +1087,11 @@ export default function App() {
             </div>
 
             {/* Card 3: Daily Top Pick Win Rate */}
-            <div className="hero-kpi-toppick-card">
+            <div
+              className={`hero-kpi-toppick-card hero-kpi-clickable ${selectedTier === 'TOP PICK' ? 'active-filter' : ''}`}
+              onClick={() => setSelectedTier(selectedTier === 'TOP PICK' ? 'all' : 'TOP PICK')}
+              title="Click to filter by Daily Top Picks"
+            >
               <div className="hero-kpi-header">
                 <span className="hero-kpi-title">👑 Daily Top Pick Win Rate</span>
                 <span className="hero-kpi-pill-badge">{scorecardStats.topPickTotal} Top Picks</span>
@@ -1078,33 +1105,56 @@ export default function App() {
             </div>
           </div>
 
-          {/* Row 2: 5 Status Sub-Tiles */}
+          {/* Row 2: 5 Status Sub-Tiles - ALL INTERACTIVELY CLICKABLE */}
           <div className="status-tiles-grid">
-            <div className="status-tile">
+            <div
+              className={`status-tile status-tile-clickable ${scoreStatusFilter === 'finished' ? 'active-filter' : ''}`}
+              onClick={() => setScoreStatusFilter(scoreStatusFilter === 'finished' ? 'all' : 'finished')}
+              title="Click to filter by settled finished matches"
+            >
               <div className="status-tile-label">Settled Matches</div>
               <div className="status-tile-val">{scorecardStats.settledMatchesCount}</div>
               <div className="status-tile-sub">Verified Full Time</div>
             </div>
 
-            <div className="status-tile won">
+            <div
+              className={`status-tile won status-tile-clickable ${settlementFilter === 'won' ? 'active-filter' : ''}`}
+              onClick={() => setSettlementFilter(settlementFilter === 'won' ? 'all' : 'won')}
+              title="Click to filter by won predictions"
+            >
               <div className="status-tile-label">Won Picks</div>
               <div className="status-tile-val">{scorecardStats.allWon}</div>
               <div className="status-tile-sub">Verified Wins</div>
             </div>
 
-            <div className="status-tile lost">
+            <div
+              className={`status-tile lost status-tile-clickable ${settlementFilter === 'lost' ? 'active-filter' : ''}`}
+              onClick={() => setSettlementFilter(settlementFilter === 'lost' ? 'all' : 'lost')}
+              title="Click to filter by lost predictions"
+            >
               <div className="status-tile-label">Lost Picks</div>
               <div className="status-tile-val">{scorecardStats.allLost}</div>
               <div className="status-tile-sub">Transparent Audit Trail</div>
             </div>
 
-            <div className="status-tile rate">
+            <div
+              className="status-tile rate status-tile-clickable"
+              onClick={() => {
+                setSettlementFilter('all');
+                setScoreStatusFilter('all');
+              }}
+              title="Click to reset win/loss filters"
+            >
               <div className="status-tile-label">Day Win Rate</div>
               <div className="status-tile-val">{scorecardStats.allWinRate}%</div>
               <div className="status-tile-sub">{scorecardStats.allWon} of {scorecardStats.allDecided} won</div>
             </div>
 
-            <div className="status-tile pending">
+            <div
+              className={`status-tile pending status-tile-clickable ${settlementFilter === 'pending' ? 'active-filter' : ''}`}
+              onClick={() => setSettlementFilter(settlementFilter === 'pending' ? 'all' : 'pending')}
+              title="Click to filter by pending / in-play picks"
+            >
               <div className="status-tile-label">In-Play / Pending</div>
               <div className="status-tile-val">{scorecardStats.allPending} ({scorecardStats.liveCount} Live)</div>
               <div className="status-tile-sub">Auto-settles every 15 mins</div>
@@ -1112,7 +1162,7 @@ export default function App() {
           </div>
         </section>
 
-        {/* 5. HORIZONTAL LEAGUES FILTER BAR */}
+        {/* 5. HORIZONTAL LEAGUES FILTER BAR (ALL 30 LEAGUES ACCESSIBLE) */}
         <div className="leagues-filter-row">
           <span className="leagues-label">Leagues:</span>
           <button
@@ -1122,7 +1172,15 @@ export default function App() {
           >
             All {currentSportObj.name} Leagues ({fixtures.length})
           </button>
-          {availableLeagues.map((lg) => (
+          <button
+            type="button"
+            className="btn-browse-all-leagues"
+            onClick={() => setIsAllLeaguesModalOpen(true)}
+            title="Browse all 30 Cloud Supabase leagues in directory"
+          >
+            🏛 Browse All 30 Leagues (30)
+          </button>
+          {availableLeagues.slice(0, 10).map((lg) => (
             <button
               key={lg.code}
               type="button"
@@ -1138,6 +1196,20 @@ export default function App() {
         <div className="actions-filter-bar">
           <div className="filter-dropdowns-row">
             <span className="filter-prefix-label">⚙ Filters:</span>
+
+            {/* League Dropdown with all 30 leagues */}
+            <select
+              className="filter-select-input"
+              value={selectedLeague}
+              onChange={(e) => setSelectedLeague(e.target.value)}
+            >
+              <option value="all">League: All 30 Leagues ({fixtures.length})</option>
+              {allLeaguesWithCounts.map((lg) => (
+                <option key={lg.code} value={lg.code}>
+                  {lg.name} ({lg.count} {lg.count === 1 ? 'match' : 'matches'})
+                </option>
+              ))}
+            </select>
 
             <select
               className="filter-select-input"
@@ -1204,14 +1276,14 @@ export default function App() {
           <div className="filter-bottom-actions">
             <div className="active-filter-chips">
               <span className="active-chip">
-                ⚡ {selectedDay === 0 ? `Today (${watDateStr})` : selectedDay === 'yesterday' ? 'Yesterday' : `Queue: ${selectedDay}`}
+                📅 {selectedDate === 'all' ? 'All Dates' : formatWatDateDisplay(selectedDate)}
               </span>
               <button
                 type="button"
                 className="btn-reset-filters"
                 onClick={resetAllFilters}
               >
-                🔄 Reset (1)
+                🔄 Reset Filters
               </button>
             </div>
 
@@ -1224,14 +1296,20 @@ export default function App() {
                 <button
                   type="button"
                   className="btn-toggle-expand"
-                  onClick={() => setExpandAll(true)}
+                  onClick={() => {
+                    setExpandAll(true);
+                    setExpandedFixtures(new Set(fixtures.map((f) => f.id)));
+                  }}
                 >
                   Expand All
                 </button>
                 <button
                   type="button"
                   className="btn-toggle-expand"
-                  onClick={() => setExpandAll(false)}
+                  onClick={() => {
+                    setExpandAll(false);
+                    setExpandedFixtures(new Set());
+                  }}
                 >
                   Collapse All
                 </button>
@@ -1271,8 +1349,24 @@ export default function App() {
                       key={bf.id}
                       className="banger-item-tile"
                       onClick={() => {
-                        setSelectedLeague(bf.league_code);
+                        const fixDate = getFixtureWatDate(bf.target_kickoff_at);
+                        if (fixDate) setSelectedDate(fixDate);
+                        setSelectedLeague('all');
+                        setSelectedTier('all');
+                        setSettlementFilter('all');
+                        setScoreStatusFilter('all');
+                        setSearchQuery('');
+                        setExpandedFixtures((prev) => new Set(prev).add(bf.id));
+                        setTimeout(() => {
+                          const el = document.getElementById(`fixture-${bf.id}`);
+                          if (el) {
+                            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            el.classList.add('highlight-pulse');
+                            setTimeout(() => el.classList.remove('highlight-pulse'), 2500);
+                          }
+                        }, 120);
                       }}
+                      title="Click to jump to match and view 250k simulation signals"
                     >
                       <div className="banger-item-meta">
                         <span>{bf.league_code}</span>
@@ -1305,16 +1399,16 @@ export default function App() {
                 <div>
                   <div className="stream-title-text">
                     <span>
-                      {selectedDay === 0
-                        ? `Today: ${watDateStr || 'Today'} Fixtures`
-                        : selectedDay === 'yesterday'
-                        ? 'Yesterday Settled Fixtures'
-                        : `Selected Horizon: Day ${selectedDay}`}
+                      {selectedDate === 'all'
+                        ? 'All Queue Dates Fixtures'
+                        : `${formatWatDateDisplay(selectedDate)} Fixtures`}
                     </span>
-                    {selectedDay === 0 && <span className="live-today-pill">LIVE TODAY</span>}
+                    {selectedDate === getFixtureWatDate(new Date().toISOString()) && (
+                      <span className="live-today-pill">LIVE TODAY</span>
+                    )}
                   </div>
                   <p className="stream-sub-text">
-                    Matches scheduled & live settlement tracking for today
+                    Matches scheduled & live settlement tracking strictly in West Africa Time (WAT / UTC+1)
                   </p>
                 </div>
               </div>
@@ -1363,15 +1457,23 @@ export default function App() {
                 const isFinished = fixture.status === 'finished';
                 const isStarred = favorites.includes(fixture.id);
 
+                const signals = canViewPredictions ? fixturePreds : fixtureTeasers;
+                const topSignal: any = signals.find((s: any) => s.confidence_category === 'BANGER') ||
+                  signals.find((s: any) => s.confidence_category === 'TOP PICK') ||
+                  signals[0];
+                const isCardExpanded = expandAll || expandedFixtures.has(fixture.id);
+                const wonCount = fixturePreds.filter((p) => p.settlement_status === 'won').length;
+                const lostCount = fixturePreds.filter((p) => p.settlement_status === 'lost').length;
+
                 return (
-                  <div key={fixture.id} className="fixture-card">
+                  <div key={fixture.id} id={`fixture-${fixture.id}`} className="fixture-card">
                     <div className="card-top">
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         <span className="league-badge">
                           {fixture.league_name || fixture.league_code}
                         </span>
-                        <span className={`queue-day-pill ${fixture.queue_day === 0 ? 'queue-day-0' : 'queue-day-1'}`}>
-                          {fixture.queue_day === 0 ? 'Queue: Today' : fixture.queue_day < 0 ? 'History' : `Queue: Day +${fixture.queue_day}`}
+                        <span className="queue-day-pill queue-day-0">
+                          📅 {time.dateStr}
                         </span>
                       </div>
 
@@ -1446,8 +1548,67 @@ export default function App() {
                       </span>
                     </div>
 
+                    {/* Per-Prediction Summary Expansion Banner */}
+                    <div
+                      className="fixture-prediction-summary"
+                      onClick={() => {
+                        setExpandedFixtures((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(fixture.id)) next.delete(fixture.id);
+                          else next.add(fixture.id);
+                          return next;
+                        });
+                      }}
+                      title="Click to expand or collapse 250,000 Monte Carlo simulation signals"
+                    >
+                      <div className="summary-left-group">
+                        {topSignal ? (
+                          <span className={`top-signal-badge ${getTierBadgeClass(topSignal.confidence_category)}`}>
+                            {topSignal.confidence_category === 'BANGER' ? '🔥 ' : topSignal.confidence_category === 'TOP PICK' ? '👑 ' : '📊 '}
+                            {formatCategoryName(topSignal.confidence_category)}: {formatMarketName(topSignal.market)} ({formatPredictionOutcome(topSignal.prediction || '')})
+                            {topSignal.probability ? ` - ${(topSignal.probability * 100).toFixed(1)}%` : ''}
+                          </span>
+                        ) : signals.length > 0 ? (
+                          <span className="summary-count-text">
+                            📊 {signals.length} Monte Carlo Predictions
+                          </span>
+                        ) : (
+                          <span className="summary-count-text">
+                            ⏱ Monte Carlo Simulation Queued
+                          </span>
+                        )}
+
+                        {(wonCount > 0 || lostCount > 0) && (
+                          <span className="summary-settle-chip">
+                            {wonCount > 0 && <span style={{ color: '#16a34a' }}>✓ {wonCount} Won </span>}
+                            {lostCount > 0 && <span style={{ color: '#dc2626' }}>✗ {lostCount} Lost</span>}
+                          </span>
+                        )}
+                      </div>
+
+                      <button
+                        type="button"
+                        className={`btn-expand-summary ${isCardExpanded ? 'expanded' : ''}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setExpandedFixtures((prev) => {
+                            const next = new Set(prev);
+                            if (next.has(fixture.id)) next.delete(fixture.id);
+                            else next.add(fixture.id);
+                            return next;
+                          });
+                        }}
+                      >
+                        {isCardExpanded ? (
+                          <>▲ Hide Breakdown ({signals.length})</>
+                        ) : (
+                          <>▼ View {signals.length} Signals (250k Sims)</>
+                        )}
+                      </button>
+                    </div>
+
                     {/* Expandable Predictions / Locked Teasers */}
-                    {expandAll && (
+                    {isCardExpanded && (
                       canViewPredictions ? (
                         fixturePreds.length > 0 ? (
                           <div className="prediction-panel">
@@ -1684,6 +1845,63 @@ export default function App() {
         entitlement={entitlement}
         onProfileUpdated={fetchCloudData}
       />
+
+      {/* ALL 30 LEAGUES DIRECTORY MODAL */}
+      {isAllLeaguesModalOpen && (
+        <div className="leagues-modal-overlay" onClick={() => setIsAllLeaguesModalOpen(false)}>
+          <div className="leagues-modal-card" onClick={(e) => e.stopPropagation()}>
+            <div className="leagues-modal-header">
+              <div className="leagues-modal-title">
+                <span>🏛</span> All 30 Supported Football Leagues
+              </div>
+              <button
+                type="button"
+                className="modal-close-btn"
+                onClick={() => setIsAllLeaguesModalOpen(false)}
+                title="Close"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="leagues-modal-body">
+              {allLeaguesWithCounts.map((lg) => (
+                <div
+                  key={lg.code}
+                  className={`league-item-card ${selectedLeague === lg.code ? 'active' : ''}`}
+                  onClick={() => {
+                    setSelectedLeague(lg.code);
+                    setIsAllLeaguesModalOpen(false);
+                  }}
+                  title={`Filter by ${lg.name}`}
+                >
+                  <div>
+                    <div className="league-item-name">{lg.name}</div>
+                    <div className="league-item-country">{lg.country || 'International'} • {lg.code}</div>
+                  </div>
+                  <span className={`league-item-count ${lg.count > 0 ? 'has-matches' : ''}`}>
+                    {lg.count} {lg.count === 1 ? 'match' : 'matches'}
+                  </span>
+                </div>
+              ))}
+            </div>
+            <div style={{ padding: '14px 24px', borderTop: '1px solid var(--border-subtle)', background: '#f8fafc', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                30 authoritative leagues synchronized from Cloud Supabase
+              </span>
+              <button
+                type="button"
+                className="btn-reset-filters"
+                onClick={() => {
+                  setSelectedLeague('all');
+                  setIsAllLeaguesModalOpen(false);
+                }}
+              >
+                Show All Leagues ({fixtures.length})
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

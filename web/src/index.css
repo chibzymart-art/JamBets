@@ -2094,3 +2094,305 @@ body {
   padding: 24px 20px;
   background: #ffffff;
 }
+
+/* =====================================================================
+   INTERACTIVE KPI, FILTER TILES & PER-PREDICTION EXPANSION STYLES
+   ===================================================================== */
+.hero-kpi-clickable {
+  cursor: pointer;
+  transition: transform 0.15s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.15s ease, border-color 0.15s ease;
+  user-select: none;
+}
+
+.hero-kpi-clickable:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.hero-kpi-clickable:active {
+  transform: translateY(0);
+}
+
+.hero-kpi-dark-card.active-filter {
+  outline: 3px solid #38bdf8;
+  outline-offset: 2px;
+}
+
+.hero-kpi-banger-card.active-filter {
+  outline: 3px solid #f97316;
+  outline-offset: 2px;
+  border-color: #ea580c;
+  background: #fffbeb;
+}
+
+.hero-kpi-toppick-card.active-filter {
+  outline: 3px solid #2563eb;
+  outline-offset: 2px;
+  border-color: #1d4ed8;
+  background: #eff6ff;
+}
+
+/* Status Tile Clickable */
+.status-tile-clickable {
+  cursor: pointer;
+  transition: transform 0.15s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.15s ease, border-color 0.15s ease;
+  user-select: none;
+}
+
+.status-tile-clickable:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-sm);
+}
+
+.status-tile-clickable:active {
+  transform: translateY(0);
+}
+
+.status-tile-clickable.active-filter {
+  outline: 2px solid #0284c7;
+  outline-offset: 2px;
+  font-weight: 700;
+}
+
+.status-tile-clickable.active-filter.won {
+  outline-color: #16a34a;
+}
+
+.status-tile-clickable.active-filter.lost {
+  outline-color: #dc2626;
+}
+
+.status-tile-clickable.active-filter.pending {
+  outline-color: #0284c7;
+}
+
+/* Banger item tile hover & smooth pulse */
+.banger-item-tile {
+  cursor: pointer;
+  transition: transform 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+}
+
+.banger-item-tile:hover {
+  transform: translateX(4px);
+  background: #fff7ed;
+  border-color: #fdba74;
+}
+
+@keyframes highlightPulse {
+  0% { box-shadow: 0 0 0 0 rgba(234, 88, 12, 0.7); }
+  50% { box-shadow: 0 0 0 10px rgba(234, 88, 12, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(234, 88, 12, 0); }
+}
+
+.highlight-pulse {
+  animation: highlightPulse 1.2s ease-in-out 2;
+  border-color: #f97316 !important;
+}
+
+/* Fixture Prediction Summary Banner */
+.fixture-prediction-summary {
+  background: #f8fafc;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  padding: 8px 12px;
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.fixture-prediction-summary:hover {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+}
+
+.summary-left-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.top-signal-badge {
+  font-size: 11px;
+  font-weight: 800;
+  padding: 3px 8px;
+  border-radius: 6px;
+  letter-spacing: 0.2px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.summary-count-text {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.summary-settle-chip {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: #f1f5f9;
+  color: var(--text-secondary);
+}
+
+.btn-expand-summary {
+  font-size: 11px;
+  font-weight: 700;
+  color: #0284c7;
+  background: #e0f2fe;
+  border: 1px solid #bae6fd;
+  border-radius: 6px;
+  padding: 5px 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+  white-space: nowrap;
+}
+
+.btn-expand-summary:hover {
+  background: #bae6fd;
+}
+
+.btn-expand-summary.expanded {
+  background: #f1f5f9;
+  color: #475569;
+  border-color: #cbd5e1;
+}
+
+/* All 30 Leagues Directory Modal */
+.leagues-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.6);
+  backdrop-filter: blur(4px);
+  z-index: 999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  animation: fadeIn 0.15s ease-out;
+}
+
+.leagues-modal-card {
+  background: #ffffff;
+  border-radius: 20px;
+  max-width: 860px;
+  width: 100%;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--border-subtle);
+  overflow: hidden;
+  animation: slideUp 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.leagues-modal-header {
+  padding: 18px 24px;
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #f8fafc;
+}
+
+.leagues-modal-title {
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.leagues-modal-body {
+  padding: 20px 24px;
+  overflow-y: auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+}
+
+.league-item-card {
+  background: #ffffff;
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  padding: 12px 14px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.league-item-card:hover {
+  border-color: #0284c7;
+  background: #f0f9ff;
+  transform: translateY(-1px);
+}
+
+.league-item-card.active {
+  border-color: #0284c7;
+  background: #e0f2fe;
+  font-weight: 700;
+  box-shadow: var(--shadow-xs);
+}
+
+.league-item-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 2px;
+}
+
+.league-item-country {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.league-item-count {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+  background: #f1f5f9;
+  border-radius: 12px;
+  color: #475569;
+  white-space: nowrap;
+}
+
+.league-item-count.has-matches {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.btn-browse-all-leagues {
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  color: #15803d;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 6px 14px;
+  border-radius: 9999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.btn-browse-all-leagues:hover {
+  background: #dcfce7;
+  border-color: #86efac;
+  transform: translateY(-1px);
+}
+
