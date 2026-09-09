@@ -5,7 +5,7 @@ interface AuthModalProps {
   isOpen: boolean;
   onClose: () => void;
   onAuthSuccess: () => void;
-  initialMode?: 'signin' | 'register';
+  initialMode?: 'signin' | 'register' | 'forgot';
 }
 
 export const AuthModal: React.FC<AuthModalProps> = ({
@@ -14,7 +14,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   onAuthSuccess,
   initialMode = 'signin'
 }) => {
-  const [mode, setMode] = useState<'signin' | 'register'>(initialMode);
+  const [mode, setMode] = useState<'signin' | 'register' | 'forgot'>(initialMode);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
@@ -46,6 +46,19 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       }
 
       if (data.user) {
+        // Check if user has been soft-deleted / disabled
+        const { data: userRecord } = await supabase
+          .from('users')
+          .select('is_deleted, status')
+          .eq('id', data.user.id)
+          .single();
+
+        if (userRecord?.is_deleted || userRecord?.status === 'disabled') {
+          await supabase.auth.signOut();
+          setErrorMessage('This account has been deactivated. Please contact support.');
+          return;
+        }
+
         setSuccessMessage('Successfully signed in!');
         setTimeout(() => {
           onAuthSuccess();
@@ -96,7 +109,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             display_name: displayName.trim() || email.split('@')[0],
             disclaimer_age_accepted: true,
             disclaimer_financial_accepted: true,
-            disclaimer_version: 'v1.0'
+            disclaimer_version: 'v1.0',
+            status: 'active',
+            is_deleted: false
           }
         }
       });
@@ -120,6 +135,36 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
   };
 
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMessage(null);
+    setSuccessMessage(null);
+
+    if (!email.trim()) {
+      setErrorMessage('Please enter your registered email address.');
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+        redirectTo: `${window.location.origin}/#reset-password`
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      setSuccessMessage('Password reset link sent! Check your inbox (and spam folder) for instructions.');
+    } catch (err: any) {
+      console.error('Forgot password error:', err);
+      setErrorMessage(err.message || 'Failed to send reset link. Please check the email and try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal-card auth-modal-card" onClick={(e) => e.stopPropagation()}>
@@ -129,12 +174,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             <span className="modal-brand-badge">JB</span>
             <div>
               <h2 className="modal-title">
-                {mode === 'signin' ? 'Sign In to JamBets' : 'Create Your JamBets Account'}
+                {mode === 'signin' && 'Sign In to JamBets'}
+                {mode === 'register' && 'Create Your JamBets Account'}
+                {mode === 'forgot' && 'Reset Your Password'}
               </h2>
               <p className="modal-subtitle">
-                {mode === 'signin'
-                  ? 'Access your subscription and verified 250k predictions'
-                  : 'Join the statistical football modeling community'}
+                {mode === 'signin' && 'Access your subscription and verified 250k predictions'}
+                {mode === 'register' && 'Join the statistical football modeling community'}
+                {mode === 'forgot' && 'Enter your email to receive recovery instructions'}
               </p>
             </div>
           </div>
@@ -143,7 +190,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           </button>
         </div>
 
-        {/* Tab Selector */}
+        {/* Tab Selector (Hidden or adapted when in forgot password mode) */}
         <div className="auth-tabs">
           <button
             type="button"
@@ -183,11 +230,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           </div>
         )}
 
-        {/* Form Body */}
-        {mode === 'signin' ? (
+        {/* Form Body: Sign In */}
+        {mode === 'signin' && (
           <form onSubmit={handleSignIn} className="auth-form">
             <div className="form-group">
-              <label htmlFor="signin-email">Email Address</label>
+              <label htmlFor="signin-email" className="form-label">Email Address</label>
               <input
                 id="signin-email"
                 type="email"
@@ -201,7 +248,21 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             </div>
 
             <div className="form-group">
-              <label htmlFor="signin-password">Password</label>
+              <div className="form-label-row">
+                <label htmlFor="signin-password" className="form-label">Password</label>
+                <button
+                  type="button"
+                  id="btn-forgot-password-link"
+                  className="auth-forgot-link"
+                  onClick={() => {
+                    setMode('forgot');
+                    setErrorMessage(null);
+                    setSuccessMessage(null);
+                  }}
+                >
+                  Forgot Password?
+                </button>
+              </div>
               <input
                 id="signin-password"
                 type="password"
@@ -214,14 +275,17 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               />
             </div>
 
-            <button type="submit" disabled={loading} className="auth-submit-btn">
+            <button type="submit" id="btn-auth-signin" disabled={loading} className="auth-submit-btn">
               {loading ? 'Authenticating...' : 'Sign In'}
             </button>
           </form>
-        ) : (
+        )}
+
+        {/* Form Body: Register */}
+        {mode === 'register' && (
           <form onSubmit={handleRegister} className="auth-form">
             <div className="form-group">
-              <label htmlFor="register-name">Full Name / Display Name</label>
+              <label htmlFor="register-name" className="form-label">Full Name / Display Name</label>
               <input
                 id="register-name"
                 type="text"
@@ -234,7 +298,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             </div>
 
             <div className="form-group">
-              <label htmlFor="register-email">Email Address</label>
+              <label htmlFor="register-email" className="form-label">Email Address</label>
               <input
                 id="register-email"
                 type="email"
@@ -248,7 +312,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             </div>
 
             <div className="form-group">
-              <label htmlFor="register-password">Password (min 6 chars)</label>
+              <label htmlFor="register-password" className="form-label">Password (min 6 chars)</label>
               <input
                 id="register-password"
                 type="password"
@@ -270,7 +334,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               </div>
 
               {/* Disclaimer 1 */}
-              <label className="disclaimer-checkbox-label">
+              <label className="disclaimer-checkbox-label" htmlFor="disclaimer-age">
                 <input
                   type="checkbox"
                   id="disclaimer-age"
@@ -285,7 +349,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               </label>
 
               {/* Disclaimer 2 */}
-              <label className="disclaimer-checkbox-label">
+              <label className="disclaimer-checkbox-label" htmlFor="disclaimer-financial">
                 <input
                   type="checkbox"
                   id="disclaimer-financial"
@@ -302,11 +366,58 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
             <button
               type="submit"
+              id="btn-auth-register"
               disabled={loading || !ageAccepted || !financialAccepted}
               className={`auth-submit-btn ${(!ageAccepted || !financialAccepted) ? 'btn-disabled' : ''}`}
             >
               {loading ? 'Registering Account...' : 'Agree & Create Account'}
             </button>
+          </form>
+        )}
+
+        {/* Form Body: Forgot Password */}
+        {mode === 'forgot' && (
+          <form onSubmit={handleForgotPassword} className="auth-form">
+            <div className="form-group">
+              <label htmlFor="forgot-email" className="form-label">Registered Email Address</label>
+              <input
+                id="forgot-email"
+                type="email"
+                required
+                placeholder="name@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                autoComplete="email"
+                className="form-input"
+              />
+              <p className="form-hint">
+                We will send an encrypted, one-time password reset link to this email address.
+              </p>
+            </div>
+
+            <button
+              type="submit"
+              id="btn-auth-forgot"
+              disabled={loading}
+              className="auth-submit-btn"
+            >
+              {loading ? 'Sending Recovery Link...' : 'Send Password Reset Link'}
+            </button>
+
+            <div className="auth-footer-action-row">
+              <button
+                type="button"
+                id="btn-back-to-signin"
+                className="btn-link-action"
+                onClick={() => {
+                  setMode('signin');
+                  setErrorMessage(null);
+                  setSuccessMessage(null);
+                }}
+              >
+                ← Back to Sign In
+              </button>
+            </div>
           </form>
         )}
 

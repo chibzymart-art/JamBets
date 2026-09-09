@@ -210,6 +210,9 @@ export interface UserProfile {
   disclaimer_financial_accepted: boolean;
   disclaimer_financial_accepted_at?: string;
   disclaimer_version?: string;
+  is_deleted?: boolean;
+  status?: 'active' | 'disabled' | 'suspended';
+  deleted_at?: string;
   created_at: string;
 }
 

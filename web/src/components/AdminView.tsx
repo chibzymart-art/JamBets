@@ -303,40 +303,42 @@ export const AdminView: React.FC<AdminViewProps> = ({ currentUserProfile, onBack
   // Render: 403 Forbidden Access Denied Barrier
   if (!isAdminVerified) {
     return (
-      <div className="max-w-2xl mx-auto py-16 px-4">
-        <div className="p-8 rounded-3xl border border-red-200 bg-white shadow-lg text-center space-y-6">
-          <div className="w-16 h-16 mx-auto rounded-full bg-red-50 border border-red-200 flex items-center justify-center text-red-600">
-            <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+      <div className="admin-lock-screen">
+        <div className="admin-lock-card">
+          <div className="admin-lock-icon">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
             </svg>
           </div>
 
-          <div>
-            <span className="px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-red-50 text-red-700 border border-red-200">
+          <div className="admin-lock-header">
+            <span className="admin-lock-badge">
               403 Forbidden • Access Denied
             </span>
-            <h1 className="text-2xl font-black text-slate-900 tracking-tight mt-3">
-              Server-Side Administrator Authorization Required
+            <h1 className="admin-lock-title">
+              Administrator Credentials Required
             </h1>
-            <p className="text-sm text-slate-600 mt-2 leading-relaxed">
+            <p className="admin-lock-desc">
               You do not have administrative credentials to access the JamBets Control Center.
               In accordance with Phase 9 security protocols, administrative capabilities are enforced strictly on the server database layer and cannot be bypassed via client-side state manipulation.
             </p>
           </div>
 
-          <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-600 text-left space-y-1 font-mono">
-            <div>Authenticated User: {currentUserProfile?.email || 'Unauthenticated Visitor'}</div>
-            <div>Current Tier: {currentUserProfile?.role || 'None'}</div>
-            <div>Verification Method: Supabase public.is_admin() RPC [Returned: false]</div>
+          <div className="admin-lock-audit-box">
+            <div>Authenticated User: <strong>{currentUserProfile?.email || 'Unauthenticated Visitor'}</strong></div>
+            <div>Current Tier: <strong>{currentUserProfile?.role || 'None'}</strong></div>
+            <div>Verification Method: <strong>Supabase public.is_admin() RPC [Returned: false]</strong></div>
           </div>
 
-          <div className="pt-2">
+          <div className="admin-lock-footer">
             {onBackToFixtures && (
               <button
+                type="button"
+                id="btn-admin-return-fixtures"
                 onClick={onBackToFixtures}
-                className="px-6 py-2.5 rounded-xl font-semibold text-sm bg-slate-900 hover:bg-slate-800 text-white shadow-sm transition-all"
+                className="btn-admin-return"
               >
-                Return to Fixtures & Predictions
+                ← Return to Fixtures & Predictions
               </button>
             )}
           </div>

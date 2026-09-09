@@ -29,7 +29,7 @@ export default function App() {
 
   // Modals
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
-  const [authModalMode, setAuthModalMode] = useState<'signin' | 'register'>('signin');
+  const [authModalMode, setAuthModalMode] = useState<'signin' | 'register' | 'forgot'>('signin');
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [isPricingModalOpen, setIsPricingModalOpen] = useState(false);
   const [isFaqModalOpen, setIsFaqModalOpen] = useState(false);
@@ -277,6 +277,17 @@ export default function App() {
       ]);
 
       if (userRes.data) {
+        // Enforce soft-delete deactivation compliance
+        if (userRes.data.is_deleted === true || userRes.data.status === 'disabled') {
+          console.warn('User account is soft-deleted / disabled. Signing out immediately.');
+          await supabase.auth.signOut();
+          setCurrentUser(null);
+          setProfile(null);
+          setSubscription(null);
+          setEntitlement(null);
+          alert('This account has been deactivated (soft delete). Access to JamBets is blocked.');
+          return;
+        }
         setProfile(userRes.data as UserProfile);
       }
       if (subRes.data && subRes.data.length > 0) {
@@ -293,6 +304,14 @@ export default function App() {
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
       if (data?.user) {
+        if (data.user.user_metadata?.status === 'disabled' || data.user.user_metadata?.is_deleted === true) {
+          supabase.auth.signOut();
+          setCurrentUser(null);
+          setProfile(null);
+          setSubscription(null);
+          setEntitlement(null);
+          return;
+        }
         setCurrentUser(data.user);
         fetchUserData(data.user.id);
       } else {
@@ -305,6 +324,15 @@ export default function App() {
 
     const { data: authListener } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (session?.user) {
+        if (session.user.user_metadata?.status === 'disabled' || session.user.user_metadata?.is_deleted === true) {
+          await supabase.auth.signOut();
+          setCurrentUser(null);
+          setProfile(null);
+          setSubscription(null);
+          setEntitlement(null);
+          alert('This account has been deactivated (soft delete). Access to JamBets is blocked.');
+          return;
+        }
         setCurrentUser(session.user);
         await fetchUserData(session.user.id);
       } else {
@@ -319,6 +347,11 @@ export default function App() {
       authListener.subscription.unsubscribe();
     };
   }, []);
+
+  // Strict RBAC: Check whether active user is an administrator
+  const isAdmin = useMemo(() => {
+    return currentUser?.user_metadata?.role === 'admin' || profile?.role === 'admin';
+  }, [currentUser, profile]);
 
   // Entitlement Permission
   const canViewPredictions = useMemo(() => {
@@ -1253,49 +1286,51 @@ export default function App() {
       </header>
 
       <main className="app-container">
-        {/* Phase 4.6: Admin Engine Controls & Automation Overrides */}
-        <section className="admin-engine-bar" aria-label="Engine Automation Controls">
-          <div className="admin-engine-header-row">
-            <div className="admin-engine-title-group">
-              <span className="admin-badge-live">⚡ AUTOMATION & ENGINE CONTROLS</span>
-              <span className="admin-engine-sub">Cloud Supabase Task Queue (30s Poller / Midnight Primary / 6:00 AM WAT Retry)</span>
-            </div>
-            {adminTaskStatus.status !== 'idle' && (
-              <div className={`admin-task-banner status-${adminTaskStatus.status}`}>
-                <span className="admin-spinner-dot" />
-                <span className="admin-task-msg">{adminTaskStatus.message}</span>
+        {/* Phase 4.6 & RBAC: Admin Engine Controls & Automation Overrides (Strictly locked to authenticated Admins) */}
+        {isAdmin && (
+          <section className="admin-engine-bar" aria-label="Engine Automation Controls">
+            <div className="admin-engine-header-row">
+              <div className="admin-engine-title-group">
+                <span className="admin-badge-live">⚡ AUTOMATION & ENGINE CONTROLS</span>
+                <span className="admin-engine-sub">Cloud Supabase Task Queue (30s Poller / Midnight Primary / 6:00 AM WAT Retry)</span>
               </div>
-            )}
-          </div>
-          <div className="admin-engine-actions">
-            <button
-              type="button"
-              id="btn-run-prediction-engine"
-              className={`admin-engine-btn btn-prediction ${adminTaskStatus.type === 'prediction' && (adminTaskStatus.status === 'pending' || adminTaskStatus.status === 'running') ? 'loading' : ''}`}
-              disabled={adminTaskStatus.status === 'pending' || adminTaskStatus.status === 'running'}
-              onClick={() => triggerAdminTask('RUN_PREDICTIONS')}
-            >
-              {adminTaskStatus.type === 'prediction' && (adminTaskStatus.status === 'pending' || adminTaskStatus.status === 'running') ? (
-                <>⏳ Running Prediction Engine...</>
-              ) : (
-                <>⚡ Run Prediction Engine</>
+              {adminTaskStatus.status !== 'idle' && (
+                <div className={`admin-task-banner status-${adminTaskStatus.status}`}>
+                  <span className="admin-spinner-dot" />
+                  <span className="admin-task-msg">{adminTaskStatus.message}</span>
+                </div>
               )}
-            </button>
-            <button
-              type="button"
-              id="btn-run-settlement-engine"
-              className={`admin-engine-btn btn-settlement ${adminTaskStatus.type === 'settlement' && (adminTaskStatus.status === 'pending' || adminTaskStatus.status === 'running') ? 'loading' : ''}`}
-              disabled={adminTaskStatus.status === 'pending' || adminTaskStatus.status === 'running'}
-              onClick={() => triggerAdminTask('RUN_SETTLEMENTS')}
-            >
-              {adminTaskStatus.type === 'settlement' && (adminTaskStatus.status === 'pending' || adminTaskStatus.status === 'running') ? (
-                <>⏳ Running Settlement Engine...</>
-              ) : (
-                <>⚡ Run Settlement Engine</>
-              )}
-            </button>
-          </div>
-        </section>
+            </div>
+            <div className="admin-engine-actions">
+              <button
+                type="button"
+                id="btn-run-prediction-engine"
+                className={`admin-engine-btn btn-prediction ${adminTaskStatus.type === 'prediction' && (adminTaskStatus.status === 'pending' || adminTaskStatus.status === 'running') ? 'loading' : ''}`}
+                disabled={adminTaskStatus.status === 'pending' || adminTaskStatus.status === 'running'}
+                onClick={() => triggerAdminTask('RUN_PREDICTIONS')}
+              >
+                {adminTaskStatus.type === 'prediction' && (adminTaskStatus.status === 'pending' || adminTaskStatus.status === 'running') ? (
+                  <>⏳ Running Prediction Engine...</>
+                ) : (
+                  <>⚡ Run Prediction Engine</>
+                )}
+              </button>
+              <button
+                type="button"
+                id="btn-run-settlement-engine"
+                className={`admin-engine-btn btn-settlement ${adminTaskStatus.type === 'settlement' && (adminTaskStatus.status === 'pending' || adminTaskStatus.status === 'running') ? 'loading' : ''}`}
+                disabled={adminTaskStatus.status === 'pending' || adminTaskStatus.status === 'running'}
+                onClick={() => triggerAdminTask('RUN_SETTLEMENTS')}
+              >
+                {adminTaskStatus.type === 'settlement' && (adminTaskStatus.status === 'pending' || adminTaskStatus.status === 'running') ? (
+                  <>⏳ Running Settlement Engine...</>
+                ) : (
+                  <>⚡ Run Settlement Engine</>
+                )}
+              </button>
+            </div>
+          </section>
+        )}
 
         {/* 2. TOP SPORT CATEGORIES HORIZONTAL SELECTOR BAR */}
         <div className="sport-categories-bar">

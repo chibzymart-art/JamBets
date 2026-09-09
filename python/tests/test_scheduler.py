@@ -105,6 +105,9 @@ class MockSupabaseClient:
         self.audit_logs.append(entry)
         return entry
 
+    def update_fixture_status(self, fixture_id: str, status: str, reason: Optional[str] = None):
+        return True
+
 
 class TestPredictionCycleScheduler(unittest.TestCase):
 
