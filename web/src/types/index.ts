@@ -26,6 +26,7 @@ export interface QueueFixture {
   home_team_name: string;
   away_team_id: string;
   away_team_name: string;
+  venue?: string | null;
 }
 
 export interface DayTab {
@@ -133,8 +134,8 @@ export interface FootballPrediction {
   probability: number | null;
   confidence_category: ConfidenceTier;
   publication_status: string;
-  tier_required: string;
-  source_data_version: string;
+  tier_required?: string;
+  source_data_version?: string;
   is_locked?: boolean;
   settlement_status?: 'pending' | 'won' | 'lost' | 'void' | 'voided' | 'conflict';
   settled_at?: string | null;

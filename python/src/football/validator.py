@@ -66,6 +66,8 @@ def merge_and_validate_fixture(
             return canonical
 
     # If all checks pass: sources agree!
+    if not canonical.venue and incoming.venue:
+        canonical.venue = incoming.venue
     canonical.sources.append(incoming)
     canonical.agreement_count = len(canonical.sources)
     canonical.has_conflict = False

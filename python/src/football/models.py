@@ -88,6 +88,7 @@ class CanonicalFixture(BaseModel):
     status: FixtureStatus
     home_score: Optional[int] = None
     away_score: Optional[int] = None
+    venue: Optional[str] = None
     freshness_state: DataFreshnessState = DataFreshnessState.CURRENT
     sources: List[RawFixturePayload] = Field(default_factory=list)
     agreement_count: int = 1

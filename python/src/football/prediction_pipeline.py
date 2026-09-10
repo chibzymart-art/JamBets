@@ -24,6 +24,7 @@ from python.src.football.prematch_features import (
 from python.src.football.prediction_models import DixonColesModel
 from python.src.football.simulation_engine import MonteCarloSimulationEngine, SimulationRunResult
 from python.src.football.publication_filter import PublicationFilter, QualifyingPrediction
+from python.src.football.market_calibrator import MarketCalibrator, MarketSelectionResult
 from python.src.sources.sportybet import SportyBetAdapter
 from python.src.sources.fotmob import FotMobAdapter
 from python.src.sources.google_news import GoogleNewsAdapter
@@ -202,70 +203,40 @@ class PredictionPipeline:
         qualifying = PublicationFilter.filter_market_outcomes(sim_res.market_outcomes)
 
         # -------------------------------------------------------------
-        # 4. Authoritative Primary Prediction: Combined Poisson + Monte Carlo
-        # Evaluated across the supported set:
-        # home win, away win, draw, win or draw (1X/X2), over 1.5, over 2.5, over 3.5,
-        # under 4.5, home over 0.5, away over 0.5, home over 1.5, away over 1.5, halftime over 0.5
+        # 4. Authoritative Primary Prediction: Option A+ Calibrated Hierarchy
         # -------------------------------------------------------------
-        ALLOWED_PRIMARY_MARKETS = {
-            ("1x2", "home"),
-            ("1x2", "away"),
-            ("1x2", "draw"),
-            ("double_chance", "1x"),
-            ("double_chance", "x2"),
-            ("over_under_1.5", "over"),
-            ("over_under_2.5", "over"),
-            ("over_under_3.5", "over"),
-            ("over_under_4.5", "under"),
-            ("home_goals_0.5", "over"),
-            ("away_goals_0.5", "over"),
-            ("home_goals_1.5", "over"),
-            ("away_goals_1.5", "over"),
-            ("ht_goals_0.5", "over"),
-        }
+        market_decision = MarketCalibrator.select_primary_banker(qualifying)
 
-        # Filter candidate pool to supported set
-        primary_candidates = [
-            q for q in qualifying
-            if (q.market_name.lower(), q.outcome.lower()) in ALLOWED_PRIMARY_MARKETS
-        ]
+        primary_candidate: Optional[QualifyingPrediction] = None
+        if market_decision.status == "QUALIFIED":
+            for q in qualifying:
+                if q.market_name.lower() == market_decision.market_name.lower() and q.outcome.lower() == market_decision.outcome.lower():
+                    primary_candidate = q
+                    break
 
-        # Strictly sort by combined probability (P_combined = 0.5 * P_poisson + 0.5 * P_monte_carlo)
-        # The single highest total combined probability outcome wins as #1 Primary Prediction
-        primary_candidates.sort(
-            key=lambda q: (q.combined_probability if q.combined_probability is not None else q.raw_probability),
-            reverse=True
-        )
+            p_sim = float(market_decision.calibrated_probability)
 
-        primary_candidate: Optional[QualifyingPrediction] = primary_candidates[0] if primary_candidates else None
-        if not primary_candidate and qualifying:
-            # Fallback if none of the specific 13 met 45% (rare)
-            cand = [q for q in qualifying if q.market_name != "over_under_0.5"]
-            if cand:
-                cand.sort(key=lambda q: (q.combined_probability if q.combined_probability is not None else q.raw_probability), reverse=True)
-                primary_candidate = cand[0]
+            # Look up corresponding P_market
+            p_market = None
+            if primary_candidate and market_probabilities:
+                m_key = primary_candidate.market_name.lower()
+                o_key = primary_candidate.outcome.lower()
+                if m_key in market_probabilities and o_key in market_probabilities[m_key]:
+                    p_market = market_probabilities[m_key][o_key]
 
-        p_sim = float(primary_candidate.combined_probability if primary_candidate and primary_candidate.combined_probability is not None else (primary_candidate.raw_probability if primary_candidate else 0.0))
+            if p_market is None and primary_candidate:
+                if "under" in primary_candidate.outcome.lower() and "3.5" in primary_candidate.market_name:
+                    p_market = 0.8200
+                elif primary_candidate.market_name == "1x2" and market_probabilities and "1x2" in market_probabilities:
+                    p_market = market_probabilities["1x2"].get(primary_candidate.outcome, 0.50)
+                else:
+                    p_market = round(p_sim * 0.98, 4)
 
-        # Look up corresponding P_market
-        p_market = None
-        if primary_candidate and market_probabilities:
-            m_key = primary_candidate.market_name.lower()
-            o_key = primary_candidate.outcome.lower()
-            if m_key in market_probabilities and o_key in market_probabilities[m_key]:
-                p_market = market_probabilities[m_key][o_key]
-
-        if p_market is None and primary_candidate:
-            if "under" in primary_candidate.outcome.lower() and "4.5" in primary_candidate.market_name:
-                p_market = 0.8800
-            elif "under" in primary_candidate.outcome.lower() and "3.5" in primary_candidate.market_name:
-                p_market = 0.8200
-            elif primary_candidate.market_name == "1x2" and market_probabilities and "1x2" in market_probabilities:
-                p_market = market_probabilities["1x2"].get(primary_candidate.outcome, 0.50)
-            else:
-                p_market = round(p_sim * 0.98, 4)
-
-        is_consensus_banker = (p_sim >= 0.8000) and (p_market is not None and p_market >= 0.7800)
+            is_consensus_banker = (p_sim >= 0.7500) and (p_market is not None and p_market >= 0.7200)
+        else:
+            p_sim = 0.0
+            p_market = None
+            is_consensus_banker = False
 
         # Diverse Secondary Picks across different market buckets (Max 4)
         secondaries: List[QualifyingPrediction] = []
@@ -332,19 +303,30 @@ class PredictionPipeline:
                 for q in secondaries
             ]
         else:
-            top_prob = round(p_sim, 4)
-            top_prob_pct = round(p_sim * 100.0, 2)
             primary = QualifyingPrediction(
                 market_name="NO_SAFE_BANKER",
                 outcome="SKIP",
-                probability_pct=top_prob_pct,
-                raw_probability=top_prob,
+                probability_pct=50.0,
+                raw_probability=0.5000,
                 confidence_tier="NO_SAFE_BANKER",
                 publication_status="published",
                 tier_required="free",
                 is_qualifying=False
             )
-            secondary_list = []
+            secondary_list = [
+                {
+                    "market": q.market_name,
+                    "prediction": q.outcome,
+                    "probability": round(float(q.combined_probability if q.combined_probability is not None else q.raw_probability), 4),
+                    "prob": round(float(q.probability_pct), 2),
+                    "confidence_tier": q.confidence_tier,
+                    "tier": q.confidence_tier,
+                    "poisson_probability": round(float(q.poisson_probability), 4) if q.poisson_probability is not None else None,
+                    "combined_probability": round(float(q.combined_probability), 4) if q.combined_probability is not None else None,
+                    "consensus_verified": False
+                }
+                for q in secondaries
+            ]
 
         # -------------------------------------------------------------
         # 5. AI Simulation Intelligence Summary
@@ -439,6 +421,11 @@ class PredictionPipeline:
                         "injury_debuff_away": features.squad_injury_debuff_away,
                         "secondary_count": len(secondary_list),
                         "has_safe_banker": is_consensus_banker,
+                        "primary_prediction_status": market_decision.status,
+                        "selection_stage": market_decision.selection_stage,
+                        "is_core_market": market_decision.is_core_market,
+                        "calibrated_probability": market_decision.calibrated_probability,
+                        "rejection_reason": market_decision.rejection_reason,
                         "feature_signature": getattr(features, "feature_signature", ""),
                         "poisson_parameters": sim_res.poisson_parameters,
                         "simulation_outlines": sim_res.simulation_outlines,

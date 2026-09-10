@@ -98,7 +98,9 @@ class ESPNAdapter(BaseSourceAdapter):
                     except (ValueError, TypeError):
                         pass
 
-                venue_name = comp.get("venue", {}).get("fullName")
+                venue_name = comp.get("venue", {}).get("fullName") or comp.get("venue", {}).get("name")
+                if not venue_name:
+                    venue_name = home_comp.get("team", {}).get("venue", {}).get("fullName")
 
                 payload = RawFixturePayload(
                     source_name=self.name,
@@ -113,7 +115,12 @@ class ESPNAdapter(BaseSourceAdapter):
                     away_score=away_score,
                     venue=venue_name,
                     retrieved_at=now_utc,
-                    raw_metadata={"espn_status": status_raw, "uid": event.get("uid")}
+                    raw_metadata={
+                        "espn_status": status_raw,
+                        "uid": event.get("uid"),
+                        "home_provider_id": home_comp.get("team", {}).get("id"),
+                        "away_provider_id": away_comp.get("team", {}).get("id")
+                    }
                 )
                 results.append(payload)
 

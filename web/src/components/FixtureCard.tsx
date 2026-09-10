@@ -187,6 +187,144 @@ export const formatPredictionOutcome = (outcome?: string | null): string => {
   }
 };
 
+const KNOWN_TEAM_OVERRIDES: Record<string, string> = {
+  'inter-milan': 'Inter Milan',
+  'internazionale': 'Inter Milan',
+  'ac-milan': 'AC Milan',
+  'milan': 'AC Milan',
+  'as-roma': 'AS Roma',
+  'roma': 'AS Roma',
+  'rb-leipzig': 'RB Leipzig',
+  'rb-bragantino': 'RB Bragantino',
+  'psv-eindhoven': 'PSV Eindhoven',
+  'psv': 'PSV Eindhoven',
+  'paris-saint-germain': 'Paris Saint-Germain',
+  'psg': 'Paris Saint-Germain',
+  'bodo-glimt': 'FK Bodø/Glimt',
+  'bodoglimt': 'FK Bodø/Glimt',
+  'athletic-bilbao': 'Athletic Bilbao',
+  'atletico-madrid': 'Atlético Madrid',
+  'bayern-munich': 'Bayern Munich',
+  'bayern': 'Bayern Munich',
+  'borussia-dortmund': 'Borussia Dortmund',
+  'dortmund': 'Borussia Dortmund',
+  'bayer-leverkusen': 'Bayer Leverkusen',
+  'leverkusen': 'Bayer Leverkusen',
+  'sporting-cp': 'Sporting CP',
+  'shakhtar-donetsk': 'Shakhtar Donetsk',
+  'shakhtar': 'Shakhtar Donetsk',
+  'estrela-amadora': 'Estrela da Amadora',
+  'slavia-prague': 'Slavia Prague',
+  'sparta-prague': 'Sparta Prague',
+  'como': 'Como 1907',
+  'como-1907': 'Como 1907',
+  'fenerbahce': 'Fenerbahçe',
+  'galatasaray': 'Galatasaray',
+  'besiktas': 'Beşiktaş',
+  'panathinaikos': 'Panathinaikos',
+  'kifisia': 'AE Kifisia',
+  'sabah': 'Sabah FK',
+  'manchester-city': 'Manchester City',
+  'manchester-united': 'Manchester United',
+  'man-city': 'Manchester City',
+  'man-utd': 'Manchester United',
+  'arsenal': 'Arsenal',
+  'chelsea': 'Chelsea',
+  'liverpool': 'Liverpool',
+  'tottenham': 'Tottenham Hotspur',
+  'tottenham-hotspur': 'Tottenham Hotspur',
+  'newcastle': 'Newcastle United',
+  'newcastle-united': 'Newcastle United',
+  'aston-villa': 'Aston Villa',
+  'brighton': 'Brighton & Hove Albion',
+  'west-ham': 'West Ham United',
+  'west-ham-united': 'West Ham United',
+  'wolves': 'Wolverhampton Wanderers',
+  'wolverhampton': 'Wolverhampton Wanderers',
+  'crystal-palace': 'Crystal Palace',
+  'bournemouth': 'AFC Bournemouth',
+  'afc-bournemouth': 'AFC Bournemouth',
+  'fulham': 'Fulham',
+  'brentford': 'Brentford',
+  'nottingham-forest': 'Nottingham Forest',
+  'everton': 'Everton',
+  'leicester': 'Leicester City',
+  'leicester-city': 'Leicester City',
+  'ipswich': 'Ipswich Town',
+  'ipswich-town': 'Ipswich Town',
+  'southampton': 'Southampton',
+  'real-madrid': 'Real Madrid',
+  'barcelona': 'FC Barcelona',
+  'fc-barcelona': 'FC Barcelona',
+  'real-sociedad': 'Real Sociedad',
+  'real-betis': 'Real Betis',
+  'villarreal': 'Villarreal',
+  'sevilla': 'Sevilla',
+  'juventus': 'Juventus',
+  'napoli': 'Napoli',
+  'lazio': 'SS Lazio',
+  'atalanta': 'Atalanta',
+  'fiorentina': 'Fiorentina',
+  'bologna': 'Bologna',
+  'torino': 'Torino',
+  'monza': 'AC Monza',
+  'genoa': 'Genoa CFC',
+  'udinese': 'Udinese',
+  'parma': 'Parma Calcio 1913',
+  'cagliari': 'Cagliari',
+  'verona': 'Hellas Verona',
+  'lecce': 'US Lecce',
+  'empoli': 'Empoli FC',
+  'venezia': 'Venezia FC',
+  'porto': 'FC Porto',
+  'fc-porto': 'FC Porto',
+  'benfica': 'SL Benfica',
+  'braga': 'SC Braga',
+  'sc-braga': 'SC Braga',
+  'ajax': 'Ajax',
+  'feyenoord': 'Feyenoord',
+  'celtic': 'Celtic',
+  'rangers': 'Rangers'
+};
+
+const ACRONYMS = new Set([
+  'fc', 'fk', 'afc', 'cf', 'sc', 'cd', 'ud', 'sk', 'ac', 'as', 'ae', 'rc',
+  'ss', 'us', 'tsg', 'vfb', 'vfl', 'fsv', 'bsc', 'sv', 'la', 'nyc', 'dc',
+  'cp', 'ca', 'cr', 'rb', 'psv', 'h&h', 'ii', 'iii', 'iv'
+]);
+
+export function formatTeamName(name?: string | null): string {
+  if (!name) return 'Team';
+  const rawClean = name.trim();
+  const slug = rawClean.toLowerCase().replace(/\s+/g, '-');
+  if (KNOWN_TEAM_OVERRIDES[slug]) {
+    return KNOWN_TEAM_OVERRIDES[slug];
+  }
+  return rawClean
+    .replace(/[-_]+/g, ' ')
+    .split(' ')
+    .filter(Boolean)
+    .map((word) => {
+      const lower = word.toLowerCase();
+      if (ACRONYMS.has(lower)) {
+        if (lower === 'vfb') return 'VfB';
+        if (lower === 'vfl') return 'VfL';
+        return lower.toUpperCase();
+      }
+      if (/^[0-9]+$/.test(word)) {
+        return word;
+      }
+      if (word.includes('/')) {
+        return word
+          .split('/')
+          .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+          .join('/');
+      }
+      return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+    })
+    .join(' ');
+}
+
 export function formatGlancePrediction(prediction?: FootballPrediction | null, fixture?: QueueFixture): string {
   if (!prediction) return 'Simulation Queued';
   if (prediction.prediction === 'SKIP' || prediction.market === 'NO_SAFE_BANKER') {
@@ -194,8 +332,8 @@ export function formatGlancePrediction(prediction?: FootballPrediction | null, f
   }
   const market = (prediction.market || '').toLowerCase();
   const outcome = (prediction.prediction || '').toLowerCase();
-  const homeName = fixture?.home_team_name?.replace(/-/g, ' ') || 'Home';
-  const awayName = fixture?.away_team_name?.replace(/-/g, ' ') || 'Away';
+  const homeName = formatTeamName(fixture?.home_team_name);
+  const awayName = formatTeamName(fixture?.away_team_name);
 
   if (market === '1x2') {
     if (outcome === 'home' || outcome === '1') return `${homeName} Win`;
@@ -363,9 +501,14 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
   isExpanded,
   onToggleExpand
 }) => {
+  // STRICT ARCHITECTURAL INVARIANT: UI MUST ONLY SHOW PREDICTED FIXTURES
+  // Fixture may appear only with an authoritative, published prediction record
+  if (!prediction || prediction.publication_status !== 'published') {
+    return null;
+  }
+
   const isFinished = fixture.status === 'finished';
   const isLive = fixture.status === 'live';
-  const isDataUnavailable = fixture.status === 'data_unavailable';
 
   // Format Kickoff in Lagos WAT (UTC+1)
   const kickoffDate = new Date(fixture.target_kickoff_at);
@@ -374,17 +517,16 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
   // Admin and verified paid users NEVER see locks.
   // Settled / finished fixtures are public to prove track record.
   // Free users see locks on active scheduled predictions.
-  const hasPrediction = !!prediction;
-  const isSettled = prediction?.settlement_status === 'won' ||
-    prediction?.settlement_status === 'lost' ||
-    prediction?.settlement_status === 'void' ||
-    prediction?.settlement_status === 'voided' ||
+  const isSettled = prediction.settlement_status === 'won' ||
+    prediction.settlement_status === 'lost' ||
+    prediction.settlement_status === 'void' ||
+    prediction.settlement_status === 'voided' ||
     isFinished;
 
-  const isLocked = !isAdmin && !canViewPredictions && !isSettled && hasPrediction;
+  const isLocked = !isAdmin && !canViewPredictions && !isSettled;
 
   const tierConfig = getTierConfig(
-    isLocked ? 'LOCKED' : prediction?.confidence_category || (hasPrediction ? 'MID_CONFIDENCE' : null)
+    isLocked ? 'LOCKED' : prediction.confidence_category || 'MID_CONFIDENCE'
   );
 
   // Parse Secondary Predictions
@@ -463,7 +605,11 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
   const country = fixture.league_country || (fixture.league_code ? LEAGUE_COUNTRY_MAP[fixture.league_code] : '') || '';
   const leagueDisplay = country ? `${country} • ${fixture.league_name || fixture.league_code}` : (fixture.league_name || fixture.league_code);
   const glancePick = formatGlancePrediction(prediction, fixture);
-  const venueText = (fixture as any).venue || `${leagueDisplay} • Matchday Venue`;
+  const venueText = fixture.venue
+    ? fixture.venue
+    : country
+      ? `${country} • Official Stadium`
+      : `${leagueDisplay} • Official Stadium`;
 
   return (
     <div id={`fixture-${fixture.id}`} className="fixture-card glance-fixture-box">
@@ -533,9 +679,9 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
           </div>
 
           <div className="glance-teams-row">
-            <span className="glance-team-name">{fixture.home_team_name?.replace(/-/g, ' ')}</span>
+            <span className="glance-team-name">{formatTeamName(fixture.home_team_name)}</span>
             <span className="glance-vs-pill">vs</span>
-            <span className="glance-team-name">{fixture.away_team_name?.replace(/-/g, ' ')}</span>
+            <span className="glance-team-name">{formatTeamName(fixture.away_team_name)}</span>
           </div>
 
           <div className="glance-venue-row">
@@ -546,16 +692,7 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
 
         {/* Right Side: Key 250,000 Sim Pick Box + Expand Chevron */}
         <div className="glance-right-col">
-          {isDataUnavailable ? (
-            <div className="glance-key-pick-card unavailable">
-              <div className="key-pick-badge">
-                <span>🛡️ SHIELDED</span>
-              </div>
-              <div className="key-pick-outcome" style={{ color: '#64748b' }}>
-                Data Unavailable
-              </div>
-            </div>
-          ) : isLocked ? (
+          {isLocked ? (
             <div className="glance-key-pick-card locked" onClick={onToggleExpand}>
               <div className="key-pick-badge">
                 <span className="key-pick-spark">✨</span>
@@ -572,7 +709,7 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
                 Unlock (₦5,000/mo) →
               </Link>
             </div>
-          ) : hasPrediction ? (
+          ) : (
             <div
               className="glance-key-pick-card"
               onClick={onToggleExpand}
@@ -587,15 +724,6 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
               </div>
               <div className="key-pick-prob">
                 {probPct ? `${probPct}% Probability` : 'Simulated'}
-              </div>
-            </div>
-          ) : (
-            <div className="glance-key-pick-card queued">
-              <div className="key-pick-badge">
-                <span>⏱ QUEUED</span>
-              </div>
-              <div className="key-pick-outcome" style={{ color: '#64748b', fontSize: 13 }}>
-                Simulation Pending
               </div>
             </div>
           )}
@@ -617,18 +745,7 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
       {/* 3. EXPANDABLE BREAKDOWN BODY */}
       {isExpanded && (
         <div className="expanded-breakdown-body">
-          {isDataUnavailable ? (
-            <div className="data-unavailable-card">
-              <div className="data-unavailable-icon">🛡️</div>
-              <div className="data-unavailable-info">
-                <h4>Data Unavailable — Hallucination Prevented</h4>
-                <p>
-                  This fixture was evaluated by our scrapers, but verified real stats/odds were not available across official multi-sources.
-                  Per JamBets' <strong>Zero-Hallucination Policy</strong>, synthetic fallbacks are strictly forbidden, and this match was passed to protect your capital.
-                </p>
-              </div>
-            </div>
-          ) : isLocked ? (
+          {isLocked ? (
             /* CRITICAL DIRECTIVE 3: PAYWALL UI BLURRED LOCK STATE */
             <div className="paywall-lock-container">
               <div className="paywall-blurred-backdrop">
@@ -660,7 +777,7 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
                 </Link>
               </div>
             </div>
-          ) : hasPrediction ? (
+          ) : (
             <div className="prediction-panel">
               <div className="prediction-panel-header">
                 <div className="sim-verified-pill">
@@ -775,19 +892,19 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
                   </div>
                   <div className="poisson-params-grid">
                     <div className="poisson-param-pill">
-                      <span className="poisson-param-label">{fixture.home_team_name?.replace(/-/g, ' ')?.slice(0, 18)} Attack Str:</span>
+                      <span className="poisson-param-label">{formatTeamName(fixture.home_team_name).slice(0, 18)} Attack Str:</span>
                       <span className="poisson-param-val">{poissonData.pParams.home_attack_str.toFixed(2)}</span>
                     </div>
                     <div className="poisson-param-pill">
-                      <span className="poisson-param-label">{fixture.away_team_name?.replace(/-/g, ' ')?.slice(0, 18)} Defense Str:</span>
+                      <span className="poisson-param-label">{formatTeamName(fixture.away_team_name).slice(0, 18)} Defense Str:</span>
                       <span className="poisson-param-val">{poissonData.pParams.away_defense_str.toFixed(2)}</span>
                     </div>
                     <div className="poisson-param-pill">
-                      <span className="poisson-param-label">{fixture.home_team_name?.replace(/-/g, ' ')?.slice(0, 18)} xG Expected:</span>
+                      <span className="poisson-param-label">{formatTeamName(fixture.home_team_name).slice(0, 18)} xG Expected:</span>
                       <span className="poisson-param-val highlight-home">{poissonData.pParams.xg_home.toFixed(2)}</span>
                     </div>
                     <div className="poisson-param-pill">
-                      <span className="poisson-param-label">{fixture.away_team_name?.replace(/-/g, ' ')?.slice(0, 18)} xG Expected:</span>
+                      <span className="poisson-param-label">{formatTeamName(fixture.away_team_name).slice(0, 18)} xG Expected:</span>
                       <span className="poisson-param-val highlight-away">{poissonData.pParams.xg_away.toFixed(2)}</span>
                     </div>
                   </div>
@@ -836,7 +953,7 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
                         {poissonData.outlines.moneyline.top_pick}
                       </div>
                       <div className="sim-outline-subtext">
-                        {fixture.home_team_name?.replace(/-/g, ' ')?.slice(0, 12)}: {poissonData.outlines.moneyline.home_win_prob.toFixed(1)}% • Draw: {poissonData.outlines.moneyline.draw_prob.toFixed(1)}% • {fixture.away_team_name?.replace(/-/g, ' ')?.slice(0, 12)}: {poissonData.outlines.moneyline.away_win_prob.toFixed(1)}%
+                        {formatTeamName(fixture.home_team_name).slice(0, 14)}: {poissonData.outlines.moneyline.home_win_prob.toFixed(1)}% • Draw: {poissonData.outlines.moneyline.draw_prob.toFixed(1)}% • {formatTeamName(fixture.away_team_name).slice(0, 14)}: {poissonData.outlines.moneyline.away_win_prob.toFixed(1)}%
                       </div>
                     </div>
 
@@ -977,10 +1094,6 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
                   <span>Strict 250,000 Sim Enforcement Gate Passed • Automated 30-Min Free Livescore Settlement Active</span>
                 </div>
               </div>
-            </div>
-          ) : (
-            <div style={{ marginTop: 10, padding: '12px 16px', background: '#f8fafc', border: '1px dashed #cbd5e1', borderRadius: 8, fontSize: 12, color: 'var(--text-muted)' }}>
-              ⏱ Mathematical simulation in queue. Quantitative Dixon-Coles parameters will generate before kickoff.
             </div>
           )}
         </div>

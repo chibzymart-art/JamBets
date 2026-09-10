@@ -38,8 +38,8 @@ export const FaqModal: React.FC<FaqModalProps> = ({ isOpen, onClose }) => {
       category: 'Settlement'
     },
     {
-      question: 'Why does JamBets show "Zero Leakage" and NOT_READY status?',
-      answer: 'If any match feature is incomplete, uncalibrated, or missing authoritative starting lineups, the match is designated NOT_READY (0 simulations, 0 predictions published). We guarantee 100% data integrity with zero speculative leaks.',
+      question: 'Why does JamBets enforce a Zero-Leakage Data Policy?',
+      answer: 'JamBets only publishes fixtures that have passed strict multi-source data validation, completed 250,000 Monte Carlo simulation runs, and satisfied our mathematical publication thresholds. Any fixture with incomplete data remains strictly internal and is never published on the prediction UI. We guarantee 100% mathematical integrity with zero speculative leaks.',
       category: 'Integrity'
     }
   ];

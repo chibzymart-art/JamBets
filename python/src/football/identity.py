@@ -7,7 +7,7 @@ sport, competition, canonical team mappings, UTC scheduled date, and provider ev
 import re
 import unicodedata
 from datetime import datetime, timezone
-from typing import Dict, Tuple
+from typing import Dict, Tuple, Optional, Any
 from python.src.football.models import RawFixturePayload, CanonicalFixture, FixtureStatus
 
 # Canonical alias mapping table for cross-provider standardization
@@ -61,7 +61,7 @@ TEAM_ALIASES: Dict[str, str] = {
     "atletico de madrid": "atletico-madrid",
     "sevilla": "sevilla",
     "real betis": "real-betis",
-    "athletic club": "athletic-bilbao",
+    "athletic club bilbao": "athletic-bilbao",
     "athletic bilbao": "athletic-bilbao",
     "real sociedad": "real-sociedad",
     "villarreal": "villarreal",
@@ -69,7 +69,7 @@ TEAM_ALIASES: Dict[str, str] = {
     # Serie A
     "inter milan": "inter-milan",
     "internazionale": "inter-milan",
-    "inter": "inter-milan",
+    "fc internazionale milano": "inter-milan",
     "ac milan": "ac-milan",
     "milan": "ac-milan",
     "juventus": "juventus",
@@ -96,6 +96,78 @@ TEAM_ALIASES: Dict[str, str] = {
     "as monaco": "monaco",
     "lyon": "lyon",
     "lille": "lille",
+    "lens": "lens",
+    "rc lens": "lens",
+
+    # European Competitions & Smaller Leagues
+    "bodo/glimt": "bodo-glimt",
+    "bodo glimt": "bodo-glimt",
+    "bodoglimt": "bodo-glimt",
+    "bodoeglimt": "bodo-glimt",
+    "fk bodo/glimt": "bodo-glimt",
+    "fk bodoglimt": "bodo-glimt",
+    "como": "como",
+    "como 1907": "como",
+    "calcio como": "como",
+    "como-1907": "como",
+    "shakhtar": "shakhtar-donetsk",
+    "shakhtar donetsk": "shakhtar-donetsk",
+    "psv": "psv-eindhoven",
+    "psv eindhoven": "psv-eindhoven",
+    "slavia prague": "slavia-prague",
+    "slavia praha": "slavia-prague",
+    "sk slavia praha": "slavia-prague",
+    "sparta prague": "sparta-prague",
+    "sparta praha": "sparta-prague",
+    "panathinaikos": "panathinaikos",
+    "kifisia": "kifisia",
+    "ae kifisia": "kifisia",
+    "sabah": "sabah",
+    "sabah fk": "sabah",
+    "fenerbahce": "fenerbahce",
+    "galatasaray": "galatasaray",
+    "besiktas": "besiktas",
+
+    # Portugal Primeira Liga
+    "estrela": "estrela-amadora",
+    "estrela da amadora": "estrela-amadora",
+    "estrela amadora": "estrela-amadora",
+    "estrela-da-amadora": "estrela-amadora",
+    "cf estrela": "estrela-amadora",
+    "braga": "braga",
+    "sc braga": "braga",
+    "sporting braga": "braga",
+    "sporting": "sporting-cp",
+    "sporting cp": "sporting-cp",
+    "sporting lisbon": "sporting-cp",
+    "benfica": "benfica",
+    "sl benfica": "benfica",
+    "porto": "porto",
+    "fc porto": "porto",
+
+    # Liga MX & Americas
+    "cd guadalajara": "guadalajara",
+    "guadalajara": "guadalajara",
+    "chivas": "guadalajara",
+    "chivas guadalajara": "guadalajara",
+    "pumas": "pumas-unam",
+    "pumas unam": "pumas-unam",
+    "unam": "pumas-unam",
+    "club universidad nacional": "pumas-unam",
+    "santos": "santos-laguna",
+    "santos laguna": "santos-laguna",
+    "club santos laguna": "santos-laguna",
+    "juarez": "fc-juarez",
+    "fc juarez": "fc-juarez",
+    "racing club": "racing-club",
+    "racing club avellaneda": "racing-club",
+    "huracan": "huracan",
+
+    # English Lower Tiers
+    "luton": "luton-town",
+    "luton town": "luton-town",
+    "stevenage": "stevenage",
+    "stevenage fc": "stevenage",
 }
 
 
@@ -125,10 +197,14 @@ def resolve_fuzzy_team_name(raw_name: str, min_confidence: float = 85.0) -> Tupl
     if cleaned in TEAM_ALIASES:
         return TEAM_ALIASES[cleaned], 100.0
 
-    # 2. Strip club abbreviations (fc, afc, football club, etc.)
-    stripped = re.sub(r"\b(football club|fc|cf|afc|sc|ac|kv|sv|fk|sk)\b", "", cleaned).strip()
+    # 2. Strip club abbreviations and foundation years conservatively
+    # Strip prefixes/suffixes like 'fc', 'cd', 'cf', 'afc', 'fk', 'sk', 'sc', 'ac', 'ad', 'sad'
+    stripped = re.sub(r"\b(football club|fc|cf|cd|afc|sc|ac|kv|sv|fk|sk|ad|sad|csd)\b", "", cleaned).strip()
+    # Strip foundation year suffixes (e.g. '1907', '1899', '1904', '1913') if preceding word exists
+    stripped = re.sub(r"\b(18\d\d|19\d\d|20\d\d|04|09)\b", "", stripped).strip()
     stripped = re.sub(r"\s+", " ", stripped).strip()
-    if stripped in TEAM_ALIASES:
+
+    if stripped and stripped in TEAM_ALIASES:
         return TEAM_ALIASES[stripped], 98.0
 
     # 3. Rapidfuzz / Levenshtein matching against all known alias keys
@@ -199,6 +275,7 @@ def build_canonical_fixture(raw: RawFixturePayload) -> CanonicalFixture:
         status=raw.status,
         home_score=raw.home_score,
         away_score=raw.away_score,
+        venue=raw.venue,
         sources=[raw],
         agreement_count=1,
         has_conflict=False
@@ -221,3 +298,59 @@ class CanonicalIdentityResolver:
     @staticmethod
     def build_canonical_fixture(raw: RawFixturePayload) -> CanonicalFixture:
         return build_canonical_fixture(raw)
+
+    @staticmethod
+    def find_matching_canonical_fixture(
+        candidate: CanonicalFixture,
+        pool: Dict[str, CanonicalFixture],
+        time_tolerance_minutes: float = 120.0
+    ) -> Optional[str]:
+        return find_matching_canonical_fixture(candidate, pool, time_tolerance_minutes)
+
+
+def find_matching_canonical_fixture(
+    candidate: CanonicalFixture,
+    pool: Dict[str, CanonicalFixture],
+    time_tolerance_minutes: float = 120.0
+) -> Optional[str]:
+    """
+    Finds a matching canonical fixture from pool for the candidate.
+    Uses multi-attribute conservative matching:
+    1. Exact canonical_key match.
+    2. Exact teams + same league + kickoff within time_tolerance_minutes (default 120m / 2h).
+    3. Fuzzy teams (>= 80% similarity on both home & away) + same league + kickoff within tolerance.
+    Returns the matching pool key if found, otherwise None.
+    """
+    # 1. Exact key match
+    if candidate.canonical_key in pool:
+        return candidate.canonical_key
+
+    candidate_kickoff = candidate.kickoff_utc
+
+    for key, existing in pool.items():
+        if existing.league_code != candidate.league_code:
+            continue
+
+        # Check kickoff time tolerance
+        diff_mins = abs((candidate_kickoff - existing.kickoff_utc).total_seconds()) / 60.0
+        if diff_mins > time_tolerance_minutes:
+            continue
+
+        # Check teams
+        if (candidate.canonical_home_team == existing.canonical_home_team and
+            candidate.canonical_away_team == existing.canonical_away_team):
+            return key
+
+        # Fuzzy team comparison if slight naming difference remains
+        if HAS_RAPIDFUZZ:
+            h_sim = fuzz.token_sort_ratio(candidate.canonical_home_team, existing.canonical_home_team)
+            a_sim = fuzz.token_sort_ratio(candidate.canonical_away_team, existing.canonical_away_team)
+        else:
+            h_sim = difflib.SequenceMatcher(None, candidate.canonical_home_team, existing.canonical_home_team).ratio() * 100.0
+            a_sim = difflib.SequenceMatcher(None, candidate.canonical_away_team, existing.canonical_away_team).ratio() * 100.0
+
+        if h_sim >= 80.0 and a_sim >= 80.0:
+            return key
+
+    return None
+

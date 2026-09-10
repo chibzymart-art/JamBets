@@ -98,10 +98,8 @@ class SupabaseClient:
             if existing:
                 fixture_id = existing[0]["id"]
                 # Update existing record
-                update_url = f"{self.base_url}/football_fixtures?id=eq.{fixture_id}"
-                resp = self.client.patch(update_url, json=fixture_payload, headers={"Prefer": "return=representation"})
-                resp.raise_for_status()
-                return resp.json()[0]
+                resp = self.patch("football_fixtures", fixture_payload, {"id": f"eq.{fixture_id}"})
+                return resp[0] if resp else existing[0]
 
         return self.post("football_fixtures", fixture_payload)[0]
 

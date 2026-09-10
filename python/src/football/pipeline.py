@@ -13,7 +13,7 @@ from python.src.football.models import (
     DataFreshnessState,
     FixtureStatus
 )
-from python.src.football.identity import build_canonical_fixture
+from python.src.football.identity import build_canonical_fixture, find_matching_canonical_fixture
 from python.src.football.stale_checker import evaluate_freshness
 from python.src.football.validator import merge_and_validate_fixture
 from python.src.sources.registry import SourceRegistry
@@ -93,20 +93,20 @@ class AcquisitionPipeline:
 
                         # 3. Canonical Identity Resolution
                         canonical_candidate = build_canonical_fixture(raw)
-                        key = canonical_candidate.canonical_key
 
-                        # 4. Multi-Source Validation
-                        if key in league_canonical_fixtures:
+                        # 4. Multi-Source Validation & Matching Fixture Lookup
+                        matched_key = find_matching_canonical_fixture(canonical_candidate, league_canonical_fixtures)
+                        if matched_key:
                             # Merge & cross-validate with existing record
-                            existing = league_canonical_fixtures[key]
+                            existing = league_canonical_fixtures[matched_key]
                             merged = merge_and_validate_fixture(existing, raw)
-                            league_canonical_fixtures[key] = merged
+                            league_canonical_fixtures[matched_key] = merged
                             if merged.has_conflict:
                                 metrics["conflicts_detected"] += 1
                             else:
                                 metrics["multi_source_verified"] += 1
                         else:
-                            league_canonical_fixtures[key] = canonical_candidate
+                            league_canonical_fixtures[canonical_candidate.canonical_key] = canonical_candidate
 
                 except Exception as exc:
                     self.registry.record_failure(adapter.slug, str(exc))
@@ -118,8 +118,18 @@ class AcquisitionPipeline:
                 metrics["canonical_fixtures_created"] += 1
 
                 # Upsert home and away teams
-                home_team_id = self.supabase.upsert_team(canonical.canonical_home_team)
-                away_team_id = self.supabase.upsert_team(canonical.canonical_away_team)
+                home_raw = canonical.sources[0].home_team_raw if canonical.sources else None
+                away_raw = canonical.sources[0].away_team_raw if canonical.sources else None
+                home_team_id = self.supabase.upsert_team(canonical.canonical_home_team, short_name=home_raw)
+                away_team_id = self.supabase.upsert_team(canonical.canonical_away_team, short_name=away_raw)
+
+                # Extract real venue from canonical or sources
+                venue_str = canonical.venue
+                if not venue_str:
+                    for s in canonical.sources:
+                        if s.venue:
+                            venue_str = s.venue
+                            break
 
                 # Use FixtureEngine to compute 4-day prediction queue window & lifecycle metadata
                 from python.src.football.fixture_engine import FixtureEngine
@@ -128,7 +138,7 @@ class AcquisitionPipeline:
                 in_queue = queue_res.is_eligible and (canonical.status.value == "scheduled")
                 queue_day = queue_res.queue_day if in_queue else None
 
-                # Upsert fixture in Cloud Supabase with canonical key and queue attributes
+                # Upsert fixture in Cloud Supabase with canonical key, venue, and queue attributes
                 fixture_payload = {
                     "league_id": league_db_id,
                     "home_team_id": home_team_id,
@@ -136,11 +146,13 @@ class AcquisitionPipeline:
                     "target_kickoff_at": canonical.kickoff_utc.isoformat(),
                     "status": canonical.status.value,
                     "canonical_key": canonical.canonical_key,
+                    "venue": venue_str,
                     "in_prediction_queue": in_queue,
                     "queue_day": queue_day,
                     "metadata": {
                         "verified": not canonical.has_conflict,
                         "queue_reason": queue_res.reason,
+                        "venue": venue_str,
                     }
                 }
                 

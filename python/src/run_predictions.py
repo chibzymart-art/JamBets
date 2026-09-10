@@ -257,13 +257,16 @@ def run():
             prev_sig = prev_meta.get("feature_signature")
             prev_market = existing_pred.get("market")
 
-            # Condition to skip: Not legacy static "over_under_0.5" AND feature signature is identical
-            if prev_market != "over_under_0.5" and prev_sig and prev_sig == features.feature_signature:
+            force_repredict = "--force" in sys.argv or not prev_meta.get("selection_stage")
+            # Condition to skip: Feature signature identical AND already evaluated under Option A+ hierarchy
+            if not force_repredict and prev_market != "over_under_0.5" and prev_sig and prev_sig == features.feature_signature and prev_meta.get("selection_stage"):
                 skipped_unchanged_count += 1
-                print(f"    [SKIP REPREDICT] Game data stable (Signature: {features.feature_signature}). Preserving existing prediction.", flush=True)
+                print(f"    [SKIP REPREDICT] Game data stable with Option A+ calibration. Preserving existing prediction.", flush=True)
                 continue
             else:
-                if prev_market == "over_under_0.5":
+                if not prev_meta.get("selection_stage"):
+                    print(f"    [OPTION A+ REPREDICT] Upgrading fixture prediction to Option A+ Calibrated Market Hierarchy.", flush=True)
+                elif prev_market == "over_under_0.5":
                     print(f"    [UPGRADE REPREDICT] Upgrading legacy static Over 0.5 prediction to dynamic diverse banker model.", flush=True)
                 else:
                     print(f"    [DATA CHANGED REPREDICT] Game data changed ({prev_sig} -> {features.feature_signature}). Re-simulating...", flush=True)

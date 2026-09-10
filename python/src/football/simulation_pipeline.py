@@ -17,6 +17,7 @@ from python.src.football.simulation_engine import (
     SimulationJob
 )
 from python.src.football.publication_filter import PublicationFilter, QualifyingPrediction
+from python.src.football.market_calibrator import MarketCalibrator, MarketSelectionResult
 from python.src.db.supabase_client import CloudSupabaseClient
 
 
@@ -122,39 +123,23 @@ class SimulationPipeline:
         ready_outcomes = [m for m in sim_res.market_outcomes if m.is_ready]
         qualifying = PublicationFilter.filter_market_outcomes(ready_outcomes)
 
-        ALLOWED_PRIMARY_MARKETS = {
-            ("1x2", "home"),
-            ("1x2", "away"),
-            ("1x2", "draw"),
-            ("double_chance", "1x"),
-            ("double_chance", "x2"),
-            ("over_under_1.5", "over"),
-            ("over_under_2.5", "over"),
-            ("over_under_3.5", "over"),
-            ("over_under_4.5", "under"),
-            ("home_goals_0.5", "over"),
-            ("away_goals_0.5", "over"),
-            ("home_goals_1.5", "over"),
-            ("away_goals_1.5", "over"),
-            ("ht_goals_0.5", "over"),
-        }
-        primary_candidates = [
-            q for q in qualifying
-            if (q.market_name.lower(), q.outcome.lower()) in ALLOWED_PRIMARY_MARKETS
-        ]
-        primary_candidates.sort(
-            key=lambda q: (q.combined_probability if q.combined_probability is not None else q.raw_probability),
-            reverse=True
-        )
+        # 5. Extract Qualifying Market Predictions & Apply Option A+ Calibrated Hierarchy
+        ready_outcomes = [m for m in sim_res.market_outcomes if m.is_ready]
+        qualifying = PublicationFilter.filter_market_outcomes(ready_outcomes)
 
-        has_banker = len(primary_candidates) > 0 and (primary_candidates[0].combined_probability or primary_candidates[0].raw_probability) >= 0.8000
+        market_decision = MarketCalibrator.select_primary_banker(qualifying)
 
-        if has_banker:
-            primary = primary_candidates[0]
+        if market_decision.status == "QUALIFIED":
+            primary_cand = None
+            for q in qualifying:
+                if q.market_name.lower() == market_decision.market_name.lower() and q.outcome.lower() == market_decision.outcome.lower():
+                    primary_cand = q
+                    break
+            primary = primary_cand if primary_cand else qualifying[0]
             secondary_candidates = [
                 q for q in qualifying
                 if q != primary
-                and (q.combined_probability if q.combined_probability is not None else q.raw_probability) >= 0.6000
+                and (q.combined_probability if q.combined_probability is not None else q.raw_probability) >= 0.5500
                 and q.market_name != "over_under_0.5"
             ]
             secondary_candidates.sort(
@@ -175,22 +160,19 @@ class SimulationPipeline:
                 for q in secondary_candidates[:4]
             ]
         else:
-            top_cand = primary_candidates[0] if primary_candidates else (qualifying[0] if qualifying else None)
-            top_prob = round(float(top_cand.combined_probability if top_cand and top_cand.combined_probability is not None else (top_cand.raw_probability if top_cand else 0.0)), 4)
-            top_prob_pct = round(float(top_cand.probability_pct if top_cand else 0.0), 2)
             primary = QualifyingPrediction(
                 market_name="NO_SAFE_BANKER",
                 outcome="SKIP",
-                probability_pct=top_prob_pct,
-                raw_probability=top_prob,
+                probability_pct=50.0,
+                raw_probability=0.5000,
                 confidence_tier="NO_SAFE_BANKER",
                 publication_status="published",
                 tier_required="free",
-                is_qualifying=True
+                is_qualifying=False
             )
             secondary_candidates = [
                 q for q in qualifying
-                if (q.combined_probability if q.combined_probability is not None else q.raw_probability) >= 0.6000
+                if (q.combined_probability if q.combined_probability is not None else q.raw_probability) >= 0.5500
                 and q.market_name != "over_under_0.5"
             ]
             secondary_candidates.sort(
