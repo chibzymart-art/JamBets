@@ -150,6 +150,47 @@ export const formatPredictionOutcome = (outcome?: string | null): string => {
   }
 };
 
+export function formatGlancePrediction(prediction?: FootballPrediction | null, fixture?: QueueFixture): string {
+  if (!prediction) return 'Simulation Queued';
+  if (prediction.prediction === 'SKIP' || prediction.market === 'NO_SAFE_BANKER') {
+    return 'Anti-Loss Pass (No Safe Edge)';
+  }
+  const market = (prediction.market || '').toLowerCase();
+  const outcome = (prediction.prediction || '').toLowerCase();
+  const homeName = fixture?.home_team_name?.replace(/-/g, ' ') || 'Home';
+  const awayName = fixture?.away_team_name?.replace(/-/g, ' ') || 'Away';
+
+  if (market === '1x2') {
+    if (outcome === 'home' || outcome === '1') return `${homeName} Win`;
+    if (outcome === 'away' || outcome === '2') return `${awayName} Win`;
+    if (outcome === 'draw' || outcome === 'x') return `Draw (X)`;
+  }
+  if (market === 'double_chance') {
+    if (outcome === '1x') return `${homeName} Win or Draw (1X)`;
+    if (outcome === 'x2') return `${awayName} Win or Draw (X2)`;
+    if (outcome === '12') return `${homeName} or ${awayName} (12)`;
+  }
+  if (market === 'over_under_0.5') return `${outcome === 'over' ? 'Over' : 'Under'} 0.5 Goals`;
+  if (market === 'over_under_1.5') return `${outcome === 'over' ? 'Over' : 'Under'} 1.5 Goals`;
+  if (market === 'over_under_2.5') return `${outcome === 'over' ? 'Over' : 'Under'} 2.5 Goals`;
+  if (market === 'over_under_3.5') return `${outcome === 'over' ? 'Over' : 'Under'} 3.5 Goals`;
+  if (market === 'over_under_4.5') return `${outcome === 'over' ? 'Over' : 'Under'} 4.5 Goals`;
+  if (market === 'home_goals_0.5') return `${homeName} Over 0.5 Goals`;
+  if (market === 'away_goals_0.5') return `${awayName} Over 0.5 Goals`;
+  if (market === 'btts' || market === 'both_teams_to_score') {
+    return outcome === 'yes' ? 'Both Teams to Score (GG Yes)' : 'Clean Sheet / Under (GG No)';
+  }
+  if (market.startsWith('corners_')) {
+    const line = market.replace('corners_', '');
+    return `Corners ${outcome === 'over' ? 'Over' : 'Under'} ${line}`;
+  }
+  if (market.startsWith('ht_goals_')) {
+    const line = market.replace('ht_goals_', '');
+    return `Half-Time ${outcome === 'over' ? 'Over' : 'Under'} ${line} Goals`;
+  }
+  return `${formatMarketName(prediction.market)} (${formatPredictionOutcome(prediction.prediction)})`;
+}
+
 export interface FixtureCardProps {
   fixture: QueueFixture;
   prediction?: FootballPrediction | null;
@@ -283,17 +324,6 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
 
   // Format Kickoff in Lagos WAT (UTC+1)
   const kickoffDate = new Date(fixture.target_kickoff_at);
-  const timeStr = kickoffDate.toLocaleTimeString('en-GB', {
-    timeZone: 'Africa/Lagos',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false
-  });
-  const dateStr = kickoffDate.toLocaleDateString('en-GB', {
-    timeZone: 'Africa/Lagos',
-    month: 'short',
-    day: 'numeric'
-  });
 
   // Paywall lock evaluation:
   // Admin and verified paid users NEVER see locks.
@@ -365,168 +395,179 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
     ? ((prediction.probability <= 1 ? prediction.probability * 100 : prediction.probability)).toFixed(1)
     : null;
 
-  return (
-    <div id={`fixture-${fixture.id}`} className="fixture-card">
-      {/* Top Bar: League & Date & Watchlist */}
-      <div className="card-top">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span className="league-badge">
-            {fixture.league_name || fixture.league_code}
-          </span>
-          <span className="queue-day-pill queue-day-0">
-            📅 {dateStr}
-          </span>
-        </div>
+  // Confidence score out of 10 & clean tier label
+  const probNum = prediction?.probability != null
+    ? (prediction.probability <= 1 ? prediction.probability * 100 : prediction.probability)
+    : null;
+  const scoreRating = probNum != null ? (probNum / 10).toFixed(1) : null;
+  const cleanTierLabel = (tierConfig.label || '').replace(/\s*\([^)]*\)/g, '').trim();
 
+  // Format date & time like "Thu, Sep 10, 12:30 AM"
+  const formattedDateTime = kickoffDate.toLocaleDateString('en-US', {
+    timeZone: 'Africa/Lagos',
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric'
+  }) + ', ' + kickoffDate.toLocaleTimeString('en-US', {
+    timeZone: 'Africa/Lagos',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true
+  });
+
+  const glancePick = formatGlancePrediction(prediction, fixture);
+  const venueText = (fixture as any).venue || `${fixture.league_name || 'Official League'} • Matchday Venue`;
+
+  return (
+    <div id={`fixture-${fixture.id}`} className="fixture-card glance-fixture-box">
+      {/* 1. TOP META ROW: FAVORITE, LIVE SCORE, LEAGUE, TIME */}
+      <div className="glance-top-row">
         <button
           type="button"
-          className={`star-favorite-btn ${isStarred ? 'starred' : ''}`}
-          title={isStarred ? 'Remove from Watchlist' : 'Add to Watchlist'}
+          className={`glance-favorite-btn ${isStarred ? 'starred' : ''}`}
+          title={isStarred ? 'Remove from Favorites' : 'Add to Favorites'}
           onClick={() => onToggleFavorite(fixture.id)}
         >
-          {isStarred ? '★' : '☆'}
+          {isStarred ? '★ FAVORITE' : '☆ FAVORITE'}
         </button>
-      </div>
 
-      {/* Matchup Header: Home vs Away */}
-      <div className="matchup-container">
-        <div className="team-row">
-          <div className="team-info">
-            <div className="team-icon">
-              {fixture.home_team_name?.charAt(0)?.toUpperCase() || 'H'}
-            </div>
-            <span className="team-name">{fixture.home_team_name?.replace(/-/g, ' ')}</span>
-          </div>
-          {fixture.home_score !== null && fixture.home_score !== undefined && (
-            <span className="team-score">{fixture.home_score}</span>
-          )}
-        </div>
-
-        <div className="vs-divider">VS</div>
-
-        <div className="team-row">
-          <div className="team-info">
-            <div className="team-icon">
-              {fixture.away_team_name?.charAt(0)?.toUpperCase() || 'A'}
-            </div>
-            <span className="team-name">{fixture.away_team_name?.replace(/-/g, ' ')}</span>
-          </div>
-          {fixture.away_score !== null && fixture.away_score !== undefined && (
-            <span className="team-score">{fixture.away_score}</span>
-          )}
-        </div>
-      </div>
-
-      {/* Match State Banners */}
-      {isLive && (
-        <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '6px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-          <span style={{ fontSize: 11, fontWeight: 800, color: '#dc2626' }}>
-            🔴 LIVE {fixture.match_minute ? `${fixture.match_minute}'` : ''}
-          </span>
-          <span style={{ fontSize: 13, fontWeight: 900, color: '#dc2626' }}>
-            Score: {fixture.home_score ?? 0} - {fixture.away_score ?? 0}
-          </span>
-        </div>
-      )}
-
-      {isFinished && (
-        <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '6px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-          <span style={{ fontSize: 11, fontWeight: 700, color: '#475569' }}>
-            FULL TIME
-          </span>
-          <span style={{ fontSize: 13, fontWeight: 800, color: '#0f172a' }}>
-            Final: {fixture.home_score ?? 0} - {fixture.away_score ?? 0}
-          </span>
-        </div>
-      )}
-
-      {/* Meta Footer */}
-      <div className="card-footer">
-        <span className="kickoff-time">
-          {dateStr} • {timeStr} WAT
-        </span>
-        <span className="status-badge">
-          {fixture.status?.toUpperCase() || 'SCHEDULED'}
-        </span>
-      </div>
-
-      {/* Prediction Summary Strip */}
-      <div
-        className="fixture-prediction-summary"
-        onClick={onToggleExpand}
-        title="Click to expand calibrated probabilistic breakdown"
-      >
-        <div className="summary-left-group">
-          {isDataUnavailable ? (
-            <span className="data-unavailable-pill" title="Skipped to prevent hallucination">
-              🛡️ Data Unavailable - Skipped
+        {isLive && (
+          <div className="glance-live-badge">
+            <span className="glance-live-tag">⚡ LIVE</span>
+            <span className="glance-live-score-pill">
+              LIVE {fixture.match_minute ? `${fixture.match_minute}'` : ''} • {fixture.home_score ?? 0} - {fixture.away_score ?? 0}
             </span>
-          ) : isLocked ? (
-            <div className="paywall-lock-badge-wrap">
-              <span className="paywall-locked-pill">
-                🔒 Premium Pick Locked (₦5,000/mo)
+          </div>
+        )}
+
+        {isFinished && (
+          <div className="glance-finished-badge">
+            <span className="glance-ft-tag">FULL TIME</span>
+            <span className="glance-ft-score-pill">
+              {fixture.home_score ?? 0} - {fixture.away_score ?? 0}
+            </span>
+          </div>
+        )}
+
+        <span className="glance-league-pill">
+          {fixture.league_name || fixture.league_code}
+        </span>
+
+        <span className="glance-time-pill">
+          📅 {formattedDateTime}
+        </span>
+      </div>
+
+      {/* 2. MIDDLE ROW: CONFIDENCE, MATCHUP & PROMINENT KEY SIM PICK */}
+      <div className="glance-middle-row">
+        {/* Left Side: Confidence Badges, Teams & Venue */}
+        <div className="glance-left-col">
+          <div className="glance-confidence-row">
+            <span
+              className={`glance-conf-pill ${tierConfig.badgeClass}`}
+              style={{ color: tierConfig.textColor, borderColor: tierConfig.borderColor, background: tierConfig.bgColor }}
+            >
+              <span className="glance-conf-bullet" style={{ background: tierConfig.textColor }} />
+              {cleanTierLabel}
+            </span>
+
+            {scoreRating && (
+              <span className="glance-score-pill">
+                Score: {scoreRating} / 10
               </span>
+            )}
+
+            {prediction && (isWon || isLost) && (
+              <span className="glance-settle-pill">
+                {isWon && <span style={{ color: '#16a34a' }}>✓ WON</span>}
+                {isLost && <span style={{ color: '#dc2626' }}>✗ LOST</span>}
+              </span>
+            )}
+          </div>
+
+          <div className="glance-teams-row">
+            <span className="glance-team-name">{fixture.home_team_name?.replace(/-/g, ' ')}</span>
+            <span className="glance-vs-pill">vs</span>
+            <span className="glance-team-name">{fixture.away_team_name?.replace(/-/g, ' ')}</span>
+          </div>
+
+          <div className="glance-venue-row">
+            <span className="glance-venue-icon">📍</span>
+            <span className="glance-venue-text">{venueText}</span>
+          </div>
+        </div>
+
+        {/* Right Side: Key 250,000 Sim Pick Box + Expand Chevron */}
+        <div className="glance-right-col">
+          {isDataUnavailable ? (
+            <div className="glance-key-pick-card unavailable">
+              <div className="key-pick-badge">
+                <span>🛡️ SHIELDED</span>
+              </div>
+              <div className="key-pick-outcome" style={{ color: '#64748b' }}>
+                Data Unavailable
+              </div>
+            </div>
+          ) : isLocked ? (
+            <div className="glance-key-pick-card locked" onClick={onToggleExpand}>
+              <div className="key-pick-badge">
+                <span className="key-pick-spark">✨</span>
+                <span>KEY 250,000 SIM PICK</span>
+              </div>
+              <div className="key-pick-outcome locked-blur">
+                ••••••••••••••••
+              </div>
               <Link
                 to="/subscription"
-                className="paywall-unlock-link-btn"
+                className="key-pick-unlock-link"
                 onClick={(e) => e.stopPropagation()}
               >
-                Unlock Pick →
+                Unlock (₦5,000/mo) →
               </Link>
             </div>
           ) : hasPrediction ? (
-            <span
-              className={`top-signal-badge ${tierConfig.badgeClass}`}
-              style={{ color: tierConfig.textColor, borderColor: tierConfig.borderColor, background: tierConfig.bgColor }}
+            <div
+              className="glance-key-pick-card"
+              onClick={onToggleExpand}
+              title="Click to expand calibrated 250,000 draw Poisson breakdown"
             >
-              {isNoBanker ? (
-                <>🛡 NO SAFE BANKER: Pass Match (No market ≥80%)</>
-              ) : (
-                <>
-                  {tierConfig.icon} {tierConfig.label}: {formatMarketName(prediction.market)} ({formatPredictionOutcome(prediction.prediction)})
-                  {probPct ? ` - ${probPct}%` : ''}
-                </>
-              )}
-            </span>
+              <div className="key-pick-badge">
+                <span className="key-pick-spark">✨</span>
+                <span>KEY 250,000 SIM PICK</span>
+              </div>
+              <div className="key-pick-outcome">
+                {glancePick}
+              </div>
+              <div className="key-pick-prob">
+                {probPct ? `${probPct}% Probability` : 'Simulated'}
+              </div>
+            </div>
           ) : (
-            <span className="summary-count-text">
-              ⏱ Probability Simulation Queued
-            </span>
+            <div className="glance-key-pick-card queued">
+              <div className="key-pick-badge">
+                <span>⏱ QUEUED</span>
+              </div>
+              <div className="key-pick-outcome" style={{ color: '#64748b', fontSize: 13 }}>
+                Simulation Pending
+              </div>
+            </div>
           )}
 
-          {/* Secondary Picks Indicator */}
-          {!isLocked && secondaryList.length > 0 && (
-            <span className="summary-secondary-chip" title="Alternative calibrated markets">
-              +{secondaryList.length} Secondary Picks
-            </span>
-          )}
-
-          {/* Settlement Badge */}
-          {prediction && (isWon || isLost) && (
-            <span className="summary-settle-chip">
-              {isWon && <span style={{ color: '#16a34a' }}>✓ Won</span>}
-              {isLost && <span style={{ color: '#dc2626' }}>✗ Lost</span>}
-            </span>
-          )}
+          <button
+            type="button"
+            className={`glance-chevron-btn ${isExpanded ? 'expanded' : ''}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleExpand();
+            }}
+            title={isExpanded ? 'Hide Poisson Breakdown' : 'Expand Poisson Breakdown'}
+          >
+            {isExpanded ? '⌃' : '⌄'}
+          </button>
         </div>
-
-        <button
-          type="button"
-          className={`btn-expand-summary ${isExpanded ? 'expanded' : ''}`}
-          onClick={(e) => {
-            e.stopPropagation();
-            onToggleExpand();
-          }}
-        >
-          {isExpanded ? (
-            <>▲ Hide Breakdown</>
-          ) : (
-            <>▼ View Sniper Breakdown {secondaryList.length ? `(1 + ${secondaryList.length} Picks)` : ''}</>
-          )}
-        </button>
       </div>
 
-      {/* Expandable Breakdown Body */}
+      {/* 3. EXPANDABLE BREAKDOWN BODY */}
       {isExpanded && (
         <div className="expanded-breakdown-body">
           {isDataUnavailable ? (

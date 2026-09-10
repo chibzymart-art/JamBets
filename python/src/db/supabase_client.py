@@ -50,6 +50,11 @@ class SupabaseClient:
         resp.raise_for_status()
         return resp.json() if resp.text else []
 
+    def delete(self, table: str, params: Dict[str, str]) -> List[Dict[str, Any]]:
+        resp = self.client.delete(f"/{table}", params=params)
+        resp.raise_for_status()
+        return resp.json() if resp.text else []
+
     def get_source_id_by_slug(self, slug: str) -> Optional[str]:
         """Retrieves data_source UUID by slug."""
         records = self.get("data_sources", {"slug": f"eq.{slug}", "select": "id"})
@@ -134,11 +139,12 @@ class SupabaseClient:
         max_time_utc = ref_time_utc + timedelta(days=max_days)
 
         # Query post-ref_time fixtures from Cloud Supabase
+        fetch_limit = min(max(limit * 3, 200), 2000)
         params: Dict[str, Any] = {
             "select": "*",
-            "target_kickoff_at": f"gt.{now_iso}",
+            "target_kickoff_at": f"gte.{now_iso}",
             "order": "target_kickoff_at.asc",
-            "limit": str(limit)
+            "limit": str(fetch_limit)
         }
         try:
             records = self.get("football_prediction_queue", params)
@@ -153,8 +159,10 @@ class SupabaseClient:
                 continue
             try:
                 k_utc = datetime.fromisoformat(kickoff_str.replace("Z", "+00:00"))
-                if ref_time_utc < k_utc <= max_time_utc:
+                if ref_time_utc <= k_utc <= max_time_utc:
                     filtered.append(r)
+                    if len(filtered) >= limit:
+                        break
             except Exception:
                 continue
         return filtered

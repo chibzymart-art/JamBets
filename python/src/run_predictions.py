@@ -163,13 +163,14 @@ def run():
     except Exception as reset_err:
         print(f"  [NOTE] Reset fixtures notice: {reset_err}", flush=True)
 
-    # Ingest forward fixtures across the full active queue window
+    # Cutoff date is strictly TODAY onwards (rolling 4-day window)
+    today_start_utc = datetime(now_utc.year, now_utc.month, now_utc.day, 0, 0, 0, tzinfo=timezone.utc)
     forward_fixtures = supabase.get_forward_prediction_queue(
-        ref_time_utc=now_utc - timedelta(hours=36),
-        max_days=5,
+        ref_time_utc=today_start_utc,
+        max_days=4,
         limit=1000
     )
-    print(f"  • Retrieved {len(forward_fixtures)} fixtures in the 4-day window from Cloud Supabase", flush=True)
+    print(f"  • Retrieved {len(forward_fixtures)} fixtures from cutoff {today_start_utc.strftime('%Y-%m-%d')} across the 4-day window from Cloud Supabase", flush=True)
 
     # Load existing predictions for smart change-detection reprediction
     try:

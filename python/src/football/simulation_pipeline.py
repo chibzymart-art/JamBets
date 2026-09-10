@@ -229,10 +229,18 @@ class SimulationPipeline:
                         "lambda_home": features.lambda_home,
                         "lambda_away": features.lambda_away,
                         "secondary_count": len(secondary_list),
-                        "has_safe_banker": has_banker
+                        "has_safe_banker": has_banker,
+                        "poisson_parameters": sim_res.poisson_parameters,
+                        "simulation_outlines": sim_res.simulation_outlines
                     }
                 }
-                self.supabase.post("football_predictions", pred_payload, on_conflict="fixture_id")
+                existing_p = self.supabase.get("football_predictions", {"fixture_id": f"eq.{fixture_id}", "select": "id"})
+                if existing_p:
+                    self.supabase.patch("football_predictions", pred_payload, {"fixture_id": f"eq.{fixture_id}"})
+                else:
+                    self.supabase.post("football_predictions", pred_payload)
+
+                self.supabase.patch("football_fixtures", {"status": "scheduled"}, {"id": f"eq.{fixture_id}"})
                 persisted_count = 1
 
             except Exception as exc:

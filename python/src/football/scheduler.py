@@ -283,11 +283,12 @@ class PredictionCycleScheduler:
             self.ensure_model_calibrated()
             self.lock.heartbeat(job_id)
 
-            # 3. Discover Fixtures strictly forward-looking from Cloud Supabase (target_kickoff_at >= NOW())
-            print("[STEP 2] Discovering candidate fixtures strictly forward-looking from Cloud Supabase...", flush=True)
+            # 3. Discover Fixtures strictly forward-looking from Cloud Supabase (target_kickoff_at >= TODAY)
+            today_start_utc = datetime(start_time_utc.year, start_time_utc.month, start_time_utc.day, 0, 0, 0, tzinfo=timezone.utc)
+            print("[STEP 2] Discovering candidate fixtures strictly forward-looking from Cloud Supabase (cutoff TODAY)...", flush=True)
             if hasattr(self.supabase, "get_forward_prediction_queue"):
                 candidate_fixtures = self.supabase.get_forward_prediction_queue(
-                    ref_time_utc=start_time_utc,
+                    ref_time_utc=today_start_utc,
                     max_days=MAX_PREDICTION_WINDOW_DAYS,
                     limit=limit_fixtures
                 )
@@ -316,13 +317,13 @@ class PredictionCycleScheduler:
                     telemetry.errors.append({"fixture_id": f_id, "error": f"INVALID_KICKOFF_TIMESTAMP: {e}"})
                     continue
 
-                # Rule: Must be scheduled
-                if f_status != "scheduled":
+                # Rule: Must be scheduled or live
+                if f_status not in ("scheduled", "live"):
                     telemetry.fixtures_skipped += 1
                     continue
 
-                # Rule: Strict temporal isolation - must not be in the past
-                if kickoff_utc < start_time_utc:
+                # Rule: Strict temporal isolation - must not be before cutoff today
+                if kickoff_utc < today_start_utc:
                     telemetry.fixtures_skipped += 1
                     telemetry.errors.append({"fixture_id": f_id, "error": "STRICT_FORWARD_ISOLATION_EXCLUDED_PAST_MATCH"})
                     continue
@@ -582,7 +583,7 @@ class AdminTaskPoller(threading.Thread):
             self.scheduler.supabase.update_admin_task(task_id, status="RUNNING")
 
             try:
-                if task_name in ("RUN_PREDICTIONS", "RUN_PREDICTION_ENGINE"):
+                if task_name in ("RUN_PREDICTIONS", "RUN_PREDICTION_ENGINE", "RUN_SIMULATIONS", "RUN_SIMULATION_ENGINE", "SIMULATE", "RUN_PREDICTION"):
                     print("[POLLER] Executing forward-looking prediction cycle (forced override)...", flush=True)
                     telemetry = self.scheduler.execute_cycle(force=True)
                     status = "COMPLETED" if telemetry.status in ("COMPLETED", "SKIPPED") else "FAILED"
