@@ -104,6 +104,41 @@ export function getTierConfig(category?: string | null): TierDisplayConfig {
   }
 }
 
+export const LEAGUE_COUNTRY_MAP: Record<string, string> = {
+  ENG_PL: 'England',
+  ESP_LL: 'Spain',
+  ITA_SA: 'Italy',
+  GER_BL: 'Germany',
+  FRA_L1: 'France',
+  EUR_CL: 'Europe',
+  EUR_EL: 'Europe',
+  EUR_ECL: 'Europe',
+  ENG_CH: 'England',
+  ENG_L1: 'England',
+  SCO_PL: 'Scotland',
+  NED_ED: 'Netherlands',
+  POR_PL: 'Portugal',
+  BEL_PL: 'Belgium',
+  TUR_SL: 'Turkey',
+  SUI_SL: 'Switzerland',
+  AUT_BL: 'Austria',
+  DEN_SL: 'Denmark',
+  GRE_SL: 'Greece',
+  SWE_AS: 'Sweden',
+  NOR_ES: 'Norway',
+  POL_EK: 'Poland',
+  CRO_1HNL: 'Croatia',
+  CZE_FL: 'Czech Republic',
+  USA_MLS: 'USA',
+  BRA_SA: 'Brazil',
+  ARG_PD: 'Argentina',
+  MEX_LM: 'Mexico',
+  KOR_KL: 'South Korea',
+  JPN_J1: 'Japan',
+  SAU_PL: 'Saudi Arabia',
+  CAF_CL: 'Africa',
+};
+
 export const formatMarketName = (market?: string | null): string => {
   if (!market) return 'Market Outcome';
   switch (market.toLowerCase()) {
@@ -116,6 +151,8 @@ export const formatMarketName = (market?: string | null): string => {
     case 'over_under_4.5': return 'Goals O/U 4.5';
     case 'home_goals_0.5': return 'Home Goals O/U 0.5';
     case 'away_goals_0.5': return 'Away Goals O/U 0.5';
+    case 'home_goals_1.5': return 'Home Goals O/U 1.5';
+    case 'away_goals_1.5': return 'Away Goals O/U 1.5';
     case 'btts':
     case 'both_teams_to_score': return 'Both Teams To Score';
     case 'ht_result': return 'Half Time Result';
@@ -177,12 +214,20 @@ export function formatGlancePrediction(prediction?: FootballPrediction | null, f
   if (market === 'over_under_4.5') return `${outcome === 'over' ? 'Over' : 'Under'} 4.5 Goals`;
   if (market === 'home_goals_0.5') return `${homeName} Over 0.5 Goals`;
   if (market === 'away_goals_0.5') return `${awayName} Over 0.5 Goals`;
+  if (market === 'home_goals_1.5') return `${homeName} Over 1.5 Goals`;
+  if (market === 'away_goals_1.5') return `${awayName} Over 1.5 Goals`;
   if (market === 'btts' || market === 'both_teams_to_score') {
     return outcome === 'yes' ? 'Both Teams to Score (GG Yes)' : 'Clean Sheet / Under (GG No)';
   }
   if (market.startsWith('corners_')) {
     const line = market.replace('corners_', '');
     return `Corners ${outcome === 'over' ? 'Over' : 'Under'} ${line}`;
+  }
+  if (market === 'ht_goals_0.5') {
+    return `Half-Time ${outcome === 'over' ? 'Over' : 'Under'} 0.5 Goals`;
+  }
+  if (market === 'ht_goals_1.5') {
+    return `Half-Time ${outcome === 'over' ? 'Over' : 'Under'} 1.5 Goals`;
   }
   if (market.startsWith('ht_goals_')) {
     const line = market.replace('ht_goals_', '');
@@ -415,8 +460,10 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
     hour12: true
   });
 
+  const country = fixture.league_country || (fixture.league_code ? LEAGUE_COUNTRY_MAP[fixture.league_code] : '') || '';
+  const leagueDisplay = country ? `${country} • ${fixture.league_name || fixture.league_code}` : (fixture.league_name || fixture.league_code);
   const glancePick = formatGlancePrediction(prediction, fixture);
-  const venueText = (fixture as any).venue || `${fixture.league_name || 'Official League'} • Matchday Venue`;
+  const venueText = (fixture as any).venue || `${leagueDisplay} • Matchday Venue`;
 
   return (
     <div id={`fixture-${fixture.id}`} className="fixture-card glance-fixture-box">
@@ -449,8 +496,8 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
           </div>
         )}
 
-        <span className="glance-league-pill">
-          {fixture.league_name || fixture.league_code}
+        <span className="glance-league-pill" title={leagueDisplay}>
+          {leagueDisplay}
         </span>
 
         <span className="glance-time-pill">

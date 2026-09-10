@@ -17,6 +17,7 @@ Strictly enforces:
 """
 
 import time
+import math
 import uuid
 import numpy as np
 from datetime import datetime, timezone
@@ -109,6 +110,8 @@ class MarketOutcome(BaseModel):
     total_simulations: int = 250000
     is_ready: bool = True
     not_ready_reason: Optional[str] = None
+    poisson_probability: Optional[float] = None
+    combined_probability: Optional[float] = None
 
 
 class SanityCheckReport(BaseModel):
@@ -387,6 +390,17 @@ class MonteCarloSimulationEngine:
         p_away_o05 = round((away_o05_hits / n) * 100.0, 4)
         p_away_u05 = round((away_u05_hits / n) * 100.0, 4)
 
+        # Team-Specific Totals (Over/Under 1.5)
+        home_o15_hits = int(np.count_nonzero(home_goals >= 2))
+        home_u15_hits = int(completed_count - home_o15_hits)
+        away_o15_hits = int(np.count_nonzero(away_goals >= 2))
+        away_u15_hits = int(completed_count - away_o15_hits)
+
+        p_home_o15 = round((home_o15_hits / n) * 100.0, 4)
+        p_home_u15 = round((home_u15_hits / n) * 100.0, 4)
+        p_away_o15 = round((away_o15_hits / n) * 100.0, 4)
+        p_away_u15 = round((away_u15_hits / n) * 100.0, 4)
+
         # Both Teams To Score (BTTS)
         btts_yes_hits = int(np.count_nonzero(home_scored & away_scored))
         btts_no_hits = int(completed_count - btts_yes_hits)
@@ -418,45 +432,146 @@ class MonteCarloSimulationEngine:
         p_o15_2h = round((o15_2h_hits / n) * 100.0, 4)
         p_u15_2h = round((u15_2h_hits / n) * 100.0, 4)
 
+        # -------------------------------------------------------------
+        # Exact Analytical Poisson Distribution Probabilities
+        # Derived directly from Dixon-Coles / Bivariate Poisson Matrix M
+        # -------------------------------------------------------------
+        p_poiss_hw = float(np.sum(np.tril(M, -1)))
+        p_poiss_dr = float(np.sum(np.diag(M)))
+        p_poiss_aw = float(np.sum(np.triu(M, 1)))
+
+        p_poiss_1x = float(p_poiss_hw + p_poiss_dr)
+        p_poiss_x2 = float(p_poiss_aw + p_poiss_dr)
+        p_poiss_12 = float(p_poiss_hw + p_poiss_aw)
+
+        i_grid, j_grid = np.indices(M.shape)
+        tot_grid = i_grid + j_grid
+
+        p_poiss_o05 = float(np.sum(M[tot_grid >= 1]))
+        p_poiss_u05 = float(np.sum(M[tot_grid == 0]))
+        p_poiss_o15 = float(np.sum(M[tot_grid >= 2]))
+        p_poiss_u15 = float(np.sum(M[tot_grid <= 1]))
+        p_poiss_o25 = float(np.sum(M[tot_grid >= 3]))
+        p_poiss_u25 = float(np.sum(M[tot_grid <= 2]))
+        p_poiss_o35 = float(np.sum(M[tot_grid >= 4]))
+        p_poiss_u35 = float(np.sum(M[tot_grid <= 3]))
+        p_poiss_o45 = float(np.sum(M[tot_grid >= 5]))
+        p_poiss_u45 = float(np.sum(M[tot_grid <= 4]))
+
+        p_poiss_home_o05 = float(np.sum(M[i_grid >= 1]))
+        p_poiss_home_u05 = float(np.sum(M[i_grid == 0]))
+        p_poiss_away_o05 = float(np.sum(M[j_grid >= 1]))
+        p_poiss_away_u05 = float(np.sum(M[j_grid == 0]))
+
+        p_poiss_home_o15 = float(np.sum(M[i_grid >= 2]))
+        p_poiss_home_u15 = float(np.sum(M[i_grid <= 1]))
+        p_poiss_away_o15 = float(np.sum(M[j_grid >= 2]))
+        p_poiss_away_u15 = float(np.sum(M[j_grid <= 1]))
+
+        p_poiss_btts_yes = float(np.sum(M[(i_grid >= 1) & (j_grid >= 1)]))
+        p_poiss_btts_no = float(1.0 - p_poiss_btts_yes)
+
+        ht_lam = (contract.lambda_home + contract.lambda_away) * 0.45
+        p_poiss_ht_o05 = float(1.0 - math.exp(-max(0.01, ht_lam)))
+        p_poiss_ht_u05 = float(math.exp(-max(0.01, ht_lam)))
+        p_poiss_ht_o15 = float(1.0 - math.exp(-max(0.01, ht_lam)) * (1.0 + ht_lam))
+        p_poiss_ht_u15 = float(1.0 - p_poiss_ht_o15)
+
+        poisson_map = {
+            ("1x2", "home"): p_poiss_hw,
+            ("1x2", "draw"): p_poiss_dr,
+            ("1x2", "away"): p_poiss_aw,
+            ("double_chance", "1x"): p_poiss_1x,
+            ("double_chance", "x2"): p_poiss_x2,
+            ("double_chance", "12"): p_poiss_12,
+            ("over_under_0.5", "over"): p_poiss_o05,
+            ("over_under_0.5", "under"): p_poiss_u05,
+            ("over_under_1.5", "over"): p_poiss_o15,
+            ("over_under_1.5", "under"): p_poiss_u15,
+            ("over_under_2.5", "over"): p_poiss_o25,
+            ("over_under_2.5", "under"): p_poiss_u25,
+            ("over_under_3.5", "over"): p_poiss_o35,
+            ("over_under_3.5", "under"): p_poiss_u35,
+            ("over_under_4.5", "over"): p_poiss_o45,
+            ("over_under_4.5", "under"): p_poiss_u45,
+            ("home_goals_0.5", "over"): p_poiss_home_o05,
+            ("home_goals_0.5", "under"): p_poiss_home_u05,
+            ("away_goals_0.5", "over"): p_poiss_away_o05,
+            ("away_goals_0.5", "under"): p_poiss_away_u05,
+            ("home_goals_1.5", "over"): p_poiss_home_o15,
+            ("home_goals_1.5", "under"): p_poiss_home_u15,
+            ("away_goals_1.5", "over"): p_poiss_away_o15,
+            ("away_goals_1.5", "under"): p_poiss_away_u15,
+            ("btts", "yes"): p_poiss_btts_yes,
+            ("btts", "no"): p_poiss_btts_no,
+            ("ht_goals_0.5", "over"): p_poiss_ht_o05,
+            ("ht_goals_0.5", "under"): p_poiss_ht_u05,
+            ("ht_goals_1.5", "over"): p_poiss_ht_o15,
+            ("ht_goals_1.5", "under"): p_poiss_ht_u15,
+        }
+
+        # Helper to construct MarketOutcome with Combined Probability
+        def make_outcome(m_name: str, out: str, p_pct: float, hits: int) -> MarketOutcome:
+            raw_p = round(p_pct / 100.0, 4)
+            poiss_p = poisson_map.get((m_name, out))
+            if poiss_p is not None:
+                poiss_p = round(float(poiss_p), 4)
+                comb_p = round(0.5 * poiss_p + 0.5 * raw_p, 4)
+            else:
+                comb_p = raw_p
+            return MarketOutcome(
+                market_name=m_name,
+                outcome=out,
+                probability=p_pct,
+                raw_probability=raw_p,
+                simulated_hits=hits,
+                poisson_probability=poiss_p,
+                combined_probability=comb_p
+            )
+
         # Assemble market outcomes
         market_outcomes: List[MarketOutcome] = [
             # 1X2
-            MarketOutcome(market_name="1x2", outcome="home", probability=p_hw, raw_probability=round(p_hw/100, 4), simulated_hits=hw_hits),
-            MarketOutcome(market_name="1x2", outcome="draw", probability=p_dr, raw_probability=round(p_dr/100, 4), simulated_hits=dr_hits),
-            MarketOutcome(market_name="1x2", outcome="away", probability=p_aw, raw_probability=round(p_aw/100, 4), simulated_hits=aw_hits),
+            make_outcome("1x2", "home", p_hw, hw_hits),
+            make_outcome("1x2", "draw", p_dr, dr_hits),
+            make_outcome("1x2", "away", p_aw, aw_hits),
             # Double Chance
-            MarketOutcome(market_name="double_chance", outcome="1x", probability=p_1x, raw_probability=round(p_1x/100, 4), simulated_hits=dc_1x_hits),
-            MarketOutcome(market_name="double_chance", outcome="x2", probability=p_x2, raw_probability=round(p_x2/100, 4), simulated_hits=dc_x2_hits),
-            MarketOutcome(market_name="double_chance", outcome="12", probability=p_12, raw_probability=round(p_12/100, 4), simulated_hits=dc_12_hits),
-            # Ultra-Safe Full-Time Goals
-            MarketOutcome(market_name="over_under_0.5", outcome="over", probability=p_o05, raw_probability=round(p_o05/100, 4), simulated_hits=o05_hits),
-            MarketOutcome(market_name="over_under_0.5", outcome="under", probability=p_u05, raw_probability=round(p_u05/100, 4), simulated_hits=u05_hits),
-            MarketOutcome(market_name="over_under_1.5", outcome="over", probability=p_o15, raw_probability=round(p_o15/100, 4), simulated_hits=o15_hits),
-            MarketOutcome(market_name="over_under_1.5", outcome="under", probability=p_u15, raw_probability=round(p_u15/100, 4), simulated_hits=u15_hits),
-            MarketOutcome(market_name="over_under_2.5", outcome="over", probability=p_o25, raw_probability=round(p_o25/100, 4), simulated_hits=o25_hits),
-            MarketOutcome(market_name="over_under_2.5", outcome="under", probability=p_u25, raw_probability=round(p_u25/100, 4), simulated_hits=u25_hits),
-            MarketOutcome(market_name="over_under_3.5", outcome="over", probability=p_o35, raw_probability=round(p_o35/100, 4), simulated_hits=o35_hits),
-            MarketOutcome(market_name="over_under_3.5", outcome="under", probability=p_u35, raw_probability=round(p_u35/100, 4), simulated_hits=u35_hits),
-            MarketOutcome(market_name="over_under_4.5", outcome="over", probability=p_o45, raw_probability=round(p_o45/100, 4), simulated_hits=o45_hits),
-            MarketOutcome(market_name="over_under_4.5", outcome="under", probability=p_u45, raw_probability=round(p_u45/100, 4), simulated_hits=u45_hits),
-            # Team-Specific Totals
-            MarketOutcome(market_name="home_goals_0.5", outcome="over", probability=p_home_o05, raw_probability=round(p_home_o05/100, 4), simulated_hits=home_o05_hits),
-            MarketOutcome(market_name="home_goals_0.5", outcome="under", probability=p_home_u05, raw_probability=round(p_home_u05/100, 4), simulated_hits=home_u05_hits),
-            MarketOutcome(market_name="away_goals_0.5", outcome="over", probability=p_away_o05, raw_probability=round(p_away_o05/100, 4), simulated_hits=away_o05_hits),
-            MarketOutcome(market_name="away_goals_0.5", outcome="under", probability=p_away_u05, raw_probability=round(p_away_u05/100, 4), simulated_hits=away_u05_hits),
+            make_outcome("double_chance", "1x", p_1x, dc_1x_hits),
+            make_outcome("double_chance", "x2", p_x2, dc_x2_hits),
+            make_outcome("double_chance", "12", p_12, dc_12_hits),
+            # Full-Time Goals
+            make_outcome("over_under_0.5", "over", p_o05, o05_hits),
+            make_outcome("over_under_0.5", "under", p_u05, u05_hits),
+            make_outcome("over_under_1.5", "over", p_o15, o15_hits),
+            make_outcome("over_under_1.5", "under", p_u15, u15_hits),
+            make_outcome("over_under_2.5", "over", p_o25, o25_hits),
+            make_outcome("over_under_2.5", "under", p_u25, u25_hits),
+            make_outcome("over_under_3.5", "over", p_o35, o35_hits),
+            make_outcome("over_under_3.5", "under", p_u35, u35_hits),
+            make_outcome("over_under_4.5", "over", p_o45, o45_hits),
+            make_outcome("over_under_4.5", "under", p_u45, u45_hits),
+            # Team-Specific Totals 0.5 & 1.5
+            make_outcome("home_goals_0.5", "over", p_home_o05, home_o05_hits),
+            make_outcome("home_goals_0.5", "under", p_home_u05, home_u05_hits),
+            make_outcome("away_goals_0.5", "over", p_away_o05, away_o05_hits),
+            make_outcome("away_goals_0.5", "under", p_away_u05, away_u05_hits),
+            make_outcome("home_goals_1.5", "over", p_home_o15, home_o15_hits),
+            make_outcome("home_goals_1.5", "under", p_home_u15, home_u15_hits),
+            make_outcome("away_goals_1.5", "over", p_away_o15, away_o15_hits),
+            make_outcome("away_goals_1.5", "under", p_away_u15, away_u15_hits),
             # BTTS
-            MarketOutcome(market_name="btts", outcome="yes", probability=p_btts_yes, raw_probability=round(p_btts_yes/100, 4), simulated_hits=btts_yes_hits),
-            MarketOutcome(market_name="btts", outcome="no", probability=p_btts_no, raw_probability=round(p_btts_no/100, 4), simulated_hits=btts_no_hits),
+            make_outcome("btts", "yes", p_btts_yes, btts_yes_hits),
+            make_outcome("btts", "no", p_btts_no, btts_no_hits),
             # Half-Time Goals
-            MarketOutcome(market_name="ht_goals_0.5", outcome="over", probability=p_o05_1h, raw_probability=round(p_o05_1h/100, 4), simulated_hits=o05_1h_hits),
-            MarketOutcome(market_name="ht_goals_0.5", outcome="under", probability=p_u05_1h, raw_probability=round(p_u05_1h/100, 4), simulated_hits=u05_1h_hits),
-            MarketOutcome(market_name="ht_goals_1.5", outcome="over", probability=p_o15_1h, raw_probability=round(p_o15_1h/100, 4), simulated_hits=o15_1h_hits),
-            MarketOutcome(market_name="ht_goals_1.5", outcome="under", probability=p_u15_1h, raw_probability=round(p_u15_1h/100, 4), simulated_hits=u15_1h_hits),
+            make_outcome("ht_goals_0.5", "over", p_o05_1h, o05_1h_hits),
+            make_outcome("ht_goals_0.5", "under", p_u05_1h, u05_1h_hits),
+            make_outcome("ht_goals_1.5", "over", p_o15_1h, o15_1h_hits),
+            make_outcome("ht_goals_1.5", "under", p_u15_1h, u15_1h_hits),
             # Second-Half Goals
-            MarketOutcome(market_name="2h_goals_0.5", outcome="over", probability=p_o05_2h, raw_probability=round(p_o05_2h/100, 4), simulated_hits=o05_2h_hits),
-            MarketOutcome(market_name="2h_goals_0.5", outcome="under", probability=p_u05_2h, raw_probability=round(p_u05_2h/100, 4), simulated_hits=u05_2h_hits),
-            MarketOutcome(market_name="2h_goals_1.5", outcome="over", probability=p_o15_2h, raw_probability=round(p_o15_2h/100, 4), simulated_hits=o15_2h_hits),
-            MarketOutcome(market_name="2h_goals_1.5", outcome="under", probability=p_u15_2h, raw_probability=round(p_u15_2h/100, 4), simulated_hits=u15_2h_hits),
+            make_outcome("2h_goals_0.5", "over", p_o05_2h, o05_2h_hits),
+            make_outcome("2h_goals_0.5", "under", p_u05_2h, u05_2h_hits),
+            make_outcome("2h_goals_1.5", "over", p_o15_2h, o15_2h_hits),
+            make_outcome("2h_goals_1.5", "under", p_u15_2h, u15_2h_hits),
         ]
 
         # Corners extraction (if simulated)

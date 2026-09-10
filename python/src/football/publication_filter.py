@@ -16,6 +16,8 @@ class QualifyingPrediction(BaseModel):
     outcome: str
     probability_pct: float = Field(ge=0.0, le=100.0)
     raw_probability: float = Field(ge=0.0, le=1.0000)
+    poisson_probability: Optional[float] = None
+    combined_probability: Optional[float] = None
     confidence_tier: str
     publication_status: str = "published"
     tier_required: str = "free"
@@ -72,19 +74,25 @@ class PublicationFilter:
         qualifying: List[QualifyingPrediction] = []
 
         for o in outcomes:
-            tier = cls.classify_confidence_tier(o.probability)
+            eff_prob = o.combined_probability * 100.0 if o.combined_probability is not None else o.probability
+            tier = cls.classify_confidence_tier(eff_prob)
             if tier is not None:
                 # Assign tier_required: e.g. BANGER/TOP PICK could be premium/pro in future, but free for now
                 tier_req = "free"
                 if tier in ("BANGER", "TOP PICK"):
                     tier_req = "pro"
 
+                raw_combined = o.combined_probability if o.combined_probability is not None else o.raw_probability
+                pct_combined = round(raw_combined * 100.0, 2)
+
                 qualifying.append(
                     QualifyingPrediction(
                         market_name=o.market_name,
                         outcome=o.outcome,
-                        probability_pct=o.probability,
-                        raw_probability=o.raw_probability,
+                        probability_pct=pct_combined,
+                        raw_probability=raw_combined,
+                        poisson_probability=o.poisson_probability,
+                        combined_probability=o.combined_probability,
                         confidence_tier=tier,
                         publication_status="published",
                         tier_required=tier_req,

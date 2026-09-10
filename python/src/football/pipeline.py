@@ -45,8 +45,9 @@ class AcquisitionPipeline:
         Enforces four-day window, stale data rejection, and multi-source verification.
         """
         now_utc = datetime.now(timezone.utc)
-        date_from = now_utc
-        # Strict four-day window enforcement: Today + 4 days (covers full horizon)
+        # Start at 00:00:00 UTC of today to capture all matches scheduled for today
+        date_from = now_utc.replace(hour=0, minute=0, second=0, microsecond=0)
+        # Strict 5-day horizon enforcement: Today (Day 0) + 4 days (Days 1, 2, 3, 4)
         date_to = (now_utc + timedelta(days=MAX_PREDICTION_WINDOW_DAYS)).replace(hour=23, minute=59, second=59)
 
         target_leagues = (

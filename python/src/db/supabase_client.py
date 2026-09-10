@@ -136,7 +136,8 @@ class SupabaseClient:
             ref_time_utc = ref_time_utc.replace(tzinfo=timezone.utc)
 
         now_iso = ref_time_utc.isoformat()
-        max_time_utc = ref_time_utc + timedelta(days=max_days)
+        # Cover full day of day 4 through 23:59:59 UTC
+        max_time_utc = (ref_time_utc + timedelta(days=max_days)).replace(hour=23, minute=59, second=59)
 
         # Query post-ref_time fixtures from Cloud Supabase
         fetch_limit = min(max(limit * 3, 200), 2000)

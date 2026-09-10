@@ -116,7 +116,7 @@ class LiveScoreAdapter(BaseSourceAdapter):
                             season=str(current_day.year),
                             home_team_raw=t1,
                             away_team_raw=t2,
-                            scheduled_kickoff_utc=kickoff_dt,
+                            kickoff_time=kickoff_dt,
                             status=canonical_status,
                             raw_payload={"livescore_eps": eps, "stage": stage.get("Snm")}
                         )

@@ -245,7 +245,7 @@ class FotMobAdapter(BaseSourceAdapter):
                         season=str(datetime.now().year),
                         home_team_raw=home_team,
                         away_team_raw=away_team,
-                        scheduled_kickoff_utc=kickoff_dt,
+                        kickoff_time=kickoff_dt,
                         status=FixtureStatus.SCHEDULED,
                         raw_payload=match
                     )

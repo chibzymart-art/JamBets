@@ -49,18 +49,43 @@ class AISimulationSummarizer:
         def_a = float(poisson_params.get("away_defense_str", away_defense))
         boost = float(poisson_params.get("home_boost_pct", home_boost_pct))
 
-        # 3. Format primary pick
-        p_market_clean = primary_market.replace("_", " ").title()
-        p_outcome_clean = primary_outcome.upper()
-        if p_market_clean.startswith("Over Under"):
-            line = p_market_clean.replace("Over Under", "").strip()
-            primary_label = f"Over {line} Goals" if p_outcome_clean == "OVER" else f"Under {line} Goals"
-        elif p_market_clean.startswith("Double Chance"):
-            primary_label = f"Double Chance ({p_outcome_clean})"
-        elif p_market_clean == "Btts":
-            primary_label = "Both Teams to Score (GG Yes)" if p_outcome_clean == "YES" else "Clean Sheet (No GG)"
-        else:
-            primary_label = f"{p_market_clean} [{p_outcome_clean}]"
+        # 3. Format primary pick nicely
+        def format_market_label(m_name: str, out_val: str) -> str:
+            m_lower = m_name.lower()
+            o_lower = out_val.lower()
+            if m_lower == "1x2":
+                if o_lower == "home":
+                    return f"{h_name} Win"
+                elif o_lower == "away":
+                    return f"{a_name} Win"
+                return "Draw"
+            elif m_lower == "double_chance":
+                if o_lower == "1x":
+                    return "Home or Draw (1X)"
+                elif o_lower == "x2":
+                    return "Away or Draw (X2)"
+                return f"Double Chance ({out_val.upper()})"
+            elif m_lower.startswith("over_under_"):
+                line = m_lower.replace("over_under_", "")
+                return f"Over {line} Goals" if o_lower == "over" else f"Under {line} Goals"
+            elif m_lower == "home_goals_0.5":
+                return f"{h_name} Over 0.5 Goals"
+            elif m_lower == "away_goals_0.5":
+                return f"{a_name} Over 0.5 Goals"
+            elif m_lower == "home_goals_1.5":
+                return f"{h_name} Over 1.5 Goals"
+            elif m_lower == "away_goals_1.5":
+                return f"{a_name} Over 1.5 Goals"
+            elif m_lower == "ht_goals_0.5":
+                return "Half-Time Over 0.5 Goals"
+            elif m_lower == "btts":
+                return "Both Teams to Score (GG Yes)" if o_lower == "yes" else "Both Teams to Score (No)"
+            elif m_lower.startswith("corners"):
+                return f"Corners {out_val.capitalize()}"
+            clean_m = m_name.replace("_", " ").title()
+            return f"{clean_m} [{out_val.upper()}]"
+
+        primary_label = format_market_label(primary_market, primary_outcome)
 
         # 4. Synthesize secondary edges
         edges: List[str] = []
@@ -68,22 +93,12 @@ class AISimulationSummarizer:
 
         if secondary_predictions:
             for s in secondary_predictions[:3]:
-                sm = s.get("market", "").replace("_", " ").title()
-                so = str(s.get("prediction", "")).upper()
+                sm = s.get("market", "")
+                so = str(s.get("prediction", ""))
                 sp = s.get("probability", 0.0)
                 sp_pct = sp * 100 if sp <= 1.0 else sp
-
-                if "Over Under" in sm:
-                    line = sm.replace("Over Under", "").strip()
-                    edge_str = f"{so.capitalize()} {line} Goals at {sp_pct:.1f}%"
-                elif "Corners" in sm:
-                    edge_str = f"Corners {so.capitalize()} 8.5 at {sp_pct:.1f}%"
-                elif "Btts" in sm:
-                    edge_str = f"Both Teams to Score at {sp_pct:.1f}%"
-                else:
-                    edge_str = f"{sm} [{so}] at {sp_pct:.1f}%"
-
-                edges.append(edge_str)
+                edge_label = format_market_label(sm, so)
+                edges.append(f"{edge_label} at {sp_pct:.1f}%")
 
             booster_pick = edges[0].split(" at ")[0] if edges else primary_label
 

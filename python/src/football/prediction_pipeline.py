@@ -202,60 +202,50 @@ class PredictionPipeline:
         qualifying = PublicationFilter.filter_market_outcomes(sim_res.market_outcomes)
 
         # -------------------------------------------------------------
-        # 4. Dynamic & Diverse Prediction Selection Hierarchy
+        # 4. Authoritative Primary Prediction: Combined Poisson + Monte Carlo
+        # Evaluated across the supported set:
+        # home win, away win, draw, win or draw (1X/X2), over 1.5, over 2.5, over 3.5,
+        # under 4.5, home over 0.5, away over 0.5, home over 1.5, away over 1.5, halftime over 0.5
         # -------------------------------------------------------------
-        EXCLUDED_PRIMARY = {"over_under_0.5"}
-        actionable = [q for q in qualifying if q.market_name not in EXCLUDED_PRIMARY]
+        ALLOWED_PRIMARY_MARKETS = {
+            ("1x2", "home"),
+            ("1x2", "away"),
+            ("1x2", "draw"),
+            ("double_chance", "1x"),
+            ("double_chance", "x2"),
+            ("over_under_1.5", "over"),
+            ("over_under_2.5", "over"),
+            ("over_under_3.5", "over"),
+            ("over_under_4.5", "under"),
+            ("home_goals_0.5", "over"),
+            ("away_goals_0.5", "over"),
+            ("home_goals_1.5", "over"),
+            ("away_goals_1.5", "over"),
+            ("ht_goals_0.5", "over"),
+        }
 
-        # Priority 1: High-probability match result / double chance edge (>= 74% DC or >= 60% 1X2)
-        tier1_team = [
-            q for q in actionable
-            if (q.market_name == "double_chance" and q.raw_probability >= 0.74) or
-               (q.market_name == "1x2" and q.raw_probability >= 0.60)
-        ]
-        # Priority 2: Actionable Goals (Over 1.5 >= 74%, Under 3.5 >= 74%, Over 2.5 >= 58%, BTTS >= 58%)
-        tier2_goals = [
-            q for q in actionable
-            if (q.market_name in ("over_under_1.5", "over_under_3.5") and q.raw_probability >= 0.74) or
-               (q.market_name in ("over_under_2.5", "btts") and q.raw_probability >= 0.58)
-        ]
-        # Priority 3: Team Totals / Corners / Half Time
-        tier3_specialty = [
-            q for q in actionable
-            if (q.market_name in ("home_goals_0.5", "away_goals_0.5") and q.raw_probability >= 0.72) or
-               (q.market_name.startswith("corners") and q.raw_probability >= 0.68) or
-               (q.market_name == "ht_goals_0.5" and q.raw_probability >= 0.70)
-        ]
-        # Priority 4: Other actionable markets
-        tier4_other = [
-            q for q in actionable
-            if q.market_name not in ("over_under_4.5", "2h_goals_0.5") and q.raw_probability >= 0.55
+        # Filter candidate pool to supported set
+        primary_candidates = [
+            q for q in qualifying
+            if (q.market_name.lower(), q.outcome.lower()) in ALLOWED_PRIMARY_MARKETS
         ]
 
-        primary_candidate: Optional[QualifyingPrediction] = None
-        if tier1_team:
-            tier1_team.sort(key=lambda q: q.raw_probability, reverse=True)
-            primary_candidate = tier1_team[0]
-        elif tier2_goals:
-            tier2_goals.sort(key=lambda q: q.raw_probability, reverse=True)
-            primary_candidate = tier2_goals[0]
-        elif tier3_specialty:
-            tier3_specialty.sort(key=lambda q: q.raw_probability, reverse=True)
-            primary_candidate = tier3_specialty[0]
-        elif tier4_other:
-            tier4_other.sort(key=lambda q: q.raw_probability, reverse=True)
-            primary_candidate = tier4_other[0]
-        else:
-            cand = [q for q in actionable if q.raw_probability >= 0.60 and q.market_name != "over_under_4.5"]
+        # Strictly sort by combined probability (P_combined = 0.5 * P_poisson + 0.5 * P_monte_carlo)
+        # The single highest total combined probability outcome wins as #1 Primary Prediction
+        primary_candidates.sort(
+            key=lambda q: (q.combined_probability if q.combined_probability is not None else q.raw_probability),
+            reverse=True
+        )
+
+        primary_candidate: Optional[QualifyingPrediction] = primary_candidates[0] if primary_candidates else None
+        if not primary_candidate and qualifying:
+            # Fallback if none of the specific 13 met 45% (rare)
+            cand = [q for q in qualifying if q.market_name != "over_under_0.5"]
             if cand:
-                cand.sort(key=lambda q: q.raw_probability, reverse=True)
+                cand.sort(key=lambda q: (q.combined_probability if q.combined_probability is not None else q.raw_probability), reverse=True)
                 primary_candidate = cand[0]
-            else:
-                u45 = [q for q in actionable if q.market_name == "over_under_4.5" and q.raw_probability >= 0.82]
-                if u45:
-                    primary_candidate = u45[0]
 
-        p_sim = float(primary_candidate.raw_probability) if primary_candidate else 0.0
+        p_sim = float(primary_candidate.combined_probability if primary_candidate and primary_candidate.combined_probability is not None else (primary_candidate.raw_probability if primary_candidate else 0.0))
 
         # Look up corresponding P_market
         p_market = None
@@ -287,13 +277,20 @@ class PredictionPipeline:
                 seen_categories.add("total_goals")
             elif primary_candidate.market_name == "btts":
                 seen_categories.add("btts")
-            elif "goals_0.5" in primary_candidate.market_name:
+            elif "goals_0.5" in primary_candidate.market_name or "goals_1.5" in primary_candidate.market_name:
                 seen_categories.add("team_goals")
             elif primary_candidate.market_name.startswith("corners"):
                 seen_categories.add("corners")
+            elif "ht_" in primary_candidate.market_name or "2h_" in primary_candidate.market_name:
+                seen_categories.add("half_goals")
 
-        remaining = [q for q in qualifying if q != primary_candidate and q.raw_probability >= 0.55 and q.market_name != "over_under_0.5"]
-        remaining.sort(key=lambda q: q.raw_probability, reverse=True)
+        remaining = [
+            q for q in qualifying
+            if q != primary_candidate
+            and (q.combined_probability if q.combined_probability is not None else q.raw_probability) >= 0.55
+            and q.market_name != "over_under_0.5"
+        ]
+        remaining.sort(key=lambda q: (q.combined_probability if q.combined_probability is not None else q.raw_probability), reverse=True)
 
         for q in remaining:
             cat = "other"
@@ -303,7 +300,7 @@ class PredictionPipeline:
                 cat = "total_goals"
             elif q.market_name == "btts":
                 cat = "btts"
-            elif "goals_0.5" in q.market_name:
+            elif "goals_0.5" in q.market_name or "goals_1.5" in q.market_name:
                 cat = "team_goals"
             elif q.market_name.startswith("corners"):
                 cat = "corners"
@@ -324,10 +321,12 @@ class PredictionPipeline:
                 {
                     "market": q.market_name,
                     "prediction": q.outcome,
-                    "probability": round(float(q.raw_probability), 4),
+                    "probability": round(float(q.combined_probability if q.combined_probability is not None else q.raw_probability), 4),
                     "prob": round(float(q.probability_pct), 2),
                     "confidence_tier": q.confidence_tier,
                     "tier": q.confidence_tier,
+                    "poisson_probability": round(float(q.poisson_probability), 4) if q.poisson_probability is not None else None,
+                    "combined_probability": round(float(q.combined_probability), 4) if q.combined_probability is not None else None,
                     "consensus_verified": is_consensus_banker
                 }
                 for q in secondaries
@@ -406,12 +405,13 @@ class PredictionPipeline:
                 sim_id = created_sim[0].get("id") if created_sim else None
 
                 # Upsert single authoritative prediction row
+                final_prob = float(primary.combined_probability if primary.combined_probability is not None else primary.raw_probability)
                 pred_payload = {
                     "fixture_id": fixture_id,
                     "simulation_id": sim_id,
                     "market": primary.market_name,
                     "prediction": primary.outcome,
-                    "probability": round(float(primary.raw_probability), 4),
+                    "probability": round(final_prob, 4),
                     "confidence_category": primary.confidence_tier,
                     "publication_status": "published",
                     "tier_required": primary.tier_required,
@@ -422,6 +422,9 @@ class PredictionPipeline:
                     "metadata": {
                         "probability_pct": primary.probability_pct,
                         "p_sim": p_sim,
+                        "p_combined": final_prob,
+                        "p_poisson": float(primary.poisson_probability) if primary.poisson_probability is not None else None,
+                        "p_monte_carlo": float(primary.raw_probability),
                         "p_market": p_market,
                         "consensus_verified": is_consensus_banker,
                         "simulations": 250000,

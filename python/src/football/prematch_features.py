@@ -295,7 +295,7 @@ class PreMatchFeatureEngine:
                 beta_away = def_a
 
                 lambda_h = alpha_home * beta_away * home_advantage * (league_h_goals / max(0.5, league_avg)) * league_avg
-                lambda_a = alpha_away * beta_home * (1.0 / home_advantage) * (league_a_goals / max(0.5, league_avg)) * league_avg
+                lambda_a = alpha_away * beta_home * (league_a_goals / max(0.5, league_avg)) * league_avg
 
                 h_points = round(3.0 * (att_h / max(0.5, def_a)), 1)
                 a_points = round(1.5 * (att_a / max(0.5, def_h)), 1)
@@ -376,7 +376,7 @@ class PreMatchFeatureEngine:
                 beta_away = max(0.4, min(2.5, a_w_avg_conceded / max(0.5, league_avg)))
 
                 lambda_h = alpha_home * beta_away * home_advantage * league_avg
-                lambda_a = alpha_away * beta_home * (1.0 / home_advantage) * league_avg
+                lambda_a = alpha_away * beta_home * league_avg
 
                 home_matches_count = len(home_matches)
                 away_matches_count = len(away_matches)

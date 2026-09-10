@@ -150,9 +150,9 @@ def run():
     else:
         print("\n[STEP 3.5] Skipping scraper synchronization (--skip-scrape active).", flush=True)
 
-    # 5. Fetch Forward 4-Day Window Fixtures
+    # 5. Fetch Forward 5-Day Horizon Fixtures (Today + 4 Days Ahead)
     now_utc = datetime.now(timezone.utc)
-    max_utc = now_utc + timedelta(days=4)
+    max_utc = (now_utc + timedelta(days=4)).replace(hour=23, minute=59, second=59)
     print(f"\n[STEP 4] Fetching forward-looking fixtures ({now_utc.strftime('%Y-%m-%d %H:%M')} to {max_utc.strftime('%Y-%m-%d %H:%M')} UTC)...", flush=True)
 
     # Reset any previously failed 'data_unavailable' fixtures back to 'scheduled'

@@ -57,6 +57,8 @@ class RawFixturePayload(BaseModel):
                 data["away_team_raw"] = data["away_team_name"]
             if "scheduled_kickoff" in data and "kickoff_time" not in data:
                 data["kickoff_time"] = data["scheduled_kickoff"]
+            if "scheduled_kickoff_utc" in data and "kickoff_time" not in data:
+                data["kickoff_time"] = data["scheduled_kickoff_utc"]
             if "season" not in data:
                 data["season"] = "2026/2027"
         return data
