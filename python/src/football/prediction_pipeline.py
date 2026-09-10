@@ -21,7 +21,7 @@ from python.src.football.prematch_features import (
     PreMatchFeatures,
     MissingDataException
 )
-from python.src.football.prediction_models import DixonColesModel
+from python.src.football.prediction_models import DixonColesModel, MultiModelEnsemble
 from python.src.football.simulation_engine import MonteCarloSimulationEngine, SimulationRunResult
 from python.src.football.publication_filter import PublicationFilter, QualifyingPrediction
 from python.src.football.market_calibrator import MarketCalibrator, MarketSelectionResult
@@ -75,6 +75,7 @@ class PredictionPipeline:
             google_news=self.google_news
         )
         self.model = DixonColesModel()
+        self.ensemble = MultiModelEnsemble()
         self.simulation_engine = MonteCarloSimulationEngine(self.model)
         self.ai_summarizer = AISimulationSummarizer()
 
@@ -191,7 +192,24 @@ class PredictionPipeline:
             )
 
         # -------------------------------------------------------------
-        # 3. SportyBet Vig-Free Implied Market Probabilities (P_market)
+        # 3. Multi-Model Ensemble Evaluation (Dixon-Coles + NegBin + xG + Elo)
+        # -------------------------------------------------------------
+        ensemble_out = self.ensemble.evaluate_fixture(
+            lambda_h=features.lambda_home,
+            lambda_a=features.lambda_away,
+            home_team=home_team_canonical,
+            away_team=away_team_canonical,
+            xg_data={
+                "home_npxg": features.alpha_home_attack,
+                "away_npxg": features.alpha_away_attack,
+                "home_xga": features.beta_home_defense,
+                "away_xga": features.beta_away_defense,
+            } if features.data_tier_used == "TIER_1_FOTMOB_XG" else None,
+            uncertainty=getattr(features, "uncertainty", 0.20)
+        )
+
+        # -------------------------------------------------------------
+        # 4. SportyBet Vig-Free Implied Market Probabilities (P_market)
         # -------------------------------------------------------------
         market_probabilities = self.sportybet.fetch_prematch_market_probabilities(
             home_team=home_team_canonical,
@@ -203,9 +221,13 @@ class PredictionPipeline:
         qualifying = PublicationFilter.filter_market_outcomes(sim_res.market_outcomes)
 
         # -------------------------------------------------------------
-        # 4. Authoritative Primary Prediction: Option A+ Calibrated Hierarchy
+        # 5. Authoritative Primary Prediction: Option A+ Calibrated Hierarchy
         # -------------------------------------------------------------
-        market_decision = MarketCalibrator.select_primary_banker(qualifying)
+        market_decision = MarketCalibrator.select_primary_banker(
+            candidate_predictions=qualifying,
+            uncertainty=ensemble_out.combined_uncertainty,
+            is_high_disagreement=ensemble_out.is_high_disagreement
+        )
 
         primary_candidate: Optional[QualifyingPrediction] = None
         if market_decision.status == "QUALIFIED":
@@ -216,7 +238,7 @@ class PredictionPipeline:
 
             p_sim = float(market_decision.calibrated_probability)
 
-            # Look up corresponding P_market
+            # Look up corresponding P_market if available from SportyBet (NEVER FABRICATE)
             p_market = None
             if primary_candidate and market_probabilities:
                 m_key = primary_candidate.market_name.lower()
@@ -224,15 +246,12 @@ class PredictionPipeline:
                 if m_key in market_probabilities and o_key in market_probabilities[m_key]:
                     p_market = market_probabilities[m_key][o_key]
 
-            if p_market is None and primary_candidate:
-                if "under" in primary_candidate.outcome.lower() and "3.5" in primary_candidate.market_name:
-                    p_market = 0.8200
-                elif primary_candidate.market_name == "1x2" and market_probabilities and "1x2" in market_probabilities:
-                    p_market = market_probabilities["1x2"].get(primary_candidate.outcome, 0.50)
-                else:
-                    p_market = round(p_sim * 0.98, 4)
-
-            is_consensus_banker = (p_sim >= 0.7500) and (p_market is not None and p_market >= 0.7200)
+            # Consensus banker requires verified market confirmation AND low model disagreement
+            is_consensus_banker = (
+                (p_sim >= 0.7500)
+                and (p_market is not None and p_market >= 0.7200)
+                and (not ensemble_out.is_high_disagreement)
+            )
         else:
             p_sim = 0.0
             p_market = None
@@ -365,6 +384,7 @@ class PredictionPipeline:
                     "status": "completed",
                     "run_tracking": {
                         "model_version": self.model.model_version,
+                        "ensemble_version": self.ensemble.ensemble_version,
                         "duration_ms": sim_res.duration_ms,
                         "data_tier": features.data_tier_used,
                         "lambda_home": features.lambda_home,
@@ -378,6 +398,15 @@ class PredictionPipeline:
                         "p_sim": p_sim,
                         "p_market": p_market,
                         "consensus_verified": is_consensus_banker,
+                        "candidate_models": ensemble_out.candidate_models,
+                        "model_weights": ensemble_out.weights,
+                        "disagreement_variance_1x2": ensemble_out.disagreement_variance_1x2,
+                        "is_high_disagreement": ensemble_out.is_high_disagreement,
+                        "combined_uncertainty": ensemble_out.combined_uncertainty,
+                        "convergence_stable": sim_res.sanity_report.convergence_stable if sim_res.sanity_report else True,
+                        "convergence_delta": sim_res.sanity_report.convergence_delta if sim_res.sanity_report else 0.0,
+                        "analytical_agreement_ok": sim_res.sanity_report.analytical_agreement_ok if sim_res.sanity_report else True,
+                        "max_analytical_discrepancy": sim_res.sanity_report.max_analytical_discrepancy if sim_res.sanity_report else 0.0,
                         "ai_summary": ai_summary_text,
                         "poisson_parameters": sim_res.poisson_parameters,
                         "simulation_outlines": sim_res.simulation_outlines
@@ -412,6 +441,14 @@ class PredictionPipeline:
                         "simulations": 250000,
                         "canonical_key": canonical_key,
                         "model_version": self.model.model_version,
+                        "ensemble_version": self.ensemble.ensemble_version,
+                        "candidate_models": ensemble_out.candidate_models,
+                        "model_weights": ensemble_out.weights,
+                        "disagreement_variance": ensemble_out.disagreement_variance_1x2,
+                        "is_high_disagreement": ensemble_out.is_high_disagreement,
+                        "combined_uncertainty": ensemble_out.combined_uncertainty,
+                        "convergence_stable": sim_res.sanity_report.convergence_stable if sim_res.sanity_report else True,
+                        "convergence_delta": sim_res.sanity_report.convergence_delta if sim_res.sanity_report else 0.0,
                         "data_tier": features.data_tier_used,
                         "home_attack": features.alpha_home_attack,
                         "away_attack": features.alpha_away_attack,

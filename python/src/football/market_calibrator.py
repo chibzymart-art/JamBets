@@ -152,16 +152,35 @@ class MarketCalibrator:
     def select_primary_banker(
         cls,
         candidate_predictions: List[Any],
-        min_probability_floor: float = 0.68
+        min_probability_floor: float = 0.68,
+        uncertainty: float = 0.20,
+        is_high_disagreement: bool = False
     ) -> MarketSelectionResult:
         """
-        Executes Option A+ multi-stage selection:
+        Executes Option A+ multi-stage selection with uncertainty and disagreement gating:
+        Stage 0: If fixture uncertainty > 0.50, trigger immediate abstention.
         Stage 1: Filter out excluded markets (Under 4.5, Over 0.5 Total, etc.)
         Stage 2: Evaluate Core Football Markets against calibrated thresholds.
         Stage 3: If >= 1 Core Market qualifies, select the strongest core market.
         Stage 4: If 0 Core Markets qualify, evaluate Secondary Pool (Home Over 0.5, etc.) with threshold >= 85%.
         Stage 5: If 0 Secondary Markets qualify, return NO_QUALIFYING_MARKET (NO_SAFE_BANKER / SKIP).
         """
+        # Excessive parameter uncertainty check (Abstention Gate)
+        if uncertainty > 0.50:
+            return MarketSelectionResult(
+                status="NO_QUALIFYING_MARKET",
+                market_name="NO_SAFE_BANKER",
+                outcome="SKIP",
+                probability=0.0,
+                calibrated_probability=0.0,
+                is_core_market=False,
+                confidence_tier="UNCLASSIFIED",
+                all_qualifying_core=[],
+                all_qualifying_secondary=[],
+                selection_stage="STAGE_3_NO_QUALIFIER",
+                rejection_reason=f"ABSTENTION: Excessive parameter uncertainty ({uncertainty:.2f} > 0.50)"
+            )
+
         core_qualifiers = []
         secondary_qualifiers = []
 
@@ -181,8 +200,10 @@ class MarketCalibrator:
                 # Strictly excluded from primary banker pool
                 continue
 
-            # Compute calibrated probability
+            # Compute calibrated probability with disagreement adjustment
             p_cal = cls.calibrate_probability(raw_p, profile.base_rate)
+            if is_high_disagreement:
+                p_cal = round(p_cal * 0.94, 4)  # 6% discount for high cross-model variance
 
             # Check market-specific calibrated threshold
             if p_cal >= profile.probability_threshold and p_cal >= min_probability_floor:

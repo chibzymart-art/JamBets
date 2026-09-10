@@ -126,6 +126,10 @@ class SanityCheckReport(BaseModel):
     monotonicity_goals_ok: bool
     double_chance_ok: bool
     all_probabilities_bounded: bool
+    convergence_stable: bool = True
+    convergence_delta: float = 0.0
+    analytical_agreement_ok: bool = True
+    max_analytical_discrepancy: float = 0.0
     violations: List[str] = Field(default_factory=list)
 
 
@@ -152,6 +156,7 @@ class SimulationRunResult(BaseModel):
     second_half_avg_goals: float = 0.0
     corners_simulated: bool = False
     corners_avg: Optional[float] = None
+    convergence_checkpoints: Dict[int, float] = Field(default_factory=dict)
     poisson_parameters: Dict[str, Any] = Field(default_factory=dict)
     simulation_outlines: Dict[str, Any] = Field(default_factory=dict)
 
@@ -269,11 +274,15 @@ class MonteCarloSimulationEngine:
         rng = np.random.Generator(np.random.PCG64(derived_seed))
 
         # 3. Compute Dixon-Coles 2D joint score distribution matrix (11x11 goals)
-        M = self.model.compute_joint_distribution(
+        dist_res = self.model.compute_joint_distribution(
             contract.lambda_home,
             contract.lambda_away,
             max_goals=self.MAX_GOALS_GRID
         )
+        if isinstance(dist_res, tuple):
+            M, _tail_mass = dist_res
+        else:
+            M = dist_res
         flat_p = M.flatten()
 
         # 4. Vectorized 250,000 categorical draws for full-time scorelines
@@ -326,7 +335,10 @@ class MonteCarloSimulationEngine:
         if contract.corner_parameters and "lambda_corners_total" in contract.corner_parameters:
             lam_c = float(contract.corner_parameters["lambda_corners_total"])
             if lam_c > 0.0:
-                tot_corners = rng.poisson(lam_c, size=sim_count)
+                # Dedicated overdispersed corner sampling via Negative Binomial
+                r_c = float(contract.corner_parameters.get("corner_r", 8.0))
+                p_c = r_c / (r_c + lam_c)
+                tot_corners = rng.negative_binomial(r_c, p_c, size=sim_count)
                 corners_simulated = True
                 corners_avg = round(float(np.mean(tot_corners)), 2)
 
@@ -612,6 +624,27 @@ class MonteCarloSimulationEngine:
                 )
             )
 
+        # Convergence Checkpoints Tracking (25k, 50k, 100k, 150k, 200k, 250k)
+        checkpoints: Dict[int, float] = {}
+        for cp in [25000, 50000, 100000, 150000, 200000, 250000]:
+            if cp <= completed_count:
+                cp_diff = diff[:cp]
+                cp_hw = float(np.count_nonzero(cp_diff > 0)) / float(cp)
+                checkpoints[cp] = round(cp_hw * 100.0, 3)
+
+        p_200k = checkpoints.get(200000, p_hw)
+        p_250k = checkpoints.get(250000, p_hw)
+        convergence_delta = round(abs(p_250k - p_200k), 4)
+        convergence_stable = convergence_delta <= 0.50  # Stable within 0.5%
+
+        # Analytical vs. Monte Carlo Sanity Comparison (Tolerance <= 0.015 / 1.5%)
+        max_analytical_discrepancy = max(
+            abs((hw_hits / n) - p_poiss_hw),
+            abs((dr_hits / n) - p_poiss_dr),
+            abs((aw_hits / n) - p_poiss_aw)
+        )
+        analytical_agreement_ok = max_analytical_discrepancy <= 0.015
+
         # 9. Statistical Sanity and Convergence Verification
         sanity = self.check_convergence_and_sanity(
             p_hw=p_hw, p_dr=p_dr, p_aw=p_aw,
@@ -621,7 +654,11 @@ class MonteCarloSimulationEngine:
             p_o35=p_o35, p_u35=p_u35,
             p_btts_yes=p_btts_yes, p_btts_no=p_btts_no,
             p_o05_1h=p_o05_1h, p_u05_1h=p_u05_1h,
-            p_o05_2h=p_o05_2h, p_u05_2h=p_u05_2h
+            p_o05_2h=p_o05_2h, p_u05_2h=p_u05_2h,
+            convergence_stable=convergence_stable,
+            convergence_delta=convergence_delta,
+            analytical_agreement_ok=analytical_agreement_ok,
+            max_analytical_discrepancy=round(float(max_analytical_discrepancy), 5)
         )
 
         # 10. Compute Top Scoreline Distribution (Vectorized across all 250,000 simulations)
@@ -742,6 +779,7 @@ class MonteCarloSimulationEngine:
             second_half_avg_goals=round(float(np.mean(tot_2h)), 2),
             corners_simulated=corners_simulated,
             corners_avg=corners_avg,
+            convergence_checkpoints=checkpoints,
             poisson_parameters=poisson_params,
             simulation_outlines=simulation_outlines
         )
@@ -755,11 +793,15 @@ class MonteCarloSimulationEngine:
         p_o35: float, p_u35: float,
         p_btts_yes: float, p_btts_no: float,
         p_o05_1h: float, p_u05_1h: float,
-        p_o05_2h: float, p_u05_2h: float
+        p_o05_2h: float, p_u05_2h: float,
+        convergence_stable: bool = True,
+        convergence_delta: float = 0.0,
+        analytical_agreement_ok: bool = True,
+        max_analytical_discrepancy: float = 0.0
     ) -> SanityCheckReport:
         """
         Runs mathematical sanity checks on extracted market probabilities.
-        Detects anomalies or broken probability axioms.
+        Detects anomalies, broken probability axioms, and Monte Carlo convergence issues.
         """
         violations: List[str] = []
 
@@ -796,6 +838,13 @@ class MonteCarloSimulationEngine:
         if not all_bounded:
             violations.append("Probability outside [0.0, 100.0] detected")
 
+        # 5. Analytical Agreement and Convergence Stability checks
+        if not analytical_agreement_ok:
+            violations.append(f"Analytical vs Monte Carlo discrepancy ({max_analytical_discrepancy}) exceeded tolerance (0.015)")
+
+        if not convergence_stable:
+            violations.append(f"Monte Carlo convergence delta ({convergence_delta}%) exceeded tolerance (0.50%)")
+
         return SanityCheckReport(
             is_valid=len(violations) == 0,
             sum_1x2=round(sum_1x2, 2),
@@ -805,5 +854,9 @@ class MonteCarloSimulationEngine:
             monotonicity_goals_ok=monotonicity_goals,
             double_chance_ok=dc_ok,
             all_probabilities_bounded=all_bounded,
+            convergence_stable=convergence_stable,
+            convergence_delta=convergence_delta,
+            analytical_agreement_ok=analytical_agreement_ok,
+            max_analytical_discrepancy=max_analytical_discrepancy,
             violations=violations
         )

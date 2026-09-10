@@ -30,6 +30,16 @@ class HistoricalMatch(BaseModel):
     away_score: int = Field(ge=0)
     final_status: str
     result: str  # 'HOME_WIN', 'DRAW', 'AWAY_WIN'
+    venue: Optional[str] = None
+    competition_stage: Optional[str] = None
+    home_shots: Optional[int] = None
+    away_shots: Optional[int] = None
+    home_shots_on_target: Optional[int] = None
+    away_shots_on_target: Optional[int] = None
+    home_corners: Optional[int] = None
+    away_corners: Optional[int] = None
+    home_xg: Optional[float] = None
+    away_xg: Optional[float] = None
     retrieval_timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     verification_status: str = "verified"
     stats: Dict[str, Any] = Field(default_factory=dict)
@@ -145,6 +155,16 @@ class HistoricalDatasetBuilder:
             away_score=away_score,
             final_status=status,
             result=expected_result,
+            venue=raw_match_dict.get("venue"),
+            competition_stage=raw_match_dict.get("competition_stage"),
+            home_shots=raw_match_dict.get("home_shots"),
+            away_shots=raw_match_dict.get("away_shots"),
+            home_shots_on_target=raw_match_dict.get("home_shots_on_target"),
+            away_shots_on_target=raw_match_dict.get("away_shots_on_target"),
+            home_corners=raw_match_dict.get("home_corners"),
+            away_corners=raw_match_dict.get("away_corners"),
+            home_xg=raw_match_dict.get("home_xg"),
+            away_xg=raw_match_dict.get("away_xg"),
             stats=raw_match_dict.get("stats", {})
         )
 
@@ -199,6 +219,9 @@ class HistoricalDatasetBuilder:
                         iso_date = event.get("date", f"{d_str[:4]}-{d_str[4:6]}-{d_str[6:]}T15:00:00Z")
                         kickoff = datetime.fromisoformat(iso_date.replace("Z", "+00:00"))
 
+                        venue_name = comp.get("venue", {}).get("fullName")
+                        stage_name = event.get("season", {}).get("slug")
+
                         payload = {
                             "provider_event_id": str(event.get("id")),
                             "source": "espn",
@@ -211,6 +234,8 @@ class HistoricalDatasetBuilder:
                             "home_score": h_score,
                             "away_score": a_score,
                             "final_status": status_type,
+                            "venue": venue_name,
+                            "competition_stage": stage_name,
                             "stats": {}
                         }
 
