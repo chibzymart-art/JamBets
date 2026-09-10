@@ -62,27 +62,44 @@ class FotMobAdapter(BaseSourceAdapter):
         if normalized_name in self._xg_cache:
             return self._xg_cache[normalized_name]
 
+        # Only query FotMob for leagues in its supported map
+        if league_code and league_code not in self.LEAGUE_ID_MAP:
+            self._xg_cache[normalized_name] = None
+            return None
+
         # Use search or league matches to find recent matches
         url = f"{self.base_url}/search/suggest"
         params = {"term": team_name}
-        data = self.get_json_with_retry(url, params=params)
+        try:
+            data = self.get_json_with_retry(url, params=params)
+        except Exception:
+            self._xg_cache[normalized_name] = None
+            return None
 
         if not data or "teamSuggest" not in data:
+            self._xg_cache[normalized_name] = None
             return None
 
         suggestions = data.get("teamSuggest", [])
         if not suggestions:
+            self._xg_cache[normalized_name] = None
             return None
 
         team_id = suggestions[0].get("id")
         if not team_id:
+            self._xg_cache[normalized_name] = None
             return None
 
         # Fetch team overview for recent match details
         team_url = f"{self.base_url}/teams"
-        team_data = self.get_json_with_retry(team_url, params={"id": team_id})
+        try:
+            team_data = self.get_json_with_retry(team_url, params={"id": team_id})
+        except Exception:
+            self._xg_cache[normalized_name] = None
+            return None
 
         if not team_data:
+            self._xg_cache[normalized_name] = None
             return None
 
         # Parse overview stats and recent fixtures

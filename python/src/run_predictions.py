@@ -137,19 +137,23 @@ def run():
     pipeline.simulation_engine.model = model
 
     # 4.5. Synchronize 5-Day Rolling Scraper Horizon (Today + 4 Days Ahead)
-    print("\n[STEP 3.5] Synchronizing Rolling 5-Day Forward Scraper Horizon (Today + 4 Days Ahead)...", flush=True)
-    from python.src.football.pipeline import AcquisitionPipeline
-    try:
-        acq = AcquisitionPipeline(supabase=supabase)
-        acq_metrics = acq.run_acquisition()
-        print(f"  [OK] Forward scraper synchronization finished. Wrote {acq_metrics.get('supabase_records_written', 0)} matches.", flush=True)
-    except Exception as acq_err:
-        print(f"  [WARN] Acquisition notice: {acq_err}", flush=True)
+    skip_scrape = "--skip-scrape" in sys.argv
+    if not skip_scrape:
+        print("\n[STEP 3.5] Synchronizing Rolling 5-Day Forward Scraper Horizon (Today + 4 Days Ahead)...", flush=True)
+        from python.src.football.pipeline import AcquisitionPipeline
+        try:
+            acq = AcquisitionPipeline(supabase=supabase)
+            acq_metrics = acq.run_acquisition()
+            print(f"  [OK] Forward scraper synchronization finished. Wrote {acq_metrics.get('supabase_records_written', 0)} matches.", flush=True)
+        except Exception as acq_err:
+            print(f"  [WARN] Acquisition notice: {acq_err}", flush=True)
+    else:
+        print("\n[STEP 3.5] Skipping scraper synchronization (--skip-scrape active).", flush=True)
 
     # 5. Fetch Forward 4-Day Window Fixtures
     now_utc = datetime.now(timezone.utc)
     max_utc = now_utc + timedelta(days=4)
-    print(f"\n[STEP 4] Fetching forward-looking fixtures ({now_utc.strftime('%Y-%m-%d %H:%M')} to {max_utc.strftime('%Y-%m-%d %H:%M')} UTC)...")
+    print(f"\n[STEP 4] Fetching forward-looking fixtures ({now_utc.strftime('%Y-%m-%d %H:%M')} to {max_utc.strftime('%Y-%m-%d %H:%M')} UTC)...", flush=True)
 
     # Reset any previously failed 'data_unavailable' fixtures back to 'scheduled'
     print("  • Resetting previously failed data_unavailable fixtures in Cloud Supabase...", flush=True)
@@ -165,7 +169,7 @@ def run():
         max_days=5,
         limit=1000
     )
-    print(f"  • Retrieved {len(forward_fixtures)} fixtures in the 4-day window from Cloud Supabase")
+    print(f"  • Retrieved {len(forward_fixtures)} fixtures in the 4-day window from Cloud Supabase", flush=True)
 
     # Load existing predictions for smart change-detection reprediction
     try:
@@ -176,20 +180,34 @@ def run():
         existing_preds_map = {}
         print(f"  [WARN] Could not load existing predictions: {e_err}", flush=True)
 
+    # Sort fixtures to prioritize any legacy static over_under_0.5 predictions for immediate upgrade
+    def fixture_priority(fix):
+        fid = fix.get("id")
+        ep = existing_preds_map.get(fid)
+        if ep and ep.get("market") == "over_under_0.5":
+            return 0  # Highest priority: upgrade legacy static bankers
+        return 1
+
+    forward_fixtures = sorted(forward_fixtures, key=fixture_priority)
+
     # If argument provided, allow limiting for tests, otherwise drain the entire forward window
     drain_all = True
     batch_limit = None
-    if len(sys.argv) > 1 and sys.argv[1].isdigit():
-        batch_limit = int(sys.argv[1])
-        drain_all = False
+    for arg in sys.argv[1:]:
+        if arg.isdigit():
+            batch_limit = int(arg)
+            drain_all = False
+            break
+
+    if batch_limit:
         fixtures_to_process = forward_fixtures[:batch_limit]
-        print(f"  • Running batch limit mode: {batch_limit} fixtures")
+        print(f"  • Running batch limit mode: {batch_limit} fixtures", flush=True)
     else:
         fixtures_to_process = forward_fixtures
-        print(f"  • Running EXHAUSTIVE DRAIN mode across ALL {len(fixtures_to_process)} forward fixtures")
+        print(f"  • Running EXHAUSTIVE DRAIN mode across ALL {len(fixtures_to_process)} forward fixtures", flush=True)
 
     # 6. Execute per-fixture isolated predictions
-    print("\n[STEP 5] Running Phase 4.7 Zero-Hallucination & Consensus Prediction Pipeline...")
+    print("\n[STEP 5] Running Phase 4.7 Zero-Hallucination & Consensus Prediction Pipeline...", flush=True)
     published_count = 0
     data_unavailable_count = 0
     consensus_banker_count = 0
@@ -208,9 +226,9 @@ def run():
 
         canonical_key = f.get("canonical_key") or f"{l_code}:{h_team}:{a_team}:{kickoff.strftime('%Y%m%d')}"
 
-        print(f"\n--- [{idx}/{len(fixtures_to_process)}] Fixture: {h_team} vs {a_team} ({l_code}) ---")
-        print(f"    Canonical Key: {canonical_key}")
-        print(f"    Kickoff: {kickoff.isoformat()}")
+        print(f"\n--- [{idx}/{len(fixtures_to_process)}] Fixture: {h_team} vs {a_team} ({l_code}) ---", flush=True)
+        print(f"    Canonical Key: {canonical_key}", flush=True)
+        print(f"    Kickoff: {kickoff.isoformat()}", flush=True)
 
         # SMART REPREDICTION: Check if already predicted and game data unchanged
         existing_pred = existing_preds_map.get(f_id)
@@ -241,13 +259,13 @@ def run():
             # Condition to skip: Not legacy static "over_under_0.5" AND feature signature is identical
             if prev_market != "over_under_0.5" and prev_sig and prev_sig == features.feature_signature:
                 skipped_unchanged_count += 1
-                print(f"    [SKIP REPREDICT] Game data stable (Signature: {features.feature_signature}). Preserving existing prediction.")
+                print(f"    [SKIP REPREDICT] Game data stable (Signature: {features.feature_signature}). Preserving existing prediction.", flush=True)
                 continue
             else:
                 if prev_market == "over_under_0.5":
-                    print(f"    [UPGRADE REPREDICT] Upgrading legacy static Over 0.5 prediction to dynamic diverse banker model.")
+                    print(f"    [UPGRADE REPREDICT] Upgrading legacy static Over 0.5 prediction to dynamic diverse banker model.", flush=True)
                 else:
-                    print(f"    [DATA CHANGED REPREDICT] Game data changed ({prev_sig} -> {features.feature_signature}). Re-simulating...")
+                    print(f"    [DATA CHANGED REPREDICT] Game data changed ({prev_sig} -> {features.feature_signature}). Re-simulating...", flush=True)
 
         res = pipeline.process_single_fixture(
             fixture_id=f_id,
@@ -263,28 +281,28 @@ def run():
         if res.status == "PUBLISHED":
             published_count += 1
             primary = res.primary_prediction
-            print(f"    Status: PUBLISHED [SNIPER MODE: 1 Fixture = 1 Database Row]")
+            print(f"    Status: PUBLISHED [SNIPER MODE: 1 Fixture = 1 Database Row]", flush=True)
             if res.simulation_result:
-                print(f"    Simulations: {res.simulation_result.completed_simulations:,} draws in {res.simulation_result.duration_ms:.1f}ms")
+                print(f"    Simulations: {res.simulation_result.completed_simulations:,} draws in {res.simulation_result.duration_ms:.1f}ms", flush=True)
             if res.is_consensus_banker:
                 consensus_banker_count += 1
-                print(f"    🎯 CONSENSUS BANKER VERIFIED: Both P_sim={res.p_sim_primary*100:.1f}% >= 82% AND P_market={res.p_market_primary*100:.1f}% >= 80%")
-                print(f"       Market: [{primary.confidence_tier}] {primary.market_name} -> {primary.outcome}")
+                print(f"    🎯 CONSENSUS BANKER VERIFIED: Both P_sim={res.p_sim_primary*100:.1f}% >= 82% AND P_market={res.p_market_primary*100:.1f}% >= 80%", flush=True)
+                print(f"       Market: [{primary.confidence_tier}] {primary.market_name} -> {primary.outcome}", flush=True)
             else:
-                print(f"    🛡 TOSS-UP / DIVERGENCE: [{primary.confidence_tier}] {primary.market_name} -> {primary.outcome} (P_sim={res.p_sim_primary*100 if res.p_sim_primary else 0:.1f}%)")
+                print(f"    🛡 TOSS-UP / DIVERGENCE: [{primary.confidence_tier}] {primary.market_name} -> {primary.outcome} (P_sim={res.p_sim_primary*100 if res.p_sim_primary else 0:.1f}%)", flush=True)
 
             if res.secondary_predictions:
-                print(f"    📦 SECONDARY CONSENSUS ({len(res.secondary_predictions)} markets >= 60%):")
+                print(f"    📦 SECONDARY CONSENSUS ({len(res.secondary_predictions)} markets >= 60%):", flush=True)
                 for s in res.secondary_predictions:
                     prob_pct = s.get('probability', 0) * 100
-                    print(f"       • [{s.get('confidence_tier')}] {s.get('market')} -> {s.get('prediction')} : {prob_pct:.1f}%")
+                    print(f"       • [{s.get('confidence_tier')}] {s.get('market')} -> {s.get('prediction')} : {prob_pct:.1f}%", flush=True)
 
         elif res.status == "DATA_UNAVAILABLE":
             data_unavailable_count += 1
-            print(f"    Status: DATA_UNAVAILABLE (Zero-Hallucination Gate enforced - no synthetic guessing)")
-            print(f"    Reason: {res.not_ready_reason}")
+            print(f"    Status: DATA_UNAVAILABLE (Zero-Hallucination Gate enforced - no synthetic guessing)", flush=True)
+            print(f"    Reason: {res.not_ready_reason}", flush=True)
         else:
-            print(f"    Status: {res.status} ({res.not_ready_reason})")
+            print(f"    Status: {res.status} ({res.not_ready_reason})", flush=True)
 
     # 7. Verification: Ensure zero pending fixtures in the 4-day window
     print("\n==================================================================")
