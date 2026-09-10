@@ -161,12 +161,22 @@ class PredictionPipeline:
         if hasattr(features, "lambda_corners") and features.lambda_corners:
             corner_params = {"lambda_corners_total": features.lambda_corners}
 
+        model_params = {
+            "home_attack_str": getattr(features, "alpha_home_attack", 1.13),
+            "away_attack_str": getattr(features, "alpha_away_attack", 1.05),
+            "home_defense_str": getattr(features, "beta_home_defense", 1.02),
+            "away_defense_str": getattr(features, "beta_away_defense", 0.97),
+            "home_boost_pct": round((getattr(features, "home_advantage", 1.15) - 1.0) * 100.0, 1),
+            "half_time_split": 0.44
+        }
+
         sim_res = self.simulation_engine.simulate_fixture(
             canonical_key=canonical_key,
             lambda_home=features.lambda_home,
             lambda_away=features.lambda_away,
             fixture_id=fixture_id,
-            corner_parameters=corner_params
+            corner_parameters=corner_params,
+            model_parameters=model_params
         )
 
         if sim_res.status != "completed" or sim_res.completed_simulations < 250000:
@@ -353,7 +363,10 @@ class PredictionPipeline:
             confidence_tier=primary.confidence_tier,
             secondary_predictions=secondary_list,
             is_consensus_banker=is_consensus_banker,
-            data_tier=features.data_tier_used
+            data_tier=features.data_tier_used,
+            home_attack=getattr(features, "alpha_home_attack", 1.13),
+            away_defense=getattr(features, "beta_away_defense", 0.97),
+            home_boost_pct=round((getattr(features, "home_advantage", 1.15) - 1.0) * 100.0, 1)
         )
 
         persisted_count = 0
@@ -384,7 +397,9 @@ class PredictionPipeline:
                         "p_sim": p_sim,
                         "p_market": p_market,
                         "consensus_verified": is_consensus_banker,
-                        "ai_summary": ai_summary_text
+                        "ai_summary": ai_summary_text,
+                        "poisson_parameters": sim_res.poisson_parameters,
+                        "simulation_outlines": sim_res.simulation_outlines
                     }
                 }
                 created_sim = self.supabase.post("football_simulations", sim_payload)
@@ -422,10 +437,17 @@ class PredictionPipeline:
                         "secondary_count": len(secondary_list),
                         "has_safe_banker": is_consensus_banker,
                         "feature_signature": getattr(features, "feature_signature", ""),
+                        "poisson_parameters": sim_res.poisson_parameters,
+                        "simulation_outlines": sim_res.simulation_outlines,
                         "ai_summary": ai_summary_text
                     }
                 }
-                self.supabase.post("football_predictions", pred_payload, on_conflict="fixture_id")
+                # Check if prediction already exists for this fixture_id
+                existing_p = self.supabase.get("football_predictions", {"fixture_id": f"eq.{fixture_id}", "select": "id"})
+                if existing_p:
+                    self.supabase.patch("football_predictions", pred_payload, {"fixture_id": f"eq.{fixture_id}"})
+                else:
+                    self.supabase.post("football_predictions", pred_payload)
 
                 # Update fixture status to 'scheduled' (ensure it's not marked data_unavailable)
                 self.supabase.patch("football_fixtures", {"status": "scheduled"}, {"id": f"eq.{fixture_id}"})

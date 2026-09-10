@@ -8162,6 +8162,248 @@ body {
   border-radius: 2px;
 }
 
+/* ==========================================================================
+   Poisson Distribution Model & Simulation Outlines
+   ========================================================================== */
+.poisson-params-section {
+  margin-top: 10px;
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.poisson-params-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.poisson-params-title {
+  font-family: var(--font-heading);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+  color: #1e293b;
+  text-transform: uppercase;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.poisson-boost-badge {
+  background: linear-gradient(135deg, #059669 0%, #047857 100%);
+  color: #ffffff;
+  font-size: 10.5px;
+  font-weight: 800;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  box-shadow: 0 1px 3px rgba(5, 150, 105, 0.2);
+}
+
+.poisson-params-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 6px;
+}
+
+.poisson-param-pill {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 5px 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+}
+
+.poisson-param-label {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #475569;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.poisson-param-val {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.poisson-param-val.highlight-home {
+  color: #059669;
+}
+
+.poisson-param-val.highlight-away {
+  color: #2563eb;
+}
+
+/* 5-Dimension Simulation Outlines */
+.simulation-outlines-section {
+  margin-top: 10px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+}
+
+.simulation-outlines-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.simulation-outlines-title {
+  font-family: var(--font-heading);
+  font-size: 12.5px;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0;
+  letter-spacing: -0.2px;
+}
+
+.simulation-outlines-subtitle {
+  font-size: 10.5px;
+  color: #64748b;
+  margin: 2px 0 0 0;
+}
+
+.sim-vectorized-badge {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  background: #f1f5f9;
+  color: #334155;
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid #cbd5e1;
+}
+
+.simulation-outlines-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(175px, 1fr));
+  gap: 8px;
+}
+
+.sim-outline-card {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  transition: all 0.15s ease;
+}
+
+.sim-outline-card:hover {
+  background: #ffffff;
+  border-color: #cbd5e1;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+}
+
+.sim-outline-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 4px;
+}
+
+.sim-outline-dim-name {
+  font-size: 10.5px;
+  font-weight: 800;
+  color: #334155;
+  letter-spacing: 0.2px;
+}
+
+.sim-outline-prob-tag {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 800;
+  background: #ecfdf5;
+  color: #047857;
+  border: 1px solid #a7f3d0;
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+.sim-outline-main-pick {
+  font-size: 12.5px;
+  font-weight: 800;
+  color: #0f172a;
+  line-height: 1.3;
+}
+
+.sim-outline-subtext {
+  font-size: 10px;
+  color: #64748b;
+  line-height: 1.4;
+  margin-top: 2px;
+}
+
+/* Verification & Strict Enforcement Badges Footer */
+.sim-enforcement-badges-footer {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding-top: 8px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.enforcement-badge-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #475569;
+}
+
+.enforcement-badge-item .badge-check-icon {
+  color: #059669;
+  font-weight: 900;
+  font-size: 11px;
+}
+
+.enforcement-badge-item.highlight-banker {
+  color: #b45309;
+  font-weight: 800;
+  background: #fefce8;
+  border: 1px solid #fef08a;
+  padding: 3px 8px;
+  border-radius: 6px;
+  display: inline-flex;
+  width: fit-content;
+}
+
+.enforcement-badge-item.gate-pass {
+  color: #065f46;
+  font-weight: 700;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  padding: 4px 10px;
+  border-radius: 6px;
+}
+
+
 
 
 

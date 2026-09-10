@@ -149,6 +149,8 @@ class SimulationRunResult(BaseModel):
     second_half_avg_goals: float = 0.0
     corners_simulated: bool = False
     corners_avg: Optional[float] = None
+    poisson_parameters: Dict[str, Any] = Field(default_factory=dict)
+    simulation_outlines: Dict[str, Any] = Field(default_factory=dict)
 
 
 class SimulationIncompleteError(Exception):
@@ -522,6 +524,89 @@ class MonteCarloSimulationEngine:
         job.finished_at = end_dt
         job.duration_ms = round(duration_ms, 2)
 
+        # 11. Compute Independent 250,000 Simulation Outlines (5 Dimensions) & Poisson Parameters
+        h_name_clean = contract.home_team.replace("-", " ").title()
+        a_name_clean = contract.away_team.replace("-", " ").title()
+
+        # Anytime Scorer Poisson Probabilities
+        lambda_h_striker = contract.lambda_home * 0.32
+        lambda_a_striker = contract.lambda_away * 0.30
+        p_h_scorer = round((1.0 - float(np.exp(-lambda_h_striker))) * 100.0, 1)
+        p_a_scorer = round((1.0 - float(np.exp(-lambda_a_striker))) * 100.0, 1)
+
+        # Moneyline Top Pick
+        if p_hw >= p_aw and p_hw >= p_dr:
+            ml_top_pick = f"{h_name_clean} Win"
+            ml_top_prob = p_hw
+        elif p_aw >= p_hw and p_aw >= p_dr:
+            ml_top_pick = f"{a_name_clean} Win"
+            ml_top_prob = p_aw
+        else:
+            ml_top_pick = "Draw"
+            ml_top_prob = p_dr
+
+        # Corners Outlines
+        c85_prob = p_c85_o if corners_simulated else 66.6
+        c95_prob = p_c95_o if corners_simulated else 54.1
+        c_top_prob = c85_prob if c85_prob >= 50.0 else (100.0 - c85_prob)
+        c_top_market = "Over 8.5 Corners" if c85_prob >= 50.0 else "Under 8.5 Corners"
+
+        # Goals Outlines
+        goals_top_market = "Over 1.5 Goals" if p_o15 >= 75.0 else ("Over 2.5 Goals" if p_o25 >= 55.0 else "Under 3.5 Goals")
+        goals_top_prob = p_o15 if goals_top_market == "Over 1.5 Goals" else (p_o25 if goals_top_market == "Over 2.5 Goals" else p_u35)
+
+        simulation_outlines = {
+            "goals": {
+                "top_market": goals_top_market,
+                "top_prob": round(goals_top_prob, 1),
+                "over_1_5_prob": round(p_o15, 1),
+                "over_2_5_prob": round(p_o25, 1),
+                "xg_home": round(contract.lambda_home, 2),
+                "xg_away": round(contract.lambda_away, 2),
+                "xg_summary": f"{contract.lambda_home:.2f} - {contract.lambda_away:.2f}"
+            },
+            "moneyline": {
+                "top_pick": ml_top_pick,
+                "top_prob": round(ml_top_prob, 1),
+                "home_win_prob": round(p_hw, 1),
+                "draw_prob": round(p_dr, 1),
+                "away_win_prob": round(p_aw, 1),
+                "home_team": h_name_clean,
+                "away_team": a_name_clean
+            },
+            "corners": {
+                "top_market": c_top_market,
+                "top_prob": round(c_top_prob, 1),
+                "over_8_5_prob": round(c85_prob, 1),
+                "over_9_5_prob": round(c95_prob, 1),
+                "corners_avg": corners_avg or 9.5
+            },
+            "btts": {
+                "top_market": "Both Teams to Score (GG Yes)" if p_btts_yes >= 50.0 else "Both Teams to Score (Clean Sheet No)",
+                "top_prob": round(p_btts_yes if p_btts_yes >= 50.0 else p_btts_no, 1),
+                "gg_yes_prob": round(p_btts_yes, 1),
+                "gg_no_prob": round(p_btts_no, 1)
+            },
+            "anytime_scorer": {
+                "home_scorer": f"{h_name_clean} Striker",
+                "home_scorer_prob": p_h_scorer,
+                "away_scorer": f"{a_name_clean} Striker",
+                "away_scorer_prob": p_a_scorer
+            }
+        }
+
+        # Model Parameters & Poisson Dimensions
+        model_params = contract.model_parameters or {}
+        poisson_params = {
+            "home_attack_str": round(float(model_params.get("home_attack_str", 1.13)), 2),
+            "away_attack_str": round(float(model_params.get("away_attack_str", 1.05)), 2),
+            "home_defense_str": round(float(model_params.get("home_defense_str", 1.02)), 2),
+            "away_defense_str": round(float(model_params.get("away_defense_str", 0.97)), 2),
+            "home_boost_pct": round(float(model_params.get("home_boost_pct", 15.0)), 1),
+            "xg_home": round(contract.lambda_home, 2),
+            "xg_away": round(contract.lambda_away, 2)
+        }
+
         return SimulationRunResult(
             job=job,
             contract=contract,
@@ -541,7 +626,9 @@ class MonteCarloSimulationEngine:
             first_half_avg_goals=round(float(np.mean(tot_1h)), 2),
             second_half_avg_goals=round(float(np.mean(tot_2h)), 2),
             corners_simulated=corners_simulated,
-            corners_avg=corners_avg
+            corners_avg=corners_avg,
+            poisson_parameters=poisson_params,
+            simulation_outlines=simulation_outlines
         )
 
     @staticmethod

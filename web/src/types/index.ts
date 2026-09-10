@@ -62,6 +62,66 @@ export interface SecondaryPrediction {
   consensus_verified?: boolean;
 }
 
+export interface PoissonParameters {
+  home_attack_str: number;
+  away_attack_str: number;
+  home_defense_str: number;
+  away_defense_str: number;
+  home_boost_pct: number;
+  xg_home: number;
+  xg_away: number;
+}
+
+export interface GoalsDimension {
+  top_market: string;
+  top_prob: number;
+  over_1_5_prob: number;
+  over_2_5_prob: number;
+  xg_home: number;
+  xg_away: number;
+  xg_summary: string;
+}
+
+export interface MoneylineDimension {
+  top_pick: string;
+  top_prob: number;
+  home_win_prob: number;
+  draw_prob: number;
+  away_win_prob: number;
+  home_team?: string;
+  away_team?: string;
+}
+
+export interface CornersDimension {
+  top_market: string;
+  top_prob: number;
+  over_8_5_prob: number;
+  over_9_5_prob: number;
+  corners_avg?: number;
+}
+
+export interface BttsDimension {
+  top_market: string;
+  top_prob: number;
+  gg_yes_prob: number;
+  gg_no_prob: number;
+}
+
+export interface AnytimeScorerDimension {
+  home_scorer: string;
+  home_scorer_prob: number;
+  away_scorer: string;
+  away_scorer_prob: number;
+}
+
+export interface SimulationOutlines {
+  goals: GoalsDimension;
+  moneyline: MoneylineDimension;
+  corners: CornersDimension;
+  btts: BttsDimension;
+  anytime_scorer: AnytimeScorerDimension;
+}
+
 export interface FootballPrediction {
   id: string;
   fixture_id: string;
@@ -93,6 +153,8 @@ export interface FootballPrediction {
     lambda_away?: number;
     secondary_count?: number;
     ai_summary?: string;
+    poisson_parameters?: PoissonParameters;
+    simulation_outlines?: SimulationOutlines;
     [key: string]: any;
   };
   target_kickoff_at: string;
