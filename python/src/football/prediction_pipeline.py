@@ -86,6 +86,7 @@ class PredictionPipeline:
         away_team_canonical: str,
         kickoff_utc: datetime,
         persist_to_supabase: bool = True,
+        features: Optional[PreMatchFeatures] = None
     ) -> FixturePredictionResult:
         """
         Executes an isolated prediction run for a single fixture with Phase 4.7 guarantees:
@@ -104,33 +105,34 @@ class PredictionPipeline:
         # -------------------------------------------------------------
         # 1. Feature Engineering with Zero-Hallucination Gate
         # -------------------------------------------------------------
-        try:
-            features = self.feature_engine.compute_features(
-                canonical_key=canonical_key,
-                league_code=league_code,
-                home_team_canonical=home_team_canonical,
-                away_team_canonical=away_team_canonical,
-                prediction_cutoff=kickoff_utc,
-                fixture_id=fixture_id,
-            )
-        except MissingDataException as mde:
-            print(f"[ZERO-HALLUCINATION] {canonical_key} missing real data: {mde.missing_fields}")
-            if persist_to_supabase and fixture_id:
-                try:
-                    self.supabase.update_fixture_status(
-                        fixture_id,
-                        "data_unavailable",
-                        reason=f"ZERO_HALLUCINATION: {', '.join(mde.missing_fields)}"
-                    )
-                except Exception as patch_err:
-                    print(f"[WARN] Failed to update fixture status in Supabase: {patch_err}")
+        if features is None:
+            try:
+                features = self.feature_engine.compute_features(
+                    canonical_key=canonical_key,
+                    league_code=league_code,
+                    home_team_canonical=home_team_canonical,
+                    away_team_canonical=away_team_canonical,
+                    prediction_cutoff=kickoff_utc,
+                    fixture_id=fixture_id,
+                )
+            except MissingDataException as mde:
+                print(f"[ZERO-HALLUCINATION] {canonical_key} missing real data: {mde.missing_fields}")
+                if persist_to_supabase and fixture_id:
+                    try:
+                        self.supabase.update_fixture_status(
+                            fixture_id,
+                            "data_unavailable",
+                            reason=f"ZERO_HALLUCINATION: {', '.join(mde.missing_fields)}"
+                        )
+                    except Exception as patch_err:
+                        print(f"[WARN] Failed to update fixture status in Supabase: {patch_err}")
 
-            return FixturePredictionResult(
-                fixture_id=fixture_id,
-                canonical_key=canonical_key,
-                status="DATA_UNAVAILABLE",
-                not_ready_reason=str(mde)
-            )
+                return FixturePredictionResult(
+                    fixture_id=fixture_id,
+                    canonical_key=canonical_key,
+                    status="DATA_UNAVAILABLE",
+                    not_ready_reason=str(mde)
+                )
 
         if not features.is_ready:
             print(f"[DATA INTEGRITY GATE] Fixture not ready: {features.not_ready_reason}")
@@ -155,11 +157,16 @@ class PredictionPipeline:
         # -------------------------------------------------------------
         # 2. 250,000 Monte Carlo Simulations (P_sim)
         # -------------------------------------------------------------
+        corner_params = None
+        if hasattr(features, "lambda_corners") and features.lambda_corners:
+            corner_params = {"lambda_corners_total": features.lambda_corners}
+
         sim_res = self.simulation_engine.simulate_fixture(
             canonical_key=canonical_key,
             lambda_home=features.lambda_home,
             lambda_away=features.lambda_away,
             fixture_id=fixture_id,
+            corner_parameters=corner_params
         )
 
         if sim_res.status != "completed" or sim_res.completed_simulations < 250000:
@@ -183,12 +190,61 @@ class PredictionPipeline:
 
         # Extract qualifying markets from Monte Carlo draws (>= 45.00%)
         qualifying = PublicationFilter.filter_market_outcomes(sim_res.market_outcomes)
-        qualifying.sort(key=lambda q: q.raw_probability, reverse=True)
 
         # -------------------------------------------------------------
-        # 4. Two-Factor Consensus Gate (P_sim >= 82% AND P_market >= 80%)
+        # 4. Dynamic & Diverse Prediction Selection Hierarchy
         # -------------------------------------------------------------
-        primary_candidate = qualifying[0] if qualifying else None
+        EXCLUDED_PRIMARY = {"over_under_0.5"}
+        actionable = [q for q in qualifying if q.market_name not in EXCLUDED_PRIMARY]
+
+        # Priority 1: High-probability match result / double chance edge (>= 74% DC or >= 60% 1X2)
+        tier1_team = [
+            q for q in actionable
+            if (q.market_name == "double_chance" and q.raw_probability >= 0.74) or
+               (q.market_name == "1x2" and q.raw_probability >= 0.60)
+        ]
+        # Priority 2: Actionable Goals (Over 1.5 >= 74%, Under 3.5 >= 74%, Over 2.5 >= 58%, BTTS >= 58%)
+        tier2_goals = [
+            q for q in actionable
+            if (q.market_name in ("over_under_1.5", "over_under_3.5") and q.raw_probability >= 0.74) or
+               (q.market_name in ("over_under_2.5", "btts") and q.raw_probability >= 0.58)
+        ]
+        # Priority 3: Team Totals / Corners / Half Time
+        tier3_specialty = [
+            q for q in actionable
+            if (q.market_name in ("home_goals_0.5", "away_goals_0.5") and q.raw_probability >= 0.72) or
+               (q.market_name.startswith("corners") and q.raw_probability >= 0.68) or
+               (q.market_name == "ht_goals_0.5" and q.raw_probability >= 0.70)
+        ]
+        # Priority 4: Other actionable markets
+        tier4_other = [
+            q for q in actionable
+            if q.market_name not in ("over_under_4.5", "2h_goals_0.5") and q.raw_probability >= 0.55
+        ]
+
+        primary_candidate: Optional[QualifyingPrediction] = None
+        if tier1_team:
+            tier1_team.sort(key=lambda q: q.raw_probability, reverse=True)
+            primary_candidate = tier1_team[0]
+        elif tier2_goals:
+            tier2_goals.sort(key=lambda q: q.raw_probability, reverse=True)
+            primary_candidate = tier2_goals[0]
+        elif tier3_specialty:
+            tier3_specialty.sort(key=lambda q: q.raw_probability, reverse=True)
+            primary_candidate = tier3_specialty[0]
+        elif tier4_other:
+            tier4_other.sort(key=lambda q: q.raw_probability, reverse=True)
+            primary_candidate = tier4_other[0]
+        else:
+            cand = [q for q in actionable if q.raw_probability >= 0.60 and q.market_name != "over_under_4.5"]
+            if cand:
+                cand.sort(key=lambda q: q.raw_probability, reverse=True)
+                primary_candidate = cand[0]
+            else:
+                u45 = [q for q in actionable if q.market_name == "over_under_4.5" and q.raw_probability >= 0.82]
+                if u45:
+                    primary_candidate = u45[0]
+
         p_sim = float(primary_candidate.raw_probability) if primary_candidate else 0.0
 
         # Look up corresponding P_market
@@ -199,9 +255,7 @@ class PredictionPipeline:
             if m_key in market_probabilities and o_key in market_probabilities[m_key]:
                 p_market = market_probabilities[m_key][o_key]
 
-        # If bookmaker has not posted this exact line yet, estimate fair market baseline from 1X2 distribution
         if p_market is None and primary_candidate:
-            # Under 4.5 / Under 3.5 in top-flight football typically carries implied market probability of 85-92%
             if "under" in primary_candidate.outcome.lower() and "4.5" in primary_candidate.market_name:
                 p_market = 0.8800
             elif "under" in primary_candidate.outcome.lower() and "3.5" in primary_candidate.market_name:
@@ -211,14 +265,51 @@ class PredictionPipeline:
             else:
                 p_market = round(p_sim * 0.98, 4)
 
-        # CONSENSUS GATING CRITERIA:
-        # Both P_sim >= 0.8000 (80%) AND P_market >= 0.7800 (78%) for Elite Consensus Banker
         is_consensus_banker = (p_sim >= 0.8000) and (p_market is not None and p_market >= 0.7800)
+
+        # Diverse Secondary Picks across different market buckets (Max 4)
+        secondaries: List[QualifyingPrediction] = []
+        seen_categories = set()
+        if primary_candidate:
+            if primary_candidate.market_name in ("1x2", "double_chance"):
+                seen_categories.add("result")
+            elif "over_under" in primary_candidate.market_name:
+                seen_categories.add("total_goals")
+            elif primary_candidate.market_name == "btts":
+                seen_categories.add("btts")
+            elif "goals_0.5" in primary_candidate.market_name:
+                seen_categories.add("team_goals")
+            elif primary_candidate.market_name.startswith("corners"):
+                seen_categories.add("corners")
+
+        remaining = [q for q in qualifying if q != primary_candidate and q.raw_probability >= 0.55 and q.market_name != "over_under_0.5"]
+        remaining.sort(key=lambda q: q.raw_probability, reverse=True)
+
+        for q in remaining:
+            cat = "other"
+            if q.market_name in ("1x2", "double_chance"):
+                cat = "result"
+            elif "over_under" in q.market_name:
+                cat = "total_goals"
+            elif q.market_name == "btts":
+                cat = "btts"
+            elif "goals_0.5" in q.market_name:
+                cat = "team_goals"
+            elif q.market_name.startswith("corners"):
+                cat = "corners"
+            elif "ht_" in q.market_name or "2h_" in q.market_name:
+                cat = "half_goals"
+
+            if cat not in seen_categories and len(secondaries) < 4:
+                secondaries.append(q)
+                seen_categories.add(cat)
+
+        for q in remaining:
+            if q not in secondaries and len(secondaries) < 4:
+                secondaries.append(q)
 
         if primary_candidate:
             primary = primary_candidate
-            # Secondary predictions: other qualifying markets >= 55.00%, capped at 4
-            secondary_candidates = [q for q in qualifying[1:] if q.raw_probability >= 0.5500]
             secondary_list = [
                 {
                     "market": q.market_name,
@@ -229,7 +320,7 @@ class PredictionPipeline:
                     "tier": q.confidence_tier,
                     "consensus_verified": is_consensus_banker
                 }
-                for q in secondary_candidates[:4]
+                for q in secondaries
             ]
         else:
             top_prob = round(p_sim, 4)
@@ -330,6 +421,7 @@ class PredictionPipeline:
                         "injury_debuff_away": features.squad_injury_debuff_away,
                         "secondary_count": len(secondary_list),
                         "has_safe_banker": is_consensus_banker,
+                        "feature_signature": getattr(features, "feature_signature", ""),
                         "ai_summary": ai_summary_text
                     }
                 }

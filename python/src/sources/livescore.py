@@ -20,6 +20,7 @@ class LiveScoreAdapter(BaseSourceAdapter):
             rate_limit_delay_seconds=2.0,
             max_retries=3
         )
+        self._date_cache: dict = {}
 
     def _map_livescore_status(self, eps: str) -> FixtureStatus:
         status_map = {
@@ -51,7 +52,12 @@ class LiveScoreAdapter(BaseSourceAdapter):
             date_str = current_day.strftime("%Y%m%d")
             url = f"{self.base_url}/{date_str}/0.00?MD=1"
 
-            data = self.get_json_with_retry(url)
+            if date_str in self._date_cache:
+                data = self._date_cache[date_str]
+            else:
+                data = self.get_json_with_retry(url)
+                if data:
+                    self._date_cache[date_str] = data
             if data:
                 stages = data.get("Stages", [])
                 for stage in stages:

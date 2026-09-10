@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, Fragment } from 'react';
 import { Routes, Route, Navigate, useNavigate, useLocation, Link } from 'react-router-dom';
 import { supabase } from './lib/supabase';
 import {
@@ -400,7 +400,8 @@ export default function App() {
     setError(null);
     const start = performance.now();
     try {
-      // Authoritative fixtures query joining leagues and teams using foreign keys
+      // Authoritative fixtures query joining leagues, teams, and predictions strictly via inner join
+      // NEVER returns pending or fixtures without published predictions
       const queueQuery = supabase
         .from('football_fixtures')
         .select(`
@@ -422,9 +423,21 @@ export default function App() {
           updated_at,
           league:football_leagues!inner(id, name, code, country),
           home_team:football_teams!football_fixtures_home_team_id_fkey(id, name),
-          away_team:football_teams!football_fixtures_away_team_id_fkey(id, name)
+          away_team:football_teams!football_fixtures_away_team_id_fkey(id, name),
+          football_predictions!inner(
+            id,
+            prediction,
+            market,
+            probability,
+            confidence_category,
+            secondary_predictions,
+            metadata,
+            settlement_status,
+            settlement_notes,
+            publication_status
+          )
         `)
-        .eq('in_prediction_queue', true)
+        .eq('football_predictions.publication_status', 'published')
         .order('target_kickoff_at', { ascending: true })
         .limit(2000);
 
@@ -513,39 +526,71 @@ export default function App() {
 
       if (queueRes.error) throw queueRes.error;
       const rawFixtures = queueRes.data || [];
-      const returnedFixtures: QueueFixture[] = rawFixtures.map((f: any) => ({
-        id: f.id,
-        canonical_key: f.canonical_key,
-        target_kickoff_at: f.target_kickoff_at,
-        status: f.status,
-        queue_day: f.queue_day,
-        in_prediction_queue: f.in_prediction_queue,
-        home_score: f.home_score,
-        away_score: f.away_score,
-        match_minute: f.match_minute,
-        period: f.period,
-        half_time_home_score: f.half_time_home_score,
-        half_time_away_score: f.half_time_away_score,
-        corners_home: f.corners_home,
-        corners_away: f.corners_away,
-        postponed_at: f.postponed_at || null,
-        cancelled_at: f.cancelled_at || null,
-        created_at: f.created_at || new Date().toISOString(),
-        updated_at: f.updated_at || new Date().toISOString(),
-        league_id: f.league?.id || f.league_id,
-        league_name: f.league?.name || f.league_name || 'Other Competitions',
-        league_code: f.league?.code || f.league_code || 'OTHER',
-        league_country: f.league?.country || f.league_country || '',
-        home_team_id: f.home_team?.id || f.home_team_id,
-        home_team_name: f.home_team?.name || f.home_team_name || 'Home Team',
-        away_team_id: f.away_team?.id || f.away_team_id,
-        away_team_name: f.away_team?.name || f.away_team_name || 'Away Team'
-      }));
+      const embeddedPreds: FootballPrediction[] = [];
+      const returnedFixtures: QueueFixture[] = [];
+
+      rawFixtures.forEach((f: any) => {
+        const fp = f.football_predictions;
+        const predList: any[] = Array.isArray(fp) ? fp : fp ? [fp] : [];
+        const validPreds = predList.filter(
+          (p: any) => p && p.prediction && typeof p.probability === 'number' && p.probability > 0
+        );
+
+        // Strictly require at least one valid predicted signal
+        if (validPreds.length === 0) return;
+
+        validPreds.forEach((p: any) => {
+          embeddedPreds.push({
+            ...p,
+            fixture_id: f.id
+          });
+        });
+
+        returnedFixtures.push({
+          id: f.id,
+          canonical_key: f.canonical_key,
+          target_kickoff_at: f.target_kickoff_at,
+          status: f.status,
+          queue_day: f.queue_day,
+          in_prediction_queue: f.in_prediction_queue,
+          home_score: f.home_score,
+          away_score: f.away_score,
+          match_minute: f.match_minute,
+          period: f.period,
+          half_time_home_score: f.half_time_home_score,
+          half_time_away_score: f.half_time_away_score,
+          corners_home: f.corners_home,
+          corners_away: f.corners_away,
+          postponed_at: f.postponed_at || null,
+          cancelled_at: f.cancelled_at || null,
+          created_at: f.created_at || new Date().toISOString(),
+          updated_at: f.updated_at || new Date().toISOString(),
+          league_id: f.league?.id || f.league_id,
+          league_name: f.league?.name || f.league_name || 'Other Competitions',
+          league_code: f.league?.code || f.league_code || 'OTHER',
+          league_country: f.league?.country || f.league_country || '',
+          home_team_id: f.home_team?.id || f.home_team_id,
+          home_team_name: f.home_team?.name || f.home_team_name || 'Home Team',
+          away_team_id: f.away_team?.id || f.away_team_id,
+          away_team_name: f.away_team?.name || f.away_team_name || 'Away Team'
+        });
+      });
+
+      // Strictly earliest kickoff time first
+      returnedFixtures.sort(
+        (a, b) => new Date(a.target_kickoff_at).getTime() - new Date(b.target_kickoff_at).getTime()
+      );
+
       const returnedLeagues: LeagueRecord[] = leagueRes.data || [];
+      const separatePreds = (predOrTeaserRes.data || []) as FootballPrediction[];
+      const allPredsMap = new Map<string, FootballPrediction>();
+      embeddedPreds.forEach((p) => allPredsMap.set(p.id, p));
+      separatePreds.forEach((p) => allPredsMap.set(p.id, p));
+      const combinedPredictions = Array.from(allPredsMap.values());
 
       setFixtures(returnedFixtures);
       setLeaguesList(returnedLeagues);
-      setPredictions((predOrTeaserRes.data || []) as FootballPrediction[]);
+      setPredictions(combinedPredictions);
 
       // Update dynamic sports state based exclusively on Cloud Supabase results
       const nextSportsState: Record<string, SportAvailability> = {
@@ -656,15 +701,12 @@ export default function App() {
     const today = getDateDetails(0);
     const tomorrow = getDateDetails(1);
 
-    // Collect upcoming future dates dynamically from queue (or default to +2, +3 days)
-    const fixedIsos = new Set([yesterday.iso, today.iso, tomorrow.iso]);
-    const extraDatesFromQueue = Array.from(fixtureCountByDate.keys())
-      .filter((d) => !fixedIsos.has(d) && d > today.iso)
-      .sort();
-
-    const futureDateIsos = extraDatesFromQueue.length > 0
-      ? extraDatesFromQueue.slice(0, 2)
-      : [getDateDetails(2).iso, getDateDetails(3).iso];
+    // Ensure full 4-day forward horizon: Tomorrow (Day +1), Day +2, Day +3, Day +4
+    const futureDateIsos = [
+      getDateDetails(2).iso,
+      getDateDetails(3).iso,
+      getDateDetails(4).iso
+    ];
 
     const futureDates = futureDateIsos.map((iso, idx) => {
       const [y, m, d] = iso.split('-').map(Number);
@@ -966,7 +1008,7 @@ export default function App() {
       }
 
       return true;
-    });
+    }).sort((a, b) => new Date(a.target_kickoff_at).getTime() - new Date(b.target_kickoff_at).getTime());
   }, [
     fixtures,
     predsByFixture,
@@ -980,39 +1022,15 @@ export default function App() {
     searchQuery
   ]);
 
-  // Group filtered fixtures by League Name using reduce
-  const fixturesByLeague = useMemo(() => {
-    const map = filteredFixtures.reduce<Map<string, {
-      leagueId: string;
-      leagueName: string;
-      leagueCode: string;
-      leagueCountry: string;
-      fixtures: QueueFixture[];
-    }>>((acc, f) => {
-      const key = f.league_name || 'Other Competitions';
-      if (!acc.has(key)) {
-        acc.set(key, {
-          leagueId: f.league_id || key,
-          leagueName: f.league_name || 'Other Competitions',
-          leagueCode: f.league_code || 'OTHER',
-          leagueCountry: f.league_country || '',
-          fixtures: []
-        });
-      }
-      acc.get(key)!.fixtures.push(f);
-      return acc;
-    }, new Map());
 
-    return Array.from(map.values()).sort((a, b) => a.leagueName.localeCompare(b.leagueName));
-  }, [filteredFixtures]);
-
-  // List of fixtures that feature BANGER signals for the left sidebar
+  // List of fixtures that feature BANGER signals for the left sidebar (strictly today in WAT)
   const bangerFixturesList = useMemo(() => {
     return fixtures.filter((f) => {
+      if (getFixtureWatDate(f.target_kickoff_at) !== dynamicDateTabs.today.id) return false;
       const pList = predsByFixture.get(f.id) || [];
       return pList.some((s) => s.confidence_category === 'BANGER');
     });
-  }, [fixtures, predsByFixture]);
+  }, [fixtures, predsByFixture, dynamicDateTabs.today.id]);
 
   // Helpers
   const formatKickoff = (isoString: string) => {
@@ -1029,7 +1047,8 @@ export default function App() {
     setSelectedMarket('all');
     setSettlementFilter('all');
     setScoreStatusFilter('all');
-    setSelectedDate('all');
+    setSelectedDate(dynamicDateTabs.today.id);
+    setSearchQuery('');
   };
 
   // Unified Platform View (Header, Top Regulatory Notice & Footer on all pages)
@@ -1327,53 +1346,28 @@ export default function App() {
                 value={selectedDate}
                 onChange={(e) => setSelectedDate(e.target.value)}
               >
-                <option value="all">Show All Dates ({dynamicDateTabs.all.count} matches)</option>
-                <option value={dynamicDateTabs.yesterday.id}>
-                  Yesterday — {dynamicDateTabs.yesterday.subLabel} ({dynamicDateTabs.yesterday.count} matches)
-                </option>
                 <option value={dynamicDateTabs.today.id}>
-                  Today — {dynamicDateTabs.today.subLabel} ({dynamicDateTabs.today.count} matches)
+                  Today — {dynamicDateTabs.today.subLabel} ({dynamicDateTabs.today.count} matches) [CURRENT]
                 </option>
                 <option value={dynamicDateTabs.tomorrow.id}>
                   Tomorrow — {dynamicDateTabs.tomorrow.subLabel} ({dynamicDateTabs.tomorrow.count} matches)
                 </option>
                 {dynamicDateTabs.futureDates.map((fd) => (
                   <option key={fd.id} value={fd.id}>
-                    {fd.label} ({fd.count} matches)
+                    {fd.label} — {fd.subLabel} ({fd.count} matches)
                   </option>
                 ))}
+                <option value={dynamicDateTabs.yesterday.id}>
+                  Yesterday — {dynamicDateTabs.yesterday.subLabel} ({dynamicDateTabs.yesterday.count} matches)
+                </option>
+                <option value="all">Show All 5 Horizon Dates ({dynamicDateTabs.all.count} matches)</option>
               </select>
             </div>
           </div>
 
-          {/* Date Navigation Pills Bar (Strictly Dynamic Calendar Grounded) */}
+          {/* Date Navigation Pills Bar (Strictly Dynamic Calendar Grounded — Today First) */}
           <div className="date-nav-pills-bar">
-            {/* Pill 1: Show All Dates */}
-            <button
-              type="button"
-              className={`date-pill-btn ${selectedDate === 'all' ? 'active' : ''}`}
-              onClick={() => setSelectedDate('all')}
-            >
-              <span className="date-pill-main-row">
-                Show All Dates ({dynamicDateTabs.all.count})
-              </span>
-              <span className="date-pill-sub-label">Full Queue</span>
-            </button>
-
-            {/* Pill 2: Yesterday (with date indication under it) */}
-            <button
-              type="button"
-              className={`date-pill-btn yesterday-pill ${selectedDate === dynamicDateTabs.yesterday.id ? 'active' : ''}`}
-              onClick={() => setSelectedDate(dynamicDateTabs.yesterday.id)}
-            >
-              <span className="date-pill-main-row">
-                Yesterday
-                <span className="date-pill-winloss">{dynamicDateTabs.yesterday.count} M</span>
-              </span>
-              <span className="date-pill-sub-label">{dynamicDateTabs.yesterday.subLabel}</span>
-            </button>
-
-            {/* Pill 3: Today (with date indication under it) */}
+            {/* Pill 1: Today (Live / Active Default) */}
             <button
               type="button"
               className={`date-pill-btn ${selectedDate === dynamicDateTabs.today.id ? 'active' : ''}`}
@@ -1386,7 +1380,7 @@ export default function App() {
               <span className="date-pill-sub-label">{dynamicDateTabs.today.subLabel}</span>
             </button>
 
-            {/* Pill 4: Tomorrow */}
+            {/* Pill 2: Tomorrow (Day +1) */}
             <button
               type="button"
               className={`date-pill-btn ${selectedDate === dynamicDateTabs.tomorrow.id ? 'active' : ''}`}
@@ -1399,7 +1393,7 @@ export default function App() {
               <span className="date-pill-sub-label">{dynamicDateTabs.tomorrow.subLabel}</span>
             </button>
 
-            {/* Pills 5 & 6: date, date */}
+            {/* Pills 3, 4, 5: Day +2, Day +3, Day +4 */}
             {dynamicDateTabs.futureDates.map((fd) => {
               const isSelected = selectedDate === fd.id;
               return (
@@ -1417,6 +1411,31 @@ export default function App() {
                 </button>
               );
             })}
+
+            {/* Pill 6: Yesterday */}
+            <button
+              type="button"
+              className={`date-pill-btn yesterday-pill ${selectedDate === dynamicDateTabs.yesterday.id ? 'active' : ''}`}
+              onClick={() => setSelectedDate(dynamicDateTabs.yesterday.id)}
+            >
+              <span className="date-pill-main-row">
+                Yesterday
+                <span className="date-pill-winloss">{dynamicDateTabs.yesterday.count} M</span>
+              </span>
+              <span className="date-pill-sub-label">{dynamicDateTabs.yesterday.subLabel}</span>
+            </button>
+
+            {/* Pill 7: Show All Dates */}
+            <button
+              type="button"
+              className={`date-pill-btn ${selectedDate === 'all' ? 'active' : ''}`}
+              onClick={() => setSelectedDate('all')}
+            >
+              <span className="date-pill-main-row">
+                All Dates ({dynamicDateTabs.all.count})
+              </span>
+              <span className="date-pill-sub-label">Full Horizon</span>
+            </button>
           </div>
 
           {/* 4. SCORECARD KPI CARDS (2 ROWS) - ALL INTERACTIVELY CLICKABLE */}
@@ -1823,9 +1842,9 @@ export default function App() {
             ) : filteredFixtures.length === 0 ? (
               <div style={{ padding: 48, background: '#ffffff', borderRadius: 16, border: '1px solid var(--border-subtle)', textAlign: 'center' }}>
                 <div style={{ fontSize: 32, marginBottom: 8 }}>⚽</div>
-                <div style={{ fontWeight: 800, fontSize: 16, color: 'var(--text-primary)' }}>No Matching Fixtures Found</div>
+                <div style={{ fontWeight: 800, fontSize: 16, color: 'var(--text-primary)' }}>No Matching Predicted Fixtures Found</div>
                 <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4, maxWidth: 460, margin: '6px auto 16px' }}>
-                  No matches match your current competition, market, or date filter parameters.
+                  No verified predicted matches found for your current filter parameters.
                 </div>
                 <button
                   type="button"
@@ -1836,25 +1855,30 @@ export default function App() {
                 </button>
               </div>
             ) : (
-              fixturesByLeague.map(({ leagueId, leagueName, leagueCountry, fixtures: leagueMatches }) => (
-                <div key={leagueId} className="league-group-container">
-                  <div className="league-group-header">
-                    <div className="league-group-title-left">
-                      <span className="league-group-trophy-icon">🏆</span>
-                      <div className="league-group-info">
-                        <span className="league-group-name">{leagueName}</span>
-                        {leagueCountry && (
-                          <span className="league-group-country-badge">📍 {leagueCountry}</span>
-                        )}
-                      </div>
-                    </div>
-                    <span className="league-group-match-count">{leagueMatches.length} Matches</span>
-                  </div>
+              <div className="chronological-fixtures-stream">
+                {filteredFixtures.map((fixture, idx) => {
+                  const kickoff = formatKickoff(fixture.target_kickoff_at);
+                  const prevFixture = idx > 0 ? filteredFixtures[idx - 1] : null;
+                  const prevKickoff = prevFixture ? formatKickoff(prevFixture.target_kickoff_at) : null;
+                  const isTimeSlotStart =
+                    !prevKickoff ||
+                    prevKickoff.timeStr !== kickoff.timeStr ||
+                    prevKickoff.dateStr !== kickoff.dateStr;
 
-                  <div className="league-group-matches-list">
-                    {leagueMatches.map((fixture) => (
+                  return (
+                    <Fragment key={fixture.id}>
+                      {isTimeSlotStart && (
+                        <div className="kickoff-slot-divider">
+                          <div className="kickoff-slot-badge">
+                            <span className="kickoff-slot-clock">⏰</span>
+                            <span className="kickoff-slot-time">{kickoff.timeStr} WAT</span>
+                            <span className="kickoff-slot-dot">•</span>
+                            <span className="kickoff-slot-date">{kickoff.dateStr}</span>
+                          </div>
+                          <div className="kickoff-slot-line" />
+                        </div>
+                      )}
                       <FixtureCard
-                        key={fixture.id}
                         fixture={fixture}
                         prediction={predsByFixture.get(fixture.id)?.[0] || null}
                         isAdmin={isAdmin}
@@ -1864,10 +1888,10 @@ export default function App() {
                         isExpanded={expandedFixtures.has(fixture.id)}
                         onToggleExpand={() => toggleFixtureExpand(fixture.id)}
                       />
-                    ))}
-                  </div>
-                </div>
-              ))
+                    </Fragment>
+                  );
+                })}
+              </div>
             )}
           </div>
 

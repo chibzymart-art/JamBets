@@ -27,6 +27,8 @@ class SupabaseClient:
             "Prefer": "return=representation,resolution=merge-duplicates"
         }
         self.client = httpx.Client(base_url=f"{self.url}/rest/v1", headers=self.headers, timeout=20.0)
+        self._leagues_cache: Dict[str, str] = {}
+        self._teams_cache: Dict[str, str] = {}
 
     def get(self, table: str, params: Optional[Dict[str, str]] = None) -> List[Dict[str, Any]]:
         resp = self.client.get(f"/{table}", params=params)
@@ -58,17 +60,27 @@ class SupabaseClient:
         return records_name[0]["id"] if records_name else None
 
     def get_league_id_by_code(self, code: str) -> Optional[str]:
-        """Retrieves football_league UUID by code."""
+        """Retrieves football_league UUID by code (cached)."""
+        if code in self._leagues_cache:
+            return self._leagues_cache[code]
         records = self.get("football_leagues", {"code": f"eq.{code}", "select": "id"})
-        return records[0]["id"] if records else None
+        if records:
+            self._leagues_cache[code] = records[0]["id"]
+            return records[0]["id"]
+        return None
 
     def upsert_team(self, name: str, short_name: Optional[str] = None) -> str:
-        """Finds or creates a team and returns its UUID."""
+        """Finds or creates a team and returns its UUID (cached)."""
+        if name in self._teams_cache:
+            return self._teams_cache[name]
         existing = self.get("football_teams", {"name": f"eq.{name}", "select": "id"})
         if existing:
+            self._teams_cache[name] = existing[0]["id"]
             return existing[0]["id"]
         created = self.post("football_teams", {"name": name, "short_name": short_name})
-        return created[0]["id"]
+        team_id = created[0]["id"]
+        self._teams_cache[name] = team_id
+        return team_id
 
     def upsert_fixture(self, fixture_payload: Dict[str, Any]) -> Dict[str, Any]:
         """

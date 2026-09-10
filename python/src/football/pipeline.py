@@ -46,8 +46,8 @@ class AcquisitionPipeline:
         """
         now_utc = datetime.now(timezone.utc)
         date_from = now_utc
-        # Strict four-day window enforcement: Today + 4 days
-        date_to = now_utc + timedelta(days=MAX_PREDICTION_WINDOW_DAYS)
+        # Strict four-day window enforcement: Today + 4 days (covers full horizon)
+        date_to = (now_utc + timedelta(days=MAX_PREDICTION_WINDOW_DAYS)).replace(hour=23, minute=59, second=59)
 
         target_leagues = (
             [LEAGUE_REGISTRY[code] for code in leagues if code in LEAGUE_REGISTRY]
@@ -67,9 +67,13 @@ class AcquisitionPipeline:
         # Ensure leagues are registered in Supabase
         self.sync_leagues_registry()
 
-        adapters = self.registry.get_all_active_adapters()
+        adapters = [
+            a for a in self.registry.get_all_active_adapters()
+            if a.slug in ("fotmob", "espn", "livescore")
+        ]
 
         for league in target_leagues:
+            print(f"  • Scraping 5-day horizon for {league.name} ({league.code})...", flush=True)
             league_canonical_fixtures: Dict[str, CanonicalFixture] = {}
 
             # 1. Fetch from all approved adapters

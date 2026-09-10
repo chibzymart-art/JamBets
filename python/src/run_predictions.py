@@ -136,6 +136,16 @@ def run():
     pipeline.model = model
     pipeline.simulation_engine.model = model
 
+    # 4.5. Synchronize 5-Day Rolling Scraper Horizon (Today + 4 Days Ahead)
+    print("\n[STEP 3.5] Synchronizing Rolling 5-Day Forward Scraper Horizon (Today + 4 Days Ahead)...", flush=True)
+    from python.src.football.pipeline import AcquisitionPipeline
+    try:
+        acq = AcquisitionPipeline(supabase=supabase)
+        acq_metrics = acq.run_acquisition()
+        print(f"  [OK] Forward scraper synchronization finished. Wrote {acq_metrics.get('supabase_records_written', 0)} matches.", flush=True)
+    except Exception as acq_err:
+        print(f"  [WARN] Acquisition notice: {acq_err}", flush=True)
+
     # 5. Fetch Forward 4-Day Window Fixtures
     now_utc = datetime.now(timezone.utc)
     max_utc = now_utc + timedelta(days=4)
@@ -157,6 +167,15 @@ def run():
     )
     print(f"  • Retrieved {len(forward_fixtures)} fixtures in the 4-day window from Cloud Supabase")
 
+    # Load existing predictions for smart change-detection reprediction
+    try:
+        existing_preds_raw = supabase.get("football_predictions", {"select": "fixture_id,market,prediction,metadata", "limit": "2000"})
+        existing_preds_map = {p["fixture_id"]: p for p in existing_preds_raw if "fixture_id" in p}
+        print(f"  • Found {len(existing_preds_map)} existing predictions in Cloud Supabase for change-detection evaluation.", flush=True)
+    except Exception as e_err:
+        existing_preds_map = {}
+        print(f"  [WARN] Could not load existing predictions: {e_err}", flush=True)
+
     # If argument provided, allow limiting for tests, otherwise drain the entire forward window
     drain_all = True
     batch_limit = None
@@ -174,6 +193,7 @@ def run():
     published_count = 0
     data_unavailable_count = 0
     consensus_banker_count = 0
+    skipped_unchanged_count = 0
 
     for idx, f in enumerate(fixtures_to_process, 1):
         f_id = f.get("id")
@@ -192,6 +212,43 @@ def run():
         print(f"    Canonical Key: {canonical_key}")
         print(f"    Kickoff: {kickoff.isoformat()}")
 
+        # SMART REPREDICTION: Check if already predicted and game data unchanged
+        existing_pred = existing_preds_map.get(f_id)
+        features = None
+        try:
+            features = pipeline.feature_engine.compute_features(
+                canonical_key=canonical_key,
+                league_code=l_code,
+                home_team_canonical=h_team,
+                away_team_canonical=a_team,
+                prediction_cutoff=kickoff,
+                fixture_id=f_id,
+            )
+        except Exception:
+            pass
+
+        if existing_pred and features:
+            prev_meta = existing_pred.get("metadata") or {}
+            if isinstance(prev_meta, str):
+                import json
+                try:
+                    prev_meta = json.loads(prev_meta)
+                except Exception:
+                    prev_meta = {}
+            prev_sig = prev_meta.get("feature_signature")
+            prev_market = existing_pred.get("market")
+
+            # Condition to skip: Not legacy static "over_under_0.5" AND feature signature is identical
+            if prev_market != "over_under_0.5" and prev_sig and prev_sig == features.feature_signature:
+                skipped_unchanged_count += 1
+                print(f"    [SKIP REPREDICT] Game data stable (Signature: {features.feature_signature}). Preserving existing prediction.")
+                continue
+            else:
+                if prev_market == "over_under_0.5":
+                    print(f"    [UPGRADE REPREDICT] Upgrading legacy static Over 0.5 prediction to dynamic diverse banker model.")
+                else:
+                    print(f"    [DATA CHANGED REPREDICT] Game data changed ({prev_sig} -> {features.feature_signature}). Re-simulating...")
+
         res = pipeline.process_single_fixture(
             fixture_id=f_id,
             canonical_key=canonical_key,
@@ -199,7 +256,8 @@ def run():
             home_team_canonical=h_team,
             away_team_canonical=a_team,
             kickoff_utc=kickoff,
-            persist_to_supabase=True
+            persist_to_supabase=True,
+            features=features
         )
 
         if res.status == "PUBLISHED":

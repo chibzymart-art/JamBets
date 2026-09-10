@@ -5,7 +5,7 @@ confirmed player absences, and squad rosters.
 Rate limit: 1.5s delay with 3-attempt exponential backoff.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import re
 from typing import List, Dict, Any, Optional
 from python.src.config import LeagueConfig
@@ -178,47 +178,61 @@ class FotMobAdapter(BaseSourceAdapter):
         return absences
 
     def fetch_fixtures(self, league: LeagueConfig, date_from: datetime, date_to: datetime) -> List[RawFixturePayload]:
-        """Fetches fixtures for the given league and date window."""
-        df_str = date_from.strftime("%Y%m%d")
-        url = f"{self.base_url}/matches"
-        data = self.get_json_with_retry(url, params={"date": df_str})
-
-        if not data or "leagues" not in data:
-            return []
+        """Fetches fixtures for the given league and date window across all forward days."""
+        if not hasattr(self, "_matches_cache"):
+            self._matches_cache: Dict[str, Any] = {}
 
         fotmob_league_id = self.LEAGUE_ID_MAP.get(league.code)
         results: List[RawFixturePayload] = []
 
-        for lg in data.get("leagues", []):
-            if fotmob_league_id and lg.get("id") != fotmob_league_id:
+        cur_date = date_from.date()
+        end_date = date_to.date()
+
+        while cur_date <= end_date:
+            df_str = cur_date.strftime("%Y%m%d")
+            if df_str in self._matches_cache:
+                data = self._matches_cache[df_str]
+            else:
+                url = f"{self.base_url}/matches"
+                data = self.get_json_with_retry(url, params={"date": df_str})
+                if data:
+                    self._matches_cache[df_str] = data
+
+            cur_date += timedelta(days=1)
+
+            if not data or "leagues" not in data:
                 continue
 
-            for match in lg.get("matches", []):
-                m_id = str(match.get("id"))
-                home_team = match.get("home", {}).get("name", "Unknown")
-                away_team = match.get("away", {}).get("name", "Unknown")
-                time_str = match.get("status", {}).get("utcTime")
-
-                if not time_str:
+            for lg in data.get("leagues", []):
+                if fotmob_league_id and lg.get("id") != fotmob_league_id:
                     continue
 
-                try:
-                    kickoff_dt = datetime.fromisoformat(time_str.replace("Z", "+00:00"))
-                except Exception:
-                    continue
+                for match in lg.get("matches", []):
+                    m_id = str(match.get("id"))
+                    home_team = match.get("home", {}).get("name", "Unknown")
+                    away_team = match.get("away", {}).get("name", "Unknown")
+                    time_str = match.get("status", {}).get("utcTime")
 
-                payload = RawFixturePayload(
-                    source_name=self.name,
-                    provider_event_id=m_id,
-                    league_code=league.code,
-                    season=str(datetime.now().year),
-                    home_team_raw=home_team,
-                    away_team_raw=away_team,
-                    scheduled_kickoff_utc=kickoff_dt,
-                    status=FixtureStatus.SCHEDULED,
-                    raw_payload=match
-                )
-                results.append(payload)
+                    if not time_str:
+                        continue
+
+                    try:
+                        kickoff_dt = datetime.fromisoformat(time_str.replace("Z", "+00:00"))
+                    except Exception:
+                        continue
+
+                    payload = RawFixturePayload(
+                        source_name=self.name,
+                        provider_event_id=m_id,
+                        league_code=league.code,
+                        season=str(datetime.now().year),
+                        home_team_raw=home_team,
+                        away_team_raw=away_team,
+                        scheduled_kickoff_utc=kickoff_dt,
+                        status=FixtureStatus.SCHEDULED,
+                        raw_payload=match
+                    )
+                    results.append(payload)
 
         return results
 
