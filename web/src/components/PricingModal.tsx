@@ -59,7 +59,7 @@ export const PricingModal: React.FC<PricingModalProps> = ({ isOpen, onClose, onU
                 onClose();
               }}
             >
-              Select Standard (₦5k Flat)
+              Select Standard (₦5,000 / month)
             </button>
           </div>
 
@@ -70,7 +70,7 @@ export const PricingModal: React.FC<PricingModalProps> = ({ isOpen, onClose, onU
               <span className="plan-badge bigbang">BIGBANG VIP</span>
               <div className="plan-price">
                 <span className="currency">₦</span>
-                <span className="amount">15,000</span>
+                <span className="amount">10,000</span>
                 <span className="period">/ month</span>
               </div>
               <p className="plan-desc">VIP algorithmic suite with exclusive 96%+ Bangers & instant access.</p>
@@ -92,7 +92,7 @@ export const PricingModal: React.FC<PricingModalProps> = ({ isOpen, onClose, onU
                 onClose();
               }}
             >
-              Unlock BigBang VIP
+              Unlock BigBang VIP (₦10,000 / month)
             </button>
           </div>
         </div>

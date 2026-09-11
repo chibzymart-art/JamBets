@@ -334,7 +334,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
             <div className={`tier-card ${currentTier === 'free' ? 'active-tier' : ''}`}>
               <div className="tier-badge-top">BASIC</div>
               <h4 className="tier-name">Free Tier</h4>
-              <div className="tier-price">$0 <span>/ month</span></div>
+              <div className="tier-price">₦0 <span>/ month</span></div>
               <ul className="tier-perks">
                 <li>✓ Browse all football fixtures</li>
                 <li>✓ Live scores & match states</li>
@@ -355,7 +355,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
             <div className={`tier-card highlighted-tier ${currentTier === 'standard' ? 'active-tier' : ''}`}>
               <div className="tier-badge-top" style={{ background: '#3b82f6', color: '#fff' }}>POPULAR</div>
               <h4 className="tier-name">Standard Plan</h4>
-              <div className="tier-price">$19 <span>/ month</span></div>
+              <div className="tier-price">₦5,000 <span>/ month</span></div>
               <ul className="tier-perks">
                 <li>✓ Full 250k simulation predictions</li>
                 <li>✓ Unlocked probabilities & confidence tiers</li>
@@ -368,7 +368,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
                 onClick={() => handleTierChange('standard')}
                 className={`tier-action-btn ${currentTier === 'standard' ? 'btn-current' : 'btn-primary'}`}
               >
-                {currentTier === 'standard' ? 'Current Plan' : 'Switch to Standard'}
+                {currentTier === 'standard' ? 'Current Plan' : 'Switch to Standard (₦5,000/mo)'}
               </button>
             </div>
 
@@ -376,7 +376,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
             <div className={`tier-card vip-tier ${currentTier === 'bigbang' ? 'active-tier' : ''}`}>
               <div className="tier-badge-top" style={{ background: '#ec4899', color: '#fff' }}>VIP PRO</div>
               <h4 className="tier-name">BigBang VIP</h4>
-              <div className="tier-price">$49 <span>/ month</span></div>
+              <div className="tier-price">₦10,000 <span>/ month</span></div>
               <ul className="tier-perks">
                 <li>✓ Everything in Standard</li>
                 <li>✓ Early mathematical settlement alerts</li>
@@ -389,7 +389,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
                 onClick={() => handleTierChange('bigbang')}
                 className={`tier-action-btn ${currentTier === 'bigbang' ? 'btn-current' : 'btn-vip'}`}
               >
-                {currentTier === 'bigbang' ? 'Current Plan' : 'Switch to BigBang'}
+                {currentTier === 'bigbang' ? 'Current Plan' : 'Switch to BigBang VIP (₦10,000/mo)'}
               </button>
             </div>
           </div>

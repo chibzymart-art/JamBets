@@ -8770,10 +8770,130 @@ body {
   border-color: #0f172a;
 }
 
+/* ==========================================================================
+   PASSWORD RECOVERY PAGE STYLES
+   ========================================================================== */
+.recovery-page-wrapper {
+  min-height: calc(100vh - 120px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 16px;
+  background: radial-gradient(circle at 50% 20%, #f0fdf4 0%, #f8fafc 100%);
+}
 
+.recovery-card {
+  width: 100%;
+  max-width: 480px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  box-shadow: 0 20px 40px -15px rgba(15, 23, 42, 0.08);
+  padding: 36px 32px;
+}
 
+.recovery-header {
+  text-align: center;
+  margin-bottom: 28px;
+}
 
+.recovery-brand-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  text-decoration: none;
+  margin-bottom: 20px;
+}
 
+.recovery-title {
+  font-size: 24px;
+  font-weight: 900;
+  color: #0f172a;
+  margin-bottom: 8px;
+  letter-spacing: -0.5px;
+}
 
+.recovery-subtitle {
+  font-size: 13.5px;
+  color: #64748b;
+  line-height: 1.5;
+  max-width: 380px;
+  margin: 0 auto;
+}
 
+.recovery-form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.recovery-footer-links {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 10px;
+  padding-top: 16px;
+  border-top: 1px solid #f1f5f9;
+}
+
+.recovery-back-link {
+  font-size: 13px;
+  font-weight: 700;
+  color: #059669;
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+.recovery-back-link:hover {
+  color: #047857;
+  text-decoration: underline;
+}
+
+.recovery-security-note {
+  margin-top: 24px;
+  text-align: center;
+  font-size: 11.5px;
+  color: #94a3b8;
+}
+
+/* ==========================================================================
+   STANDALONE LANDING NAVBAR STYLES
+   ========================================================================== */
+.landing-nav-cta {
+  background: linear-gradient(135deg, #059669 0%, #10b981 100%) !important;
+  color: #ffffff !important;
+  border: 1px solid #059669 !important;
+  font-weight: 800 !important;
+  box-shadow: 0 4px 12px rgba(5, 150, 105, 0.25) !important;
+  padding: 8px 18px !important;
+  border-radius: 8px !important;
+  text-decoration: none !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  transition: all 0.2s ease !important;
+}
+
+.landing-nav-cta:hover {
+  transform: translateY(-1px) !important;
+  box-shadow: 0 6px 16px rgba(5, 150, 105, 0.35) !important;
+}
+
+.landing-nav-link-btn {
+  background: none;
+  border: none;
+  font-size: 14px;
+  font-weight: 700;
+  color: #475569;
+  cursor: pointer;
+  padding: 6px 12px;
+  border-radius: 6px;
+  transition: all 0.15s ease;
+  text-decoration: none;
+}
+
+.landing-nav-link-btn:hover {
+  color: #0f172a;
+  background: #f1f5f9;
+}
 

@@ -11,7 +11,6 @@ import {
 } from './types';
 import { AuthModal } from './components/AuthModal';
 import { ProfileModal } from './components/ProfileModal';
-import { AnalyticsView } from './components/AnalyticsView';
 import { AdminView } from './components/AdminView';
 import { PricingModal } from './components/PricingModal';
 import { FaqModal } from './components/FaqModal';
@@ -19,6 +18,7 @@ import { NavigationFooter } from './components/NavigationFooter';
 import { FixtureCard, formatPredictionOutcome } from './components/FixtureCard';
 import { LandingPage } from './pages/Landing';
 import { SubscriptionPage } from './pages/Subscription';
+import { PasswordRecoveryPage } from './pages/PasswordRecovery';
 
 export default function App() {
   const navigate = useNavigate();
@@ -237,8 +237,7 @@ export default function App() {
 
   useEffect(() => {
     const handleHash = () => {
-      if (window.location.hash === '#analytics') navigate('/analytics');
-      else if (window.location.hash === '#admin') navigate('/admin');
+      if (window.location.hash === '#admin') navigate('/admin');
       else if (window.location.hash === '#fixtures') navigate('/dashboard/predictions');
     };
     handleHash();
@@ -320,7 +319,7 @@ export default function App() {
       }
     });
 
-    const { data: authListener } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (session?.user) {
         if (session.user.user_metadata?.status === 'disabled' || session.user.user_metadata?.is_deleted === true) {
           await supabase.auth.signOut();
@@ -333,6 +332,9 @@ export default function App() {
         }
         setCurrentUser(session.user);
         await fetchUserData(session.user.id);
+        if (event === 'SIGNED_IN') {
+          navigate('/dashboard/predictions');
+        }
       } else {
         setCurrentUser(null);
         setProfile(null);
@@ -344,7 +346,7 @@ export default function App() {
     return () => {
       authListener.subscription.unsubscribe();
     };
-  }, []);
+  }, [navigate]);
 
   // Strict RBAC: Check whether active user is an administrator
   const isAdmin = useMemo(() => {
@@ -373,25 +375,7 @@ export default function App() {
   const handleAuthSuccess = async () => {
     setIsAuthModalOpen(false);
     await fetchCloudData();
-    try {
-      const { data } = await supabase.auth.getUser();
-      if (data?.user) {
-        const { data: userRec } = await supabase
-          .from('users')
-          .select('role')
-          .eq('id', data.user.id)
-          .single();
-
-        const role = userRec?.role || 'free';
-        if (role === 'standard' || role === 'bigbang' || role === 'admin') {
-          navigate('/dashboard/predictions');
-        } else {
-          navigate('/subscription');
-        }
-      }
-    } catch {
-      navigate('/subscription');
-    }
+    navigate('/dashboard/predictions');
   };
 
   // Authoritative Cloud Supabase Query
@@ -1125,47 +1109,99 @@ export default function App() {
       </aside>
 
       {/* 1. TOP HEADER BAR */}
-      <header className="site-header">
+      <header className={`site-header ${location.pathname === '/' ? 'landing-standalone-header' : ''}`}>
         <div className="site-header-inner">
           <Link to="/" className="header-brand" onClick={() => resetAllFilters()}>
             <div className="brand-icon-sq">J</div>
             <div>
               <span className="brand-text-name">JamBets</span>
-              <span className="brand-text-tag">Analytics</span>
+              <span className="brand-text-tag">Quantitative Models</span>
             </div>
           </Link>
 
-          <div className="header-center-links">
-            <Link
-              to="/"
-              className={`nav-link-btn ${location.pathname === '/' ? 'active' : ''}`}
-            >
-              Overview
-            </Link>
-            <Link
-              to="/dashboard/predictions"
-              className={`nav-link-btn ${location.pathname.startsWith('/dashboard') ? 'active' : ''}`}
-            >
-              Predictions
-            </Link>
-            <Link
-              to="/subscription"
-              className={`nav-link-btn ${location.pathname === '/subscription' ? 'active' : ''}`}
-            >
-              Pricing & Plans <span className="pricing-flat-badge">₦5,000/mo</span>
-            </Link>
-            <Link
-              to="/analytics"
-              className={`nav-link-btn ${location.pathname === '/analytics' ? 'active' : ''}`}
-            >
-              Analytics & Audit
-            </Link>
-            <button className="nav-link-btn" onClick={() => setIsFaqModalOpen(true)}>
-              FAQ
-            </button>
-          </div>
+          {location.pathname === '/' ? (
+            /* STANDALONE LANDING PAGE NAVBAR */
+            <div className="header-center-links">
+              <button
+                type="button"
+                className="landing-nav-link-btn"
+                onClick={() => {
+                  const el = document.querySelector('.landing-sports-status-section');
+                  el?.scrollIntoView({ behavior: 'smooth' });
+                }}
+              >
+                Sports Coverage
+              </button>
+              <button
+                type="button"
+                className="landing-nav-link-btn"
+                onClick={() => {
+                  const el = document.querySelector('.landing-proof-section');
+                  el?.scrollIntoView({ behavior: 'smooth' });
+                }}
+              >
+                Accuracy Ledger
+              </button>
+              <button
+                type="button"
+                className="landing-nav-link-btn"
+                onClick={() => {
+                  const el = document.querySelector('.landing-methodology-section');
+                  el?.scrollIntoView({ behavior: 'smooth' });
+                }}
+              >
+                Methodology
+              </button>
+              <button
+                type="button"
+                className="landing-nav-link-btn"
+                onClick={() => setIsPricingModalOpen(true)}
+              >
+                Pricing & Plans <span className="pricing-flat-badge">₦5,000/mo</span>
+              </button>
+              <button
+                type="button"
+                className="landing-nav-link-btn"
+                onClick={() => setIsFaqModalOpen(true)}
+              >
+                FAQ & Rules
+              </button>
+            </div>
+          ) : (
+            /* INTERNAL APP NAVBAR */
+            <div className="header-center-links">
+              <Link
+                to="/"
+                className="nav-link-btn"
+              >
+                ← Home
+              </Link>
+              <Link
+                to="/dashboard/predictions"
+                className={`nav-link-btn ${location.pathname.startsWith('/dashboard') ? 'active' : ''}`}
+              >
+                Predictions Dashboard
+              </Link>
+              <button
+                type="button"
+                className={`nav-link-btn ${location.pathname === '/subscription' ? 'active' : ''}`}
+                onClick={() => setIsPricingModalOpen(true)}
+              >
+                Pricing & Plans <span className="pricing-flat-badge">₦5,000/mo</span>
+              </button>
+              <button className="nav-link-btn" onClick={() => setIsFaqModalOpen(true)}>
+                FAQ
+              </button>
+            </div>
+          )}
 
           <div className="header-right-actions">
+            {location.pathname === '/' && (
+              <Link to="/dashboard/predictions" className="landing-nav-cta">
+                📊 Predictions Dashboard →
+              </Link>
+            )}
+
             {isAdmin && (
               <Link
                 to="/admin"
@@ -1231,7 +1267,11 @@ export default function App() {
             }
           />
 
-          {/* ROUTE 2: NGN SUBSCRIPTION PAGE */}
+          {/* ROUTE 2: PASSWORD RECOVERY PAGE */}
+          <Route path="/reset-password" element={<PasswordRecoveryPage />} />
+          <Route path="/forgot-password" element={<PasswordRecoveryPage />} />
+
+          {/* ROUTE 3: NGN SUBSCRIPTION PAGE */}
           <Route
             path="/subscription"
             element={
@@ -1246,12 +1286,10 @@ export default function App() {
             }
           />
 
-          {/* ROUTE 3: ANALYTICS & AUDIT */}
+          {/* REMOVED: ANALYTICS & AUDIT ROUTE (SAFELY REDIRECT TO DASHBOARD) */}
           <Route
             path="/analytics"
-            element={
-              <AnalyticsView onBackToFixtures={() => navigate('/dashboard/predictions')} />
-            }
+            element={<Navigate to="/dashboard/predictions" replace />}
           />
 
           {/* ROUTE 4: ADMIN COMMAND DECK (STRICTLY GATED) */}

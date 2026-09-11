@@ -149,7 +149,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-        redirectTo: `${window.location.origin}/#reset-password`
+        redirectTo: `${window.location.origin}/reset-password`
       });
 
       if (error) {
@@ -404,7 +404,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               {loading ? 'Sending Recovery Link...' : 'Send Password Reset Link'}
             </button>
 
-            <div className="auth-footer-action-row">
+            <div className="auth-footer-action-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <button
                 type="button"
                 id="btn-back-to-signin"
@@ -417,6 +417,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               >
                 ← Back to Sign In
               </button>
+              <a
+                href="/reset-password"
+                className="btn-link-action"
+                onClick={onClose}
+                style={{ fontSize: '12px', color: '#059669', textDecoration: 'underline' }}
+              >
+                Open Full Recovery Page ↗
+              </a>
             </div>
           </form>
         )}
