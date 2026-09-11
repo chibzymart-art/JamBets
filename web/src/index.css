@@ -270,6 +270,13 @@ body {
   flex-shrink: 0;
 }
 
+.regulatory-top-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
 .regulatory-top-text {
   font-size: 11.5px;
   line-height: 1.45;
@@ -282,6 +289,303 @@ body {
   color: #ffffff !important;
   font-weight: 700;
   letter-spacing: 0.2px;
+}
+
+.regulatory-mobile-toggle-btn {
+  display: none;
+}
+
+/* AI Mathematical Engine Simulation Loader (High Retention) */
+.engine-loading-container {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto 32px;
+  padding: 0 16px;
+  box-sizing: border-box;
+}
+
+.engine-loading-card {
+  background: #ffffff;
+  border: 1px solid var(--border-subtle);
+  border-radius: 16px;
+  padding: 36px 24px;
+  text-align: center;
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+}
+
+.engine-loading-radar-wrap {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.engine-loading-radar-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 3px solid transparent;
+  border-top-color: #059669;
+  border-right-color: #10b981;
+  animation: radarSpin 1.1s linear infinite;
+}
+
+@keyframes radarSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.engine-loading-radar-core {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: #ecfdf5;
+  color: #059669;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  box-shadow: 0 0 16px rgba(16, 185, 129, 0.35);
+}
+
+.engine-loading-header {
+  max-width: 600px;
+}
+
+.engine-loading-badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.8px;
+  color: #059669;
+  background: #d1fae5;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  margin-bottom: 8px;
+}
+
+.engine-loading-title {
+  font-family: var(--font-heading);
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--text-primary);
+  margin: 0 0 8px;
+  letter-spacing: -0.3px;
+}
+
+.engine-loading-subtitle {
+  font-size: 13.5px;
+  color: var(--text-secondary);
+  line-height: 1.55;
+  margin: 0;
+}
+
+.engine-loading-telemetry-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.engine-telemetry-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 14px;
+  border-radius: 9999px;
+  background: #f8fafc;
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+}
+
+.engine-telemetry-chip.active {
+  background: #ecfdf5;
+  border-color: #a7f3d0;
+  color: #065f46;
+}
+
+.chip-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #059669;
+}
+
+.chip-dot.pulse {
+  background: #2563eb;
+  animation: chipPulse 1s infinite alternate;
+}
+
+@keyframes chipPulse {
+  from { opacity: 0.4; transform: scale(0.85); }
+  to { opacity: 1; transform: scale(1.25); }
+}
+
+.engine-skeleton-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+  width: 100%;
+  max-width: 800px;
+  margin-top: 8px;
+}
+
+.engine-skeleton-card {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.skeleton-row-top,
+.skeleton-match-row,
+.skeleton-row-bottom {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.skeleton-bar,
+.skeleton-pill,
+.skeleton-badge-sm {
+  background: linear-gradient(90deg, #e2e8f0 25%, #f1f5f9 50%, #e2e8f0 75%);
+  background-size: 200% 100%;
+  animation: skeletonShimmer 1.5s infinite;
+  border-radius: 6px;
+}
+
+@keyframes skeletonShimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.skeleton-bar.long { height: 16px; flex: 1; }
+.skeleton-bar.med { height: 14px; width: 60%; }
+.skeleton-pill.short { height: 18px; width: 70px; border-radius: 9999px; }
+.skeleton-pill.med { height: 18px; width: 90px; border-radius: 9999px; }
+.skeleton-pill.wide { height: 28px; width: 100%; border-radius: 8px; }
+.skeleton-badge-sm { width: 22px; height: 16px; }
+
+/* Engaging AI Model Lab Preview for Upcoming Sports */
+.coming-soon-panel {
+  max-width: 720px;
+  margin: 32px auto;
+  background: #ffffff;
+  border: 1px solid var(--border-subtle);
+  border-radius: 20px;
+  padding: 40px 24px;
+  text-align: center;
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+}
+
+.coming-soon-icon-circle {
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+  background: #f1f5f9;
+  font-size: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.coming-soon-title {
+  font-family: var(--font-heading);
+  font-size: 26px;
+  font-weight: 800;
+  color: var(--text-primary);
+  margin: 0;
+  letter-spacing: -0.4px;
+}
+
+.coming-soon-status-badge {
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  color: #1e40af;
+  background: #dbeafe;
+  padding: 4px 12px;
+  border-radius: 9999px;
+}
+
+.coming-soon-desc {
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  max-width: 520px;
+  margin: 0;
+}
+
+.coming-soon-stats-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  width: 100%;
+  max-width: 480px;
+  margin: 6px 0;
+}
+
+.coming-soon-stat-box {
+  flex: 1;
+  background: #f8fafc;
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  padding: 12px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.cs-stat-val {
+  font-family: var(--font-heading);
+  font-size: 18px;
+  font-weight: 800;
+  color: #059669;
+}
+
+.cs-stat-lbl {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.coming-soon-back-btn {
+  background: #059669;
+  color: #ffffff;
+  border: none;
+  border-radius: 10px;
+  padding: 12px 22px;
+  font-family: var(--font-heading);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  box-shadow: 0 4px 10px rgba(5, 150, 105, 0.25);
+  margin-top: 6px;
+}
+
+.coming-soon-back-btn:hover {
+  background: #047857;
+  transform: translateY(-1px);
 }
 
 .brand-icon-sq {
@@ -9747,32 +10051,84 @@ body {
     overflow-x: hidden !important;
   }
 
-  /* 1. TOP REGULATORY BANNER */
+  /* 1. TOP REGULATORY BANNER - ULTRA COMPACT EXPANDABLE CONTAINER ON MOBILE */
   .regulatory-top-banner {
     width: 100% !important;
     max-width: 100% !important;
-    padding: 8px 10px !important;
+    padding: 4px 8px !important;
     box-sizing: border-box !important;
-    overflow-x: hidden !important;
+    overflow: hidden !important;
   }
 
   .regulatory-top-banner-inner {
     width: 100% !important;
     max-width: 100% !important;
-    gap: 8px !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 6px !important;
     box-sizing: border-box !important;
   }
 
   .regulatory-top-icon {
-    font-size: 14px !important;
-    flex-shrink: 0;
+    font-size: 13px !important;
+    flex-shrink: 0 !important;
   }
 
-  .regulatory-top-text {
+  .regulatory-top-content {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 6px !important;
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  .regulatory-top-text.collapsed {
+    display: -webkit-box !important;
+    -webkit-line-clamp: 1 !important;
+    -webkit-box-orient: vertical !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
     font-size: 9.5px !important;
-    line-height: 1.35 !important;
-    word-break: break-word !important;
-    overflow-wrap: break-word !important;
+    line-height: 1.25 !important;
+    margin: 0 !important;
+    text-align: left !important;
+    flex: 1 !important;
+    min-width: 0 !important;
+  }
+
+  .regulatory-top-text.expanded {
+    display: block !important;
+    -webkit-line-clamp: unset !important;
+    font-size: 10px !important;
+    line-height: 1.4 !important;
+    margin: 0 !important;
+    text-align: left !important;
+  }
+
+  .regulatory-mobile-toggle-btn {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    background: rgba(255, 255, 255, 0.22) !important;
+    border: 1px solid rgba(255, 255, 255, 0.4) !important;
+    color: #ffffff !important;
+    font-size: 8.5px !important;
+    font-weight: 800 !important;
+    padding: 2px 6px !important;
+    border-radius: 4px !important;
+    cursor: pointer !important;
+    white-space: nowrap !important;
+    flex-shrink: 0 !important;
+  }
+
+  .engine-skeleton-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .coming-soon-stats-row {
+    flex-direction: column !important;
+    gap: 8px !important;
   }
 
   /* 2. SITE HEADER (NO OVERFLOW, STRICT APP HEADER) */
