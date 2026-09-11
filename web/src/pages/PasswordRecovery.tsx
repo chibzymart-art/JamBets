@@ -116,11 +116,8 @@ export const PasswordRecoveryPage: React.FC = () => {
         {/* Brand Header */}
         <div className="recovery-header">
           <Link to="/" className="recovery-brand-link" title="Return to JamBets Home">
-            <div className="brand-icon-sq" style={{ width: 44, height: 44, fontSize: 20 }}>J</div>
-            <div>
-              <span className="brand-text-name" style={{ fontSize: 22 }}>JamBets</span>
-              <span className="brand-text-tag">Account Security</span>
-            </div>
+            <img src="/jambets-logo.svg" alt="JamBets Sniper Engine" className="recovery-brand-logo-img" />
+            <span className="brand-text-tag">Account Security</span>
           </Link>
           <h1 className="recovery-title">
             {isResettingPassword ? 'Set New Password' : 'Password Recovery'}

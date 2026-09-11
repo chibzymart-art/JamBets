@@ -49,7 +49,7 @@ export const FaqModal: React.FC<FaqModalProps> = ({ isOpen, onClose }) => {
       <div className="modal-card faq-modal-card" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <div className="modal-brand">
-            <span className="modal-brand-badge" style={{ background: '#059669' }}>J</span>
+            <img src="/jambets-logo.svg" alt="JamBets" className="modal-brand-logo-img" />
             <div>
               <h2 className="modal-title">Frequently Asked Questions</h2>
               <p className="modal-subtitle">Mathematical transparency, simulation rules, and settlement methodology</p>

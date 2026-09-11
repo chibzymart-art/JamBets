@@ -176,7 +176,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         {/* Modal Header */}
         <div className="modal-header">
           <div className="modal-brand">
-            <span className="modal-brand-badge">JB</span>
+            <img src="/jambets-logo.svg" alt="JamBets" className="modal-brand-logo-img" />
             <div>
               <h2 className="modal-title">
                 {mode === 'signin' && 'Sign In to JamBets'}

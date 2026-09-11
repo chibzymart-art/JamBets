@@ -28,7 +28,7 @@ export const NavigationFooter: React.FC<NavigationFooterProps> = ({
         {/* Pinned Regulatory Notice Banner */}
         <div className="footer-regulatory-alert-box">
           <div className="regulatory-alert-inner">
-            <div className="regulatory-badge-icon">⚠️</div>
+            <div className="regulatory-badge-icon">🛡️</div>
             <div className="regulatory-alert-text">
               <strong>STRICT REGULATORY & FINANCIAL INDEMNITY NOTICE:</strong> Predictions are probabilistic estimates
               derived from quantitative mathematical modeling for informational and research purposes only. They are not
@@ -43,8 +43,7 @@ export const NavigationFooter: React.FC<NavigationFooterProps> = ({
           {/* Brand & Identity Column */}
           <div className="footer-brand-col">
             <div className="footer-brand-header">
-              <div className="brand-logo-mark">J</div>
-              <span className="brand-title-text">JamBets</span>
+              <img src="/jambets-logo.svg" alt="JamBets Sniper Engine" className="footer-brand-logo-img" />
             </div>
             <p className="footer-brand-bio">
               Next-generation mathematical sports analytics platform. Rigorous bivariate modeling, verified post-match settlement
@@ -210,8 +209,7 @@ export const NavigationFooter: React.FC<NavigationFooterProps> = ({
       <div className="footer-mobile-container">
         <div className="footer-mobile-brand-row">
           <div className="footer-mobile-logo">
-            <div className="brand-logo-mark">J</div>
-            <span className="brand-title-text">JamBets</span>
+            <img src="/jambets-logo.svg" alt="JamBets Sniper Engine" className="footer-brand-logo-img" />
           </div>
           <span className="footer-live-badge compact">
             <span className="status-live-dot" />

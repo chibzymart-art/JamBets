@@ -203,6 +203,87 @@ body {
   cursor: pointer;
 }
 
+/* JamBets Official Brand Logo SVGs */
+.brand-header-logo-img {
+  height: 38px;
+  width: auto;
+  max-width: 180px;
+  display: block;
+  object-fit: contain;
+  transition: transform 0.15s ease;
+}
+
+.brand-header-logo-img:hover {
+  transform: scale(1.02);
+}
+
+.footer-brand-logo-img {
+  height: 38px;
+  width: auto;
+  max-width: 180px;
+  display: block;
+  object-fit: contain;
+  background: rgba(255, 255, 255, 0.96);
+  padding: 4px 10px;
+  border-radius: 8px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+}
+
+.recovery-brand-logo-img {
+  height: 44px;
+  width: auto;
+  max-width: 200px;
+  display: block;
+  object-fit: contain;
+  margin-bottom: 8px;
+}
+
+.modal-brand-logo-img {
+  height: 34px;
+  width: auto;
+  max-width: 160px;
+  display: block;
+  object-fit: contain;
+}
+
+/* Universal Top Regulatory Compliance Banner - Safe Reassuring Blue Theme */
+.regulatory-top-banner {
+  background: linear-gradient(90deg, #1e3a8a 0%, #1d4ed8 50%, #1e40af 100%) !important;
+  border-bottom: 1px solid rgba(147, 197, 253, 0.35) !important;
+  padding: 8px 16px !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+.regulatory-top-banner-inner {
+  max-width: 1400px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.regulatory-top-icon {
+  font-size: 16px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.regulatory-top-text {
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: #e0e7ff !important;
+  margin: 0;
+  text-align: center;
+}
+
+.regulatory-top-text strong {
+  color: #ffffff !important;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+}
+
 .brand-icon-sq {
   width: 38px;
   height: 38px;
@@ -6706,8 +6787,8 @@ body {
 }
 
 .footer-regulatory-alert-box {
-  background: rgba(69, 10, 10, 0.4);
-  border-bottom: 1px solid rgba(239, 68, 68, 0.35);
+  background: rgba(30, 58, 138, 0.5) !important;
+  border-bottom: 1px solid rgba(59, 130, 246, 0.35) !important;
   padding: 14px 24px;
 }
 
@@ -6727,11 +6808,11 @@ body {
 .regulatory-alert-text {
   font-size: 11px;
   line-height: 1.5;
-  color: #fca5a5;
+  color: #bfdbfe !important;
 }
 
 .regulatory-alert-text strong {
-  color: #ffffff;
+  color: #ffffff !important;
 }
 
 .footer-main-links-container {
@@ -9725,6 +9806,27 @@ body {
     gap: 8px !important;
   }
 
+  .brand-header-logo-img {
+    height: 30px !important;
+    max-width: 140px !important;
+  }
+
+  .footer-brand-logo-img {
+    height: 28px !important;
+    max-width: 130px !important;
+    padding: 3px 8px !important;
+  }
+
+  .regulatory-top-banner {
+    padding: 6px 10px !important;
+  }
+
+  .regulatory-top-text {
+    font-size: 10px !important;
+    line-height: 1.35 !important;
+    text-align: left !important;
+  }
+
   .brand-icon-sq {
     width: 32px !important;
     height: 32px !important;
@@ -10136,13 +10238,25 @@ body {
 
   .date-pill-btn {
     flex-shrink: 0 !important;
-    padding: 6px 12px !important;
-    min-width: 92px !important;
-    border-radius: 10px !important;
+    padding: 4px 8px !important;
+    min-width: 66px !important;
+    border-radius: 8px !important;
+    gap: 1px !important;
   }
 
   .date-pill-main-row {
-    font-size: 12px !important;
+    font-size: 11px !important;
+    gap: 4px !important;
+  }
+
+  .date-pill-sub-label {
+    font-size: 9px !important;
+  }
+
+  .date-pill-winloss {
+    font-size: 8.5px !important;
+    padding: 1px 4px !important;
+    border-radius: 3px !important;
   }
 
   /* KPI Grid & Status Tiles */

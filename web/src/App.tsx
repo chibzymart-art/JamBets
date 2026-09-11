@@ -1099,11 +1099,11 @@ export default function App() {
   return (
     <div className="app-wrapper">
       {/* 0. PINNED UNIVERSAL REGULATORY BANNER (ALL PAGES) */}
-      <aside className="regulatory-top-banner" role="alert" aria-label="Strict Regulatory Notice">
+      <aside className="regulatory-top-banner" role="note" aria-label="Strict Regulatory Notice">
         <div className="regulatory-top-banner-inner">
-          <span className="regulatory-top-icon" aria-hidden="true">⚠️</span>
+          <span className="regulatory-top-icon" aria-hidden="true">🛡️</span>
           <p className="regulatory-top-text">
-            <strong>STRICT REGULATORY NOTICE:</strong> Predictions are probabilistic estimates derived from mathematical simulations for informational purposes only. They are not guarantees of outcomes, and JamGames does not place bets on anyone's behalf. Sports predictive modeling entails variance and uncertainty; please make decisions responsibly. JamGames will not take responsibility for any financial losses. This is STRICTLY FOR EDUCATIONAL purposes only and NOT A FINANCIAL OR INVESTMENT ADVICE
+            <strong>STRICT REGULATORY NOTICE:</strong> Predictions are probabilistic estimates derived from mathematical simulations for informational purposes only. They are not guarantees of outcomes, and JamGames does not place bets on anyone's behalf. Sports predictive modeling entails variance and uncertainty; please make decisions responsibly. JamGames will not take responsibility for any financial losses. This is STRICTLY FOR EDUCATIONAL purposes only and NOT A FINANCIAL OR INVESTMENT ADVICE;
           </p>
         </div>
       </aside>
@@ -1111,9 +1111,8 @@ export default function App() {
       {/* 1. TOP HEADER BAR */}
       <header className={`site-header ${location.pathname === '/' ? 'landing-standalone-header' : ''}`}>
         <div className="site-header-inner">
-          <Link to="/" className="header-brand" onClick={() => resetAllFilters()}>
-            <div className="brand-icon-sq">J</div>
-            <span className="brand-text-name">JamBets</span>
+          <Link to="/" className="header-brand" onClick={() => resetAllFilters()} title="JamBets Home">
+            <img src="/jambets-logo.svg" alt="JamBets Sniper Engine" className="brand-header-logo-img" />
           </Link>
 
           {/* Clean Unified Navigation Links */}
