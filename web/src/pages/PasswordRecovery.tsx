@@ -61,7 +61,12 @@ export const PasswordRecoveryPage: React.FC = () => {
       );
     } catch (err: any) {
       console.error('Password reset request error:', err);
-      setErrorMessage(err.message || 'Failed to send recovery email. Please verify your address and try again.');
+      const msg = err.message || '';
+      if (msg.toLowerCase().includes('rate limit') || msg.toLowerCase().includes('over_email_send_rate_limit')) {
+        setErrorMessage('Email rate limit reached. Supabase limits password recovery emails to a few per hour for security. Please wait a short while before requesting another link, or log in directly with your password.');
+      } else {
+        setErrorMessage(msg || 'Failed to send recovery email. Please verify your address and try again.');
+      }
     } finally {
       setLoading(false);
     }

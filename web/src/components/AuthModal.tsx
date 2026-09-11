@@ -159,7 +159,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       setSuccessMessage('Password reset link sent! Check your inbox (and spam folder) for instructions.');
     } catch (err: any) {
       console.error('Forgot password error:', err);
-      setErrorMessage(err.message || 'Failed to send reset link. Please check the email and try again.');
+      const msg = err.message || '';
+      if (msg.toLowerCase().includes('rate limit') || msg.toLowerCase().includes('over_email_send_rate_limit')) {
+        setErrorMessage('Email rate limit reached. Supabase limits password recovery emails to prevent abuse. Please wait a short while before requesting another link.');
+      } else {
+        setErrorMessage(msg || 'Failed to send reset link. Please check the email and try again.');
+      }
     } finally {
       setLoading(false);
     }
