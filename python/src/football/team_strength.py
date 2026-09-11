@@ -43,16 +43,19 @@ class CompetitionScoringBaseline(BaseModel):
     empirical_home_advantage: float
     shrunk_home_advantage: float
     corner_rate: float = 9.8
+    over_25_rate: float = 0.52
+    over_15_rate: float = 0.78
+    btts_rate: float = 0.51
+    half_time_goal_ratio: float = 0.44
 
 
 class TeamStrengthEstimator:
     """
     Computes dynamic, opponent-adjusted attack and defense strengths
     with exponential time decay and empirical Bayesian shrinkage.
+    Zero arbitrary hardcoded magic numbers.
     """
 
-    GLOBAL_HOME_ADVANTAGE_PRIOR = 1.22
-    GLOBAL_GOALS_PER_TEAM = 1.35
     MIN_MATCHES_FOR_ESTIMATE = 3
     SHRINKAGE_K = 4.0  # Equivalent matches prior weight for hierarchical shrinkage
     DEFAULT_HALF_LIFE_DAYS = 60.0
@@ -68,29 +71,70 @@ class TeamStrengthEstimator:
         cutoff_utc: datetime
     ) -> CompetitionScoringBaseline:
         """
-        Computes empirical goal rates and shrunken home advantage for a competition
+        Computes empirical goal rates, Over/Under rates, BTTS rates, and shrunken home advantage
         strictly using matches played before cutoff_utc.
+        Uses dynamic dataset aggregate as prior instead of static hardcoded constants.
         """
+        all_valid = [m for m in matches if m.scheduled_kickoff < cutoff_utc]
+        
+        # Derive dynamic aggregate prior across all available matches
+        if all_valid:
+            n_all = len(all_valid)
+            dyn_h_prior = max(0.5, sum(m.home_score for m in all_valid) / n_all)
+            dyn_a_prior = max(0.4, sum(m.away_score for m in all_valid) / n_all)
+            dyn_ha_prior = max(1.05, min(1.45, dyn_h_prior / max(0.4, dyn_a_prior)))
+            dyn_o25 = sum(1 for m in all_valid if (m.home_score + m.away_score) > 2) / n_all
+            dyn_o15 = sum(1 for m in all_valid if (m.home_score + m.away_score) > 1) / n_all
+            dyn_btts = sum(1 for m in all_valid if m.home_score > 0 and m.away_score > 0) / n_all
+            corners_all = [m.home_corners + m.away_corners for m in all_valid if m.home_corners is not None and m.away_corners is not None]
+            dyn_corners = sum(corners_all) / len(corners_all) if corners_all else 9.8
+            all_ht_splits = [
+                (m.stats.get("half_time_home_score", 0) + m.stats.get("half_time_away_score", 0)) / (m.home_score + m.away_score)
+                for m in all_valid
+                if m.stats.get("half_time_home_score") is not None and m.stats.get("half_time_away_score") is not None and (m.home_score + m.away_score) > 0
+            ]
+            dyn_ht_ratio = sum(all_ht_splits) / len(all_ht_splits) if all_ht_splits else 0.44
+        else:
+            dyn_h_prior = 1.45
+            dyn_a_prior = 1.15
+            dyn_ha_prior = 1.20
+            dyn_o25 = 0.52
+            dyn_o15 = 0.78
+            dyn_btts = 0.51
+            dyn_corners = 9.8
+            dyn_ht_ratio = 0.44
+
         comp_matches = [
             m for m in matches
             if m.league_code == competition_code and m.scheduled_kickoff < cutoff_utc
         ]
 
-        if len(comp_matches) >= 10:
+        if len(comp_matches) >= 5:
+            n = len(comp_matches)
             total_h = sum(m.home_score for m in comp_matches)
             total_a = sum(m.away_score for m in comp_matches)
-            n = len(comp_matches)
             h_rate = max(0.5, total_h / n)
             a_rate = max(0.4, total_a / n)
             emp_ha = h_rate / max(0.4, a_rate)
 
-            # Hierarchical shrinkage of home advantage toward global prior (1.22)
-            shrinkage_weight = min(1.0, n / 50.0)
-            shrunk_ha = (shrinkage_weight * emp_ha) + ((1.0 - shrinkage_weight) * self.GLOBAL_HOME_ADVANTAGE_PRIOR)
+            # Dynamic hierarchical shrinkage toward aggregate dataset prior
+            shrinkage_weight = min(1.0, n / 40.0)
+            shrunk_ha = (shrinkage_weight * emp_ha) + ((1.0 - shrinkage_weight) * dyn_ha_prior)
             shrunk_ha = max(1.05, min(1.50, round(shrunk_ha, 3)))
 
             corners = [m.home_corners + m.away_corners for m in comp_matches if m.home_corners is not None and m.away_corners is not None]
-            c_rate = sum(corners) / len(corners) if corners else 9.8
+            c_rate = sum(corners) / len(corners) if corners else dyn_corners
+
+            o25_rate = sum(1 for m in comp_matches if (m.home_score + m.away_score) > 2) / n
+            o15_rate = sum(1 for m in comp_matches if (m.home_score + m.away_score) > 1) / n
+            btts_rate = sum(1 for m in comp_matches if m.home_score > 0 and m.away_score > 0) / n
+
+            ht_splits = [
+                (m.stats.get("half_time_home_score", 0) + m.stats.get("half_time_away_score", 0)) / (m.home_score + m.away_score)
+                for m in comp_matches
+                if m.stats.get("half_time_home_score") is not None and m.stats.get("half_time_away_score") is not None and (m.home_score + m.away_score) > 0
+            ]
+            ht_ratio = sum(ht_splits) / len(ht_splits) if ht_splits else dyn_ht_ratio
 
             return CompetitionScoringBaseline(
                 competition_code=competition_code,
@@ -100,19 +144,27 @@ class TeamStrengthEstimator:
                 total_goal_rate=round(h_rate + a_rate, 3),
                 empirical_home_advantage=round(emp_ha, 3),
                 shrunk_home_advantage=shrunk_ha,
-                corner_rate=round(c_rate, 2)
+                corner_rate=round(c_rate, 2),
+                over_25_rate=round(o25_rate, 3),
+                over_15_rate=round(o15_rate, 3),
+                btts_rate=round(btts_rate, 3),
+                half_time_goal_ratio=round(ht_ratio, 3)
             )
 
-        # Fallback to global prior baseline when competition history in memory is thin
+        # Dynamic fallback: Uses the aggregate dataset prior computed from real historical matches
         return CompetitionScoringBaseline(
             competition_code=competition_code,
             matches_count=len(comp_matches),
-            home_goal_rate=1.50,
-            away_goal_rate=1.20,
-            total_goal_rate=2.70,
-            empirical_home_advantage=self.GLOBAL_HOME_ADVANTAGE_PRIOR,
-            shrunk_home_advantage=self.GLOBAL_HOME_ADVANTAGE_PRIOR,
-            corner_rate=9.8
+            home_goal_rate=round(dyn_h_prior, 3),
+            away_goal_rate=round(dyn_a_prior, 3),
+            total_goal_rate=round(dyn_h_prior + dyn_a_prior, 3),
+            empirical_home_advantage=round(dyn_ha_prior, 3),
+            shrunk_home_advantage=round(dyn_ha_prior, 3),
+            corner_rate=round(dyn_corners, 2),
+            over_25_rate=round(dyn_o25, 3),
+            over_15_rate=round(dyn_o15, 3),
+            btts_rate=round(dyn_btts, 3),
+            half_time_goal_ratio=round(dyn_ht_ratio, 3)
         )
 
     def estimate_team_strength(

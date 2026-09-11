@@ -169,7 +169,7 @@ class PredictionPipeline:
             "home_defense_str": getattr(features, "beta_home_defense", 1.02),
             "away_defense_str": getattr(features, "beta_away_defense", 0.97),
             "home_boost_pct": round((getattr(features, "home_advantage", 1.15) - 1.0) * 100.0, 1),
-            "half_time_split": 0.44
+            "half_time_split": getattr(features, "half_time_split", 0.44)
         }
 
         sim_res = self.simulation_engine.simulate_fixture(
@@ -223,10 +223,16 @@ class PredictionPipeline:
         # -------------------------------------------------------------
         # 5. Authoritative Primary Prediction: Option A+ Calibrated Hierarchy
         # -------------------------------------------------------------
+        dynamic_rates = {
+            "over_under_2.5": getattr(features, "dynamic_over_25_rate", 0.52),
+            "over_under_1.5": getattr(features, "dynamic_over_15_rate", 0.78),
+            "btts": getattr(features, "dynamic_btts_rate", 0.51),
+        }
         market_decision = MarketCalibrator.select_primary_banker(
             candidate_predictions=qualifying,
             uncertainty=ensemble_out.combined_uncertainty,
-            is_high_disagreement=ensemble_out.is_high_disagreement
+            is_high_disagreement=ensemble_out.is_high_disagreement,
+            dynamic_base_rates=dynamic_rates
         )
 
         primary_candidate: Optional[QualifyingPrediction] = None
@@ -278,7 +284,7 @@ class PredictionPipeline:
             q for q in qualifying
             if q != primary_candidate
             and (q.combined_probability if q.combined_probability is not None else q.raw_probability) >= 0.55
-            and q.market_name != "over_under_0.5"
+            and q.market_name not in ("over_under_0.5", "over_under_3.5", "over_under_4.5")
         ]
         remaining.sort(key=lambda q: (q.combined_probability if q.combined_probability is not None else q.raw_probability), reverse=True)
 

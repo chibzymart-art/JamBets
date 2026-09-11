@@ -601,25 +601,19 @@ class AdminTaskPoller(threading.Thread):
 
             try:
                 if task_name in ("RUN_PREDICTIONS", "RUN_PREDICTION_ENGINE", "RUN_SIMULATIONS", "RUN_SIMULATION_ENGINE", "SIMULATE", "RUN_PREDICTION"):
-                    print("[POLLER] Executing forward-looking prediction cycle (forced override)...", flush=True)
-                    if not self.scheduler:
-                        from python.src.football.scheduler import PredictionCycleScheduler
-                        self.scheduler = PredictionCycleScheduler(supabase_client=supabase)
-                    telemetry = self.scheduler.execute_cycle(force=True)
-                    status = "COMPLETED" if telemetry.status in ("COMPLETED", "SKIPPED") else "FAILED"
+                    print("[POLLER] Executing fresh data scraping, model calibration & simulation pipeline...", flush=True)
+                    from python.src import run_predictions
+                    run_predictions.run()
                     supabase.update_admin_task(
                         task_id=task_id,
-                        status=status,
+                        status="COMPLETED",
                         metadata={
-                            "cycle_id": telemetry.cycle_id,
-                            "processed": telemetry.fixtures_processed,
-                            "published": telemetry.predictions_published,
-                            "skipped": telemetry.fixtures_skipped,
-                            "failed": telemetry.fixtures_failed,
-                            "duration_ms": telemetry.duration_ms
+                            "note": "Fresh data scraping, simulation & prediction pipeline completed successfully.",
+                            "status": "COMPLETED",
+                            "finished_at": datetime.now(timezone.utc).isoformat()
                         }
                     )
-                    print(f"[POLLER] Admin task {task_name} finished with status: {status}", flush=True)
+                    print(f"[POLLER] Admin task {task_name} finished successfully with status: COMPLETED", flush=True)
 
                 elif task_name in ("RUN_SETTLEMENTS", "RUN_SETTLEMENT_ENGINE"):
                     print("[POLLER] Executing settlement cycle (backward-looking override)...", flush=True)

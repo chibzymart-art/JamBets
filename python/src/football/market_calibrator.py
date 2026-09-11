@@ -36,47 +36,43 @@ MARKET_HIERARCHY: Dict[Tuple[str, str], MarketCalibrationProfile] = {
     # --- Tier 1: Core Football Markets (Priority 1) ---
     ("1x2", "home"): MarketCalibrationProfile(
         market_name="1x2", outcome="home", is_core=True, is_secondary=False, is_excluded=False,
-        base_rate=0.45, probability_threshold=0.68, hierarchy_priority=1
+        base_rate=0.45, probability_threshold=0.62, hierarchy_priority=1
     ),
     ("1x2", "away"): MarketCalibrationProfile(
         market_name="1x2", outcome="away", is_core=True, is_secondary=False, is_excluded=False,
-        base_rate=0.30, probability_threshold=0.68, hierarchy_priority=1
+        base_rate=0.30, probability_threshold=0.62, hierarchy_priority=1
     ),
     ("1x2", "draw"): MarketCalibrationProfile(
         market_name="1x2", outcome="draw", is_core=True, is_secondary=False, is_excluded=False,
-        base_rate=0.25, probability_threshold=0.65, hierarchy_priority=1
+        base_rate=0.25, probability_threshold=0.60, hierarchy_priority=1
     ),
     ("double_chance", "1x"): MarketCalibrationProfile(
         market_name="double_chance", outcome="1x", is_core=True, is_secondary=False, is_excluded=False,
-        base_rate=0.70, probability_threshold=0.80, hierarchy_priority=1
+        base_rate=0.70, probability_threshold=0.75, hierarchy_priority=1
     ),
     ("double_chance", "x2"): MarketCalibrationProfile(
         market_name="double_chance", outcome="x2", is_core=True, is_secondary=False, is_excluded=False,
-        base_rate=0.55, probability_threshold=0.80, hierarchy_priority=1
+        base_rate=0.55, probability_threshold=0.75, hierarchy_priority=1
     ),
     ("double_chance", "12"): MarketCalibrationProfile(
         market_name="double_chance", outcome="12", is_core=True, is_secondary=False, is_excluded=False,
-        base_rate=0.75, probability_threshold=0.80, hierarchy_priority=1
+        base_rate=0.75, probability_threshold=0.75, hierarchy_priority=1
     ),
     ("over_under_1.5", "over"): MarketCalibrationProfile(
         market_name="over_under_1.5", outcome="over", is_core=True, is_secondary=False, is_excluded=False,
-        base_rate=0.78, probability_threshold=0.82, hierarchy_priority=1
+        base_rate=0.78, probability_threshold=0.76, hierarchy_priority=1
     ),
     ("over_under_2.5", "over"): MarketCalibrationProfile(
         market_name="over_under_2.5", outcome="over", is_core=True, is_secondary=False, is_excluded=False,
-        base_rate=0.52, probability_threshold=0.75, hierarchy_priority=1
-    ),
-    ("over_under_3.5", "under"): MarketCalibrationProfile(
-        market_name="over_under_3.5", outcome="under", is_core=True, is_secondary=False, is_excluded=False,
-        base_rate=0.72, probability_threshold=0.80, hierarchy_priority=1
+        base_rate=0.52, probability_threshold=0.60, hierarchy_priority=1
     ),
     ("btts", "yes"): MarketCalibrationProfile(
         market_name="btts", outcome="yes", is_core=True, is_secondary=False, is_excluded=False,
-        base_rate=0.51, probability_threshold=0.72, hierarchy_priority=1
+        base_rate=0.51, probability_threshold=0.62, hierarchy_priority=1
     ),
 
     # --- Tier 2: Secondary Candidate Pool (Priority 2) ---
-    # Home Over 0.5 retained as secondary candidate; never dominates purely by raw probability
+    # Team totals retained as secondary candidates; never dominates purely by raw probability
     ("home_goals_0.5", "over"): MarketCalibrationProfile(
         market_name="home_goals_0.5", outcome="over", is_core=False, is_secondary=True, is_excluded=False,
         base_rate=0.84, probability_threshold=0.85, hierarchy_priority=2
@@ -87,18 +83,27 @@ MARKET_HIERARCHY: Dict[Tuple[str, str], MarketCalibrationProfile] = {
     ),
     ("home_goals_1.5", "over"): MarketCalibrationProfile(
         market_name="home_goals_1.5", outcome="over", is_core=False, is_secondary=True, is_excluded=False,
-        base_rate=0.55, probability_threshold=0.78, hierarchy_priority=2
+        base_rate=0.55, probability_threshold=0.72, hierarchy_priority=2
     ),
     ("away_goals_1.5", "over"): MarketCalibrationProfile(
         market_name="away_goals_1.5", outcome="over", is_core=False, is_secondary=True, is_excluded=False,
-        base_rate=0.38, probability_threshold=0.78, hierarchy_priority=2
+        base_rate=0.38, probability_threshold=0.72, hierarchy_priority=2
     ),
     ("ht_goals_0.5", "over"): MarketCalibrationProfile(
         market_name="ht_goals_0.5", outcome="over", is_core=False, is_secondary=True, is_excluded=False,
-        base_rate=0.69, probability_threshold=0.85, hierarchy_priority=2
+        base_rate=0.69, probability_threshold=0.80, hierarchy_priority=2
     ),
 
-    # --- Tier 3: Relegated / Excluded from Primary Banker Pool ---
+    # --- Tier 3: Relegated / Strictly Excluded Markets ---
+    # Under 3.5 is completely eliminated and banned from primary and secondary consideration
+    ("over_under_3.5", "under"): MarketCalibrationProfile(
+        market_name="over_under_3.5", outcome="under", is_core=False, is_secondary=False, is_excluded=True,
+        base_rate=0.72, probability_threshold=0.99, hierarchy_priority=99
+    ),
+    ("over_under_3.5", "over"): MarketCalibrationProfile(
+        market_name="over_under_3.5", outcome="over", is_core=False, is_secondary=False, is_excluded=True,
+        base_rate=0.28, probability_threshold=0.99, hierarchy_priority=99
+    ),
     ("over_under_4.5", "under"): MarketCalibrationProfile(
         market_name="over_under_4.5", outcome="under", is_core=False, is_secondary=False, is_excluded=True,
         base_rate=0.89, probability_threshold=0.99, hierarchy_priority=99
@@ -152,17 +157,18 @@ class MarketCalibrator:
     def select_primary_banker(
         cls,
         candidate_predictions: List[Any],
-        min_probability_floor: float = 0.68,
+        min_probability_floor: float = 0.58,
         uncertainty: float = 0.20,
-        is_high_disagreement: bool = False
+        is_high_disagreement: bool = False,
+        dynamic_base_rates: Optional[Dict[str, float]] = None
     ) -> MarketSelectionResult:
         """
         Executes Option A+ multi-stage selection with uncertainty and disagreement gating:
         Stage 0: If fixture uncertainty > 0.50, trigger immediate abstention.
-        Stage 1: Filter out excluded markets (Under 4.5, Over 0.5 Total, etc.)
+        Stage 1: Filter out excluded markets (Under 3.5, Over 3.5, Under 4.5, Over 0.5 Total, etc.)
         Stage 2: Evaluate Core Football Markets against calibrated thresholds.
         Stage 3: If >= 1 Core Market qualifies, select the strongest core market.
-        Stage 4: If 0 Core Markets qualify, evaluate Secondary Pool (Home Over 0.5, etc.) with threshold >= 85%.
+        Stage 4: If 0 Core Markets qualify, evaluate Secondary Pool (Home Over 0.5, etc.) with threshold >= 80%.
         Stage 5: If 0 Secondary Markets qualify, return NO_QUALIFYING_MARKET (NO_SAFE_BANKER / SKIP).
         """
         # Excessive parameter uncertainty check (Abstention Gate)
@@ -188,6 +194,11 @@ class MarketCalibrator:
             # Handle both QualifyingPrediction objects and dicts
             m_name = getattr(cand, "market_name", "").lower() if hasattr(cand, "market_name") else cand.get("market_name", "").lower()
             outcome = getattr(cand, "outcome", "").lower() if hasattr(cand, "outcome") else cand.get("outcome", "").lower()
+            
+            # Strict elimination of 3.5 goals from all consideration
+            if "3.5" in m_name or m_name == "over_under_3.5":
+                continue
+
             raw_p = getattr(cand, "combined_probability", None)
             if raw_p is None:
                 raw_p = getattr(cand, "raw_probability", 0.0) if hasattr(cand, "raw_probability") else cand.get("probability", 0.0)
@@ -200,8 +211,15 @@ class MarketCalibrator:
                 # Strictly excluded from primary banker pool
                 continue
 
+            # Use dynamic league-specific base rate if provided, otherwise fallback to profile base rate
+            effective_base_rate = profile.base_rate
+            if dynamic_base_rates and m_name in dynamic_base_rates:
+                dyn_rate = float(dynamic_base_rates[m_name])
+                if 0.10 <= dyn_rate <= 0.90:
+                    effective_base_rate = dyn_rate
+
             # Compute calibrated probability with disagreement adjustment
-            p_cal = cls.calibrate_probability(raw_p, profile.base_rate)
+            p_cal = cls.calibrate_probability(raw_p, effective_base_rate)
             if is_high_disagreement:
                 p_cal = round(p_cal * 0.94, 4)  # 6% discount for high cross-model variance
 

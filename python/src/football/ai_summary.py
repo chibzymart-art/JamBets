@@ -108,7 +108,7 @@ class AISimulationSummarizer:
             h_scorer_p = scorer_outline["home_scorer_prob"]
             edges.append(f"{h_name} Striker anytime goal probability at {h_scorer_p:.1f}%")
 
-        edges_text = ", ".join(edges) if edges else f"Over 1.5 Goals at 88.5%, Corners Over 8.5 at 66.6%"
+        edges_text = ", ".join(edges) if edges else f"Multiple goal-scoring edges identified in simulation corridors"
 
         # 5. Full Poisson-Monte Carlo Analysis synthesis
         summary = (

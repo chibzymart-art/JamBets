@@ -80,6 +80,10 @@ class PreMatchFeatures(BaseModel):
     lambda_away: float = 1.15
     home_advantage: float = 1.22
     lambda_corners: Optional[float] = None
+    dynamic_over_25_rate: float = 0.52
+    dynamic_over_15_rate: float = 0.78
+    dynamic_btts_rate: float = 0.51
+    half_time_split: float = 0.44
 
     # Parametric uncertainty [0.0, 1.0]
     uncertainty: float = 0.20
@@ -345,6 +349,10 @@ class PreMatchFeatureEngine:
             lambda_away=lambda_a,
             home_advantage=round(home_advantage, 3),
             lambda_corners=lambda_corners,
+            dynamic_over_25_rate=round(getattr(baseline, "over_25_rate", 0.52), 3),
+            dynamic_over_15_rate=round(getattr(baseline, "over_15_rate", 0.78), 3),
+            dynamic_btts_rate=round(getattr(baseline, "btts_rate", 0.51), 3),
+            half_time_split=round(getattr(baseline, "half_time_goal_ratio", 0.44), 3),
             uncertainty=uncertainty,
             home_rest_days=home_rest,
             away_rest_days=away_rest,

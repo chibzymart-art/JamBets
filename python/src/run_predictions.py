@@ -187,12 +187,12 @@ def run():
         existing_preds_map = {}
         print(f"  [WARN] Could not load existing predictions: {e_err}", flush=True)
 
-    # Sort fixtures to prioritize any legacy static over_under_0.5 predictions for immediate upgrade
+    # Sort fixtures to prioritize any legacy static over_under_0.5 or eliminated over_under_3.5 predictions for immediate upgrade
     def fixture_priority(fix):
         fid = fix.get("id")
         ep = existing_preds_map.get(fid)
-        if ep and ep.get("market") == "over_under_0.5":
-            return 0  # Highest priority: upgrade legacy static bankers
+        if ep and ep.get("market") in ("over_under_0.5", "over_under_3.5"):
+            return 0  # Highest priority: upgrade legacy static bankers and eliminated under 3.5
         return 1
 
     forward_fixtures = sorted(forward_fixtures, key=fixture_priority)
@@ -264,16 +264,16 @@ def run():
             prev_market = existing_pred.get("market")
 
             force_repredict = "--force" in sys.argv or not prev_meta.get("selection_stage")
-            # Condition to skip: Feature signature identical AND already evaluated under Option A+ hierarchy
-            if not force_repredict and prev_market != "over_under_0.5" and prev_sig and prev_sig == features.feature_signature and prev_meta.get("selection_stage"):
+            # Condition to skip: Feature signature identical AND not an eliminated market (0.5/3.5) AND already evaluated under Option A+ hierarchy
+            if not force_repredict and prev_market not in ("over_under_0.5", "over_under_3.5") and prev_sig and prev_sig == features.feature_signature and prev_meta.get("selection_stage"):
                 skipped_unchanged_count += 1
                 print(f"    [SKIP REPREDICT] Game data stable with Option A+ calibration. Preserving existing prediction.", flush=True)
                 continue
             else:
                 if not prev_meta.get("selection_stage"):
                     print(f"    [OPTION A+ REPREDICT] Upgrading fixture prediction to Option A+ Calibrated Market Hierarchy.", flush=True)
-                elif prev_market == "over_under_0.5":
-                    print(f"    [UPGRADE REPREDICT] Upgrading legacy static Over 0.5 prediction to dynamic diverse banker model.", flush=True)
+                elif prev_market in ("over_under_0.5", "over_under_3.5"):
+                    print(f"    [UPGRADE REPREDICT] Upgrading legacy/eliminated {prev_market} prediction to dynamic banker model.", flush=True)
                 else:
                     print(f"    [DATA CHANGED REPREDICT] Game data changed ({prev_sig} -> {features.feature_signature}). Re-simulating...", flush=True)
 
