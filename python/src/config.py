@@ -64,11 +64,87 @@ LEAGUE_REGISTRY: Dict[str, LeagueConfig] = {
     ),
     "ENG_L1": LeagueConfig(
         code="ENG_L1", name="League One", country="England", tier=3,
-        espn_slug="eng.3", livescore_country="england", livescore_stage="league-one"
+        espn_slug="eng.3", livescore_country="england", livescore_stage="league-1"
+    ),
+    "ENG_L2": LeagueConfig(
+        code="ENG_L2", name="League Two", country="England", tier=4,
+        espn_slug="eng.4", livescore_country="england", livescore_stage="league-2"
+    ),
+    "ENG_PL2": LeagueConfig(
+        code="ENG_PL2", name="Premier League 2", country="England", tier=5,
+        espn_slug=None, livescore_country="england", livescore_stage="premier-league-2"
+    ),
+    "ENG_PL_U18": LeagueConfig(
+        code="ENG_PL_U18", name="Premier League U18", country="England", tier=6,
+        espn_slug=None, livescore_country="england", livescore_stage="premier-league-u18"
+    ),
+    "ENG_NL": LeagueConfig(
+        code="ENG_NL", name="National League", country="England", tier=5,
+        espn_slug="eng.5", livescore_country="england", livescore_stage="national-league"
+    ),
+    "ENG_NL_N": LeagueConfig(
+        code="ENG_NL_N", name="National League North", country="England", tier=6,
+        espn_slug=None, livescore_country="england", livescore_stage="national-league-north"
+    ),
+    "ENG_NL_S": LeagueConfig(
+        code="ENG_NL_S", name="National League South", country="England", tier=6,
+        espn_slug=None, livescore_country="england", livescore_stage="national-league-south"
+    ),
+    "ENG_NPL": LeagueConfig(
+        code="ENG_NPL", name="Northern Premier League", country="England", tier=7,
+        espn_slug=None, livescore_country="england", livescore_stage="northern-premier-division"
+    ),
+    "ENG_ILP": LeagueConfig(
+        code="ENG_ILP", name="Isthmian League Premier", country="England", tier=7,
+        espn_slug=None, livescore_country="england", livescore_stage="isthmian-league"
+    ),
+    "ENG_SLP": LeagueConfig(
+        code="ENG_SLP", name="Southern League Premier", country="England", tier=7,
+        espn_slug=None, livescore_country="england", livescore_stage="southern-premier-division-south"
+    ),
+    "ENG_WSL": LeagueConfig(
+        code="ENG_WSL", name="FA Women's Super League", country="England", tier=1,
+        espn_slug="eng.w.1", livescore_country="england", livescore_stage="fa-women-s-super-league"
+    ),
+    "ENG_EFL_CUP": LeagueConfig(
+        code="ENG_EFL_CUP", name="EFL Cup", country="England", tier=1,
+        espn_slug="eng.league_cup", livescore_country="england", livescore_stage="efl-cup"
+    ),
+    "ESP_LL2": LeagueConfig(
+        code="ESP_LL2", name="LaLiga 2", country="Spain", tier=2,
+        espn_slug="esp.2", livescore_country="spain", livescore_stage="laliga-2"
+    ),
+    "ITA_SB": LeagueConfig(
+        code="ITA_SB", name="Serie B", country="Italy", tier=2,
+        espn_slug="ita.2", livescore_country="italy", livescore_stage="serie-b"
+    ),
+    "GER_3L": LeagueConfig(
+        code="GER_3L", name="3. Liga", country="Germany", tier=3,
+        espn_slug=None, livescore_country="germany", livescore_stage="3-liga"
+    ),
+    "FRA_L2": LeagueConfig(
+        code="FRA_L2", name="Ligue 2", country="France", tier=2,
+        espn_slug="fra.2", livescore_country="france", livescore_stage="ligue-2"
+    ),
+    "NED_EED": LeagueConfig(
+        code="NED_EED", name="Eerste Divisie", country="Netherlands", tier=2,
+        espn_slug="ned.2", livescore_country="netherlands", livescore_stage="eerste-divisie"
+    ),
+    "SCO_CH": LeagueConfig(
+        code="SCO_CH", name="Scottish Championship", country="Scotland", tier=2,
+        espn_slug="sco.2", livescore_country="scotland", livescore_stage="championship"
+    ),
+    "USA_USLC": LeagueConfig(
+        code="USA_USLC", name="USL Championship", country="USA", tier=2,
+        espn_slug="usa.usl.1", livescore_country="usa", livescore_stage="usl-championship"
+    ),
+    "USA_MLSN": LeagueConfig(
+        code="USA_MLSN", name="MLS Next Pro", country="USA", tier=3,
+        espn_slug=None, livescore_country="usa", livescore_stage="mls-next-pro"
     ),
     "SCO_PL": LeagueConfig(
         code="SCO_PL", name="Scottish Premiership", country="Scotland", tier=1,
-        espn_slug="sco.1", livescore_country="scotland", livescore_stage="premiership"
+        espn_slug="sco.1", livescore_country="scotland", livescore_stage="scotland-premiership"
     ),
     "NED_ED": LeagueConfig(
         code="NED_ED", name="Eredivisie", country="Netherlands", tier=1,
@@ -78,9 +154,13 @@ LEAGUE_REGISTRY: Dict[str, LeagueConfig] = {
         code="POR_PL", name="Primeira Liga", country="Portugal", tier=1,
         espn_slug="por.1", livescore_country="portugal", livescore_stage="primeira-liga"
     ),
+    "POR_L2": LeagueConfig(
+        code="POR_L2", name="Liga Portugal 2", country="Portugal", tier=2,
+        espn_slug="por.2", livescore_country="portugal", livescore_stage="segunda-liga"
+    ),
     "BEL_PL": LeagueConfig(
         code="BEL_PL", name="Belgian Pro League", country="Belgium", tier=1,
-        espn_slug="bel.1", livescore_country="belgium", livescore_stage="pro-league"
+        espn_slug="bel.1", livescore_country="belgium", livescore_stage="belgian-pro-league-2025"
     ),
     "TUR_SL": LeagueConfig(
         code="TUR_SL", name="Süper Lig", country="Turkey", tier=1,
@@ -118,7 +198,7 @@ LEAGUE_REGISTRY: Dict[str, LeagueConfig] = {
     # --- Americas, Asia & Global Competitions ---
     "USA_MLS": LeagueConfig(
         code="USA_MLS", name="Major League Soccer", country="USA", tier=1,
-        espn_slug="usa.1", livescore_country="usa", livescore_stage="mls"
+        espn_slug="usa.1", livescore_country="usa", livescore_stage="major-league-soccer-2026"
     ),
     "BRA_SA": LeagueConfig(
         code="BRA_SA", name="Brasileirão Série A", country="Brazil", tier=1,
@@ -126,7 +206,7 @@ LEAGUE_REGISTRY: Dict[str, LeagueConfig] = {
     ),
     "ARG_PD": LeagueConfig(
         code="ARG_PD", name="Liga Profesional de Fútbol", country="Argentina", tier=1,
-        espn_slug="arg.1", livescore_country="argentina", livescore_stage="primera-division"
+        espn_slug="arg.1", livescore_country="argentina", livescore_stage="liga-profesional-clausura"
     ),
     "MEX_LMX": LeagueConfig(
         code="MEX_LMX", name="Liga MX", country="Mexico", tier=1,
@@ -134,11 +214,11 @@ LEAGUE_REGISTRY: Dict[str, LeagueConfig] = {
     ),
     "SAU_SPL": LeagueConfig(
         code="SAU_SPL", name="Saudi Pro League", country="Saudi Arabia", tier=1,
-        espn_slug="sau.1", livescore_country="saudi-arabia", livescore_stage="pro-league"
+        espn_slug="sau.1", livescore_country="saudi-arabia", livescore_stage="saudi-professional-league"
     ),
     "JPN_J1": LeagueConfig(
         code="JPN_J1", name="J1 League", country="Japan", tier=1,
-        espn_slug="jpn.1", livescore_country="japan", livescore_stage="j1-league"
+        espn_slug="jpn.1", livescore_country="japan", livescore_stage="j-league-2025"
     ),
     "AUS_AL": LeagueConfig(
         code="AUS_AL", name="A-League Men", country="Australia", tier=1,

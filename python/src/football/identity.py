@@ -52,6 +52,10 @@ TEAM_ALIASES: Dict[str, str] = {
     "southampton": "southampton",
     "sunderland": "sunderland",
     "hull city": "hull-city",
+    "queens park rangers": "queens-park-rangers",
+    "qpr": "queens-park-rangers",
+    "milton keynes dons": "milton-keynes-dons",
+    "mk dons": "milton-keynes-dons",
 
     # La Liga
     "real madrid": "real-madrid",

@@ -419,6 +419,8 @@ export default function App() {
           metadata,
           settlement_status,
           settlement_notes,
+          settled_at,
+          actual_score,
           publication_status,
           simulations_count,
           target_kickoff_at,
@@ -558,6 +560,8 @@ export default function App() {
           metadata: item.metadata,
           settlement_status: item.settlement_status,
           settlement_notes: item.settlement_notes,
+          settled_at: item.settled_at || null,
+          actual_score: item.actual_score || null,
           publication_status: item.publication_status,
           simulations_count: item.simulations_count,
           tier_required: item.tier_required || 'free',
@@ -920,7 +924,13 @@ export default function App() {
 
     sourceList.forEach((item: any) => {
       if (!activeFixtureIds.has(item.fixture_id)) return;
-      const st = item.settlement_status || 'pending';
+      const f = fixtures.find((fix) => fix.id === item.fixture_id);
+      const isFinished = f?.status === 'finished' || f?.period === 'FT';
+      let st = item.settlement_status || 'pending';
+      // "Lost should be when a fixture has been completely ended and result confirmed"
+      if (st === 'lost' && !isFinished) {
+        st = 'pending';
+      }
       const cat = item.confidence_category;
 
       if (st === 'won') allWon++;
@@ -954,8 +964,16 @@ export default function App() {
       ? fixtures
       : fixtures.filter((f) => getFixtureWatDate(f.target_kickoff_at) === selectedDate);
 
-    const liveCount = scopedFixtures.filter((f) => f.status === 'live').length;
-    const settledMatchesCount = scopedFixtures.filter((f) => f.status === 'finished').length;
+    const liveCount = scopedFixtures.filter((f) => {
+      const isFinished = f.status === 'finished' || f.period === 'FT';
+      return !isFinished && (
+        f.status === 'live' ||
+        f.status === 'in_progress' ||
+        f.status === 'halftime' ||
+        (f.period && ['1H', 'HT', '2H', 'ET', 'PK'].includes(f.period.toUpperCase()))
+      );
+    }).length;
+    const settledMatchesCount = scopedFixtures.filter((f) => f.status === 'finished' || f.period === 'FT').length;
 
     return {
       allWon,
@@ -979,13 +997,20 @@ export default function App() {
       liveCount,
       settledMatchesCount
     };
-  }, [canViewPredictions, predictions, fixtures, selectedDate]);
+  }, [fixtures, predsByFixture, canViewPredictions, selectedDate]);
 
-  // Filtered Fixtures
+  // Filter and sort fixtures for display
   const filteredFixtures = useMemo(() => {
     return fixtures.filter((f) => {
       const fixturePreds = predsByFixture.get(f.id) || [];
       const signals: any[] = fixturePreds;
+      const isFinished = f.status === 'finished' || f.period === 'FT';
+      const isLive = !isFinished && (
+        f.status === 'live' ||
+        f.status === 'in_progress' ||
+        f.status === 'halftime' ||
+        (f.period && ['1H', 'HT', '2H', 'ET', 'PK'].includes(f.period.toUpperCase()))
+      );
 
       // League filter
       if (selectedLeague !== 'all' && f.league_code !== selectedLeague) {
@@ -999,8 +1024,10 @@ export default function App() {
       }
 
       // Score status filter (Live, Finished, Scheduled)
-      if (scoreStatusFilter !== 'all' && f.status !== scoreStatusFilter) {
-        return false;
+      if (scoreStatusFilter !== 'all') {
+        if (scoreStatusFilter === 'live' && !isLive) return false;
+        if (scoreStatusFilter === 'finished' && !isFinished) return false;
+        if (scoreStatusFilter === 'scheduled' && (isLive || isFinished)) return false;
       }
 
       // Tier filter
@@ -1019,7 +1046,11 @@ export default function App() {
       if (settlementFilter !== 'all') {
         if (canViewPredictions) {
           const hasStatus = fixturePreds.some((p) => {
-            const st = p.settlement_status || 'pending';
+            let st = p.settlement_status || 'pending';
+            // "Lost should be when a fixture has been completely ended and result confirmed"
+            if (st === 'lost' && !isFinished) {
+              st = 'pending';
+            }
             if (settlementFilter === 'void') return st === 'void' || st === 'voided';
             return st === settlementFilter;
           });

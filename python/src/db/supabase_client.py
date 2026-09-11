@@ -29,6 +29,7 @@ class SupabaseClient:
         self.client = httpx.Client(base_url=f"{self.url}/rest/v1", headers=self.headers, timeout=20.0)
         self._leagues_cache: Dict[str, str] = {}
         self._teams_cache: Dict[str, str] = {}
+        self._sources_cache: Dict[str, str] = {}
 
     def get(self, table: str, params: Optional[Dict[str, str]] = None) -> List[Dict[str, Any]]:
         resp = self.client.get(f"/{table}", params=params)
@@ -56,13 +57,21 @@ class SupabaseClient:
         return resp.json() if resp.text else []
 
     def get_source_id_by_slug(self, slug: str) -> Optional[str]:
-        """Retrieves data_source UUID by slug."""
+        """Retrieves data_source UUID by slug (cached)."""
+        if slug in self._sources_cache:
+            return self._sources_cache[slug]
         records = self.get("data_sources", {"slug": f"eq.{slug}", "select": "id"})
         if records:
-            return records[0]["id"]
+            sid = records[0]["id"]
+            self._sources_cache[slug] = sid
+            return sid
         # Try by name if slug fails
         records_name = self.get("data_sources", {"name": f"ilike.{slug}", "select": "id"})
-        return records_name[0]["id"] if records_name else None
+        if records_name:
+            sid = records_name[0]["id"]
+            self._sources_cache[slug] = sid
+            return sid
+        return None
 
     def get_league_id_by_code(self, code: str) -> Optional[str]:
         """Retrieves football_league UUID by code (cached)."""

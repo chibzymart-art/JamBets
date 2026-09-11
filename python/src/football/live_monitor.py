@@ -32,6 +32,7 @@ class LiveMatchState(BaseModel):
     source_timestamp: Optional[datetime] = None
     is_stale: bool = False
     is_verified: bool = True
+    sources_verified: List[str] = Field(default_factory=list)
     has_conflict: bool = False
     conflict_reason: Optional[str] = None
 
@@ -222,6 +223,7 @@ class LiveMonitorEngine:
             retrieval_time=primary.retrieved_at,
             is_stale=not is_fresh,
             is_verified=not has_conflict and is_fresh,
+            sources_verified=list(set([p.source_name for p in source_payloads])),
             has_conflict=has_conflict,
             conflict_reason=conflict_reason
         )

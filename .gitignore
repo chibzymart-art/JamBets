@@ -107,3 +107,4 @@ temp/
 *.bak
 *.tmp
 *.temp
+scratch/

@@ -90,16 +90,7 @@ class BaseSourceAdapter(ABC):
             try:
                 result = request_fn()
 
-                # Validate result isn't empty or null
-                if result is not None and result != "" and result != {} and result != []:
-                    return result
-
-                # If result is empty, treat as retryable on earlier attempts
-                if attempt < self.max_retries:
-                    backoff = (1.5 ** attempt) + random.uniform(0.2, 0.8)
-                    print(f"[{self.name}] {operation_name} returned empty result on attempt {attempt}/{self.max_retries}. Backing off {backoff:.1f}s...")
-                    time.sleep(backoff)
-                else:
+                if result is not None:
                     return result
 
             except httpx.HTTPStatusError as exc:

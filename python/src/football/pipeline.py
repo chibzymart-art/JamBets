@@ -38,6 +38,12 @@ class AcquisitionPipeline:
                     "country": config.country,
                     "is_active": config.is_active
                 })
+            else:
+                self.supabase.patch("football_leagues", {
+                    "name": config.name,
+                    "country": config.country,
+                    "is_active": config.is_active
+                }, {"code": f"eq.{code}"})
 
     def run_acquisition(self, leagues: Optional[List[str]] = None) -> Dict[str, Any]:
         """
@@ -70,7 +76,7 @@ class AcquisitionPipeline:
 
         adapters = [
             a for a in self.registry.get_all_active_adapters()
-            if a.slug in ("fotmob", "espn", "livescore")
+            if a.slug in ("espn", "livescore")
         ]
 
         for league in target_leagues:

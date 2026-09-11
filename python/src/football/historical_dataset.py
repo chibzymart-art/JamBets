@@ -247,6 +247,54 @@ class HistoricalDatasetBuilder:
 
         return added_count
 
+    def fetch_historical_from_livescore(self, date_strings: List[str]) -> int:
+        """
+        Fetches genuine historical completed results from LiveScore API for date strings (YYYYMMDD).
+        Captures full-time completed matches across all domestic and international tiers.
+        """
+        added_count = 0
+        with httpx.Client(timeout=15.0) as client:
+            for d_str in date_strings:
+                url = f"https://prod-public-api.livescore.com/v1/api/app/date/soccer/{d_str}/1?locale=en"
+                try:
+                    resp = client.get(url)
+                    if resp.status_code != 200:
+                        continue
+                    data = resp.json()
+                    for s in data.get("Stages", []):
+                        scd = s.get("Scd", "unknown")
+                        for ev in s.get("Events", []):
+                            if ev.get("Eps") in ("FT", "AET", "AP"):
+                                eid = str(ev.get("Eid"))
+                                t1 = ev.get("T1", [{}])[0].get("Nm")
+                                t2 = ev.get("T2", [{}])[0].get("Nm")
+                                tr1 = ev.get("Tr1")
+                                tr2 = ev.get("Tr2")
+                                esd = str(ev.get("Esd", ""))
+                                if t1 and t2 and tr1 is not None and tr2 is not None:
+                                    try:
+                                        k_dt = datetime.strptime(esd, "%Y%m%d%H%M%S").replace(tzinfo=timezone.utc)
+                                        payload = {
+                                            "provider_event_id": f"ls_{eid}",
+                                            "source": "livescore",
+                                            "league_code": scd,
+                                            "season": str(k_dt.year),
+                                            "scheduled_kickoff": k_dt,
+                                            "home_team_raw": t1,
+                                            "away_team_raw": t2,
+                                            "home_score": int(tr1),
+                                            "away_score": int(tr2),
+                                            "final_status": "finished"
+                                        }
+                                        ok, _ = self.validate_and_add_match(payload)
+                                        if ok:
+                                            added_count += 1
+                                    except Exception:
+                                        continue
+                except Exception:
+                    continue
+        return added_count
+
     def generate_metadata(self, version: str = "v1.0.0") -> DatasetMetadata:
         """Generates comprehensive dataset metadata."""
         leagues = sorted(list(set(m.league_code for m in self.matches)))

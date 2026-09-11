@@ -115,9 +115,32 @@ export const LEAGUE_COUNTRY_MAP: Record<string, string> = {
   EUR_ECL: 'Europe',
   ENG_CH: 'England',
   ENG_L1: 'England',
+  ENG_L2: 'England',
+  ENG_PL2: 'England',
+  ENG_PL_U18: 'England',
+  ENG_NL: 'England',
+  ENG_NL_N: 'England',
+  ENG_NL_S: 'England',
+  ENG_NPL: 'England',
+  ENG_ILP: 'England',
+  ENG_SLP: 'England',
+  ENG_WSL: 'England',
+  ENG_EFL_CUP: 'England',
+  ESP_LL2: 'Spain',
+  ITA_SB: 'Italy',
+  GER_2BL: 'Germany',
+  GER_3L: 'Germany',
+  FRA_L2: 'France',
+  NED_EED: 'Netherlands',
+  SCO_CH: 'Scotland',
+  USA_USLC: 'USA',
+  USA_MLSN: 'USA',
+  ARG_PN: 'Argentina',
+  BRA_SB: 'Brazil',
   SCO_PL: 'Scotland',
   NED_ED: 'Netherlands',
   POR_PL: 'Portugal',
+  POR_L2: 'Portugal',
   BEL_PL: 'Belgium',
   TUR_SL: 'Turkey',
   SUI_SL: 'Switzerland',
@@ -507,8 +530,13 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
     return null;
   }
 
-  const isFinished = fixture.status === 'finished';
-  const isLive = fixture.status === 'live';
+  const isFinished = fixture.status === 'finished' || fixture.period === 'FT';
+  const isLive = !isFinished && (
+    fixture.status === 'live' ||
+    fixture.status === 'in_progress' ||
+    fixture.status === 'halftime' ||
+    (Boolean(fixture.period) && ['1H', 'HT', '2H', 'ET', 'PK'].includes((fixture.period || '').toUpperCase()))
+  );
 
   // Format Kickoff in Lagos WAT (UTC+1)
   const kickoffDate = new Date(fixture.target_kickoff_at);
@@ -569,10 +597,15 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
     return `Poisson-Monte Carlo Analysis: ${homeName} Attack Strength (${p.home_attack_str.toFixed(2)}) vs ${awayName} Defense (${p.away_defense_str.toFixed(2)}) with +${p.home_boost_pct}% Home Advantage & Form Weighting models expected goals at ${p.xg_home.toFixed(2)} vs ${p.xg_away.toFixed(2)}. 250,000 Monte Carlo simulation runs confirm '${topPick}' (${topProb.toFixed(1)}%) as the highest-probable occurrence. Secondary edges: Over 1.5 Goals at ${o.goals.over_1_5_prob.toFixed(1)}%, Corners Over 8.5 at ${o.corners.over_8_5_prob.toFixed(1)}%, and ${o.anytime_scorer.home_scorer} anytime goal probability at ${o.anytime_scorer.home_scorer_prob.toFixed(1)}%. Recommended strategy: Core banker on ${topPick} with Over 1.5 Goals accumulator booster.`;
   }, [prediction?.metadata, poissonData, fixture]);
 
+  // If the match is live and the prediction has been met or settled while live, it settles the match by showing WON.
   const isWon = prediction?.settlement_status === 'won';
-  const isLost = prediction?.settlement_status === 'lost';
-  const isVoid = prediction?.settlement_status === 'void' || prediction?.settlement_status === 'voided';
-  const isPending = !prediction?.settlement_status || prediction.settlement_status === 'pending';
+
+  // Lost should be when a fixture has been completely ended and result confirmed.
+  // Never show LOST while the match is live!
+  const isLost = prediction?.settlement_status === 'lost' && isFinished;
+
+  const isVoid = (prediction?.settlement_status === 'void' || prediction?.settlement_status === 'voided') && isFinished;
+  const isPending = !isWon && !isLost && !isVoid;
 
   const isNoBanker = prediction?.market === 'NO_SAFE_BANKER' ||
     prediction?.confidence_category === 'NO_SAFE_BANKER' ||
@@ -626,9 +659,9 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
 
         {isLive && (
           <div className="glance-live-badge">
-            <span className="glance-live-tag">⚡ LIVE</span>
+            <span className="glance-live-tag">⚡ LIVE {fixture.period && fixture.period !== 'LIVE' ? `(${fixture.period})` : ''}</span>
             <span className="glance-live-score-pill">
-              LIVE {fixture.match_minute ? `${fixture.match_minute}'` : ''} • {fixture.home_score ?? 0} - {fixture.away_score ?? 0}
+              {fixture.home_score ?? 0} - {fixture.away_score ?? 0} {fixture.match_minute ? `• ${fixture.match_minute}'` : ''}
             </span>
           </div>
         )}
@@ -670,17 +703,47 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
               </span>
             )}
 
-            {prediction && (isWon || isLost) && (
-              <span className="glance-settle-pill">
-                {isWon && <span style={{ color: '#16a34a' }}>✓ WON</span>}
-                {isLost && <span style={{ color: '#dc2626' }}>✗ LOST</span>}
-              </span>
+            {prediction && (
+              <>
+                {isWon && (
+                  <span className={`glance-settle-pill ${isLive ? 'won-live' : ''}`}>
+                    <span style={{ color: '#16a34a', fontWeight: 800 }}>
+                      ✓ WON {isLive ? '(IN-PLAY)' : ''}
+                    </span>
+                  </span>
+                )}
+                {isLost && (
+                  <span className="glance-settle-pill">
+                    <span style={{ color: '#dc2626', fontWeight: 800 }}>✗ LOST</span>
+                  </span>
+                )}
+                {isLive && !isWon && (
+                  <span className="glance-settle-pill live-pending">
+                    <span style={{ color: '#b45309', fontWeight: 800 }}>⚡ IN-PLAY</span>
+                  </span>
+                )}
+                {isVoid && (
+                  <span className="glance-settle-pill">
+                    <span style={{ color: '#64748b', fontWeight: 800 }}>⊘ VOID</span>
+                  </span>
+                )}
+              </>
             )}
           </div>
 
           <div className="glance-teams-row">
             <span className="glance-team-name">{formatTeamName(fixture.home_team_name)}</span>
-            <span className="glance-vs-pill">vs</span>
+            {isLive || isFinished || (fixture.home_score != null && fixture.away_score != null) ? (
+              <span
+                className={`glance-live-match-score ${isLive ? 'in-play' : 'final'}`}
+                title={isLive ? 'Current Live Match Score' : 'Final Match Score'}
+              >
+                {isLive && <span className="live-dot" />}
+                {fixture.home_score ?? 0} - {fixture.away_score ?? 0}
+              </span>
+            ) : (
+              <span className="glance-vs-pill">vs</span>
+            )}
             <span className="glance-team-name">{formatTeamName(fixture.away_team_name)}</span>
           </div>
 
@@ -718,6 +781,21 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
               <div className="key-pick-badge">
                 <span className="key-pick-spark">✨</span>
                 <span>KEY 250,000 SIM PICK</span>
+                {isWon && (
+                  <span style={{ marginLeft: 6, padding: '1px 6px', background: '#16a34a', color: '#fff', borderRadius: 4, fontSize: 10, fontWeight: 900 }}>
+                    ✓ WON {isLive ? '(IN-PLAY)' : ''}
+                  </span>
+                )}
+                {isLost && (
+                  <span style={{ marginLeft: 6, padding: '1px 6px', background: '#dc2626', color: '#fff', borderRadius: 4, fontSize: 10, fontWeight: 900 }}>
+                    ✗ LOST
+                  </span>
+                )}
+                {isLive && !isWon && (
+                  <span style={{ marginLeft: 6, padding: '1px 6px', background: '#ea580c', color: '#fff', borderRadius: 4, fontSize: 10, fontWeight: 900 }}>
+                    ⚡ LIVE
+                  </span>
+                )}
               </div>
               <div className="key-pick-outcome">
                 {glancePick}
@@ -835,10 +913,15 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
                       🎯 PRIMARY PREDICTION (TOP BANKER)
                     </span>
                     <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                      {isWon && <span className="badge-settled-won">✓ WON</span>}
+                      {isWon && <span className="badge-settled-won">✓ WON {isLive ? '(IN-PLAY)' : ''}</span>}
                       {isLost && <span className="badge-settled-lost">✗ LOST</span>}
                       {isVoid && <span className="badge-settled-void">⊘ VOID</span>}
-                      {isPending && <span className="badge-settled-pending">⏳ PENDING</span>}
+                      {isLive && !isWon && (
+                        <span className="badge-settled-pending" style={{ background: '#fef3c7', color: '#b45309', borderColor: '#fde68a' }}>
+                          ⚡ LIVE IN-PLAY
+                        </span>
+                      )}
+                      {isPending && !isLive && <span className="badge-settled-pending">⏳ PENDING</span>}
                       <span
                         className={`tier-badge ${tierConfig.badgeClass}`}
                         style={{ color: tierConfig.textColor, borderColor: tierConfig.borderColor, background: tierConfig.bgColor }}

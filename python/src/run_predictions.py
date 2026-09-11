@@ -62,6 +62,12 @@ def run():
         total_historical += count
         print(f"  • [{l_code}] Ingested {count} verified matches", flush=True)
 
+    print("\n[STEP 1.1] Ingesting verified completed matches from LiveScore across all domestic & international tiers...", flush=True)
+    past_dates = [(datetime.now(timezone.utc) - timedelta(days=i)).strftime("%Y%m%d") for i in range(1, 11)]
+    ls_hist_count = dataset.fetch_historical_from_livescore(past_dates)
+    total_historical += ls_hist_count
+    print(f"  [OK] Ingested {ls_hist_count} verified multi-tier completed matches from LiveScore", flush=True)
+
     print(f"[INFO] Total verified historical matches in dataset: {len(dataset.matches)}", flush=True)
 
     # 2. Record dataset metadata in Cloud Supabase

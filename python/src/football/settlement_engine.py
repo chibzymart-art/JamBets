@@ -217,12 +217,12 @@ class SettlementEngine:
                         notes=f"In-play {score_str}: {total_goals} goals, max allowed <{threshold}"
                     )
 
-        # --- 1B. Team-Specific Goals Markets (Home / Away Over/Under 0.5) ---
-        elif market in ("home_goals_0.5", "away_goals_0.5"):
-            is_home_target = (market == "home_goals_0.5")
+        # --- 1B. Team-Specific Goals Markets (Home / Away Over/Under 0.5 / 1.5) ---
+        elif "home_goals" in market or "away_goals" in market:
+            is_home_target = "home_goals" in market
             team_goals = h if is_home_target else a
             team_label = "Home" if is_home_target else "Away"
-            threshold = 0.5
+            threshold = 1.5 if "1.5" in market else 0.5
 
             if outcome in ("over", "o"):
                 if team_goals > threshold:

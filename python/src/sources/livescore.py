@@ -22,6 +22,54 @@ class LiveScoreAdapter(BaseSourceAdapter):
         )
         self._date_cache: dict = {}
 
+    LIVESCORE_STAGE_ALIASES = {
+        "ENG_PL": ["premier-league"],
+        "ENG_PL2": ["premier-league-2"],
+        "ENG_PL_U18": ["premier-league-u18"],
+        "ENG_CH": ["championship"],
+        "ENG_L1": ["league-1", "league-one"],
+        "ENG_L2": ["league-2", "league-two"],
+        "ENG_NL": ["national-league"],
+        "ENG_NL_N": ["national-league-north"],
+        "ENG_NL_S": ["national-league-south"],
+        "ENG_NPL": ["northern-premier-division", "northern-premier-league", "northern-premier-league-east-division", "northern-premier-league-midlands-division", "northern-premier-league-west-division"],
+        "ENG_ILP": ["isthmian-league", "isthmian-league-north-division", "isthmian-league-south-central-division", "isthmian-league-south-east-division"],
+        "ENG_SLP": ["southern-premier-division-south", "southern-premier-division-central", "southern-league-central-division"],
+        "ENG_WSL": ["fa-women-s-super-league"],
+        "ENG_EFL_CUP": ["efl-cup-round-3-2025-2026", "efl-cup", "carabao-cup"],
+        "ESP_LL": ["laliga"],
+        "ESP_LL2": ["laliga-2"],
+        "ITA_SA": ["serie-a"],
+        "ITA_SB": ["serie-b"],
+        "GER_BL": ["bundesliga"],
+        "GER_2BL": ["2-bundesliga"],
+        "GER_3L": ["3-liga"],
+        "FRA_L1": ["ligue-1"],
+        "FRA_L2": ["ligue-2"],
+        "SCO_PL": ["premiership", "scotland-premiership"],
+        "SCO_CH": ["championship"],
+        "NED_ED": ["eredivisie"],
+        "NED_EED": ["eerste-divisie"],
+        "USA_USLC": ["usl-championship"],
+        "USA_MLSN": ["mls-next-pro"],
+        "POR_PL": ["primeira-liga"],
+        "POR_L2": ["segunda-liga", "liga-portugal-2"],
+        "BEL_PL": ["belgian-pro-league-2025", "pro-league", "belgian-pro-league"],
+        "TUR_SL": ["super-lig"],
+        "SUI_SL": ["super-league"],
+        "AUT_BL": ["bundesliga"],
+        "DEN_SL": ["superliga"],
+        "SWE_AL": ["allsvenskan"],
+        "NOR_EL": ["eliteserien"],
+        "GRE_SL": ["super-league"],
+        "USA_MLS": ["major-league-soccer-2026", "mls"],
+        "BRA_SA": ["serie-a"],
+        "ARG_PD": ["liga-profesional-clausura", "primera-division"],
+        "MEX_LMX": ["liga-mx-apertura", "liga-mx-clausura", "liga-mx"],
+        "SAU_SPL": ["saudi-professional-league", "pro-league"],
+        "JPN_J1": ["j-league-2025", "j1-league"]
+    }
+
     def _map_livescore_status(self, eps: str) -> FixtureStatus:
         status_map = {
             "NS": FixtureStatus.SCHEDULED,
@@ -63,17 +111,18 @@ class LiveScoreAdapter(BaseSourceAdapter):
                 for stage in stages:
                     stage_country = (stage.get("Cnm") or "").lower().replace(" ", "-")
                     stage_name = (stage.get("Snm") or "").lower().replace(" ", "-")
+                    stage_code = (stage.get("Scd") or "").lower().replace(" ", "-")
 
-                    # Strict country & stage validation to prevent cross-country misclassification
-                    # Both country AND stage must match precisely
+                    # Strict country & stage validation to prevent cross-country & cross-tier misclassification
+                    # Both country AND stage must match precisely (no substring containment that leaks lower leagues)
                     country_matches = (
                         stage_country == league.livescore_country or
                         stage_country == league.country.lower().replace(" ", "-")
                     )
+                    allowed_stages = self.LIVESCORE_STAGE_ALIASES.get(league.code, [league.livescore_stage])
                     stage_matches = (
-                        stage_name == league.livescore_stage or
-                        league.livescore_stage in stage_name or
-                        stage_name in league.livescore_stage
+                        stage_code in allowed_stages or
+                        stage_name in allowed_stages
                     )
                     if not (country_matches and stage_matches):
                         continue
@@ -98,12 +147,45 @@ class LiveScoreAdapter(BaseSourceAdapter):
 
                         home_score = None
                         away_score = None
+                        ht_home = None
+                        ht_away = None
                         if canonical_status in (FixtureStatus.LIVE, FixtureStatus.FINISHED):
                             try:
                                 home_score = int(ev.get("Tr1"))
                                 away_score = int(ev.get("Tr2"))
                             except (ValueError, TypeError):
                                 pass
+                            try:
+                                ht_home = int(ev.get("Trh1"))
+                                ht_away = int(ev.get("Trh2"))
+                            except (ValueError, TypeError):
+                                pass
+
+                        minute = None
+                        if eps.isdigit():
+                            minute = int(eps)
+                        elif "'" in eps:
+                            try:
+                                minute = int(eps.replace("'", "").split("+")[0].strip())
+                            except Exception:
+                                pass
+
+                        period = None
+                        if eps == "HT":
+                            period = "HT"
+                        elif canonical_status == FixtureStatus.FINISHED:
+                            period = "FT"
+                        elif canonical_status == FixtureStatus.LIVE:
+                            period = "2H" if (minute and minute > 45) else "1H"
+
+                        raw_meta = {
+                            "livescore_eps": eps,
+                            "stage": stage.get("Snm"),
+                            "minute": minute,
+                            "period": period,
+                            "half_time_home_score": ht_home,
+                            "half_time_away_score": ht_away,
+                        }
 
                         payload = RawFixturePayload(
                             source_name=self.name,
@@ -114,7 +196,9 @@ class LiveScoreAdapter(BaseSourceAdapter):
                             away_team_raw=t2,
                             kickoff_time=kickoff_dt,
                             status=canonical_status,
-                            raw_payload={"livescore_eps": eps, "stage": stage.get("Snm")}
+                            home_score=home_score,
+                            away_score=away_score,
+                            raw_metadata=raw_meta
                         )
                         results.append(payload)
 

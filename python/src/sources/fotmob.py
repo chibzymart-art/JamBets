@@ -25,6 +25,8 @@ class FotMobAdapter(BaseSourceAdapter):
     LEAGUE_ID_MAP = {
         "ENG_PL": 47,
         "ENG_CH": 48,
+        "ENG_L1": 108,
+        "ENG_L2": 109,
         "ESP_LL": 87,
         "ITA_SA": 55,
         "GER_BL": 54,
@@ -34,7 +36,7 @@ class FotMobAdapter(BaseSourceAdapter):
         "EUR_CL": 42,
         "EUR_EL": 73,
         "POR_PL": 61,
-        "SCO_PR": 64,
+        "SCO_PL": 64,
         "TUR_SL": 71
     }
 
@@ -200,6 +202,9 @@ class FotMobAdapter(BaseSourceAdapter):
             self._matches_cache: Dict[str, Any] = {}
 
         fotmob_league_id = self.LEAGUE_ID_MAP.get(league.code)
+        if not fotmob_league_id:
+            return []
+
         results: List[RawFixturePayload] = []
 
         cur_date = date_from.date()
@@ -221,7 +226,7 @@ class FotMobAdapter(BaseSourceAdapter):
                 continue
 
             for lg in data.get("leagues", []):
-                if fotmob_league_id and lg.get("id") != fotmob_league_id:
+                if lg.get("id") != fotmob_league_id:
                     continue
 
                 for match in lg.get("matches", []):
