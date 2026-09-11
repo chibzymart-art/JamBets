@@ -98,9 +98,9 @@ export const PasswordRecoveryPage: React.FC = () => {
         throw error;
       }
 
-      setSuccessMessage('🎉 Your password has been successfully updated! Directing you to the Predictions Dashboard...');
+      setSuccessMessage('🎉 Your password has been successfully updated! Directing you to the Dashboard...');
       setTimeout(() => {
-        navigate('/dashboard/predictions');
+        navigate('/dashboard');
       }, 1500);
     } catch (err: any) {
       console.error('Update password error:', err);
@@ -179,7 +179,7 @@ export const PasswordRecoveryPage: React.FC = () => {
               <Link to="/" className="recovery-back-link">
                 ← Back to Home
               </Link>
-              <Link to="/dashboard/predictions" className="recovery-back-link">
+              <Link to="/dashboard" className="recovery-back-link">
                 Launch Dashboard →
               </Link>
             </div>

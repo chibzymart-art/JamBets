@@ -238,7 +238,7 @@ export default function App() {
   useEffect(() => {
     const handleHash = () => {
       if (window.location.hash === '#admin') navigate('/admin');
-      else if (window.location.hash === '#fixtures') navigate('/dashboard/predictions');
+      else if (window.location.hash === '#fixtures') navigate('/dashboard');
     };
     handleHash();
     window.addEventListener('hashchange', handleHash);
@@ -333,7 +333,7 @@ export default function App() {
         setCurrentUser(session.user);
         await fetchUserData(session.user.id);
         if (event === 'SIGNED_IN') {
-          navigate('/dashboard/predictions');
+          navigate('/dashboard');
         }
       } else {
         setCurrentUser(null);
@@ -375,7 +375,7 @@ export default function App() {
   const handleAuthSuccess = async () => {
     setIsAuthModalOpen(false);
     await fetchCloudData();
-    navigate('/dashboard/predictions');
+    navigate('/dashboard');
   };
 
   // Authoritative Cloud Supabase Query
@@ -1103,7 +1103,7 @@ export default function App() {
         <div className="regulatory-top-banner-inner">
           <span className="regulatory-top-icon" aria-hidden="true">⚠️</span>
           <p className="regulatory-top-text">
-            <strong>STRICT REGULATORY NOTICE:</strong> Predictions are probabilistic estimates derived from mathematical simulations for informational purposes only. They are not guarantees of outcomes, and JamBets does not place bets on anyone's behalf. Sports predictive modeling entails variance and uncertainty; please make decisions responsibly. JamBets will not take responsibility for any financial losses. This is STRICTLY FOR EDUCATIONAL purposes only and NOT FINANCIAL OR INVESTMENT ADVICE.
+            <strong>STRICT REGULATORY NOTICE:</strong> Predictions are probabilistic estimates derived from mathematical simulations for informational purposes only. They are not guarantees of outcomes, and JamGames does not place bets on anyone's behalf. Sports predictive modeling entails variance and uncertainty; please make decisions responsibly. JamGames will not take responsibility for any financial losses. This is STRICTLY FOR EDUCATIONAL purposes only and NOT A FINANCIAL OR INVESTMENT ADVICE
           </p>
         </div>
       </aside>
@@ -1113,92 +1113,37 @@ export default function App() {
         <div className="site-header-inner">
           <Link to="/" className="header-brand" onClick={() => resetAllFilters()}>
             <div className="brand-icon-sq">J</div>
-            <div>
-              <span className="brand-text-name">JamBets</span>
-              <span className="brand-text-tag">Quantitative Models</span>
-            </div>
+            <span className="brand-text-name">JamBets</span>
           </Link>
 
-          {location.pathname === '/' ? (
-            /* STANDALONE LANDING PAGE NAVBAR */
-            <div className="header-center-links">
-              <button
-                type="button"
-                className="landing-nav-link-btn"
-                onClick={() => {
-                  const el = document.querySelector('.landing-sports-status-section');
-                  el?.scrollIntoView({ behavior: 'smooth' });
-                }}
-              >
-                Sports Coverage
-              </button>
-              <button
-                type="button"
-                className="landing-nav-link-btn"
-                onClick={() => {
-                  const el = document.querySelector('.landing-proof-section');
-                  el?.scrollIntoView({ behavior: 'smooth' });
-                }}
-              >
-                Accuracy Ledger
-              </button>
-              <button
-                type="button"
-                className="landing-nav-link-btn"
-                onClick={() => {
-                  const el = document.querySelector('.landing-methodology-section');
-                  el?.scrollIntoView({ behavior: 'smooth' });
-                }}
-              >
-                Methodology
-              </button>
-              <button
-                type="button"
-                className="landing-nav-link-btn"
-                onClick={() => setIsPricingModalOpen(true)}
-              >
-                Pricing & Plans <span className="pricing-flat-badge">₦5,000/mo</span>
-              </button>
-              <button
-                type="button"
-                className="landing-nav-link-btn"
-                onClick={() => setIsFaqModalOpen(true)}
-              >
-                FAQ & Rules
-              </button>
-            </div>
-          ) : (
-            /* INTERNAL APP NAVBAR */
-            <div className="header-center-links">
-              <Link
-                to="/"
-                className="nav-link-btn"
-              >
-                ← Home
-              </Link>
-              <Link
-                to="/dashboard/predictions"
-                className={`nav-link-btn ${location.pathname.startsWith('/dashboard') ? 'active' : ''}`}
-              >
-                Predictions Dashboard
-              </Link>
-              <button
-                type="button"
-                className={`nav-link-btn ${location.pathname === '/subscription' ? 'active' : ''}`}
-                onClick={() => setIsPricingModalOpen(true)}
-              >
-                Pricing & Plans <span className="pricing-flat-badge">₦5,000/mo</span>
-              </button>
-              <button className="nav-link-btn" onClick={() => setIsFaqModalOpen(true)}>
-                FAQ
-              </button>
-            </div>
-          )}
+          {/* Clean Unified Navigation Links */}
+          <div className="header-center-links">
+            <Link
+              to="/dashboard"
+              className={`nav-link-btn ${location.pathname.startsWith('/dashboard') ? 'active' : ''}`}
+            >
+              {currentUser ? 'Dashboard' : 'Predictions'}
+            </Link>
+            <button
+              type="button"
+              className={`nav-link-btn ${location.pathname === '/subscription' ? 'active' : ''}`}
+              onClick={() => setIsPricingModalOpen(true)}
+            >
+              Pricing <span className="pricing-flat-badge">₦5k Flat</span>
+            </button>
+            <button
+              type="button"
+              className="nav-link-btn"
+              onClick={() => setIsFaqModalOpen(true)}
+            >
+              FAQ
+            </button>
+          </div>
 
           <div className="header-right-actions">
             {location.pathname === '/' && (
-              <Link to="/dashboard/predictions" className="landing-nav-cta">
-                📊 Predictions Dashboard →
+              <Link to="/dashboard" className="landing-nav-cta">
+                {currentUser ? '📊 Dashboard →' : '📊 Predictions →'}
               </Link>
             )}
 
@@ -1238,7 +1183,7 @@ export default function App() {
                 </button>
                 <button
                   className="login-action-btn"
-                  style={{ background: '#059669', borderColor: '#059669' }}
+                  style={{ background: '#059669', borderColor: '#059669', color: '#ffffff' }}
                   onClick={() => { setAuthModalMode('register'); setIsAuthModalOpen(true); }}
                 >
                   Register
@@ -1263,6 +1208,7 @@ export default function App() {
                 currentUser={currentUser}
                 userRole={profile?.role}
                 onOpenFaq={() => setIsFaqModalOpen(true)}
+                onOpenPricing={() => setIsPricingModalOpen(true)}
               />
             }
           />
@@ -1286,10 +1232,18 @@ export default function App() {
             }
           />
 
-          {/* REMOVED: ANALYTICS & AUDIT ROUTE (SAFELY REDIRECT TO DASHBOARD) */}
+          {/* REDIRECT ALIASES TO DASHBOARD */}
           <Route
             path="/analytics"
-            element={<Navigate to="/dashboard/predictions" replace />}
+            element={<Navigate to="/dashboard" replace />}
+          />
+          <Route
+            path="/predictions"
+            element={<Navigate to="/dashboard" replace />}
+          />
+          <Route
+            path="/dashboard/predictions"
+            element={<Navigate to="/dashboard" replace />}
           />
 
           {/* ROUTE 4: ADMIN COMMAND DECK (STRICTLY GATED) */}
@@ -1299,7 +1253,7 @@ export default function App() {
               isAdmin ? (
                 <AdminView
                   currentUserProfile={profile}
-                  onBackToFixtures={() => navigate('/dashboard/predictions')}
+                  onBackToFixtures={() => navigate('/dashboard')}
                   onOpenAuthModal={() => {
                     setAuthModalMode('signin');
                     setIsAuthModalOpen(true);
@@ -1313,7 +1267,7 @@ export default function App() {
 
           {/* ROUTE 5: PREDICTIONS FIXTURE DASHBOARD */}
           <Route
-            path="/dashboard/predictions"
+            path="/dashboard"
             element={
               <div id="fixtures-view-section">
         {/* Phase 4.6 & RBAC: Admin Engine Controls & Automation Overrides (Strictly locked to authenticated Admins) */}
@@ -2081,11 +2035,54 @@ export default function App() {
         onOpenLeaguesModal={() => setIsAllLeaguesModalOpen(true)}
         onSelectDateFilter={(date) => {
           setSelectedDate(date);
-          navigate('/dashboard/predictions');
+          navigate('/dashboard');
           window.scrollTo({ top: 0, behavior: 'smooth' });
         }}
         userRole={isAdmin ? 'admin' : profile?.role}
       />
+
+      {/* MOBILE APP BOTTOM TAB BAR (Native App Experience on Mobile Screens <= 768px) */}
+      <nav className="mobile-app-bottom-bar" aria-label="Mobile Navigation Bar">
+        <Link to="/" className={`mobile-tab-item ${location.pathname === '/' ? 'active' : ''}`}>
+          <span className="mobile-tab-icon">🏠</span>
+          <span className="mobile-tab-label">Home</span>
+        </Link>
+        <Link to="/dashboard" className={`mobile-tab-item ${location.pathname === '/dashboard' ? 'active' : ''}`}>
+          <span className="mobile-tab-icon">📊</span>
+          <span className="mobile-tab-label">{currentUser ? 'Dashboard' : 'Predictions'}</span>
+        </Link>
+        <button
+          type="button"
+          className={`mobile-tab-item ${location.pathname === '/subscription' ? 'active' : ''}`}
+          onClick={() => setIsPricingModalOpen(true)}
+        >
+          <span className="mobile-tab-icon">⚡</span>
+          <span className="mobile-tab-label">Plans</span>
+        </button>
+        <button
+          type="button"
+          className="mobile-tab-item"
+          onClick={() => setIsFaqModalOpen(true)}
+        >
+          <span className="mobile-tab-icon">❓</span>
+          <span className="mobile-tab-label">FAQ</span>
+        </button>
+        <button
+          type="button"
+          className="mobile-tab-item"
+          onClick={() => {
+            if (currentUser) {
+              setIsProfileModalOpen(true);
+            } else {
+              setAuthModalMode('signin');
+              setIsAuthModalOpen(true);
+            }
+          }}
+        >
+          <span className="mobile-tab-icon">👤</span>
+          <span className="mobile-tab-label">{currentUser ? 'Account' : 'Sign In'}</span>
+        </button>
+      </nav>
 
       {/* MODALS */}
       <PricingModal

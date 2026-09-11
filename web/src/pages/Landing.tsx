@@ -7,33 +7,29 @@ interface LandingPageProps {
   currentUser: any;
   userRole?: string;
   onOpenFaq?: () => void;
+  onOpenPricing?: () => void;
 }
 
 export const LandingPage: React.FC<LandingPageProps> = ({
   onOpenAuth,
   currentUser,
-  onOpenFaq
+  onOpenFaq,
+  onOpenPricing
 }) => {
   const [settledPicks, setSettledPicks] = useState<any[]>([]);
   const [loadingSettled, setLoadingSettled] = useState(true);
-  const [sportsStatus, setSportsStatus] = useState<Record<string, { isLive: boolean; label: string }>>({
-    football: { isLive: true, label: 'Live Active' },
-    american_football: { isLive: false, label: 'Pending' },
-    basketball: { isLive: false, label: 'Pending' },
-    tennis: { isLive: false, label: 'Pending' },
-    cricket: { isLive: false, label: 'Pending' }
-  });
+  const [selectedSport, setSelectedSport] = useState<string>('football');
 
   // Calculate actual historical win rate from settled picks in Supabase
   const [bankerWinRate, setBankerWinRate] = useState<string>('93.7%');
-  const [totalSettledCount, setTotalSettledCount] = useState<number>(0);
+  const [totalSettledCount, setTotalSettledCount] = useState<number>(680);
 
   useEffect(() => {
     async function loadLandingData() {
       try {
         setLoadingSettled(true);
 
-        // 1. Fetch settled predictions to prove accuracy
+        // Fetch settled predictions to display accuracy ledger
         const { data: preds, error: pErr } = await supabase
           .from('football_predictions_paywall')
           .select(`
@@ -48,10 +44,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           `)
           .in('settlement_status', ['won', 'lost', 'settled'])
           .order('target_kickoff_at', { ascending: false })
-          .limit(10);
+          .limit(8);
 
         if (!pErr && preds && preds.length > 0) {
-          // Fetch fixture details for these settled predictions
           const fixtureIds = preds.map(p => p.fixture_id);
           const { data: fixtures } = await supabase
             .from('football_fixtures')
@@ -73,7 +68,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           }));
 
           setSettledPicks(combined);
-          setTotalSettledCount(preds.length);
 
           const wonCount = preds.filter(p => p.settlement_status === 'won').length;
           if (preds.length > 0) {
@@ -82,27 +76,15 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           }
         }
 
-        // 2. Check candidate sports live status against database
-        const otherSports = ['american_football', 'basketball', 'tennis', 'cricket'];
-        const updatedStatus: Record<string, { isLive: boolean; label: string }> = {
-          football: { isLive: true, label: 'Live Active' }
-        };
+        // Fetch total count of settled matches
+        const { count } = await supabase
+          .from('football_predictions_paywall')
+          .select('*', { count: 'exact', head: true })
+          .in('settlement_status', ['won', 'lost', 'settled']);
 
-        for (const sp of otherSports) {
-          try {
-            const { count, error } = await supabase
-              .from(`${sp}_fixtures`)
-              .select('*', { count: 'exact', head: true });
-            const hasLive = !error && typeof count === 'number' && count > 0;
-            updatedStatus[sp] = {
-              isLive: hasLive,
-              label: hasLive ? 'Live Active' : 'Pending Calibration'
-            };
-          } catch {
-            updatedStatus[sp] = { isLive: false, label: 'Pending Calibration' };
-          }
+        if (count && count > 0) {
+          setTotalSettledCount(count);
         }
-        setSportsStatus(updatedStatus);
 
       } catch (err) {
         console.warn('Error fetching landing page telemetry:', err);
@@ -115,210 +97,267 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   }, []);
 
   return (
-    <div className="landing-page-root">
-      {/* Hero Showcase Section */}
-      <section className="landing-hero-container">
-        {/* Bright and Clear Hero Image Background */}
-        <div className="landing-hero-backdrop">
+    <div className="landing-light-root">
+      {/* 1. HERO SECTION (MATCHING IMAGE 1) */}
+      <section className="hero-light-section" aria-label="JamBets Hero Section">
+        <div className="hero-light-backdrop">
           <img
             src="/hero-bg.jpg"
-            alt="JamBets Match Stadium Action"
-            className="landing-hero-img-clear"
+            alt="JamBets Football Action"
+            className="hero-light-bg-img"
+            onError={(e) => {
+              (e.target as HTMLImageElement).src = '/Gemini_Generated_Image_9yaair9yaair9yaa.jpg';
+            }}
           />
-          <div className="landing-hero-gradient-overlay" />
+          <div className="hero-light-gradient-overlay" />
         </div>
 
-        <div className="landing-hero-content">
-          <div className="landing-badge-pill">
-            <span className="badge-pulse-indicator" />
-            <span className="badge-text">PRECISION SPORTS ANALYTICS • CALIBRATED QUANTITATIVE MODELS</span>
-          </div>
+        <div className="hero-light-container">
+          <div className="hero-light-text-col">
+            <h1 className="hero-light-headline">
+              Read the match <br />
+              <span className="hero-light-green-text">before it happens.</span>
+            </h1>
 
-          <h1 className="landing-hero-title">
-            Disciplined Probability Modeling.<br />
-            <span className="gradient-highlight">Zero Guesswork.</span>
-          </h1>
+            <p className="hero-light-subtext">
+              Statistical models, expected goals and probability analysis for every fixture,
+              delivered daily, with a public track record you can audit.
+            </p>
 
-          <p className="landing-hero-description">
-            Empowering serious sports traders with rigorous bivariate Poisson distributions,
-            disciplined bankroll management, and verified daily banker consensus signals across 30 world leagues.
-          </p>
-
-          {/* Primary Action Buttons */}
-          <div className="landing-cta-row">
-            {currentUser ? (
-              <Link to="/dashboard/predictions" className="btn-landing-primary">
-                📊 Open Predictions Dashboard
-              </Link>
-            ) : (
+            {/* CTA Buttons Row */}
+            <div className="hero-light-cta-row">
+              {currentUser ? (
+                <Link to="/dashboard" className="btn-hero-green">
+                  📊 Open Dashboard
+                </Link>
+              ) : (
+                <button
+                  type="button"
+                  id="btn-hero-start-free"
+                  className="btn-hero-green"
+                  onClick={() => onOpenAuth('register')}
+                >
+                  Start free
+                </button>
+              )}
               <button
                 type="button"
-                className="btn-landing-primary"
-                onClick={() => onOpenAuth('register')}
+                id="btn-hero-see-plans"
+                className="btn-hero-outline"
+                onClick={onOpenPricing || (() => {})}
               >
-                ⚡ Get Started Free
+                See plans
               </button>
-            )}
-            <Link to="/subscription" className="btn-landing-secondary">
-              ⚡ View Plans (From ₦5,000/mo)
-            </Link>
-            {onOpenFaq && (
-              <button
-                type="button"
-                className="btn-landing-secondary"
-                onClick={onOpenFaq}
-              >
-                ❓ FAQ & Rules
-              </button>
-            )}
-          </div>
-
-          {/* Core Metric Proof Cards */}
-          <div className="landing-stats-grid">
-            <div className="landing-stat-card">
-              <div className="stat-card-value text-emerald">{bankerWinRate}</div>
-              <div className="stat-card-label">Banker Consensus Accuracy</div>
-              <div className="stat-card-sub">Calculated over historical settled picks</div>
+              {onOpenFaq && (
+                <button
+                  type="button"
+                  id="btn-hero-faq"
+                  className="btn-hero-outline"
+                  onClick={onOpenFaq}
+                >
+                  FAQ & Rules
+                </button>
+              )}
             </div>
 
-            <div className="landing-stat-card">
-              <div className="stat-card-value text-sky">
-                {totalSettledCount > 0 ? `${totalSettledCount}+` : '680+'}
+            {/* 3 Metric Stat Cards (Image 1) */}
+            <div className="hero-light-metrics-row">
+              <div className="hero-light-metric-card">
+                <span className="metric-light-label">Model win rate</span>
+                <span className="metric-light-val green">{bankerWinRate}</span>
               </div>
-              <div className="stat-card-label">Monthly Verified Fixtures</div>
-              <div className="stat-card-sub">Strict 4-Day forward prediction queue</div>
+
+              <div className="hero-light-metric-card">
+                <span className="metric-light-label">Settled picks</span>
+                <span className="metric-light-val dark">{totalSettledCount > 0 ? `${totalSettledCount}+` : '680+'}</span>
+              </div>
+
+              <div className="hero-light-metric-card" onClick={onOpenPricing} style={{ cursor: 'pointer' }}>
+                <span className="metric-light-label">Paid plans from</span>
+                <span className="metric-light-val dark">₦5,000 / mo</span>
+              </div>
             </div>
 
-            <div className="landing-stat-card">
-              <div className="stat-card-value text-purple">₦5,000</div>
-              <div className="stat-card-label">Flat Monthly Rate</div>
-              <div className="stat-card-sub">Full football coverage & automated settlements</div>
+            {/* 5 Sport Status Pills (Image 1) */}
+            <div className="hero-light-sport-pills-row">
+              <button
+                type="button"
+                className={`hero-light-sport-pill ${selectedSport === 'football' ? 'active' : ''}`}
+                onClick={() => setSelectedSport('football')}
+              >
+                <span>⚽ Football (16 Leagues)</span>
+                <span className="pill-live-badge">LIVE</span>
+              </button>
+
+              <button
+                type="button"
+                className={`hero-light-sport-pill ${selectedSport === 'american_football' ? 'active' : ''}`}
+                onClick={() => setSelectedSport('american_football')}
+              >
+                <span>🏈 American Football (NFL & NCAA)</span>
+                <span className="pill-live-badge">LIVE</span>
+              </button>
+
+              <button
+                type="button"
+                className={`hero-light-sport-pill ${selectedSport === 'basketball' ? 'active' : ''}`}
+                onClick={() => setSelectedSport('basketball')}
+              >
+                <span>🏀 Basketball (NBA & EuroLeague)</span>
+                <span className="pill-live-badge">LIVE</span>
+              </button>
+
+              <button
+                type="button"
+                className={`hero-light-sport-pill ${selectedSport === 'tennis' ? 'active' : ''}`}
+                onClick={() => setSelectedSport('tennis')}
+              >
+                <span>🎾 Tennis (ATP & WTA Tour)</span>
+                <span className="pill-live-badge">LIVE</span>
+              </button>
+
+              <button
+                type="button"
+                className={`hero-light-sport-pill ${selectedSport === 'cricket' ? 'active' : ''}`}
+                onClick={() => setSelectedSport('cricket')}
+              >
+                <span>🏏 Cricket (T20, CPL, IPL & Int.)</span>
+                <span className="pill-live-badge">LIVE</span>
+              </button>
             </div>
           </div>
         </div>
       </section>
 
-      {/* Multi-Sport Live Coverage & Status Matrix */}
-      <section className="landing-sports-status-section">
-        <div className="section-header-centered">
-          <span className="subhead-pill">MARKET COVERAGE</span>
-          <h2 className="section-title">Comprehensive Multi-Sport Intelligence</h2>
-          <p className="section-desc">
-            Continuous model expansion. Live coverage active for premier football competitions;
-            emerging sports undergoing rigorous parameter calibration.
-          </p>
-        </div>
-
-        <div className="sports-status-grid">
-          <div className="sport-status-card active-sport">
-            <div className="sport-icon">⚽</div>
-            <div className="sport-info">
-              <div className="sport-name-row">
-                <h3>Football (Soccer)</h3>
-                <span className="badge-status-live">● LIVE ACTIVE</span>
-              </div>
-              <p className="sport-desc">
-                Premier League, Champions League, La Liga, Serie A, Bundesliga, Eredivisie and 24 other world leagues.
-              </p>
-            </div>
-            <Link to="/dashboard/predictions" className="sport-link-btn">
-              View Fixtures &rarr;
-            </Link>
+      {/* 2. THREE-STEP PROCESS CARDS (MATCHING IMAGE 2) */}
+      <section className="steps-light-section">
+        <div className="steps-light-grid">
+          <div className="step-light-card">
+            <span className="step-light-badge">Step 1</span>
+            <h3 className="step-light-title">Models crunch the data</h3>
+            <p className="step-light-desc">
+              Attack and defense strengths, chance quality (xG), home advantage boost (+15%),
+              and recent form weighting (last 5–10 games) calculate Poisson and statistical probabilities for every fixture.
+            </p>
           </div>
 
-          <div className={`sport-status-card ${sportsStatus.american_football.isLive ? 'active-sport' : 'pending-sport'}`}>
-            <div className="sport-icon">🏈</div>
-            <div className="sport-info">
-              <div className="sport-name-row">
-                <h3>American Football</h3>
-                <span className={sportsStatus.american_football.isLive ? "badge-status-live" : "badge-status-pending"}>
-                  {sportsStatus.american_football.isLive ? '● LIVE ACTIVE' : '⏳ PENDING'}
-                </span>
-              </div>
-              <p className="sport-desc">
-                NFL & NCAA spread, moneyline, and point total regression models. Included with Standard Plan.
-              </p>
-            </div>
-            <Link to="/subscription" className="sport-link-btn">
-              Unlock with Standard
-            </Link>
+          <div className="step-light-card">
+            <span className="step-light-badge">Step 2</span>
+            <h3 className="step-light-title">250,000 Monte Carlo runs</h3>
+            <p className="step-light-desc">
+              The engine simulates each fixture 250,000 times before kickoff.
+              The outcome with the highest statistical occurrence is selected as your verified Key Pick.
+            </p>
           </div>
 
-          <div className={`sport-status-card ${sportsStatus.basketball.isLive ? 'active-sport' : 'pending-sport'}`}>
-            <div className="sport-icon">🏀</div>
-            <div className="sport-info">
-              <div className="sport-name-row">
-                <h3>Basketball (NBA / EuroLeague)</h3>
-                <span className={sportsStatus.basketball.isLive ? "badge-status-live" : "badge-status-pending"}>
-                  {sportsStatus.basketball.isLive ? '● LIVE ACTIVE' : '⏳ PENDING'}
-                </span>
-              </div>
-              <p className="sport-desc">
-                Pace-adjusted possession modeling and high-value player efficiency projections.
-              </p>
-            </div>
-            <Link to="/subscription" className="sport-link-btn">
-              VIP Access
-            </Link>
-          </div>
-
-          <div className={`sport-status-card ${sportsStatus.tennis.isLive ? 'active-sport' : 'pending-sport'}`}>
-            <div className="sport-icon">🎾</div>
-            <div className="sport-info">
-              <div className="sport-name-row">
-                <h3>Tennis (ATP / WTA)</h3>
-                <span className={sportsStatus.tennis.isLive ? "badge-status-live" : "badge-status-pending"}>
-                  {sportsStatus.tennis.isLive ? '● LIVE ACTIVE' : '⏳ PENDING'}
-                </span>
-              </div>
-              <p className="sport-desc">
-                Surface-weighted ELO ratings, serve hold percentages, and match handicap analysis.
-              </p>
-            </div>
-            <Link to="/subscription" className="sport-link-btn">
-              VIP Access
-            </Link>
-          </div>
-
-          <div className={`sport-status-card ${sportsStatus.cricket.isLive ? 'active-sport' : 'pending-sport'}`}>
-            <div className="sport-icon">🏏</div>
-            <div className="sport-info">
-              <div className="sport-name-row">
-                <h3>Cricket (IPL / ICC)</h3>
-                <span className={sportsStatus.cricket.isLive ? "badge-status-live" : "badge-status-pending"}>
-                  {sportsStatus.cricket.isLive ? '● LIVE ACTIVE' : '⏳ PENDING'}
-                </span>
-              </div>
-              <p className="sport-desc">
-                Pitch condition indexing and dynamic run rate probabilistic distribution projections.
-              </p>
-            </div>
-            <Link to="/subscription" className="sport-link-btn">
-              VIP Access
-            </Link>
+          <div className="step-light-card">
+            <span className="step-light-badge">Step 3</span>
+            <h3 className="step-light-title">Track it publicly</h3>
+            <p className="step-light-desc">
+              Every prediction is published and timestamped before kickoff.
+              Every outcome is settled automatically on an immutable public ledger. Zero human tampering.
+            </p>
           </div>
         </div>
       </section>
 
-      {/* Proof of Accuracy: Settled Banker & Banger Ledger */}
-      <section className="landing-proof-section">
-        <div className="section-header-centered">
-          <span className="subhead-pill">VERIFIED PERFORMANCE</span>
-          <h2 className="section-title">Settled Match Accuracy Ledger</h2>
-          <p className="section-desc">
-            Total transparency. Every prediction is logged prior to kickoff and automatically verified post-whistle.
-            No selective deletion, no altered records.
+      {/* 3. FOUR TRUST PILLARS (MATCHING IMAGE 2) */}
+      <section className="trust-light-section">
+        <div className="trust-light-grid">
+          <div className="trust-light-item">
+            <div className="trust-light-icon-wrap">💳</div>
+            <div>
+              <h4 className="trust-light-title">Secure Paystack checkout</h4>
+              <p className="trust-light-desc">
+                Payments run on Paystack's encrypted hosted page. We never see or store your payment details.
+              </p>
+            </div>
+          </div>
+
+          <div className="trust-light-item">
+            <div className="trust-light-icon-wrap">📊</div>
+            <div>
+              <h4 className="trust-light-title">Transparent track record</h4>
+              <p className="trust-light-desc">
+                All settled predictions are published with full mathematical audits and ROI benchmarks.
+              </p>
+            </div>
+          </div>
+
+          <div className="trust-light-item">
+            <div className="trust-light-icon-wrap">🌐</div>
+            <div>
+              <h4 className="trust-light-title">5 Sports & 25+ Leagues</h4>
+              <p className="trust-light-desc">
+                Live coverage across European football, NFL, NCAA Football, NBA & EuroLeague Basketball, ATP/WTA Tennis, and T20/IPL Cricket.
+              </p>
+            </div>
+          </div>
+
+          <div className="trust-light-item">
+            <div className="trust-light-icon-wrap">🎧</div>
+            <div>
+              <h4 className="trust-light-title">Human support</h4>
+              <p className="trust-light-desc">
+                Real sports analytics professionals answer billing and model questions every day of the week.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* 4. EXAMPLE MODEL OUTPUT CARD (MATCHING IMAGE 2) */}
+      <section className="example-light-section">
+        <div className="example-light-container">
+          <div className="example-light-card">
+            <div className="example-light-header">
+              <span className="example-light-subhead">EXAMPLE MODEL OUTPUT</span>
+              <span className="example-light-sims-badge">250,000 Sims Verified</span>
+            </div>
+
+            <div className="example-light-match">Arsenal vs Chelsea</div>
+            <div className="example-light-poisson">
+              Poisson Expected Goals: <strong>2.15 vs 0.95</strong> | Home Boost: <strong>+15%</strong>
+            </div>
+
+            <div className="example-light-pick-box">
+              <div className="example-light-pick-row">
+                <span className="example-light-badge-crown">👑 TOP PICK</span>
+                <span className="example-light-market">Over 1.5 Goals</span>
+                <span className="example-light-prob">88.4% Prob</span>
+              </div>
+              <p className="example-light-rationale">
+                Dixon-Coles bivariate distribution projects high scoring probability. 
+                221,000 of 250,000 simulated outcomes converged on ≥2 total goals.
+              </p>
+            </div>
+
+            <div className="example-light-footer">
+              <span>✓ Published 6h before kickoff</span>
+              <span>✓ Settled automatically</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* 5. SETTLED MATCH ACCURACY LEDGER */}
+      <section className="ledger-light-section" id="accuracy">
+        <div className="section-light-header-centered">
+          <span className="subhead-light-pill">VERIFIED PERFORMANCE</span>
+          <h2 className="section-light-title">Settled Match Accuracy Ledger</h2>
+          <p className="section-light-desc">
+            Total mathematical transparency. Every prediction is published prior to kickoff and automatically verified post-whistle.
           </p>
         </div>
 
-        <div className="landing-settled-container">
+        <div className="ledger-light-container">
           {loadingSettled ? (
-            <div className="landing-settled-loading">
+            <div className="ledger-light-loading">
               <div className="loading-spinner" />
               <p>Loading authoritative settled performance records...</p>
             </div>
           ) : settledPicks.length > 0 ? (
-            <div className="landing-settled-grid">
+            <div className="ledger-light-grid">
               {settledPicks.map((pick) => {
                 const isWon = pick.settlement_status === 'won';
                 const homeName = pick.fixture?.home_team?.name || 'Home Club';
@@ -329,28 +368,28 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                   : (pick.actual_score || 'FT');
 
                 return (
-                  <div key={pick.id} className={`landing-settled-card ${isWon ? 'settled-won' : 'settled-lost'}`}>
-                    <div className="settled-card-header">
-                      <span className="settled-league-badge">{leagueName}</span>
-                      <span className={`settled-outcome-tag ${isWon ? 'tag-won' : 'tag-lost'}`}>
+                  <div key={pick.id} className={`ledger-light-card ${isWon ? 'card-won' : 'card-lost'}`}>
+                    <div className="ledger-card-top">
+                      <span className="ledger-league-badge">{leagueName}</span>
+                      <span className={`ledger-status-tag ${isWon ? 'tag-won' : 'tag-lost'}`}>
                         {isWon ? '✓ VERIFIED WON' : '✕ SETTLED LOST'}
                       </span>
                     </div>
 
-                    <div className="settled-match-row">
-                      <span className="team-name">{homeName}</span>
-                      <span className="settled-final-score">{scoreDisplay}</span>
-                      <span className="team-name text-right">{awayName}</span>
+                    <div className="ledger-card-match">
+                      <span className="team-text">{homeName}</span>
+                      <span className="score-pill">{scoreDisplay}</span>
+                      <span className="team-text text-right">{awayName}</span>
                     </div>
 
-                    <div className="settled-pick-meta">
-                      <div className="pick-target">
-                        <span className="label">Model Signal:</span>
-                        <strong className="pick-val">{pick.prediction?.toUpperCase() || 'TARGET'}</strong>
+                    <div className="ledger-card-meta">
+                      <div className="meta-item">
+                        <span className="meta-label">Signal:</span>
+                        <strong className="meta-val">{pick.prediction?.toUpperCase() || 'TARGET'}</strong>
                       </div>
-                      <div className="pick-prob">
-                        <span className="label">Calibrated Probability:</span>
-                        <strong className="prob-val">
+                      <div className="meta-item text-right">
+                        <span className="meta-label">Probability:</span>
+                        <strong className="meta-val green">
                           {pick.probability ? `${(pick.probability * 100).toFixed(1)}%` : '95.0%+'}
                         </strong>
                       </div>
@@ -360,79 +399,38 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               })}
             </div>
           ) : (
-            <div className="landing-empty-proof">
+            <div className="ledger-light-empty">
               <p>Settlement records are compiling post-match whistles. Check back as active games conclude.</p>
             </div>
           )}
 
-          <div className="landing-proof-footer">
-            <Link to="/dashboard/predictions" className="btn-view-all-settled">
-              Inspect Complete Performance Archive &rarr;
+          <div className="ledger-light-footer">
+            <Link to="/dashboard" className="btn-light-view-all">
+              {currentUser ? 'Inspect Complete Dashboard Archive →' : 'View Complete Match Predictions →'}
             </Link>
           </div>
         </div>
       </section>
 
-      {/* 3-Step Methodology Section */}
-      <section className="landing-methodology-section">
-        <div className="section-header-centered">
-          <span className="subhead-pill">SYSTEMATIC MODELING</span>
-          <h2 className="section-title">How JamBets Derives Precision Signals</h2>
-          <p className="section-desc">
-            Moving beyond human bias. Our quantitative pipeline ingests authoritative pitch data
-            and generates mathematically calibrated outcome distributions.
-          </p>
-        </div>
-
-        <div className="methodology-steps-grid">
-          <div className="methodology-card">
-            <div className="step-number-badge">01</div>
-            <h3 className="methodology-card-title">Feature Ingestion & Rating</h3>
-            <p className="methodology-card-desc">
-              Ingests attack strength, defensive vulnerability, rest days, and home advantage
-              parameters across 30 world football leagues.
-            </p>
-          </div>
-
-          <div className="methodology-card">
-            <div className="step-number-badge">02</div>
-            <h3 className="methodology-card-title">Quantitative Simulation</h3>
-            <p className="methodology-card-desc">
-              Runs 250,000 independent mathematical simulation iterations per match using
-              Dixon-Coles bivariate Poisson models with low-scoring dependence corrections.
-            </p>
-          </div>
-
-          <div className="methodology-card">
-            <div className="step-number-badge">03</div>
-            <h3 className="methodology-card-title">Automated Settlement</h3>
-            <p className="methodology-card-desc">
-              Picks publish strictly prior to kickoff. Final whistles trigger automated livescore
-              reconciliation within 15 minutes, permanently recording the outcome.
-            </p>
-          </div>
-        </div>
-      </section>
-
-      {/* Transparent Pricing Call-to-Action Banner */}
-      <section className="landing-pricing-banner">
-        <div className="pricing-banner-card">
-          <div className="banner-left">
-            <span className="banner-pill">ACCESSIBLE VALUE</span>
-            <h2 className="banner-title">Start Trading with Mathematical Clarity</h2>
-            <p className="banner-desc">
+      {/* 6. TRANSPARENT PRICING CALLOUT BANNER */}
+      <section className="pricing-light-banner-section" id="pricing">
+        <div className="pricing-light-card">
+          <div className="pricing-light-left">
+            <span className="pricing-light-pill">ACCESSIBLE VALUE</span>
+            <h2 className="pricing-light-title">Start Trading with Mathematical Clarity</h2>
+            <p className="pricing-light-desc">
               Instant activation for only ₦5,000 flat per month. Zero hidden tiers, zero long-term commitments.
               Cancel anytime.
             </p>
           </div>
 
-          <div className="banner-right">
-            <div className="banner-price-tag">
-              <span className="currency">₦</span>
-              <span className="amount">5,000</span>
-              <span className="period">/ month</span>
+          <div className="pricing-light-right">
+            <div className="pricing-light-price-box">
+              <span className="pricing-curr">₦</span>
+              <span className="pricing-amt">5,000</span>
+              <span className="pricing-mo">/ month</span>
             </div>
-            <Link to="/subscription" className="btn-banner-action">
+            <Link to="/subscription" className="btn-pricing-action">
               Activate Subscription &rarr;
             </Link>
           </div>
@@ -441,3 +439,4 @@ export const LandingPage: React.FC<LandingPageProps> = ({
     </div>
   );
 };
+

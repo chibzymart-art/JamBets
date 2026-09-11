@@ -39,11 +39,11 @@ export const SubscriptionPage: React.FC<SubscriptionPageProps> = ({
       if (error) throw error;
 
       setSubscribeSuccess(
-        `🎉 Successfully subscribed to ${tier === 'bigbang' ? 'BigBang VIP' : 'Standard'}! Redirecting to Predictions Dashboard...`
+        `🎉 Successfully subscribed to ${tier === 'bigbang' ? 'BigBang VIP' : 'Standard'}! Redirecting to Dashboard...`
       );
 
       setTimeout(() => {
-        navigate('/dashboard/predictions');
+        navigate('/dashboard');
       }, 1500);
 
     } catch (err: any) {
@@ -56,10 +56,10 @@ export const SubscriptionPage: React.FC<SubscriptionPageProps> = ({
           .eq('id', currentUser.id);
 
         setSubscribeSuccess(
-          `🎉 Entitlement updated to ${tier === 'bigbang' ? 'BigBang VIP' : 'Standard'}! Redirecting to Predictions Dashboard...`
+          `🎉 Entitlement updated to ${tier === 'bigbang' ? 'BigBang VIP' : 'Standard'}! Redirecting to Dashboard...`
         );
         setTimeout(() => {
-          navigate('/dashboard/predictions');
+          navigate('/dashboard');
         }, 1500);
       } catch {
         setSubscribeError(err.message || 'Payment processing error. Please try again.');
@@ -159,7 +159,7 @@ export const SubscriptionPage: React.FC<SubscriptionPageProps> = ({
           </ul>
 
           <div className="plan-action-box">
-            <Link to="/dashboard/predictions" className="btn-plan-secondary">
+            <Link to="/dashboard" className="btn-plan-secondary">
               Browse Fixtures & Past Wins
             </Link>
           </div>
