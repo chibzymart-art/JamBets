@@ -24,6 +24,8 @@ from python.src.football.settlement_engine import SettlementEngine, SettlementDe
 from python.src.football.scheduler_lock import DistributedSchedulerLock
 from python.src.sources.espn import ESPNAdapter
 from python.src.sources.livescore import LiveScoreAdapter
+from python.src.sources.flashscore import FlashscoreAdapter
+from python.src.sources.google_score import GoogleScoreAdapter
 
 load_dotenv()
 
@@ -58,6 +60,8 @@ class SettlementScheduler:
         )
         self.espn_adapter = ESPNAdapter()
         self.livescore_adapter = LiveScoreAdapter()
+        self.flashscore_adapter = FlashscoreAdapter()
+        self.google_adapter = GoogleScoreAdapter()
 
     @classmethod
     def get_wat_now(cls) -> datetime:
@@ -174,67 +178,70 @@ class SettlementScheduler:
         }
 
         try:
-            # Step 2: Retrieve Candidate Fixtures from Cloud Supabase
-            print("[STEP 1] Retrieving monitored candidate fixtures from Cloud Supabase...")
-            candidate_fixtures = self.supabase.get_active_fixtures_for_monitoring(limit=500)
+            # Step 2: Retrieve Candidate Fixtures from Cloud Supabase in active window [-36h, +2h]
+            print("[STEP 1] Retrieving monitored candidate fixtures from Cloud Supabase in active settlement window...")
+            now_utc = datetime.now(timezone.utc)
+            w_start = (now_utc - timedelta(hours=36)).strftime("%Y-%m-%dT%H:%M:%SZ")
+            w_end = (now_utc + timedelta(hours=2)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-            # Augment with any fixtures that have unsettled predictions
+            # 1. Fetch fixtures in the active settlement window [-36h, +2h]
+            raw_window_fixes = self.supabase.get("football_fixtures", {
+                "target_kickoff_at": f"gte.{w_start}",
+                "order": "target_kickoff_at.asc",
+                "limit": "200"
+            })
+            candidate_fixtures = [f for f in raw_window_fixes if f.get("target_kickoff_at", "") <= w_end]
+            candidate_fix_ids = {f.get("id") for f in candidate_fixtures}
+
+            # 2. Also fetch any fixtures currently marked 'live'
+            try:
+                live_fixes = self.supabase.get("football_fixtures", {"status": "eq.live", "limit": "50"})
+                for lf in live_fixes:
+                    if lf.get("id") not in candidate_fix_ids:
+                        candidate_fixtures.append(lf)
+                        candidate_fix_ids.add(lf.get("id"))
+            except Exception as live_err:
+                print(f"  [NOTE] Live fixture query: {live_err}")
+
+            unsettled_by_fix_id: Dict[str, List[Dict[str, Any]]] = {}
+            # 3. Augment with fixtures that have unsettled published predictions whose kickoff has arrived or passed
             try:
                 unsettled_all = self.supabase.get_unsettled_predictions()
-                unsettled_fix_ids = {p.get("fixture_id") for p in unsettled_all if p.get("fixture_id")}
-                candidate_fix_ids = {f.get("id") for f in candidate_fixtures}
-                missing_ids = unsettled_fix_ids - candidate_fix_ids
-                if missing_ids:
-                    print(f"  • Augmenting candidate list with {len(missing_ids)} fixtures from unsettled predictions...")
-                    for m_id in list(missing_ids)[:150]:
-                        m_fixes = self.supabase.get("football_prediction_queue", {"id": f"eq.{m_id}", "limit": "1"})
-                        if not m_fixes:
-                            m_fixes = self.supabase.get("football_fixtures", {"id": f"eq.{m_id}", "limit": "1"})
-                        if m_fixes:
-                            candidate_fixtures.append(m_fixes[0])
-                            candidate_fix_ids.add(m_fixes[0].get("id"))
-
-                # Also augment with any fixtures in football_fixtures kicking off in [-36h, +36h]
-                try:
-                    w_start = (datetime.now(timezone.utc) - timedelta(hours=36)).strftime("%Y-%m-%dT%H:%M:%SZ")
-                    w_end = (datetime.now(timezone.utc) + timedelta(hours=36)).strftime("%Y-%m-%dT%H:%M:%SZ")
-                    recent_fixtures = self.supabase.get("football_fixtures", {
-                        "target_kickoff_at": f"gte.{w_start}",
-                        "order": "target_kickoff_at.asc",
-                        "limit": "200"
-                    })
-                    recent_added = 0
-                    for rf in recent_fixtures:
-                        if rf.get("id") not in candidate_fix_ids:
-                            candidate_fixtures.append(rf)
-                            candidate_fix_ids.add(rf.get("id"))
-                            recent_added += 1
-                    if recent_added > 0:
-                        print(f"  • Augmenting candidate list with {recent_added} recent window fixtures...")
-                except Exception as w_err:
-                    print(f"  [NOTE] Window fixture augmentation: {w_err}")
+                for p in unsettled_all:
+                    f_id = p.get("fixture_id")
+                    if f_id:
+                        unsettled_by_fix_id.setdefault(f_id, []).append(p)
+                    if f_id and f_id not in candidate_fix_ids:
+                        p_ko = p.get("target_kickoff_at", "")
+                        if p_ko and p_ko <= w_end:
+                            m_fixes = self.supabase.get("football_fixtures", {"id": f"eq.{f_id}", "limit": "1"})
+                            if m_fixes:
+                                candidate_fixtures.append(m_fixes[0])
+                                candidate_fix_ids.add(f_id)
             except Exception as aug_err:
                 print(f"  [NOTE] Candidate fixture augmentation: {aug_err}")
 
+            # Populate league_code on every candidate fixture from canonical_key if missing
+            for f in candidate_fixtures:
+                if not f.get("league_code") and ":" in f.get("canonical_key", ""):
+                    f["league_code"] = f["canonical_key"].split(":")[0]
+
             stats["fixtures_inspected"] = len(candidate_fixtures)
-            print(f"  • Retrieved {len(candidate_fixtures)} monitored candidate fixtures")
+            print(f"  • Retrieved {len(candidate_fixtures)} monitored candidate fixtures in active window")
 
-            # Step 3: Ingest Fresh Live/Result Feeds from Approved Sources (LiveScore & ESPN)
-            print("[STEP 2] Scraping verified match feeds from LiveScore & ESPN across active competitions...")
-            live_payloads_by_key: Dict[str, List[Any]] = {}
-
-            # Collect active leagues
+            # Collect active leagues strictly from candidate fixtures
             leagues_in_play = set(f.get("league_code") for f in candidate_fixtures if f.get("league_code"))
-            if not leagues_in_play or force:
-                leagues_in_play = set(LEAGUE_REGISTRY.keys())
+            if not leagues_in_play:
+                leagues_in_play = {"ENG_PL", "ESP_LL", "ITA_SA", "GER_BL", "FRA_L1", "JPN_J1", "MEX_LMX"}
 
-            print(f"  • Ingesting feeds across {len(leagues_in_play)} competitions...")
-            today_utc = datetime.now(timezone.utc)
-            date_from = today_utc - timedelta(days=1)
-            date_to = today_utc + timedelta(days=1)
+            print(f"  • Ingesting feeds across {len(leagues_in_play)} active competitions: {', '.join(sorted(leagues_in_play))}...")
+            date_from = now_utc - timedelta(days=1)
+            date_to = now_utc + timedelta(days=1)
 
             ls_count = 0
             espn_count = 0
+            fs_count = 0
+            live_payloads_by_key: Dict[str, List[Any]] = {}
 
             for league_code in leagues_in_play:
                 league_cfg = LEAGUE_REGISTRY.get(league_code)
@@ -255,7 +262,21 @@ class SettlementScheduler:
                 except Exception as e:
                     print(f"  [WARN] LiveScore fetch error for {league_code}: {e}")
 
-                # 2. Query ESPN verified scoreboard & livescores
+                # 2. Query Flashscore verified scoreboard & livescores
+                try:
+                    fs_fixtures = self.flashscore_adapter.fetch_fixtures(
+                        league_cfg,
+                        date_from,
+                        date_to
+                    )
+                    for raw in fs_fixtures:
+                        c_fix = CanonicalIdentityResolver.build_canonical_fixture(raw)
+                        live_payloads_by_key.setdefault(c_fix.canonical_key, []).append(raw)
+                        fs_count += 1
+                except Exception as e:
+                    print(f"  [WARN] Flashscore fetch error for {league_code}: {e}")
+
+                # 3. Query ESPN verified scoreboard & livescores
                 if league_cfg.espn_slug:
                     try:
                         espn_fixtures = self.espn_adapter.fetch_fixtures(
@@ -270,11 +291,13 @@ class SettlementScheduler:
                     except Exception as e:
                         print(f"  [WARN] ESPN fetch error for {league_code}: {e}")
 
-            print(f"  [OK] Ingested {ls_count} LiveScore matches and {espn_count} ESPN matches across {len(live_payloads_by_key)} unique canonical keys.")
+            print(f"  [OK] Ingested {ls_count} LiveScore, {fs_count} FlashScore, and {espn_count} ESPN matches across {len(live_payloads_by_key)} unique canonical keys.")
 
             # Step 4: Process Each Fixture with Isolation
             print("[STEP 3] Synchronizing live states and evaluating predictions...")
             self.lock.heartbeat(job_id)
+
+            now_utc = datetime.now(timezone.utc)
 
             for idx, fix in enumerate(candidate_fixtures, 1):
                 fix_id = fix.get("id")
@@ -282,32 +305,80 @@ class SettlementScheduler:
                 kickoff_str = fix.get("target_kickoff_at") or fix.get("kickoff_at")
 
                 try:
-                    kickoff_dt = datetime.fromisoformat(kickoff_str.replace("Z", "+00:00")) if kickoff_str else datetime.now(timezone.utc)
+                    kickoff_dt = datetime.fromisoformat(kickoff_str.replace("Z", "+00:00")) if kickoff_str else now_utc
                 except Exception:
-                    kickoff_dt = datetime.now(timezone.utc)
+                    kickoff_dt = now_utc
+
+                if kickoff_dt.tzinfo is None:
+                    kickoff_dt = kickoff_dt.replace(tzinfo=timezone.utc)
 
                 try:
+                    parts = canonical_key.split(":") if ":" in canonical_key else []
+                    l_code = fix.get("league_code") or (parts[0] if len(parts) >= 1 else "")
+                    h_name = (parts[1] if len(parts) >= 2 else "") or CanonicalIdentityResolver.normalize_team_name(fix.get("home_team_name") or "")
+                    a_name = (parts[2] if len(parts) >= 3 else "") or CanonicalIdentityResolver.normalize_team_name(fix.get("away_team_name") or "")
+                    date_str = kickoff_dt.strftime("%Y%m%d")
+
                     # Multi-source reconciliation for this fixture
                     source_payloads = live_payloads_by_key.get(canonical_key, [])
-                    if not source_payloads:
-                        parts = canonical_key.split(":") if ":" in canonical_key else []
-                        l_code = fix.get("league_code") or (parts[0] if len(parts) >= 1 else "")
-                        h_name = (parts[1] if len(parts) >= 2 else "") or CanonicalIdentityResolver.normalize_team_name(fix.get("home_team_name") or "")
-                        a_name = (parts[2] if len(parts) >= 3 else "") or CanonicalIdentityResolver.normalize_team_name(fix.get("away_team_name") or "")
-                        if l_code and h_name and a_name:
-                            for delta in (0, -1, 1):
-                                alt_date = (kickoff_dt + timedelta(days=delta)).strftime("%Y%m%d")
-                                alt_key = f"{l_code}:{h_name}:{a_name}:{alt_date}"
-                                if alt_key in live_payloads_by_key:
-                                    source_payloads = live_payloads_by_key[alt_key]
-                                    break
+                    if not source_payloads and l_code and h_name and a_name:
+                        # Direct date lock key (NEVER match yesterday or tomorrow's match!)
+                        locked_key = f"{l_code}:{h_name}:{a_name}:{date_str}"
+                        if locked_key in live_payloads_by_key:
+                            source_payloads = live_payloads_by_key[locked_key]
+                        else:
+                            # Token matching locked strictly to same league, same date, and kickoff within 45m
+                            for k, payloads in live_payloads_by_key.items():
+                                k_parts = k.split(":")
+                                if len(k_parts) >= 4 and k_parts[0] == l_code and k_parts[3] == date_str:
+                                    k_h, k_a = k_parts[1], k_parts[2]
+                                    h_tok = (len(h_name) >= 3 and len(k_h) >= 3) and (h_name in k_h or k_h in h_name)
+                                    a_tok = (len(a_name) >= 3 and len(k_a) >= 3) and (a_name in k_a or k_a in a_name)
+                                    if h_tok and a_tok:
+                                        p_valid = [
+                                            p for p in payloads
+                                            if abs((p.kickoff_time.astimezone(timezone.utc) - kickoff_dt).total_seconds()) <= 2700
+                                        ]
+                                        if p_valid:
+                                            source_payloads = p_valid
+                                            break
+
+                    # If no feed matched from LiveScore/Flashscore/ESPN, and fixture has predictions and kickoff has arrived or passed, query Google Search
+                    if not source_payloads and fix.get("in_prediction_queue") and now_utc >= (kickoff_dt - timedelta(minutes=5)):
+                        raw_h = fix.get("home_team_name") or h_name
+                        raw_a = fix.get("away_team_name") or a_name
+                        try:
+                            g_res = self.google_adapter.fetch_match_result(raw_h, raw_a, kickoff_dt)
+                            if g_res and g_res.get("home_score") is not None:
+                                raw_g = RawFixturePayload(
+                                    provider_event_id=f"goog_{fix_id[:8]}",
+                                    source_name="Google",
+                                    league_code=l_code or fix.get("league_code", "UNKNOWN"),
+                                    season=str(kickoff_dt.year),
+                                    home_team_raw=raw_h,
+                                    away_team_raw=raw_a,
+                                    kickoff_time=kickoff_dt,
+                                    status=g_res["status"],
+                                    home_score=g_res["home_score"],
+                                    away_score=g_res["away_score"],
+                                    venue=None,
+                                    raw_metadata={
+                                        "minute": g_res.get("minute"),
+                                        "period": g_res.get("period"),
+                                        "google_status": g_res["status"].value
+                                    },
+                                    retrieved_at=now_utc
+                                )
+                                source_payloads = [raw_g]
+                        except Exception as g_err:
+                            print(f"  [NOTE] Google score check error: {g_err}")
 
                     match_state = LiveMonitorEngine.reconcile_multi_sources(
                         fixture_id=fix_id,
                         canonical_key=canonical_key,
                         scheduled_kickoff=kickoff_dt,
                         source_payloads=source_payloads,
-                        now_utc=datetime.now(timezone.utc)
+                        now_utc=now_utc
                     )
 
                     if match_state.has_conflict:
@@ -356,7 +427,7 @@ class SettlementScheduler:
                             stats["fixtures_live"] += 1
 
                     # Step 5: Evaluate Published Predictions for this Fixture
-                    unsettled_preds = self.supabase.get_unsettled_predictions(fix_id)
+                    unsettled_preds = unsettled_by_fix_id.get(fix_id, [])
                     stats["predictions_inspected"] += len(unsettled_preds)
 
                     for pred in unsettled_preds:

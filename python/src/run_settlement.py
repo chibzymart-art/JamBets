@@ -28,7 +28,6 @@ def main():
     parser.add_argument(
         "--force",
         action="store_true",
-        default=True,
         help="Force immediate execution, bypassing slot lock deduplication"
     )
     parser.add_argument(
@@ -45,6 +44,9 @@ def main():
 
     args = parser.parse_args()
 
+    # In standalone single run, force is enabled by default unless in daemon mode
+    forced_run = args.force or (not args.daemon)
+
     print("==================================================================")
     print(" JamBets — Production Live Score Scraper & Settlement Engine")
     print(f" Timestamp: {datetime.now(timezone.utc).isoformat()}")
@@ -55,17 +57,21 @@ def main():
     scheduler = SettlementScheduler(supabase_client=supabase)
 
     if args.daemon:
-        print("\n[DAEMON] Starting continuous 15-minute settlement loop...")
+        print("\n[DAEMON] Starting continuous 15-minute settlement loop and real-time AdminTaskPoller...")
+        from python.src.football.scheduler import AdminTaskPoller
+        poller = AdminTaskPoller(supabase=supabase, poll_interval=2.0)
+        poller.start()
+
         while True:
             try:
                 metrics = scheduler.run_settlement_cycle(slot_override=args.slot, force=args.force)
-                print(f"[DAEMON] Cycle finished. Sleeping until next 15-minute boundary...")
+                print(f"[DAEMON] 15m slot check: {metrics.get('status')}. Next slot check in 60s...")
             except Exception as e:
                 print(f"[DAEMON ERROR] Unexpected failure in settlement cycle: {e}")
-            time.sleep(300)  # Check every 5 minutes
+            time.sleep(60)  # Check slot boundary every minute
     else:
         print("\n[STEP 1] Executing immediate settlement cycle across all competitions...")
-        metrics = scheduler.run_settlement_cycle(slot_override=args.slot, force=args.force)
+        metrics = scheduler.run_settlement_cycle(slot_override=args.slot, force=forced_run)
 
         print("\n==================================================================")
         print(" Settlement Cycle Summary:")

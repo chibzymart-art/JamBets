@@ -344,11 +344,11 @@ class SupabaseClient:
         return self.get("football_settlements", {"prediction_id": f"in.({id_list})"})
 
     def get_pending_admin_tasks(self) -> List[Dict[str, Any]]:
-        """Retrieves pending admin override tasks ordered by creation time."""
+        """Retrieves pending admin override tasks ordered by creation time (newest first)."""
         params = {
             "status": "eq.PENDING",
-            "order": "created_at.asc",
-            "limit": "10"
+            "order": "created_at.desc",
+            "limit": "5"
         }
         try:
             return self.get("admin_tasks", params)

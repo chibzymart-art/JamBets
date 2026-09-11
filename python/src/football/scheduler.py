@@ -546,12 +546,13 @@ class PredictionCycleScheduler:
 
 class AdminTaskPoller(threading.Thread):
     """
-    Lightweight background worker polling Cloud Supabase admin_tasks every 30 seconds
+    Lightweight background worker polling Cloud Supabase admin_tasks every 2 seconds
     to execute manual engine override triggers on demand from the React UI.
     """
-    def __init__(self, scheduler: "PredictionCycleScheduler", poll_interval: float = 30.0):
+    def __init__(self, scheduler: Optional["PredictionCycleScheduler"] = None, supabase: Optional[Any] = None, poll_interval: float = 2.0):
         super().__init__(daemon=True, name="AdminTaskPoller")
         self.scheduler = scheduler
+        self.supabase = supabase or (scheduler.supabase if scheduler else None)
         self.poll_interval = poll_interval
         self._stop_event = threading.Event()
 
@@ -570,24 +571,43 @@ class AdminTaskPoller(threading.Thread):
         print("[POLLER] Admin task poller thread stopped.", flush=True)
 
     def poll_and_execute(self):
-        pending_tasks = self.scheduler.supabase.get_pending_admin_tasks()
+        supabase = self.supabase or (self.scheduler.supabase if self.scheduler else None)
+        if not supabase:
+            return
+
+        pending_tasks = supabase.get_pending_admin_tasks()
         if not pending_tasks:
             return
 
         for task in pending_tasks:
             task_id = task["id"]
             task_name = task.get("task_name", "").upper().strip()
+
+            # Skip and complete ancient tasks older than 30 minutes
+            created_at_str = task.get("created_at")
+            if created_at_str:
+                try:
+                    c_dt = datetime.fromisoformat(created_at_str.replace("Z", "+00:00"))
+                    if (datetime.now(timezone.utc) - c_dt).total_seconds() > 1800:
+                        supabase.update_admin_task(task_id, status="COMPLETED", metadata={"note": "Auto-completed stale task"})
+                        continue
+                except Exception:
+                    pass
+
             print(f"\n[POLLER] Found PENDING admin task: {task_name} (ID: {task_id})", flush=True)
 
             # Mark as RUNNING
-            self.scheduler.supabase.update_admin_task(task_id, status="RUNNING")
+            supabase.update_admin_task(task_id, status="RUNNING")
 
             try:
                 if task_name in ("RUN_PREDICTIONS", "RUN_PREDICTION_ENGINE", "RUN_SIMULATIONS", "RUN_SIMULATION_ENGINE", "SIMULATE", "RUN_PREDICTION"):
                     print("[POLLER] Executing forward-looking prediction cycle (forced override)...", flush=True)
+                    if not self.scheduler:
+                        from python.src.football.scheduler import PredictionCycleScheduler
+                        self.scheduler = PredictionCycleScheduler(supabase_client=supabase)
                     telemetry = self.scheduler.execute_cycle(force=True)
                     status = "COMPLETED" if telemetry.status in ("COMPLETED", "SKIPPED") else "FAILED"
-                    self.scheduler.supabase.update_admin_task(
+                    supabase.update_admin_task(
                         task_id=task_id,
                         status=status,
                         metadata={
@@ -604,9 +624,9 @@ class AdminTaskPoller(threading.Thread):
                 elif task_name in ("RUN_SETTLEMENTS", "RUN_SETTLEMENT_ENGINE"):
                     print("[POLLER] Executing settlement cycle (backward-looking override)...", flush=True)
                     from python.src.football.settlement_scheduler import SettlementScheduler
-                    settler = SettlementScheduler(supabase_client=self.scheduler.supabase)
-                    result = settler.run_settlement_cycle()
-                    self.scheduler.supabase.update_admin_task(
+                    settler = SettlementScheduler(supabase_client=supabase)
+                    result = settler.run_settlement_cycle(force=True)
+                    supabase.update_admin_task(
                         task_id=task_id,
                         status="COMPLETED",
                         metadata=result
@@ -614,14 +634,14 @@ class AdminTaskPoller(threading.Thread):
                     print(f"[POLLER] Admin task {task_name} finished successfully", flush=True)
 
                 else:
-                    self.scheduler.supabase.update_admin_task(
+                    supabase.update_admin_task(
                         task_id=task_id,
                         status="FAILED",
                         error_message=f"Unknown task_name: {task_name}"
                     )
             except Exception as exc:
                 print(f"[POLLER ERROR] Failed executing admin task {task_name}: {exc}", flush=True)
-                self.scheduler.supabase.update_admin_task(
+                supabase.update_admin_task(
                     task_id=task_id,
                     status="FAILED",
                     error_message=str(exc)

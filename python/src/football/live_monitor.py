@@ -154,10 +154,60 @@ class LiveMonitorEngine:
             )
 
         now = now_utc or datetime.now(timezone.utc)
+        if now.tzinfo is None:
+            now = now.replace(tzinfo=timezone.utc)
+
+        sk_utc = scheduled_kickoff if scheduled_kickoff.tzinfo else scheduled_kickoff.replace(tzinfo=timezone.utc)
+
+        # 1. Strict Kickoff Time Tolerance Filter:
+        # Reject any source payload whose kickoff time is > 45 minutes from scheduled_kickoff.
+        # This prevents picking up earlier (e.g. U21/reserve or previous day) fixtures.
+        valid_payloads = []
+        for p in source_payloads:
+            p_ko = p.kickoff_time if p.kickoff_time.tzinfo else p.kickoff_time.replace(tzinfo=timezone.utc)
+            diff_mins = abs((p_ko - sk_utc).total_seconds()) / 60.0
+            if diff_mins <= 45.0:
+                valid_payloads.append(p)
+            else:
+                print(f"  [REJECT_EARLY/LATE] {p.source_name} match kickoff {p.kickoff_time} deviates {diff_mins:.1f}m from target {scheduled_kickoff} ({canonical_key})")
+        source_payloads = valid_payloads
+
+        if not source_payloads:
+            # No valid source data matching the exact kickoff time window
+            return LiveMatchState(
+                fixture_id=fixture_id,
+                canonical_key=canonical_key,
+                provider_event_id="unknown",
+                source_name="none",
+                status=FixtureStatus.SCHEDULED,
+                raw_status="NO_TIMED_MATCH",
+                scheduled_kickoff=scheduled_kickoff,
+                is_stale=False,
+                is_verified=False
+            )
+
+        # 2. Strict Pre-Match Invariant:
+        # If current time is earlier than (scheduled_kickoff - 5 minutes), the match
+        # CANNOT be LIVE or FINISHED. It must remain SCHEDULED with no scores.
+        if now < (sk_utc - timedelta(minutes=5)):
+            return LiveMatchState(
+                fixture_id=fixture_id,
+                canonical_key=canonical_key,
+                provider_event_id=source_payloads[0].provider_event_id,
+                source_name=source_payloads[0].source_name,
+                status=FixtureStatus.SCHEDULED,
+                raw_status="SCHEDULED_PREMATCH",
+                scheduled_kickoff=scheduled_kickoff,
+                home_score=None,
+                away_score=None,
+                is_stale=False,
+                is_verified=True,
+                sources_verified=[p.source_name for p in source_payloads]
+            )
 
         # Primary source
         primary = source_payloads[0]
-        raw_status = primary.raw_metadata.get("espn_status") or str(primary.status.value)
+        raw_status = primary.raw_metadata.get("espn_status") or primary.raw_metadata.get("flashscore_status") or str(primary.status.value)
         status = cls.normalize_status(raw_status, scheduled_kickoff, now)
 
         is_fresh = cls.validate_freshness(primary.retrieved_at, now_utc=now)

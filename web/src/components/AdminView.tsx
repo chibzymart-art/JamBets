@@ -300,7 +300,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
             }
           }
         } catch {}
-      }, 3000);
+      }, 1500);
 
     } catch (err: any) {
       playSfx('error');

@@ -340,9 +340,17 @@ def find_matching_canonical_fixture(
         if diff_mins > time_tolerance_minutes:
             continue
 
-        # Check teams
+        # Check teams exact
         if (candidate.canonical_home_team == existing.canonical_home_team and
             candidate.canonical_away_team == existing.canonical_away_team):
+            return key
+
+        # Substring / token matching (e.g. 'kobe' in 'vissel-kobe', 'kashima' in 'kashima-antlers')
+        c_h, e_h = candidate.canonical_home_team, existing.canonical_home_team
+        c_a, e_a = candidate.canonical_away_team, existing.canonical_away_team
+        home_token_match = (len(c_h) >= 3 and len(e_h) >= 3) and (c_h in e_h or e_h in c_h)
+        away_token_match = (len(c_a) >= 3 and len(e_a) >= 3) and (c_a in e_a or e_a in c_a)
+        if home_token_match and away_token_match and diff_mins <= 45.0:
             return key
 
         # Fuzzy team comparison if slight naming difference remains
