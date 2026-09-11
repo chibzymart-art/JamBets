@@ -65,19 +65,23 @@ class FlashscoreAdapter(BaseSourceAdapter):
         "league one": "ENG_L1",
         "league two": "ENG_L2",
         "national league": "ENG_NL",
+        "premier league 2": "ENG_PL2",
         "laliga": "ESP_LL",
         "laliga2": "ESP_LL2",
         "serie a": "ITA_SA",
         "serie b": "ITA_SB",
         "bundesliga": "GER_BL",
         "2. bundesliga": "GER_2BL",
+        "3. liga": "GER_3L",
         "ligue 1": "FRA_L1",
         "ligue 2": "FRA_L2",
         "premiership": "SCO_PL",
+        "championship - scotland": "SCO_CH",
         "eredivisie": "NED_ED",
         "eerste divisie": "NED_EED",
         "primeira liga": "POR_PL",
         "liga portugal 2": "POR_L2",
+        "segunda liga": "POR_L2",
         "pro league": "BEL_PL",
         "super lig": "TUR_SL",
         "super league": "SUI_SL",
@@ -91,6 +95,9 @@ class FlashscoreAdapter(BaseSourceAdapter):
         "liga j1": "JPN_J1",
         "j1": "JPN_J1",
         "saudi professional league": "SAU_SPL",
+        "liga profesional saudi": "SAU_SPL",
+        "saudi pro league": "SAU_SPL",
+        "profesional saudi": "SAU_SPL",
         "champions league": "EUR_CL",
         "europa league": "EUR_EL"
     }
@@ -214,6 +221,7 @@ class FlashscoreAdapter(BaseSourceAdapter):
     def _match_league_code(self, league: LeagueConfig, match_info: Dict[str, Any]) -> bool:
         """Determines if a Flashscore match belongs to the given league."""
         tourn = match_info.get("tournament", "").lower()
+        clean_tourn = tourn.split(":", 1)[1].strip() if ":" in tourn else tourn
         raw_country = match_info.get("country", "").lower().strip()
         country = self.COUNTRY_MAP.get(raw_country, raw_country)
 
@@ -227,7 +235,10 @@ class FlashscoreAdapter(BaseSourceAdapter):
 
         # Check alias map
         for k, code in self.TOURNAMENT_MAP.items():
-            if code == league.code and (k in tourn or k in f"{country} {tourn}" or k in f"{raw_country} {tourn}"):
+            if code == league.code and (
+                k in clean_tourn or k in tourn or
+                k in f"{country} {clean_tourn}" or k in f"{raw_country} {clean_tourn}"
+            ):
                 return True
 
         if not country_matches:
@@ -235,7 +246,16 @@ class FlashscoreAdapter(BaseSourceAdapter):
 
         # Check tournament name
         name_lower = league.name.lower()
-        if name_lower in tourn or tourn in name_lower:
+        if (
+            name_lower in clean_tourn or clean_tourn in name_lower or
+            name_lower in tourn or tourn in name_lower
+        ):
+            return True
+
+        # Check key token overlaps if country matches
+        name_tokens = set(name_lower.replace("-", " ").split()) - {"league", "liga", "division", "the", "and"}
+        tourn_tokens = set(clean_tourn.replace("-", " ").split()) - {"league", "liga", "division", "the", "and"}
+        if name_tokens and tourn_tokens and (name_tokens.issubset(tourn_tokens) or (len(name_tokens & tourn_tokens) >= 2)):
             return True
 
         return False

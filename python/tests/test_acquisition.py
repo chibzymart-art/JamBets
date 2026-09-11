@@ -177,6 +177,41 @@ class TestFootballDataAcquisition(unittest.TestCase):
         teams = client.get("football_teams", {"select": "id,name"})
         self.assertGreater(len(teams), 10, "Must have normalized teams in Cloud Supabase")
 
+    def test_08_livescore_active_minute_mapping(self):
+        """Verify that LiveScore elapsed minutes and stoppage times map strictly to FixtureStatus.LIVE."""
+        from python.src.sources.livescore import LiveScoreAdapter
+        adapter = LiveScoreAdapter()
+        self.assertEqual(adapter._map_livescore_status("1H"), FixtureStatus.LIVE)
+        self.assertEqual(adapter._map_livescore_status("HT"), FixtureStatus.LIVE)
+        self.assertEqual(adapter._map_livescore_status("2H"), FixtureStatus.LIVE)
+        self.assertEqual(adapter._map_livescore_status("35"), FixtureStatus.LIVE)
+        self.assertEqual(adapter._map_livescore_status("45+2"), FixtureStatus.LIVE)
+        self.assertEqual(adapter._map_livescore_status("78'"), FixtureStatus.LIVE)
+        self.assertEqual(adapter._map_livescore_status("FT"), FixtureStatus.FINISHED)
+        self.assertEqual(adapter._map_livescore_status("NS"), FixtureStatus.SCHEDULED)
+
+    def test_09_flashscore_tournament_prefix_matching(self):
+        """Verify that Flashscore localized tournament prefixes and aliases map to canonical league configs."""
+        from python.src.sources.flashscore import FlashscoreAdapter
+        from python.src.config import LEAGUE_REGISTRY
+        adapter = FlashscoreAdapter()
+
+        # Saudi Pro League localized in Malay/Indonesian feed
+        sau_cfg = LEAGUE_REGISTRY["SAU_SPL"]
+        sau_match = {
+            "tournament": "ARAB SAUDI: Liga Profesional Saudi",
+            "country": "Arab Saudi"
+        }
+        self.assertTrue(adapter._match_league_code(sau_cfg, sau_match))
+
+        # J1 League localized in Japanese/Malay feed
+        jpn_cfg = LEAGUE_REGISTRY["JPN_J1"]
+        jpn_match = {
+            "tournament": "JEPUN: Liga J1",
+            "country": "Jepun"
+        }
+        self.assertTrue(adapter._match_league_code(jpn_cfg, jpn_match))
+
 
 if __name__ == "__main__":
     unittest.main()

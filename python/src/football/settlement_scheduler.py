@@ -343,8 +343,11 @@ class SettlementScheduler:
                                             source_payloads = p_valid
                                             break
 
-                    # If no feed matched from LiveScore/Flashscore/ESPN, and fixture has predictions and kickoff has arrived or passed, query Google Search
-                    if not source_payloads and fix.get("in_prediction_queue") and now_utc >= (kickoff_dt - timedelta(minutes=5)):
+                    # If no feed matched or available feeds have no score and kickoff has arrived, query Google Search
+                    has_score = any(p.home_score is not None for p in source_payloads)
+                    needs_fallback = (not source_payloads) or (not has_score and now_utc >= (kickoff_dt + timedelta(minutes=10)))
+
+                    if needs_fallback and fix.get("in_prediction_queue") and now_utc >= (kickoff_dt - timedelta(minutes=5)):
                         raw_h = fix.get("home_team_name") or h_name
                         raw_a = fix.get("away_team_name") or a_name
                         try:
@@ -369,7 +372,10 @@ class SettlementScheduler:
                                     },
                                     retrieved_at=now_utc
                                 )
-                                source_payloads = [raw_g]
+                                if not source_payloads:
+                                    source_payloads = [raw_g]
+                                else:
+                                    source_payloads.append(raw_g)
                         except Exception as g_err:
                             print(f"  [NOTE] Google score check error: {g_err}")
 

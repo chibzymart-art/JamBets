@@ -93,11 +93,16 @@ class LiveMonitorEngine:
         if any(term in raw_upper for term in ("SUSPENDED", "STATUS_SUSPENDED", "INTERRUPTED")):
             return FixtureStatus.SUSPENDED
 
-        # Explicit Live / In Progress / Halftime
+        # Explicit Live / In Progress / Halftime / Match periods
         if any(term in raw_upper for term in (
             "IN_PROGRESS", "FIRST_HALF", "SECOND_HALF", "HALFTIME", "HALF_TIME",
-            "STATUS_IN_PROGRESS", "STATUS_FIRST_HALF", "STATUS_SECOND_HALF", "STATUS_HALFTIME", "LIVE"
+            "STATUS_IN_PROGRESS", "STATUS_FIRST_HALF", "STATUS_SECOND_HALF", "STATUS_HALFTIME", "LIVE",
+            "HT", "1H", "2H", "ET", "P"
         )):
+            return FixtureStatus.LIVE
+
+        clean_token = raw_upper.replace("'", "").split("+")[0].strip()
+        if clean_token.isdigit() and int(clean_token) > 0:
             return FixtureStatus.LIVE
 
         # Default fallback: strictly remain SCHEDULED.

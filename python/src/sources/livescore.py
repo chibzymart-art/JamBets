@@ -71,6 +71,7 @@ class LiveScoreAdapter(BaseSourceAdapter):
     }
 
     def _map_livescore_status(self, eps: str) -> FixtureStatus:
+        eps_clean = eps.strip().replace("'", "")
         status_map = {
             "NS": FixtureStatus.SCHEDULED,
             "1H": FixtureStatus.LIVE,
@@ -86,7 +87,13 @@ class LiveScoreAdapter(BaseSourceAdapter):
             "Susp.": FixtureStatus.SUSPENDED,
             "Int.": FixtureStatus.INTERRUPTED
         }
-        return status_map.get(eps, FixtureStatus.SCHEDULED)
+        if eps in status_map:
+            return status_map[eps]
+        # Any numeric elapsed minute (e.g. "35", "45+2", "78'", "90+3") indicates active play
+        first_token = eps_clean.split("+")[0].strip()
+        if first_token.isdigit():
+            return FixtureStatus.LIVE
+        return FixtureStatus.SCHEDULED
 
     def fetch_fixtures(self, league: LeagueConfig, date_from: datetime, date_to: datetime) -> List[RawFixturePayload]:
         """Queries LiveScore by date and filters for matching league stages."""
@@ -151,13 +158,17 @@ class LiveScoreAdapter(BaseSourceAdapter):
                         ht_away = None
                         if canonical_status in (FixtureStatus.LIVE, FixtureStatus.FINISHED):
                             try:
-                                home_score = int(ev.get("Tr1"))
-                                away_score = int(ev.get("Tr2"))
+                                if ev.get("Tr1") is not None:
+                                    home_score = int(ev.get("Tr1"))
+                                if ev.get("Tr2") is not None:
+                                    away_score = int(ev.get("Tr2"))
                             except (ValueError, TypeError):
                                 pass
                             try:
-                                ht_home = int(ev.get("Trh1"))
-                                ht_away = int(ev.get("Trh2"))
+                                if ev.get("Trh1") is not None:
+                                    ht_home = int(ev.get("Trh1"))
+                                if ev.get("Trh2") is not None:
+                                    ht_away = int(ev.get("Trh2"))
                             except (ValueError, TypeError):
                                 pass
 
