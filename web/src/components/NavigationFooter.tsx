@@ -23,22 +23,22 @@ export const NavigationFooter: React.FC<NavigationFooterProps> = ({
 
   return (
     <footer className="jambets-global-footer" role="contentinfo" aria-label="Platform Directory and Compliance Footer">
-      {/* Pinned Regulatory Notice Banner */}
-      <div className="footer-regulatory-alert-box">
-        <div className="regulatory-alert-inner">
-          <div className="regulatory-badge-icon">⚠️</div>
-          <div className="regulatory-alert-text">
-            <strong>STRICT REGULATORY & FINANCIAL INDEMNITY NOTICE:</strong> Predictions are probabilistic estimates
-            derived from quantitative mathematical modeling for informational and research purposes only. They are not
-            guarantees of sports outcomes, and JamBets does not accept wagers or place bets on anyone's behalf. Sports predictive
-            modeling entails variance and inherent risk; always make decisions responsibly. JamBets accepts zero liability for
-            financial losses. Strictly 18+ only.
+      {/* 1. DESKTOP VIEW: FULL MULTI-COLUMN DIRECTORY & NOTICE (HIDDEN ON MOBILE) */}
+      <div className="footer-desktop-container">
+        {/* Pinned Regulatory Notice Banner */}
+        <div className="footer-regulatory-alert-box">
+          <div className="regulatory-alert-inner">
+            <div className="regulatory-badge-icon">⚠️</div>
+            <div className="regulatory-alert-text">
+              <strong>STRICT REGULATORY & FINANCIAL INDEMNITY NOTICE:</strong> Predictions are probabilistic estimates
+              derived from quantitative mathematical modeling for informational and research purposes only. They are not
+              guarantees of sports outcomes, and JamBets does not accept wagers or place bets on anyone's behalf. Sports predictive
+              modeling entails variance and inherent risk; always make decisions responsibly. JamBets accepts zero liability for
+              financial losses. Strictly 18+ only.
+            </div>
           </div>
         </div>
-      </div>
 
-      {/* 1. DESKTOP VIEW: FULL MULTI-COLUMN DIRECTORY (HIDDEN ON MOBILE) */}
-      <div className="footer-desktop-container">
         <div className="footer-main-links-container">
           {/* Brand & Identity Column */}
           <div className="footer-brand-col">
