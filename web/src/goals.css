@@ -1,7 +1,9 @@
 /* ==========================================================================
-   JamBets — Goals Specialist Hub (Bright Modern 2-Line List Stylesheet)
-   Clean, bright white aesthetics, 2 lines per match, thick border separators,
-   highest ratings sorted descending, zero visual clutter.
+   JamBets — Goals Specialist Hub (Bright Modern 2-Line Dual-Card Stylesheet)
+   Clean, bright white aesthetics, 2 lines per match:
+   Line 1: League, Kickoff Time (always stated), Clubs Matchup, Score
+   Line 2: Two cards per line (Over 2.5 on Left, 1st Half Over 0.5 on Right)
+   Thick border separators between fixtures, highest ratings sorted descending.
    ========================================================================== */
 
 .goals-page-container {
@@ -161,7 +163,7 @@
   color: #475569;
 }
 
-/* 2. Single Line Match Items Container with Thick Border Separators */
+/* 2. Grouped Match Container with Thick Border Separators */
 .goals-cards-grid {
   display: flex;
   flex-direction: column;
@@ -173,15 +175,14 @@
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
 }
 
-/* Individual 2-Line Row */
+/* Individual 2-Line Row with Thick Border Separator */
 .goal-item-row {
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  gap: 10px;
-  padding: 16px 20px;
+  gap: 14px;
+  padding: 18px 22px;
   background: #ffffff;
-  border-bottom: 2.5px solid #e2e8f0; /* Thick border separator! */
+  border-bottom: 3px solid #e2e8f0; /* Thick border separator dividing fixtures! */
   transition: background 0.15s ease;
 }
 
@@ -190,22 +191,26 @@
 }
 
 .goal-item-row:hover {
-  background: #f8fafc;
+  background: #fafafa;
 }
 
-/* LINE 1: Fixture Details (League, Kickoff, Matchup Clubs, Live Score) */
+/* ==========================================================================
+   LINE 1: Fixture Header (League, Always Stated Kickoff, Matchup Clubs, Score)
+   ========================================================================== */
 .goal-row-line-1 {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 14px;
+  flex-wrap: nowrap;
 }
 
 .goal-meta-left {
   display: flex;
   align-items: center;
   gap: 8px;
-  min-width: 170px;
+  flex-wrap: wrap;
+  min-width: 240px;
 }
 
 .goal-league-chip {
@@ -214,16 +219,20 @@
   color: #475569;
   background: #f1f5f9;
   border: 1px solid #e2e8f0;
-  padding: 2px 8px;
+  padding: 2.5px 9px;
   border-radius: 6px;
   letter-spacing: 0.03em;
   white-space: nowrap;
 }
 
 .goal-time-chip {
-  font-size: 0.74rem;
-  font-weight: 600;
-  color: #64748b;
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: #334155;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  padding: 2.5px 8px;
+  border-radius: 6px;
   white-space: nowrap;
 }
 
@@ -236,8 +245,9 @@
   color: #dc2626;
   background: #fef2f2;
   border: 1px solid #fecaca;
-  padding: 2px 8px;
+  padding: 2.5px 8px;
   border-radius: 6px;
+  white-space: nowrap;
 }
 
 .live-pulse-dot {
@@ -260,23 +270,26 @@
   color: #059669;
   background: #ecfdf5;
   border: 1px solid #a7f3d0;
-  padding: 2px 8px;
+  padding: 2.5px 8px;
   border-radius: 6px;
+  white-space: nowrap;
 }
 
 .goal-clubs-matchup {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 1.02rem;
-  font-weight: 750;
+  justify-content: center;
+  gap: 10px;
+  font-size: 1.05rem;
+  font-weight: 800;
   color: #0f172a;
   flex: 1;
+  text-align: center;
 }
 
 .club-name {
   color: #0f172a;
-  font-weight: 750;
+  font-weight: 800;
   line-height: 1.25;
 }
 
@@ -285,16 +298,24 @@
   font-weight: 800;
   color: #94a3b8;
   text-transform: uppercase;
-  padding: 0 2px;
+  padding: 0 4px;
 }
 
 .goal-score-right {
-  min-width: 90px;
+  min-width: 140px;
   text-align: right;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.goal-score-display-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .goal-score-pill {
-  font-size: 0.88rem;
+  font-size: 0.86rem;
   font-weight: 700;
   color: #059669;
   background: #ecfdf5;
@@ -304,110 +325,252 @@
   white-space: nowrap;
 }
 
-/* LINE 2: Market Prediction, Rating Ranking, Confidence %, Settlement Score */
-.goal-row-line-2 {
+.goal-score-pill strong {
+  font-weight: 850;
+}
+
+.goal-ht-pill {
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: #64748b;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  padding: 3px 7px;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+
+.goal-upcoming-badge {
+  font-size: 0.74rem;
+  font-weight: 650;
+  color: #64748b;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  padding: 2.5px 8px;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+
+/* ==========================================================================
+   LINE 2: Two Cards Per Line (Over 2.5 on Left, 1st Half Over 0.5 on Right)
+   ========================================================================== */
+.goal-dual-cards-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  width: 100%;
+}
+
+.goal-subcard {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  background: #f8fafc;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 12px 16px;
+  transition: all 0.2s ease;
+}
+
+.goal-subcard:hover {
+  border-color: #cbd5e1;
+  background: #ffffff;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.04);
+}
+
+.goal-subcard.over25-card {
+  border-left: 3.5px solid #f97316;
+}
+
+.goal-subcard.ht05-card {
+  border-left: 3.5px solid #10b981;
+}
+
+/* Subcard Header */
+.subcard-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
 }
 
-.goal-pred-left {
+.subcard-title-group {
   display: flex;
   align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
+  gap: 6px;
 }
 
-.goal-market-pill {
-  font-size: 0.82rem;
+.subcard-market-icon {
+  font-size: 1rem;
+}
+
+.subcard-market-title {
+  font-size: 0.86rem;
   font-weight: 800;
   color: #0f172a;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  padding: 4px 10px;
-  border-radius: 8px;
-  letter-spacing: 0.02em;
 }
 
-.goal-confidence-pill {
-  font-size: 0.84rem;
-  font-weight: 600;
-  color: #334155;
-  background: #f0fdf4;
-  border: 1px solid #bbf7d0;
-  padding: 3px 10px;
-  border-radius: 8px;
-}
-
-.goal-confidence-pill strong {
-  color: #16a34a;
-  font-weight: 800;
-}
-
-.goal-tier-badge {
-  font-size: 0.74rem;
+.subcard-tier-badge {
+  font-size: 0.72rem;
   font-weight: 750;
   border-width: 1px;
   border-style: solid;
-  padding: 3px 10px;
-  border-radius: 8px;
+  padding: 2.5px 9px;
+  border-radius: 7px;
   letter-spacing: 0.02em;
   white-space: nowrap;
 }
 
-.goal-xg-pill {
+.subcard-unranked-badge {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #94a3b8;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  padding: 2px 7px;
+  border-radius: 6px;
+}
+
+/* Subcard Body & Metrics */
+.subcard-metrics-box {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.metric-headline-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.metric-prob-wrap {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+}
+
+.metric-prob-number {
+  font-size: 1.25rem;
+  font-weight: 850;
+  color: #0f172a;
+  letter-spacing: -0.02em;
+}
+
+.metric-prob-label {
   font-size: 0.74rem;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.metric-xg-tag,
+.metric-minute-tag {
+  font-size: 0.75rem;
   font-weight: 700;
   color: #2563eb;
   background: #eff6ff;
   border: 1px solid #bfdbfe;
-  padding: 3px 8px;
+  padding: 2px 8px;
   border-radius: 6px;
+  white-space: nowrap;
 }
 
-.goal-locked-pill {
-  font-size: 0.78rem;
-  font-weight: 750;
-  color: #7c3aed;
-  background: #f5f3ff;
-  border: 1px solid #ddd6fe;
-  padding: 4px 12px;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.15s ease;
+.metric-xg-tag strong,
+.metric-minute-tag strong {
+  color: #1d4ed8;
+  font-weight: 850;
 }
 
-.goal-locked-pill:hover {
-  background: #ede9fe;
+/* Progress Bar */
+.subcard-progress-bar {
+  width: 100%;
+  height: 6px;
+  background: #e2e8f0;
+  border-radius: 9999px;
+  overflow: hidden;
 }
 
-/* Settlement Score: NO Won or Lose, Just the Score */
-.goal-settlement-inline {
+.subcard-progress-fill {
+  height: 100%;
+  border-radius: 9999px;
+  transition: width 0.4s ease;
+}
+
+/* Stats Row */
+.subcard-stats-row {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 0.82rem;
-  font-weight: 700;
-  color: #334155;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  padding: 4px 12px;
-  border-radius: 6px;
-}
-
-.settlement-score-label strong {
-  color: #059669;
-}
-
-.settlement-ht-note {
-  font-size: 0.72rem;
-  color: #64748b;
+  gap: 8px;
+  font-size: 0.74rem;
   font-weight: 600;
+  color: #64748b;
+  margin-top: 2px;
 }
 
-/* Empty & Loading States */
+.subcard-stats-row strong {
+  color: #334155;
+}
+
+.stat-sep {
+  opacity: 0.4;
+}
+
+/* Locked Subcard Teaser (Enticing for visitors) */
+.subcard-lock-btn {
+  width: 100%;
+  background: #f5f3ff;
+  border: 1.5px dashed #c4b5fd;
+  border-radius: 10px;
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  color: #6d28d9;
+  font-family: inherit;
+}
+
+.subcard-lock-btn:hover {
+  background: #ede9fe;
+  border-color: #a78bfa;
+}
+
+.lock-icon {
+  font-size: 1rem;
+}
+
+.lock-text {
+  font-size: 0.78rem;
+  font-weight: 750;
+}
+
+.lock-action {
+  font-size: 0.74rem;
+  font-weight: 750;
+  color: #7c3aed;
+  text-decoration: underline;
+}
+
+.subcard-unranked-box {
+  padding: 10px 0;
+  text-align: center;
+}
+
+.subcard-muted-text {
+  font-size: 0.75rem;
+  color: #94a3b8;
+  font-style: italic;
+}
+
+/* ==========================================================================
+   Loading, Error, and Empty States
+   ========================================================================== */
 .goals-loading-state,
 .goals-error-state,
 .goals-empty-state {
@@ -461,45 +624,53 @@
   background: #1e293b;
 }
 
-/* Mobile Responsiveness (390px - 768px) */
+/* ==========================================================================
+   Mobile Responsiveness (390px - 768px)
+   ========================================================================== */
 @media (max-width: 768px) {
   .goals-page-container {
     padding: 12px 10px 60px 10px;
   }
 
   .goal-item-row {
-    padding: 14px 14px;
-    gap: 8px;
-    border-bottom-width: 2px;
+    padding: 14px 12px;
+    gap: 10px;
+    border-bottom-width: 2.5px;
   }
 
   .goal-row-line-1 {
     flex-direction: column;
     align-items: flex-start;
-    gap: 6px;
+    gap: 8px;
   }
 
   .goal-meta-left {
     width: 100%;
     justify-content: space-between;
+    min-width: auto;
   }
 
   .goal-clubs-matchup {
-    font-size: 0.94rem;
+    font-size: 0.96rem;
+    justify-content: flex-start;
+    text-align: left;
     flex-wrap: wrap;
     gap: 6px;
   }
 
   .goal-score-right {
+    width: 100%;
+    justify-content: flex-start;
     min-width: auto;
   }
 
-  .goal-row-line-2 {
+  .goal-dual-cards-row {
+    grid-template-columns: 1fr;
     gap: 8px;
   }
 
-  .goal-pred-left {
-    gap: 6px;
+  .goal-subcard {
+    padding: 10px 12px;
   }
 
   .goal-subfilters-row {

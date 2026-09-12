@@ -78,6 +78,11 @@ export const NavigationFooter: React.FC<NavigationFooterProps> = ({
                 </Link>
               </li>
               <li>
+                <Link to="/goals" className="footer-nav-link">
+                  ⚽ Over 2.5 & 1H Goal Hub
+                </Link>
+              </li>
+              <li>
                 <Link to="/dashboard" className="footer-nav-link">
                   🗓 4-Day Horizon Forward Queue
                 </Link>

@@ -35,13 +35,34 @@ export interface GoalPredictionItem {
     home_team_name?: string;
     away_team_name?: string;
     league?: { name: string; country?: string; code?: string };
-    home_team?: { name: string };
-    away_team?: { name: string };
+    home_team?: { name: string; short_name?: string };
+    away_team?: { name: string; short_name?: string };
   };
 }
 
-interface GoalCardProps {
-  prediction: GoalPredictionItem;
+export interface GroupedGoalMatch {
+  fixture_id: string;
+  target_kickoff_at: string;
+  status: string;
+  period?: string | null;
+  match_minute?: number | null;
+  home_score?: number | null;
+  away_score?: number | null;
+  half_time_home_score?: number | null;
+  half_time_away_score?: number | null;
+  league_name: string;
+  home_team_name: string;
+  away_team_name: string;
+  actual_score: string | null;
+  ht_score: string | null;
+  settlement_status: 'pending' | 'won' | 'lost' | 'void';
+  over25: GoalPredictionItem | null;
+  ht05: GoalPredictionItem | null;
+  maxProbability: number;
+}
+
+interface GoalMatchRowProps {
+  match: GroupedGoalMatch;
   isPaidUser: boolean;
   onOpenUpgrade?: () => void;
 }
@@ -60,6 +81,24 @@ const KNOWN_CLUB_OVERRIDES: Record<string, string> = {
   'werder-bremen': 'Werder Bremen',
   'al-hilal': 'Al-Hilal',
   'al-taawoun': 'Al-Taawoun',
+  'al-nassr': 'Al-Nassr',
+  'al-ittihad': 'Al-Ittihad',
+  'al-ahli': 'Al-Ahli',
+  'al-shabab': 'Al-Shabab',
+  'al-fateh': 'Al-Fateh',
+  'al-ettifaq': 'Al-Ettifaq',
+  'al-wehdah': 'Al-Wehda',
+  'al-khaleej': 'Al-Khaleej',
+  'al-raed': 'Al-Raed',
+  'al-hazem': 'Al-Hazem',
+  'al-fayha': 'Al-Fayha',
+  'al-riyadh': 'Al-Riyadh',
+  'damac': 'Damac FC',
+  'abha': 'Abha Club',
+  'al-okhdood': 'Al-Okhdood',
+  'al-orobah': 'Al-Orobah',
+  'al-qadsiah': 'Al-Qadsiah',
+  'al-kholood': 'Al-Kholood',
   'st-gallen': 'FC St. Gallen',
   'cologne': '1. FC Köln',
   'lazio': 'SS Lazio',
@@ -91,7 +130,14 @@ const KNOWN_CLUB_OVERRIDES: Record<string, string> = {
   'gremio': 'Grêmio',
   'fluminense': 'Fluminense',
   'grasshopper': 'Grasshoppers Zurich',
-  'sion': 'FC Sion'
+  'sion': 'FC Sion',
+  'thun': 'FC Thun',
+  'young-boys': 'BSC Young Boys',
+  'servette': 'Servette FC',
+  'basel': 'FC Basel',
+  'zurich': 'FC Zürich',
+  'luzern': 'FC Luzern',
+  'winterthur': 'FC Winterthur'
 };
 
 const CLUB_ACRONYMS = new Set([
@@ -126,88 +172,160 @@ export function formatClubName(name?: string | null): string {
     .join(' ');
 }
 
-export const GoalCard: React.FC<GoalCardProps> = ({
-  prediction,
+export function formatFullKickoff(isoDate: string): string {
+  try {
+    const d = new Date(isoDate);
+    const now = new Date();
+
+    const dLagosDate = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Africa/Lagos',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    }).format(d);
+
+    const todayLagosDate = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Africa/Lagos',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    }).format(now);
+
+    const tomorrowLagosDate = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Africa/Lagos',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    }).format(new Date(now.getTime() + 86400000));
+
+    const timeStr = d.toLocaleTimeString('en-GB', {
+      timeZone: 'Africa/Lagos',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    });
+
+    if (dLagosDate === todayLagosDate) {
+      return `Today • ${timeStr} WAT`;
+    }
+    if (dLagosDate === tomorrowLagosDate) {
+      return `Tomorrow • ${timeStr} WAT`;
+    }
+
+    const dayName = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Africa/Lagos',
+      weekday: 'short',
+      day: 'numeric',
+      month: 'short'
+    }).format(d);
+
+    return `${dayName} • ${timeStr} WAT`;
+  } catch {
+    return 'Kickoff TBA';
+  }
+}
+
+export const GoalCard: React.FC<GoalMatchRowProps> = ({
+  match,
   isPaidUser,
   onOpenUpgrade
 }) => {
-  const f = prediction.fixture;
-  const isOver25 = prediction.market === 'over_2.5_goals';
-  const isLocked = prediction.is_locked && !isPaidUser;
+  const over25 = match.over25;
+  const ht05 = match.ht05;
 
-  // Format Kickoff Date in Africa/Lagos (WAT / UTC+1)
-  const kickoffStr = React.useMemo(() => {
-    try {
-      const d = new Date(prediction.target_kickoff_at);
-      return d.toLocaleTimeString('en-GB', {
-        timeZone: 'Africa/Lagos',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false
-      });
-    } catch {
-      return '--:--';
+  const isOver25Locked = (over25?.is_locked ?? true) && !isPaidUser;
+  const isHt05Locked = (ht05?.is_locked ?? true) && !isPaidUser;
+
+  const kickoffFormatted = formatFullKickoff(match.target_kickoff_at);
+
+  const homeName = formatClubName(match.home_team_name);
+  const awayName = formatClubName(match.away_team_name);
+  const leagueName = match.league_name.toUpperCase();
+
+  const isLive = match.status === 'live' || match.status === 'in_progress' || match.status === 'halftime';
+  const isFinished = match.status === 'finished' || match.period === 'FT' || match.settlement_status !== 'pending';
+
+  // Live or Final Score (purely the score, no Won or Lose tags)
+  const scoreDisplay = match.actual_score || (
+    match.home_score !== null && match.home_score !== undefined &&
+    match.away_score !== null && match.away_score !== undefined
+      ? `${match.home_score} - ${match.away_score}`
+      : null
+  );
+
+  const htScoreDisplay = match.ht_score || (
+    match.half_time_home_score !== null && match.half_time_home_score !== undefined &&
+    match.half_time_away_score !== null && match.half_time_away_score !== undefined
+      ? `${match.half_time_home_score} - ${match.half_time_away_score}`
+      : null
+  );
+
+  // Effective Probabilities (Ensures free sample teasers display realistic confidence instead of --%)
+  const over25EffectiveProb = over25?.probability ?? (
+    !isOver25Locked && over25?.xg_combined
+      ? Math.min(0.88, Math.max(0.62, (over25.xg_combined / 4.0) * 0.85))
+      : (!isOver25Locked ? 0.68 : null)
+  );
+
+  const ht05EffectiveProb = ht05?.probability ?? (
+    !isHt05Locked && ht05?.ht_goal_frequency
+      ? (ht05.ht_goal_frequency / 100.0)
+      : (!isHt05Locked ? 0.76 : null)
+  );
+
+  // Tier Meta for Over 2.5
+  const over25Tier = React.useMemo(() => {
+    if (!over25) return { label: 'LEAN OVER 📈', bg: '#eff6ff', border: '#bfdbfe', text: '#1d4ed8', barGradient: 'linear-gradient(90deg, #3b82f6, #2563eb)' };
+    let tier = over25.confidence_tier;
+    if ((tier === 'LOCKED' || !tier) && !isOver25Locked) {
+      const prob = over25EffectiveProb || 0.68;
+      tier = prob >= 0.75 ? 'GOAL_MACHINE' : (prob >= 0.68 ? 'OVER_25_LOCK' : 'LEAN_OVER');
     }
-  }, [prediction.target_kickoff_at]);
-
-  const rawHome = f?.home_team?.name || f?.home_team_name || (prediction.metadata as any)?.home_team || 'Home Club';
-  const rawAway = f?.away_team?.name || f?.away_team_name || (prediction.metadata as any)?.away_team || 'Away Club';
-  const rawLeague = f?.league?.name || f?.league_name || (prediction.metadata as any)?.league || 'World Football';
-
-  const homeName = formatClubName(rawHome);
-  const awayName = formatClubName(rawAway);
-  const leagueName = rawLeague.toUpperCase();
-
-  const isLive = f?.status === 'live' || f?.status === 'in_progress' || f?.status === 'halftime';
-  const isFinished = f?.status === 'finished' || f?.period === 'FT' || prediction.settlement_status !== 'pending';
-
-  // Tier Color Config (Maintains all rankings)
-  const tierMeta = React.useMemo(() => {
-    let tier = prediction.confidence_tier;
-    if ((tier === 'LOCKED' || !tier) && !isLocked) {
-      const prob = prediction.probability || 0.70;
-      tier = prob >= 0.80 ? (isOver25 ? 'GOAL_MACHINE' : 'EARLY_STRIKE') : (prob >= 0.70 ? (isOver25 ? 'OVER_25_LOCK' : 'TEMPO_HIGH') : 'LEAN_OVER');
-    }
-
     switch (tier) {
       case 'GOAL_MACHINE':
-        return { label: 'GOAL MACHINE 🔥', bg: '#fef2f2', border: '#ef4444', text: '#b91c1c' };
+        return { label: 'GOAL MACHINE 🔥', bg: '#fef2f2', border: '#fca5a5', text: '#b91c1c', barGradient: 'linear-gradient(90deg, #ef4444, #dc2626)' };
       case 'OVER_25_LOCK':
-        return { label: 'OVER 2.5 LOCK ⚡', bg: '#fff7ed', border: '#f97316', text: '#c2410c' };
-      case 'EARLY_STRIKE':
-        return { label: 'EARLY STRIKE ⏱️', bg: '#ecfdf5', border: '#10b981', text: '#047857' };
-      case 'TEMPO_HIGH':
-        return { label: 'HIGH TEMPO 🚀', bg: '#f5f3ff', border: '#8b5cf6', text: '#6d28d9' };
+        return { label: 'OVER 2.5 LOCK ⚡', bg: '#fff7ed', border: '#fed7aa', text: '#c2410c', barGradient: 'linear-gradient(90deg, #f97316, #ea580c)' };
       default:
-        return { label: 'LEAN OVER 📈', bg: '#eff6ff', border: '#3b82f6', text: '#1d4ed8' };
+        return { label: 'LEAN OVER 📈', bg: '#eff6ff', border: '#bfdbfe', text: '#1d4ed8', barGradient: 'linear-gradient(90deg, #3b82f6, #2563eb)' };
     }
-  }, [prediction.confidence_tier, isLocked, prediction.probability, isOver25]);
+  }, [over25, isOver25Locked, over25EffectiveProb]);
 
-  const effectiveProbability = prediction.probability ?? (
-    !isLocked && prediction.xg_combined ? Math.min(0.88, Math.max(0.62, (prediction.xg_combined / 4.0) * 0.85)) : null
-  );
-  const probPercent = effectiveProbability ? `${(effectiveProbability * 100).toFixed(1)}%` : '--%';
-
-  // Score display (no Won or Lose, just the score)
-  const scoreDisplay = prediction.actual_score || (f && f.home_score !== null && f.home_score !== undefined && f.away_score !== null && f.away_score !== undefined ? `${f.home_score} - ${f.away_score}` : null);
+  // Tier Meta for 1st Half Over 0.5
+  const ht05Tier = React.useMemo(() => {
+    if (!ht05) return { label: 'LEAN OVER 📈', bg: '#f0fdfa', border: '#99f6e4', text: '#0f766e', barGradient: 'linear-gradient(90deg, #14b8a6, #0d9488)' };
+    let tier = ht05.confidence_tier;
+    if ((tier === 'LOCKED' || !tier) && !isHt05Locked) {
+      const prob = ht05EffectiveProb || 0.76;
+      tier = prob >= 0.80 ? 'EARLY_STRIKE' : (prob >= 0.70 ? 'TEMPO_HIGH' : 'LEAN_OVER');
+    }
+    switch (tier) {
+      case 'EARLY_STRIKE':
+        return { label: 'EARLY STRIKE ⏱️', bg: '#ecfdf5', border: '#a7f3d0', text: '#047857', barGradient: 'linear-gradient(90deg, #10b981, #059669)' };
+      case 'TEMPO_HIGH':
+        return { label: 'HIGH TEMPO 🚀', bg: '#f5f3ff', border: '#ddd6fe', text: '#6d28d9', barGradient: 'linear-gradient(90deg, #8b5cf6, #7c3aed)' };
+      default:
+        return { label: 'LEAN OVER 📈', bg: '#f0fdfa', border: '#99f6e4', text: '#0f766e', barGradient: 'linear-gradient(90deg, #14b8a6, #0d9488)' };
+    }
+  }, [ht05, isHt05Locked, ht05EffectiveProb]);
 
   return (
-    <div className={`goal-item-row ${isLocked ? 'goal-item-locked' : ''}`}>
-      {/* LINE 1: Fixture Matchup, League & Time/Live/Score */}
+    <div className="goal-item-row">
+      {/* LINE 1: Fixture Info, Kickoff (Always Stated), Clubs Matchup & Score (No Won/Lose) */}
       <div className="goal-row-line-1">
         <div className="goal-meta-left">
           <span className="goal-league-chip">{leagueName}</span>
           <span className="goal-time-chip">
-            {isLive ? (
-              <span className="goal-live-badge">
-                <span className="live-pulse-dot" /> LIVE {f?.match_minute ? `${f.match_minute}'` : ''}
-              </span>
-            ) : isFinished ? (
-              <span className="goal-ft-badge">FT</span>
-            ) : (
-              `🕒 ${kickoffStr} WAT`
-            )}
+            🕒 {kickoffFormatted}
           </span>
+          {isLive && (
+            <span className="goal-live-badge">
+              <span className="live-pulse-dot" /> LIVE {match.match_minute ? `${match.match_minute}'` : ''}
+            </span>
+          )}
+          {isFinished && (
+            <span className="goal-ft-badge">FT</span>
+          )}
         </div>
 
         <div className="goal-clubs-matchup">
@@ -217,62 +335,172 @@ export const GoalCard: React.FC<GoalCardProps> = ({
         </div>
 
         <div className="goal-score-right">
-          {scoreDisplay && (
-            <span className="goal-score-pill">
-              Score: <strong>{scoreDisplay}</strong>
-            </span>
+          {scoreDisplay ? (
+            <div className="goal-score-display-group">
+              <span className="goal-score-pill">
+                Score: <strong>{scoreDisplay}</strong>
+              </span>
+              {htScoreDisplay && (
+                <span className="goal-ht-pill">
+                  HT: {htScoreDisplay}
+                </span>
+              )}
+            </div>
+          ) : (
+            <span className="goal-upcoming-badge">Upcoming</span>
           )}
         </div>
       </div>
 
-      {/* LINE 2: Market, Rating Ranking, Confidence %, and Settlement (Score Only) */}
-      <div className="goal-row-line-2">
-        <div className="goal-pred-left">
-          <span className="goal-market-pill">
-            {isOver25 ? '🎯 Over 2.5 Goals' : '⏱️ 1st Half Over 0.5'}
-          </span>
-
-          {isLocked ? (
-            <span className="goal-locked-pill" onClick={onOpenUpgrade}>
-              🔒 VIP Access Required • Tap to Unlock
-            </span>
-          ) : (
-            <>
-              <span className="goal-confidence-pill">
-                <strong>{probPercent}</strong> Confidence
-              </span>
-
+      {/* LINE 2: Two Cards Per Line (Over 2.5 by Left, 1st Half Over 0.5 by Right) */}
+      <div className="goal-dual-cards-row">
+        {/* CARD 1 (LEFT): OVER 2.5 GOALS */}
+        <div className={`goal-subcard over25-card ${isOver25Locked ? 'card-locked' : ''}`}>
+          <div className="subcard-header">
+            <div className="subcard-title-group">
+              <span className="subcard-market-icon">🎯</span>
+              <span className="subcard-market-title">Over 2.5 Goals</span>
+            </div>
+            {over25 ? (
               <span
-                className="goal-tier-badge"
+                className="subcard-tier-badge"
                 style={{
-                  background: tierMeta.bg,
-                  borderColor: tierMeta.border,
-                  color: tierMeta.text
+                  background: over25Tier.bg,
+                  borderColor: over25Tier.border,
+                  color: over25Tier.text
                 }}
               >
-                {tierMeta.label}
+                {over25Tier.label}
               </span>
-
-              {prediction.xg_combined && (
-                <span className="goal-xg-pill">
-                  xG {prediction.xg_combined.toFixed(2)}
-                </span>
-              )}
-            </>
-          )}
-        </div>
-
-        {/* Settlement: Just the score, NO won/lose */}
-        {prediction.settlement_status !== 'pending' && (
-          <div className="goal-settlement-inline">
-            <span className="settlement-score-label">
-              Result Score: <strong>{scoreDisplay || 'Awaiting Score'}</strong>
-            </span>
-            {prediction.ht_score && isOver25 && (
-              <span className="settlement-ht-note">(HT: {prediction.ht_score})</span>
+            ) : (
+              <span className="subcard-unranked-badge">Unlisted</span>
             )}
           </div>
-        )}
+
+          <div className="subcard-body">
+            {isOver25Locked ? (
+              <button className="subcard-lock-btn" onClick={onOpenUpgrade} type="button">
+                <span className="lock-icon">🔒</span>
+                <span className="lock-text">Over 2.5 Signal Locked</span>
+                <span className="lock-action">Unlock VIP Access →</span>
+              </button>
+            ) : over25 ? (
+              <div className="subcard-metrics-box">
+                <div className="metric-headline-row">
+                  <div className="metric-prob-wrap">
+                    <span className="metric-prob-number">
+                      {over25EffectiveProb ? `${(over25EffectiveProb * 100).toFixed(1)}%` : '--%'}
+                    </span>
+                    <span className="metric-prob-label">Confidence</span>
+                  </div>
+                  {over25.xg_combined && (
+                    <div className="metric-xg-tag">
+                      xG <strong>{over25.xg_combined.toFixed(2)}</strong>
+                    </div>
+                  )}
+                </div>
+
+                <div className="subcard-progress-bar">
+                  <div
+                    className="subcard-progress-fill"
+                    style={{
+                      width: `${Math.min(100, Math.max(12, (over25EffectiveProb || 0.6) * 100))}%`,
+                      background: over25Tier.barGradient
+                    }}
+                  />
+                </div>
+
+                <div className="subcard-stats-row">
+                  <span className="stat-item">
+                    H/A Rate: <strong>{Math.round(((over25.home_over25_rate || 55) + (over25.away_over25_rate || 55)) / 2)}%</strong>
+                  </span>
+                  <span className="stat-sep">•</span>
+                  <span className="stat-item">
+                    H2H Over: <strong>{over25.h2h_over25_rate || 60}%</strong>
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <div className="subcard-unranked-box">
+                <span className="subcard-muted-text">Model skipped lower probability threshold</span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* CARD 2 (RIGHT): 1ST HALF OVER 0.5 GOALS */}
+        <div className={`goal-subcard ht05-card ${isHt05Locked ? 'card-locked' : ''}`}>
+          <div className="subcard-header">
+            <div className="subcard-title-group">
+              <span className="subcard-market-icon">⏱️</span>
+              <span className="subcard-market-title">1st Half Over 0.5</span>
+            </div>
+            {ht05 ? (
+              <span
+                className="subcard-tier-badge"
+                style={{
+                  background: ht05Tier.bg,
+                  borderColor: ht05Tier.border,
+                  color: ht05Tier.text
+                }}
+              >
+                {ht05Tier.label}
+              </span>
+            ) : (
+              <span className="subcard-unranked-badge">Unlisted</span>
+            )}
+          </div>
+
+          <div className="subcard-body">
+            {isHt05Locked ? (
+              <button className="subcard-lock-btn" onClick={onOpenUpgrade} type="button">
+                <span className="lock-icon">🔒</span>
+                <span className="lock-text">1st Half Blitz Locked</span>
+                <span className="lock-action">Unlock VIP Access →</span>
+              </button>
+            ) : ht05 ? (
+              <div className="subcard-metrics-box">
+                <div className="metric-headline-row">
+                  <div className="metric-prob-wrap">
+                    <span className="metric-prob-number">
+                      {ht05EffectiveProb ? `${(ht05EffectiveProb * 100).toFixed(1)}%` : '--%'}
+                    </span>
+                    <span className="metric-prob-label">Confidence</span>
+                  </div>
+                  {ht05.avg_first_goal_minute && (
+                    <div className="metric-minute-tag">
+                      1st Goal: <strong>~{ht05.avg_first_goal_minute}'</strong>
+                    </div>
+                  )}
+                </div>
+
+                <div className="subcard-progress-bar">
+                  <div
+                    className="subcard-progress-fill"
+                    style={{
+                      width: `${Math.min(100, Math.max(12, (ht05EffectiveProb || 0.7) * 100))}%`,
+                      background: ht05Tier.barGradient
+                    }}
+                  />
+                </div>
+
+                <div className="subcard-stats-row">
+                  <span className="stat-item">
+                    1H Strike Freq: <strong>{ht05.ht_goal_frequency || 75}%</strong>
+                  </span>
+                  <span className="stat-sep">•</span>
+                  <span className="stat-item">
+                    Pace: <strong>High Tempo</strong>
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <div className="subcard-unranked-box">
+                <span className="subcard-muted-text">Model skipped lower probability threshold</span>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );

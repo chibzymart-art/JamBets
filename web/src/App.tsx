@@ -1904,6 +1904,10 @@ export default function App() {
           <span className="mobile-tab-icon">📊</span>
           <span className="mobile-tab-label">{currentUser ? 'Dashboard' : 'Predictions'}</span>
         </Link>
+        <Link to="/goals" className={`mobile-tab-item ${location.pathname === '/goals' ? 'active' : ''}`}>
+          <span className="mobile-tab-icon">⚽</span>
+          <span className="mobile-tab-label">Over 2.5</span>
+        </Link>
         <button
           type="button"
           className={`mobile-tab-item ${location.pathname === '/subscription' ? 'active' : ''}`}
