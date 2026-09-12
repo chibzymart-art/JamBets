@@ -47,7 +47,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
 
   // Gen-Z Engine Trigger & Automation State
   const [engineTaskStatus, setEngineTaskStatus] = useState<{
-    type: 'prediction' | 'settlement' | null;
+    type: 'prediction' | 'settlement' | 'goals' | null;
     status: 'idle' | 'pending' | 'running' | 'completed' | 'failed';
     message?: string;
   }>({ type: null, status: 'idle' });
@@ -230,9 +230,10 @@ export const AdminView: React.FC<AdminViewProps> = ({
   }, [isAdminVerified, autoRefreshLogs]);
 
   // Interactive Engine Trigger
-  const triggerEngineTask = async (taskName: 'RUN_PREDICTIONS' | 'RUN_SETTLEMENTS') => {
+  const triggerEngineTask = async (taskName: 'RUN_PREDICTIONS' | 'RUN_SETTLEMENTS' | 'RUN_GOALS_ENGINE') => {
     playSfx('cook');
-    const type = taskName === 'RUN_PREDICTIONS' ? 'prediction' : 'settlement';
+    const type: 'prediction' | 'settlement' | 'goals' =
+      taskName === 'RUN_PREDICTIONS' ? 'prediction' : (taskName === 'RUN_GOALS_ENGINE' ? 'goals' : 'settlement');
     setEngineTaskStatus({
       type,
       status: 'pending',
@@ -595,11 +596,11 @@ export const AdminView: React.FC<AdminViewProps> = ({
       <section className="genz-card genz-launchpad-card">
         <div className="genz-card-header">
           <div className="card-title-group">
-            <span className="card-emoji">🚀</span>
+            <span className="card-emoji">⚡</span>
             <div>
-              <h2 className="card-title">Automation Launchpad & Manual Engine Overrides</h2>
+              <h2 className="card-title">⚡ AUTOMATION & ENGINE CONTROLS</h2>
               <p className="card-subtitle">
-                Asynchronous task dispatcher wired directly to the Cloud Supabase <code>admin_tasks</code> queue.
+                Automated Processing Pipeline (30s Poller / Midnight Primary / 6:00 AM WAT Retry)
               </p>
             </div>
           </div>
@@ -617,14 +618,14 @@ export const AdminView: React.FC<AdminViewProps> = ({
           <button
             type="button"
             id="btn-genz-cook-predictions"
-            className={`btn-cyber-trigger btn-cook-predictions ${engineTaskStatus.type === 'prediction' && engineTaskStatus.status === 'running' ? 'cooking' : ''}`}
+            className={`btn-cyber-trigger btn-cook-predictions ${engineTaskStatus.type === 'prediction' && (engineTaskStatus.status === 'running' || engineTaskStatus.status === 'pending') ? 'cooking' : ''}`}
             disabled={engineTaskStatus.status === 'pending' || engineTaskStatus.status === 'running'}
             onClick={() => triggerEngineTask('RUN_PREDICTIONS')}
           >
             <div className="btn-inner">
               <span className="btn-icon">⚡</span>
               <div>
-                <div className="btn-main-label">COOK PREDICTIONS</div>
+                <div className="btn-main-label">⚡ Run Prediction Engine</div>
                 <div className="btn-sub-label">Forward 4-Day Horizon • 250k Sims • 2.5s Delay</div>
               </div>
             </div>
@@ -633,15 +634,31 @@ export const AdminView: React.FC<AdminViewProps> = ({
           <button
             type="button"
             id="btn-genz-settle-bets"
-            className={`btn-cyber-trigger btn-settle-bets ${engineTaskStatus.type === 'settlement' && engineTaskStatus.status === 'running' ? 'cooking' : ''}`}
+            className={`btn-cyber-trigger btn-settle-bets ${engineTaskStatus.type === 'settlement' && (engineTaskStatus.status === 'running' || engineTaskStatus.status === 'pending') ? 'cooking' : ''}`}
             disabled={engineTaskStatus.status === 'pending' || engineTaskStatus.status === 'running'}
             onClick={() => triggerEngineTask('RUN_SETTLEMENTS')}
           >
             <div className="btn-inner">
-              <span className="btn-icon">🎯</span>
+              <span className="btn-icon">⚡</span>
               <div>
-                <div className="btn-main-label">BAG THE WINS (SETTLE)</div>
+                <div className="btn-main-label">⚡ Run Settlement Engine</div>
                 <div className="btn-sub-label">Verify Full-Time Scores • Audit Ledger • Won/Lost</div>
+              </div>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            id="btn-genz-goals-engine"
+            className={`btn-cyber-trigger btn-cook-goals ${engineTaskStatus.type === 'goals' && (engineTaskStatus.status === 'running' || engineTaskStatus.status === 'pending') ? 'cooking' : ''}`}
+            disabled={engineTaskStatus.status === 'pending' || engineTaskStatus.status === 'running'}
+            onClick={() => triggerEngineTask('RUN_GOALS_ENGINE')}
+          >
+            <div className="btn-inner">
+              <span className="btn-icon">⚽</span>
+              <div>
+                <div className="btn-main-label">⚽ Run Goals Engine</div>
+                <div className="btn-sub-label">Over 2.5 & 1H Over 0.5 Blitz Engine • Autonomous Modeling</div>
               </div>
             </div>
           </button>

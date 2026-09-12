@@ -90,6 +90,11 @@ export default function App() {
   });
   const [expandedFixtures, setExpandedFixtures] = useState<Set<string>>(new Set());
   const [isAllLeaguesModalOpen, setIsAllLeaguesModalOpen] = useState(false);
+  const [isHamburgerOpen, setIsHamburgerOpen] = useState(false);
+
+  useEffect(() => {
+    setIsHamburgerOpen(false);
+  }, [location.pathname]);
 
   // Multi-Filters
   const [selectedLeague, setSelectedLeague] = useState<string>('all');
@@ -134,120 +139,6 @@ export default function App() {
 
   const [, setLatencyMs] = useState<number | null>(null);
   const [, setLastRefreshed] = useState<Date>(new Date());
-
-  // Phase 4.6: Admin Engine Trigger State & Poller Listener
-  const [adminTaskStatus, setAdminTaskStatus] = useState<{
-    type: 'prediction' | 'settlement' | 'goals' | null;
-    status: 'idle' | 'pending' | 'running' | 'completed' | 'failed';
-    message?: string;
-    taskId?: string;
-  }>({ type: null, status: 'idle' });
-
-  const triggerAdminTask = async (taskName: 'RUN_PREDICTIONS' | 'RUN_SETTLEMENTS' | 'RUN_GOALS_ENGINE') => {
-    const type = taskName === 'RUN_PREDICTIONS' ? 'prediction' : (taskName === 'RUN_GOALS_ENGINE' ? 'goals' : 'settlement');
-    setAdminTaskStatus({
-      type,
-      status: 'pending',
-      message: `Queueing ${taskName}...`
-    });
-
-    try {
-      const { data, error: insertErr } = await supabase
-        .from('admin_tasks')
-        .insert({
-          task_name: taskName,
-          status: 'PENDING',
-          metadata: {
-            triggered_by: 'admin_ui_override',
-            user_id: currentUser?.id || 'anonymous_admin',
-            timestamp: new Date().toISOString()
-          }
-        })
-        .select()
-        .single();
-
-      if (insertErr || !data) {
-        throw new Error(insertErr?.message || 'Failed to insert admin task');
-      }
-
-      const taskId = data.id;
-      setAdminTaskStatus({
-        type,
-        status: 'pending',
-        taskId,
-        message: `Task queued (PENDING). Waiting for backend poller...`
-      });
-
-      // Poll task status until complete or failed (up to 2 minutes)
-      const startTime = Date.now();
-      const interval = setInterval(async () => {
-        try {
-          const { data: updatedTask } = await supabase
-            .from('admin_tasks')
-            .select('*')
-            .eq('id', taskId)
-            .single();
-
-          if (updatedTask) {
-            const currentStatus = updatedTask.status;
-            if (currentStatus === 'RUNNING') {
-              setAdminTaskStatus({
-                type,
-                status: 'running',
-                taskId,
-                message: `Backend poller active: ${taskName} is RUNNING...`
-              });
-            } else if (currentStatus === 'COMPLETED') {
-              clearInterval(interval);
-              setAdminTaskStatus({
-                type,
-                status: 'completed',
-                taskId,
-                message: `✅ ${taskName} completed successfully! Data refreshed.`
-              });
-              await fetchCloudData();
-              setTimeout(() => {
-                setAdminTaskStatus({ type: null, status: 'idle' });
-              }, 6000);
-            } else if (currentStatus === 'FAILED') {
-              clearInterval(interval);
-              setAdminTaskStatus({
-                type,
-                status: 'failed',
-                taskId,
-                message: `❌ ${taskName} failed: ${updatedTask.error_message || 'Unknown error'}`
-              });
-              setTimeout(() => {
-                setAdminTaskStatus({ type: null, status: 'idle' });
-              }, 8000);
-            }
-          }
-
-          if (Date.now() - startTime > 360000) {
-            clearInterval(interval);
-            setAdminTaskStatus({
-              type,
-              status: 'failed',
-              message: 'Task poll timeout (360s). Check background process.'
-            });
-          }
-        } catch (pollErr) {
-          console.error('Error polling admin task:', pollErr);
-        }
-      }, 2500);
-
-    } catch (err: any) {
-      console.error('Failed to trigger admin task:', err);
-      setAdminTaskStatus({
-        type,
-        status: 'failed',
-        message: `Failed to trigger ${taskName}: ${err.message || err}`
-      });
-      setTimeout(() => {
-        setAdminTaskStatus({ type: null, status: 'idle' });
-      }, 5000);
-    }
-  };
 
   useEffect(() => {
     const handleHash = () => {
@@ -1085,13 +976,6 @@ export default function App() {
             >
               Pricing <span className="pricing-flat-badge">₦5k Flat</span>
             </button>
-            <button
-              type="button"
-              className="nav-link-btn"
-              onClick={() => setIsFaqModalOpen(true)}
-            >
-              FAQ
-            </button>
           </div>
 
           <div className="header-right-actions">
@@ -1110,39 +994,203 @@ export default function App() {
               </Link>
             )}
 
-            {currentUser ? (
+            {!currentUser && (
+              <button
+                type="button"
+                className="login-action-btn"
+                onClick={() => { setAuthModalMode('signin'); setIsAuthModalOpen(true); }}
+              >
+                Sign In
+              </button>
+            )}
+
+            {/* Modern Hamburger Menu Button */}
+            <button
+              type="button"
+              id="btn-nav-hamburger"
+              className={`hamburger-toggle-btn ${isHamburgerOpen ? 'active' : ''}`}
+              onClick={() => setIsHamburgerOpen(!isHamburgerOpen)}
+              aria-label="Toggle navigation and user menu"
+              aria-expanded={isHamburgerOpen}
+              title="Navigation & Account Menu"
+            >
+              {isHamburgerOpen ? (
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18"></line>
+                  <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+              ) : (
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="3" y1="12" x2="21" y2="12"></line>
+                  <line x1="3" y1="6" x2="21" y2="6"></line>
+                  <line x1="3" y1="18" x2="21" y2="18"></line>
+                </svg>
+              )}
+            </button>
+
+            {/* Hamburger Dropdown Display Panel */}
+            {isHamburgerOpen && (
               <>
-                <div className="user-profile-pill" onClick={() => setIsProfileModalOpen(true)}>
-                  <span className="user-avatar-icon">👤</span>
-                  <span>{profile?.display_name || currentUser.email?.split('@')[0]}</span>
+                <div
+                  className="hamburger-backdrop"
+                  onClick={() => setIsHamburgerOpen(false)}
+                  aria-hidden="true"
+                />
+                <div
+                  className="hamburger-dropdown-panel"
+                  role="menu"
+                  aria-label="Navigation and user actions menu"
+                >
+                  {currentUser ? (
+                    <div
+                      className="hamburger-user-header"
+                      onClick={() => {
+                        setIsHamburgerOpen(false);
+                        setIsProfileModalOpen(true);
+                      }}
+                      title="Click to view full profile details"
+                    >
+                      <div className="hamburger-user-avatar">👤</div>
+                      <div className="hamburger-user-details">
+                        <div className="hamburger-user-name">
+                          {profile?.display_name || currentUser.email?.split('@')[0]}
+                        </div>
+                        <div className="hamburger-user-email">
+                          {currentUser.email}
+                        </div>
+                        <span className={`hamburger-role-badge role-${profile?.role || 'free'}`}>
+                          {profile?.role === 'admin'
+                            ? '🛡 Sigma Admin'
+                            : profile?.role === 'bigbang'
+                            ? '💥 BigBang VIP'
+                            : profile?.role === 'standard'
+                            ? '⭐ Standard VIP'
+                            : 'Free Access'}
+                        </span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="hamburger-guest-header">
+                      <div className="hamburger-guest-title">Welcome to JamBets</div>
+                      <div className="hamburger-guest-sub">Sign in to unlock full VIP odds & simulations</div>
+                      <div className="hamburger-auth-row">
+                        <button
+                          type="button"
+                          className="hamburger-auth-btn signin"
+                          onClick={() => {
+                            setIsHamburgerOpen(false);
+                            setAuthModalMode('signin');
+                            setIsAuthModalOpen(true);
+                          }}
+                        >
+                          Sign In
+                        </button>
+                        <button
+                          type="button"
+                          className="hamburger-auth-btn register"
+                          onClick={() => {
+                            setIsHamburgerOpen(false);
+                            setAuthModalMode('register');
+                            setIsAuthModalOpen(true);
+                          }}
+                        >
+                          Register
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="hamburger-divider" />
+
+                  <div className="hamburger-menu-list">
+                    <button
+                      type="button"
+                      className="hamburger-menu-item"
+                      onClick={() => {
+                        setIsHamburgerOpen(false);
+                        setIsFaqModalOpen(true);
+                      }}
+                    >
+                      <span className="hamburger-item-icon">❓</span>
+                      <span className="hamburger-item-label">FAQ & Help Center</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      className="hamburger-menu-item"
+                      onClick={() => {
+                        setIsHamburgerOpen(false);
+                        setIsPricingModalOpen(true);
+                      }}
+                    >
+                      <span className="hamburger-item-icon">💳</span>
+                      <span className="hamburger-item-label">Pricing Plans</span>
+                      <span className="pricing-flat-badge" style={{ marginLeft: 'auto' }}>₦5k Flat</span>
+                    </button>
+
+                    <Link
+                      to="/goals"
+                      className="hamburger-menu-item"
+                      onClick={() => setIsHamburgerOpen(false)}
+                    >
+                      <span className="hamburger-item-icon">🔥</span>
+                      <span className="hamburger-item-label">Over 2.5 & 1H Blitz Hub</span>
+                    </Link>
+
+                    <Link
+                      to="/dashboard"
+                      className="hamburger-menu-item"
+                      onClick={() => setIsHamburgerOpen(false)}
+                    >
+                      <span className="hamburger-item-icon">📊</span>
+                      <span className="hamburger-item-label">Predictions Dashboard</span>
+                    </Link>
+
+                    {isAdmin && (
+                      <Link
+                        to="/admin"
+                        className="hamburger-menu-item admin-item"
+                        onClick={() => setIsHamburgerOpen(false)}
+                      >
+                        <span className="hamburger-item-icon">🛡</span>
+                        <span className="hamburger-item-label">Admin Command Deck</span>
+                      </Link>
+                    )}
+
+                    {currentUser && (
+                      <button
+                        type="button"
+                        className="hamburger-menu-item"
+                        onClick={() => {
+                          setIsHamburgerOpen(false);
+                          setIsProfileModalOpen(true);
+                        }}
+                      >
+                        <span className="hamburger-item-icon">⚙️</span>
+                        <span className="hamburger-item-label">Account Profile</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {currentUser && (
+                    <>
+                      <div className="hamburger-divider" />
+                      <button
+                        type="button"
+                        className="hamburger-menu-item hamburger-logout-item"
+                        onClick={async () => {
+                          setIsHamburgerOpen(false);
+                          await supabase.auth.signOut();
+                          window.location.reload();
+                        }}
+                      >
+                        <span className="hamburger-item-icon">🚪</span>
+                        <span className="hamburger-item-label">Sign Out</span>
+                      </button>
+                    </>
+                  )}
                 </div>
-                <button
-                  className="logout-icon-btn"
-                  title="Sign Out"
-                  onClick={async () => {
-                    await supabase.auth.signOut();
-                    window.location.reload();
-                  }}
-                >
-                  [→
-                </button>
               </>
-            ) : (
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <button
-                  className="login-action-btn"
-                  onClick={() => { setAuthModalMode('signin'); setIsAuthModalOpen(true); }}
-                >
-                  Sign In
-                </button>
-                <button
-                  className="login-action-btn"
-                  style={{ background: '#059669', borderColor: '#059669', color: '#ffffff' }}
-                  onClick={() => { setAuthModalMode('register'); setIsAuthModalOpen(true); }}
-                >
-                  Register
-                </button>
-              </div>
             )}
           </div>
         </div>
@@ -1242,65 +1290,6 @@ export default function App() {
             path="/dashboard"
             element={
               <div id="fixtures-view-section">
-        {/* Phase 4.6 & RBAC: Admin Engine Controls & Automation Overrides (Strictly locked to authenticated Admins) */}
-        {isAdmin && (
-          <section className="admin-engine-bar" aria-label="Engine Automation Controls">
-            <div className="admin-engine-header-row">
-              <div className="admin-engine-title-group">
-                <span className="admin-badge-live">⚡ AUTOMATION & ENGINE CONTROLS</span>
-                <span className="admin-engine-sub">Automated Processing Pipeline (30s Poller / Midnight Primary / 6:00 AM WAT Retry)</span>
-              </div>
-              {adminTaskStatus.status !== 'idle' && (
-                <div className={`admin-task-banner status-${adminTaskStatus.status}`}>
-                  <span className="admin-spinner-dot" />
-                  <span className="admin-task-msg">{adminTaskStatus.message}</span>
-                </div>
-              )}
-            </div>
-            <div className="admin-engine-actions">
-              <button
-                type="button"
-                id="btn-run-prediction-engine"
-                className={`admin-engine-btn btn-prediction ${adminTaskStatus.type === 'prediction' && (adminTaskStatus.status === 'pending' || adminTaskStatus.status === 'running') ? 'loading' : ''}`}
-                disabled={adminTaskStatus.status === 'pending' || adminTaskStatus.status === 'running'}
-                onClick={() => triggerAdminTask('RUN_PREDICTIONS')}
-              >
-                {adminTaskStatus.type === 'prediction' && (adminTaskStatus.status === 'pending' || adminTaskStatus.status === 'running') ? (
-                  <>⏳ Running Prediction Engine...</>
-                ) : (
-                  <>⚡ Run Prediction Engine</>
-                )}
-              </button>
-              <button
-                type="button"
-                id="btn-run-settlement-engine"
-                className={`admin-engine-btn btn-settlement ${adminTaskStatus.type === 'settlement' && (adminTaskStatus.status === 'pending' || adminTaskStatus.status === 'running') ? 'loading' : ''}`}
-                disabled={adminTaskStatus.status === 'pending' || adminTaskStatus.status === 'running'}
-                onClick={() => triggerAdminTask('RUN_SETTLEMENTS')}
-              >
-                {adminTaskStatus.type === 'settlement' && (adminTaskStatus.status === 'pending' || adminTaskStatus.status === 'running') ? (
-                  <>⏳ Running Settlement Engine...</>
-                ) : (
-                  <>⚡ Run Settlement Engine</>
-                )}
-              </button>
-              <button
-                type="button"
-                id="btn-run-goals-engine"
-                className={`admin-engine-btn btn-goals ${adminTaskStatus.type === 'goals' && (adminTaskStatus.status === 'pending' || adminTaskStatus.status === 'running') ? 'loading' : ''}`}
-                disabled={adminTaskStatus.status === 'pending' || adminTaskStatus.status === 'running'}
-                onClick={() => triggerAdminTask('RUN_GOALS_ENGINE')}
-              >
-                {adminTaskStatus.type === 'goals' && (adminTaskStatus.status === 'pending' || adminTaskStatus.status === 'running') ? (
-                  <>⏳ Running Goals Engine...</>
-                ) : (
-                  <>⚽ Run Goals Engine</>
-                )}
-              </button>
-            </div>
-          </section>
-        )}
-
         {/* 2. TOP SPORT CATEGORIES HORIZONTAL SELECTOR BAR */}
         <div className="sport-categories-bar">
           {sportsList.map((sp) => (
