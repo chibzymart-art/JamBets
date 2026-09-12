@@ -132,6 +132,30 @@ class SettlementEngine:
         # MARKET-SPECIFIC DETERMINISTIC SETTLEMENT RULES
         # =====================================================================
 
+        # --- 0. Anti-Loss Pass / Protected Skip (No Safe Edge) ---
+        # When volatile/high-risk games are skipped by the model, settle as VOID (Protected Pass) upon Full-Time
+        if market in ("no_safe_banker", "skip") or outcome in ("skip", "pass", "no_safe_banker"):
+            if not is_finished:
+                return SettlementDecision(
+                    prediction_id=pred_id,
+                    fixture_id=fixture_id,
+                    market=market,
+                    prediction=outcome,
+                    status=SettlementStatus.PENDING,
+                    actual_score=score_str,
+                    notes="In-play: Anti-Loss Pass (No Safe Edge) awaiting Full-Time"
+                )
+            return SettlementDecision(
+                prediction_id=pred_id,
+                fixture_id=fixture_id,
+                market=market,
+                prediction=outcome,
+                status=SettlementStatus.VOID,
+                settled_at=now,
+                actual_score=score_str,
+                notes=f"SETTLED (PASSED): Anti-Loss Pass (No Safe Edge) - Protected against loss. FT {score_str}"
+            )
+
         # --- 1. Over / Under Goals Markets ---
         if market in ("over_under_0.5", "over_under_1.5", "over_under_2.5", "over_under_3.5", "over_under_4.5"):
             if "0.5" in market:
