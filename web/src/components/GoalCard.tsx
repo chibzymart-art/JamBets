@@ -245,20 +245,36 @@ export const GoalCard: React.FC<GoalMatchRowProps> = ({
   const isLive = match.status === 'live' || match.status === 'in_progress' || match.status === 'halftime';
   const isFinished = match.status === 'finished' || match.period === 'FT' || match.settlement_status !== 'pending';
 
-  // Live or Final Score (purely the score, no Won or Lose tags)
-  const scoreDisplay = match.actual_score || (
+  // Helper to format scores with spaces around hyphens (e.g. '2-1' -> '2 - 1')
+  const formatScore = (raw?: string | null): string | null => {
+    if (!raw) return null;
+    const clean = raw.trim();
+    if (clean.includes('-')) {
+      const parts = clean.split('-');
+      if (parts.length === 2 && parts[0].trim() && parts[1].trim()) {
+        return `${parts[0].trim()} - ${parts[1].trim()}`;
+      }
+    }
+    return clean;
+  };
+
+  // Full-time / Final Score (on the Over 2.5 side)
+  const rawFtScore = over25?.actual_score || match.actual_score || (
     match.home_score !== null && match.home_score !== undefined &&
     match.away_score !== null && match.away_score !== undefined
-      ? `${match.home_score} - ${match.away_score}`
+      ? `${match.home_score}-${match.away_score}`
       : null
   );
+  const ftScoreFormatted = formatScore(rawFtScore);
 
-  const htScoreDisplay = match.ht_score || (
+  // Half-time Score (on the 1st Half Over 0.5 side)
+  const rawHtScore = ht05?.ht_score || match.ht_score || (
     match.half_time_home_score !== null && match.half_time_home_score !== undefined &&
     match.half_time_away_score !== null && match.half_time_away_score !== undefined
-      ? `${match.half_time_home_score} - ${match.half_time_away_score}`
+      ? `${match.half_time_home_score}-${match.half_time_away_score}`
       : null
   );
+  const htScoreFormatted = formatScore(rawHtScore);
 
   // Effective Probabilities (Ensures free sample teasers display realistic confidence instead of --%)
   const over25EffectiveProb = over25?.probability ?? (
@@ -311,7 +327,7 @@ export const GoalCard: React.FC<GoalMatchRowProps> = ({
 
   return (
     <div className="goal-item-row">
-      {/* LINE 1: Fixture Info, Kickoff (Always Stated), Clubs Matchup & Score (No Won/Lose) */}
+      {/* LINE 1: Fixture Info, Kickoff (Always Stated), Clubs Matchup & Status */}
       <div className="goal-row-line-1">
         <div className="goal-meta-left">
           <span className="goal-league-chip">{leagueName}</span>
@@ -334,47 +350,61 @@ export const GoalCard: React.FC<GoalMatchRowProps> = ({
           <span className="club-name away">{awayName}</span>
         </div>
 
-        <div className="goal-score-right">
-          {scoreDisplay ? (
-            <div className="goal-score-display-group">
-              <span className="goal-score-pill">
-                Score: <strong>{scoreDisplay}</strong>
-              </span>
-              {htScoreDisplay && (
-                <span className="goal-ht-pill">
-                  HT: {htScoreDisplay}
-                </span>
-              )}
-            </div>
+        <div className="goal-status-right">
+          {isLive ? (
+            <span className="goal-status-pill live-pill">
+              <span className="live-pulse-dot" /> LIVE {match.match_minute ? `${match.match_minute}'` : ''}
+            </span>
+          ) : isFinished ? (
+            <span className="goal-status-pill ft-pill">
+              MATCH FINISHED
+            </span>
           ) : (
-            <span className="goal-upcoming-badge">Upcoming</span>
+            <span className="goal-status-pill upcoming-pill">
+              Upcoming
+            </span>
           )}
         </div>
       </div>
 
-      {/* LINE 2: Two Cards Per Line (Over 2.5 by Left, 1st Half Over 0.5 by Right) */}
+      {/* LINE 2: Two Cards Per Line (Over 2.5 with FT Score on Left, 1st Half Over 0.5 with HT Score on Right) */}
       <div className="goal-dual-cards-row">
-        {/* CARD 1 (LEFT): OVER 2.5 GOALS */}
+        {/* CARD 1 (LEFT): OVER 2.5 GOALS (Carries Final / Full-Time Score) */}
         <div className={`goal-subcard over25-card ${isOver25Locked ? 'card-locked' : ''}`}>
           <div className="subcard-header">
             <div className="subcard-title-group">
               <span className="subcard-market-icon">🎯</span>
               <span className="subcard-market-title">Over 2.5 Goals</span>
             </div>
-            {over25 ? (
-              <span
-                className="subcard-tier-badge"
-                style={{
-                  background: over25Tier.bg,
-                  borderColor: over25Tier.border,
-                  color: over25Tier.text
-                }}
-              >
-                {over25Tier.label}
-              </span>
-            ) : (
-              <span className="subcard-unranked-badge">Unlisted</span>
-            )}
+
+            <div className="subcard-header-right">
+              {ftScoreFormatted ? (
+                <div className="subcard-score-pill ft-score" title="Full-Time / Final Score for Over 2.5 market">
+                  <span className="score-pill-tag">{isFinished ? 'FT Score' : 'LIVE'}</span>
+                  <strong className="score-pill-val">{ftScoreFormatted}</strong>
+                </div>
+              ) : (
+                <div className="subcard-score-pill empty-score" title="Upcoming match">
+                  <span className="score-pill-tag">FT</span>
+                  <span className="score-pill-val">- : -</span>
+                </div>
+              )}
+
+              {over25 ? (
+                <span
+                  className="subcard-tier-badge"
+                  style={{
+                    background: over25Tier.bg,
+                    borderColor: over25Tier.border,
+                    color: over25Tier.text
+                  }}
+                >
+                  {over25Tier.label}
+                </span>
+              ) : (
+                <span className="subcard-unranked-badge">Unlisted</span>
+              )}
+            </div>
           </div>
 
           <div className="subcard-body">
@@ -428,27 +458,42 @@ export const GoalCard: React.FC<GoalMatchRowProps> = ({
           </div>
         </div>
 
-        {/* CARD 2 (RIGHT): 1ST HALF OVER 0.5 GOALS */}
+        {/* CARD 2 (RIGHT): 1ST HALF OVER 0.5 GOALS (Carries Halftime Score) */}
         <div className={`goal-subcard ht05-card ${isHt05Locked ? 'card-locked' : ''}`}>
           <div className="subcard-header">
             <div className="subcard-title-group">
               <span className="subcard-market-icon">⏱️</span>
               <span className="subcard-market-title">1st Half Over 0.5</span>
             </div>
-            {ht05 ? (
-              <span
-                className="subcard-tier-badge"
-                style={{
-                  background: ht05Tier.bg,
-                  borderColor: ht05Tier.border,
-                  color: ht05Tier.text
-                }}
-              >
-                {ht05Tier.label}
-              </span>
-            ) : (
-              <span className="subcard-unranked-badge">Unlisted</span>
-            )}
+
+            <div className="subcard-header-right">
+              {htScoreFormatted ? (
+                <div className="subcard-score-pill ht-score" title="Halftime Score for 1st Half Over 0.5 market">
+                  <span className="score-pill-tag">HT Score</span>
+                  <strong className="score-pill-val">{htScoreFormatted}</strong>
+                </div>
+              ) : (
+                <div className="subcard-score-pill empty-score" title={isFinished ? 'Halftime score not reported' : 'Upcoming match'}>
+                  <span className="score-pill-tag">HT</span>
+                  <span className="score-pill-val">- : -</span>
+                </div>
+              )}
+
+              {ht05 ? (
+                <span
+                  className="subcard-tier-badge"
+                  style={{
+                    background: ht05Tier.bg,
+                    borderColor: ht05Tier.border,
+                    color: ht05Tier.text
+                  }}
+                >
+                  {ht05Tier.label}
+                </span>
+              ) : (
+                <span className="subcard-unranked-badge">Unlisted</span>
+              )}
+            </div>
           </div>
 
           <div className="subcard-body">

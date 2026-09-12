@@ -301,54 +301,41 @@
   padding: 0 4px;
 }
 
-.goal-score-right {
+.goal-status-right {
   min-width: 140px;
   text-align: right;
   display: flex;
   justify-content: flex-end;
 }
 
-.goal-score-display-group {
+.goal-status-pill {
+  font-size: 0.72rem;
+  font-weight: 750;
+  padding: 3px 10px;
+  border-radius: 6px;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
+.goal-status-pill.live-pill {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #dc2626;
 }
 
-.goal-score-pill {
-  font-size: 0.86rem;
-  font-weight: 700;
-  color: #059669;
+.goal-status-pill.ft-pill {
   background: #ecfdf5;
   border: 1px solid #a7f3d0;
-  padding: 3px 10px;
-  border-radius: 8px;
-  white-space: nowrap;
+  color: #059669;
 }
 
-.goal-score-pill strong {
-  font-weight: 850;
-}
-
-.goal-ht-pill {
-  font-size: 0.74rem;
-  font-weight: 700;
-  color: #64748b;
-  background: #f1f5f9;
-  border: 1px solid #e2e8f0;
-  padding: 3px 7px;
-  border-radius: 6px;
-  white-space: nowrap;
-}
-
-.goal-upcoming-badge {
-  font-size: 0.74rem;
-  font-weight: 650;
-  color: #64748b;
+.goal-status-pill.upcoming-pill {
   background: #f8fafc;
   border: 1px solid #e2e8f0;
-  padding: 2.5px 8px;
-  border-radius: 6px;
-  white-space: nowrap;
+  color: #64748b;
 }
 
 /* ==========================================================================
@@ -430,6 +417,57 @@
   border: 1px solid #e2e8f0;
   padding: 2px 7px;
   border-radius: 6px;
+}
+
+/* Header Right Group (Score Pill + Tier Badge) */
+.subcard-header-right {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.subcard-score-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2.5px 8px;
+  border-radius: 7px;
+  white-space: nowrap;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+}
+
+.subcard-score-pill.ft-score {
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  color: #047857;
+}
+
+.subcard-score-pill.ht-score {
+  background: #f0fdfa;
+  border: 1px solid #99f6e4;
+  color: #0f766e;
+}
+
+.subcard-score-pill.empty-score {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  color: #94a3b8;
+}
+
+.subcard-score-pill .score-pill-tag {
+  font-size: 0.65rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  opacity: 0.85;
+}
+
+.subcard-score-pill .score-pill-val {
+  font-weight: 850;
+  font-size: 0.80rem;
+  letter-spacing: 0.02em;
 }
 
 /* Subcard Body & Metrics */
@@ -658,7 +696,7 @@
     gap: 6px;
   }
 
-  .goal-score-right {
+  .goal-status-right {
     width: 100%;
     justify-content: flex-start;
     min-width: auto;
