@@ -19,6 +19,7 @@ import { FixtureCard, formatPredictionOutcome } from './components/FixtureCard';
 import { LandingPage } from './pages/Landing';
 import { SubscriptionPage } from './pages/Subscription';
 import { PasswordRecoveryPage } from './pages/PasswordRecovery';
+import { GoalsPage } from './pages/GoalsPage';
 
 export default function App() {
   const navigate = useNavigate();
@@ -136,14 +137,14 @@ export default function App() {
 
   // Phase 4.6: Admin Engine Trigger State & Poller Listener
   const [adminTaskStatus, setAdminTaskStatus] = useState<{
-    type: 'prediction' | 'settlement' | null;
+    type: 'prediction' | 'settlement' | 'goals' | null;
     status: 'idle' | 'pending' | 'running' | 'completed' | 'failed';
     message?: string;
     taskId?: string;
   }>({ type: null, status: 'idle' });
 
-  const triggerAdminTask = async (taskName: 'RUN_PREDICTIONS' | 'RUN_SETTLEMENTS') => {
-    const type = taskName === 'RUN_PREDICTIONS' ? 'prediction' : 'settlement';
+  const triggerAdminTask = async (taskName: 'RUN_PREDICTIONS' | 'RUN_SETTLEMENTS' | 'RUN_GOALS_ENGINE') => {
+    const type = taskName === 'RUN_PREDICTIONS' ? 'prediction' : (taskName === 'RUN_GOALS_ENGINE' ? 'goals' : 'settlement');
     setAdminTaskStatus({
       type,
       status: 'pending',
@@ -1071,6 +1072,12 @@ export default function App() {
             >
               {currentUser ? 'Dashboard' : 'Predictions'}
             </Link>
+            <Link
+              to="/goals"
+              className={`nav-link-btn ${location.pathname === '/goals' ? 'active' : ''}`}
+            >
+              🔥 Over 2.5 Hub
+            </Link>
             <button
               type="button"
               className={`nav-link-btn ${location.pathname === '/subscription' ? 'active' : ''}`}
@@ -1193,6 +1200,24 @@ export default function App() {
             element={<Navigate to="/dashboard" replace />}
           />
 
+          {/* ROUTE: GOALS SPECIALIST HUB (OVER 2.5 & 1H OVER 0.5) */}
+          <Route
+            path="/goals"
+            element={
+              <GoalsPage
+                currentUser={currentUser}
+                userRole={profile?.role}
+                isAdmin={isAdmin}
+                onOpenAuth={(mode) => {
+                  setAuthModalMode(mode);
+                  setIsAuthModalOpen(true);
+                }}
+                onOpenSubscription={() => setIsPricingModalOpen(true)}
+              />
+            }
+          />
+          <Route path="/over-2-5" element={<Navigate to="/goals" replace />} />
+
           {/* ROUTE 4: ADMIN COMMAND DECK (STRICTLY GATED) */}
           <Route
             path="/admin"
@@ -1257,6 +1282,19 @@ export default function App() {
                   <>⏳ Running Settlement Engine...</>
                 ) : (
                   <>⚡ Run Settlement Engine</>
+                )}
+              </button>
+              <button
+                type="button"
+                id="btn-run-goals-engine"
+                className={`admin-engine-btn btn-goals ${adminTaskStatus.type === 'goals' && (adminTaskStatus.status === 'pending' || adminTaskStatus.status === 'running') ? 'loading' : ''}`}
+                disabled={adminTaskStatus.status === 'pending' || adminTaskStatus.status === 'running'}
+                onClick={() => triggerAdminTask('RUN_GOALS_ENGINE')}
+              >
+                {adminTaskStatus.type === 'goals' && (adminTaskStatus.status === 'pending' || adminTaskStatus.status === 'running') ? (
+                  <>⏳ Running Goals Engine...</>
+                ) : (
+                  <>⚽ Run Goals Engine</>
                 )}
               </button>
             </div>

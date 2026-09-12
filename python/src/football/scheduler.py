@@ -627,6 +627,17 @@ class AdminTaskPoller(threading.Thread):
                     )
                     print(f"[POLLER] Admin task {task_name} finished successfully", flush=True)
 
+                elif task_name in ("RUN_GOALS_ENGINE", "RUN_GOALS_PREDICTIONS", "RUN_GOALS_CYCLE"):
+                    print("[POLLER] Executing Goals Specialist simulation & settlement cycle...", flush=True)
+                    from python.src.goals.run_goals_cycle import run_cycle
+                    result = run_cycle(predict=True, settle=True)
+                    supabase.update_admin_task(
+                        task_id=task_id,
+                        status="COMPLETED",
+                        metadata=result
+                    )
+                    print(f"[POLLER] Admin task {task_name} finished successfully", flush=True)
+
                 else:
                     supabase.update_admin_task(
                         task_id=task_id,
