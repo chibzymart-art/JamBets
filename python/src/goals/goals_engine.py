@@ -6,7 +6,7 @@ Runs strictly independently from the core banker prediction engine.
 
 import sys
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import List, Dict, Any
 
 # Ensure project root is on path
@@ -32,25 +32,30 @@ class GoalsEngine:
         Returns summary statistics.
         """
         print("⚽ [GoalsEngine] Starting Goals Specialist Simulation Pass...")
-        now_iso = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(timezone.utc)
+        now_iso = now.isoformat()
+        # Strictly current time and future (max 4 days ahead). Never past games.
+        min_kickoff = (now - timedelta(minutes=5)).isoformat()
+        max_kickoff = (now + timedelta(days=4)).isoformat()
 
-        # 1. Fetch eligible scheduled / upcoming fixtures
+        # 1. Fetch eligible current and future scheduled fixtures (Strictly current to 4 days ahead, NOT past games)
         # Read-only query against football_fixtures
         fixtures = self.db.get("football_fixtures", {
-            "status": "in.(scheduled,live,in_progress,halftime,finished)",
+            "status": "in.(scheduled,live,in_progress,halftime)",
+            "target_kickoff_at": f"gte.{min_kickoff}",
             "order": "target_kickoff_at.asc",
             "limit": str(max_fixtures)
         })
 
         if not fixtures:
-            print("ℹ️ [GoalsEngine] No fixtures found for goal analysis.")
+            print("ℹ️ [GoalsEngine] No active/future fixtures found for goal analysis.")
             return {"status": "success", "processed": 0, "published": 0}
 
         # Cache league names and team names
         leagues = {l['id']: l['name'] for l in self.db.get("football_leagues")}
         teams = {t['id']: t['name'] for t in self.db.get("football_teams")}
 
-        print(f"📊 [GoalsEngine] Evaluating {len(fixtures)} fixtures for Goal signals...")
+        print(f"📊 [GoalsEngine] Evaluating {len(fixtures)} fixtures for Goal signals (Strictly current to 4 days ahead)...")
 
         over25_count = 0
         ht05_count = 0
@@ -58,6 +63,20 @@ class GoalsEngine:
 
         for f in fixtures:
             fid = f["id"]
+            status = (f.get("status") or "").lower()
+            if status in ("finished", "ft", "cancelled", "postponed"):
+                continue
+
+            kickoff_at = f.get("target_kickoff_at")
+            if not kickoff_at:
+                continue
+
+            try:
+                k_dt = datetime.fromisoformat(kickoff_at.replace("Z", "+00:00"))
+                if k_dt < (now - timedelta(minutes=5)) or k_dt > (now + timedelta(days=4)):
+                    continue
+            except Exception:
+                continue
             home_name = teams.get(f.get("home_team_id"), "Home Team")
             away_name = teams.get(f.get("away_team_id"), "Away Team")
             league_name = leagues.get(f.get("league_id"), "Football League")

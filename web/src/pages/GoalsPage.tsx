@@ -192,67 +192,6 @@ export const GoalsPage: React.FC<GoalsPageProps> = ({
 
   return (
     <div className="goals-page-container">
-      {/* Top Hero Banner */}
-      <section className="goals-hero-banner">
-        <div className="goals-hero-glow" />
-        <div className="goals-hero-content">
-          <div className="goals-hero-badge">
-            <span className="badge-pulse-icon">⚡</span>
-            <span>GOALS SPECIALIST ENGINE — HIGH-OCTANE STRIKES</span>
-          </div>
-          <h1 className="goals-hero-title">
-            Over 2.5 & 1st Half Blitz
-          </h1>
-          <p className="goals-hero-desc">
-            Autonomous statistical goal modeling. Tracking high-tempo goal matches, explosive first-half early strikes, and Poisson goal pace.
-          </p>
-
-          {/* Quick Metrics Bar */}
-          <div className="goals-metric-strip">
-            <div className="metric-pill">
-              <span className="metric-val">{stats.over25Count}</span>
-              <span className="metric-label">Over 2.5 Picks</span>
-            </div>
-            <div className="metric-divider" />
-            <div className="metric-pill">
-              <span className="metric-val">{stats.ht05Count}</span>
-              <span className="metric-label">1H Over 0.5 Blitz</span>
-            </div>
-            <div className="metric-divider" />
-            <div className="metric-pill">
-              <span className="metric-val highlight">{stats.winRate}%</span>
-              <span className="metric-label">Strike Rate</span>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Paywall Banner for Free/Visitor accounts */}
-      {!isPaidUser && (
-        <section className="goals-vip-lock-callout">
-          <div className="lock-callout-inner">
-            <div className="lock-icon-container">
-              <span>💎</span>
-            </div>
-            <div className="lock-copy">
-              <h3>Goals Hub is a Paid-Only Feature</h3>
-              <p>
-                Upgrade to <strong>Standard</strong> or <strong>BigBang VIP</strong> for unrestricted real-time access to all Over 2.5 Locks and 1st Half Goal signals.
-              </p>
-            </div>
-            {currentUser ? (
-              <button className="lock-cta-btn" onClick={onOpenSubscription}>
-                Upgrade for Instant Access ⚡
-              </button>
-            ) : (
-              <button className="lock-cta-btn" onClick={() => onOpenAuth('signin')}>
-                Sign In to Unlock ⚡
-              </button>
-            )}
-          </div>
-        </section>
-      )}
-
       {/* Control Filters Bar */}
       <div className="goals-controls-bar">
         {/* Market Filter Tabs */}
@@ -350,7 +289,7 @@ export const GoalsPage: React.FC<GoalsPageProps> = ({
                 key={pred.id}
                 prediction={pred}
                 isPaidUser={isPaidUser || idx < 2} // Let visitors see 2 free sample teasers
-                onOpenUpgrade={onOpenSubscription}
+                onOpenUpgrade={currentUser ? onOpenSubscription : () => onOpenAuth('signin')}
               />
             ))}
           </div>

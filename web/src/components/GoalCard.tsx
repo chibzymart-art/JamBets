@@ -76,19 +76,19 @@ export const GoalCard: React.FC<GoalCardProps> = ({
   const isLive = f?.status === 'live' || f?.status === 'in_progress' || f?.status === 'halftime';
   const isFinished = f?.status === 'finished' || f?.period === 'FT' || prediction.settlement_status !== 'pending';
 
-  // Tier Color Config
+  // Tier Color Config (Bright Theme Optimized)
   const tierMeta = React.useMemo(() => {
     switch (prediction.confidence_tier) {
       case 'GOAL_MACHINE':
-        return { label: 'GOAL MACHINE 🔥', bg: 'rgba(239, 68, 68, 0.15)', border: '#ef4444', text: '#fca5a5' };
+        return { label: 'GOAL MACHINE 🔥', bg: '#fef2f2', border: '#ef4444', text: '#b91c1c' };
       case 'OVER_25_LOCK':
-        return { label: 'OVER 2.5 LOCK ⚡', bg: 'rgba(249, 115, 22, 0.15)', border: '#f97316', text: '#fdba74' };
+        return { label: 'OVER 2.5 LOCK ⚡', bg: '#fff7ed', border: '#f97316', text: '#c2410c' };
       case 'EARLY_STRIKE':
-        return { label: 'EARLY STRIKE ⏱️', bg: 'rgba(16, 185, 129, 0.15)', border: '#10b981', text: '#6ee7b7' };
+        return { label: 'EARLY STRIKE ⏱️', bg: '#ecfdf5', border: '#10b981', text: '#047857' };
       case 'TEMPO_HIGH':
-        return { label: 'HIGH TEMPO 🚀', bg: 'rgba(139, 92, 246, 0.15)', border: '#8b5cf6', text: '#c4b5fd' };
+        return { label: 'HIGH TEMPO 🚀', bg: '#f5f3ff', border: '#8b5cf6', text: '#6d28d9' };
       default:
-        return { label: 'LEAN OVER 📈', bg: 'rgba(59, 130, 246, 0.15)', border: '#3b82f6', text: '#93c5fd' };
+        return { label: 'LEAN OVER 📈', bg: '#eff6ff', border: '#3b82f6', text: '#1d4ed8' };
     }
   }, [prediction.confidence_tier]);
 

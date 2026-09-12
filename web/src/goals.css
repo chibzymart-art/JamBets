@@ -1,180 +1,19 @@
 /* ==========================================================================
-   JamBets — Goals Specialist Hub (Gen-Z Mobile-First Stylesheet)
-   Sleek dark glassmorphism, high-octane neon accents, zero visual clutter
+   JamBets — Goals Specialist Hub (Bright Modern Gen-Z Stylesheet)
+   Clean, crisp, bright white design system matching JamBets dashboard aesthetics.
+   High contrast typography, vivid sporty accents, zero visual clutter.
    ========================================================================== */
 
 .goals-page-container {
   width: 100%;
-  max-width: 1200px;
+  max-width: 1240px;
   margin: 0 auto;
   padding: 16px 16px 80px 16px;
-  color: #f1f5f9;
+  color: #0f172a;
+  background: transparent;
 }
 
-/* 1. Hero Banner */
-.goals-hero-banner {
-  position: relative;
-  background: linear-gradient(135deg, rgba(15, 23, 42, 0.85) 0%, rgba(30, 27, 75, 0.65) 100%);
-  border: 1px solid rgba(139, 92, 246, 0.25);
-  border-radius: 20px;
-  padding: 24px;
-  margin-bottom: 20px;
-  overflow: hidden;
-  box-shadow: 0 10px 30px -10px rgba(139, 92, 246, 0.2);
-  backdrop-filter: blur(12px);
-}
-
-.goals-hero-glow {
-  position: absolute;
-  top: -50px;
-  right: -50px;
-  width: 250px;
-  height: 250px;
-  background: radial-gradient(circle, rgba(139, 92, 246, 0.35) 0%, rgba(0,0,0,0) 70%);
-  pointer-events: none;
-}
-
-.goals-hero-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  background: rgba(139, 92, 246, 0.15);
-  border: 1px solid rgba(139, 92, 246, 0.4);
-  color: #c4b5fd;
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  padding: 4px 10px;
-  border-radius: 9999px;
-  margin-bottom: 12px;
-}
-
-.goals-hero-title {
-  font-size: clamp(1.5rem, 3.5vw, 2.3rem);
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  margin: 0 0 8px 0;
-  background: linear-gradient(135deg, #ffffff 30%, #c4b5fd 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-}
-
-.goals-hero-desc {
-  font-size: 0.92rem;
-  color: #94a3b8;
-  max-width: 680px;
-  line-height: 1.5;
-  margin: 0 0 18px 0;
-}
-
-.goals-metric-strip {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  background: rgba(15, 23, 42, 0.6);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  padding: 10px 18px;
-  border-radius: 14px;
-  width: fit-content;
-}
-
-.metric-pill {
-  display: flex;
-  flex-direction: column;
-}
-
-.metric-val {
-  font-size: 1.25rem;
-  font-weight: 800;
-  color: #f8fafc;
-  line-height: 1.1;
-}
-
-.metric-val.highlight {
-  color: #34d399;
-}
-
-.metric-label {
-  font-size: 0.7rem;
-  color: #94a3b8;
-  text-transform: uppercase;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-}
-
-.metric-divider {
-  width: 1px;
-  height: 26px;
-  background: rgba(255, 255, 255, 0.12);
-}
-
-/* 2. VIP Gating Callout Banner */
-.goals-vip-lock-callout {
-  background: linear-gradient(135deg, rgba(88, 28, 135, 0.4) 0%, rgba(15, 23, 42, 0.8) 100%);
-  border: 1px solid rgba(168, 85, 247, 0.4);
-  border-radius: 16px;
-  padding: 16px 20px;
-  margin-bottom: 20px;
-  backdrop-filter: blur(10px);
-}
-
-.lock-callout-inner {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  flex-wrap: wrap;
-}
-
-.lock-icon-container {
-  font-size: 1.8rem;
-  width: 44px;
-  height: 44px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(168, 85, 247, 0.15);
-  border-radius: 12px;
-}
-
-.lock-copy {
-  flex: 1;
-  min-width: 240px;
-}
-
-.lock-copy h3 {
-  margin: 0 0 4px 0;
-  font-size: 1rem;
-  font-weight: 700;
-  color: #f3e8ff;
-}
-
-.lock-copy p {
-  margin: 0;
-  font-size: 0.85rem;
-  color: #d8b4fe;
-}
-
-.lock-cta-btn {
-  background: linear-gradient(135deg, #9333ea 0%, #7e22ce 100%);
-  color: #ffffff;
-  border: none;
-  border-radius: 12px;
-  padding: 10px 18px;
-  font-size: 0.88rem;
-  font-weight: 700;
-  cursor: pointer;
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
-  box-shadow: 0 4px 14px rgba(147, 51, 234, 0.4);
-}
-
-.lock-cta-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(147, 51, 234, 0.6);
-}
-
-/* 3. Controls & Filter Bar */
+/* 1. Controls & Filter Bar (Sticky/Crisp Top Position) */
 .goals-controls-bar {
   display: flex;
   flex-direction: column;
@@ -182,6 +21,7 @@
   margin-bottom: 20px;
 }
 
+/* Market Filter Tabs */
 .goals-market-tabs {
   display: flex;
   gap: 8px;
@@ -196,29 +36,32 @@
 
 .goals-tab-btn {
   white-space: nowrap;
-  background: rgba(15, 23, 42, 0.6);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  color: #94a3b8;
-  padding: 8px 16px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  color: #475569;
+  padding: 8px 18px;
   border-radius: 12px;
   font-size: 0.84rem;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
 }
 
 .goals-tab-btn:hover {
-  background: rgba(30, 41, 59, 0.8);
-  color: #f1f5f9;
+  background: #f1f5f9;
+  color: #0f172a;
+  border-color: #cbd5e1;
 }
 
 .goals-tab-btn.active {
-  background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%);
+  background: #0f172a;
   color: #ffffff;
-  border-color: #8b5cf6;
-  box-shadow: 0 4px 12px rgba(124, 58, 237, 0.35);
+  border-color: #0f172a;
+  box-shadow: 0 3px 10px rgba(15, 23, 42, 0.18);
 }
 
+/* Sub-filters (Dates + Search) */
 .goals-subfilters-row {
   display: flex;
   align-items: center;
@@ -233,53 +76,68 @@
 }
 
 .date-pill {
-  background: rgba(15, 23, 42, 0.5);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  color: #94a3b8;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  color: #475569;
   padding: 6px 14px;
   border-radius: 9999px;
   font-size: 0.78rem;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.15s ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+}
+
+.date-pill:hover {
+  background: #f8fafc;
+  color: #0f172a;
+  border-color: #cbd5e1;
 }
 
 .date-pill.active {
-  background: #3b82f6;
+  background: #059669;
   color: #ffffff;
-  border-color: #3b82f6;
+  border-color: #059669;
+  box-shadow: 0 2px 6px rgba(5, 150, 105, 0.25);
 }
 
 .goals-search-box {
   position: relative;
   display: flex;
   align-items: center;
-  background: rgba(15, 23, 42, 0.6);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
   border-radius: 12px;
-  padding: 6px 12px;
+  padding: 7px 12px;
   min-width: 240px;
   max-width: 340px;
   flex: 1;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.goals-search-box:focus-within {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
 }
 
 .search-icon {
   font-size: 0.85rem;
   margin-right: 6px;
-  opacity: 0.6;
+  opacity: 0.5;
 }
 
 .goals-search-input {
   background: transparent;
   border: none;
   outline: none;
-  color: #f8fafc;
+  color: #0f172a;
   font-size: 0.82rem;
   width: 100%;
 }
 
 .goals-search-input::placeholder {
-  color: #64748b;
+  color: #94a3b8;
 }
 
 .clear-search-btn {
@@ -291,7 +149,11 @@
   padding: 0 4px;
 }
 
-/* 4. Goal Card (Gen-Z Mobile First) */
+.clear-search-btn:hover {
+  color: #475569;
+}
+
+/* 2. Goal Card (Bright Modern Gen-Z Mobile First) */
 .goals-cards-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
@@ -299,8 +161,8 @@
 }
 
 .goal-card-genz {
-  background: rgba(15, 23, 42, 0.75);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
   border-radius: 16px;
   padding: 16px;
   display: flex;
@@ -308,15 +170,16 @@
   gap: 12px;
   position: relative;
   transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
-  backdrop-filter: blur(10px);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.02);
 }
 
 .goal-card-genz:hover {
   transform: translateY(-2px);
-  border-color: rgba(139, 92, 246, 0.35);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  border-color: #cbd5e1;
+  box-shadow: 0 10px 22px -4px rgba(0, 0, 0, 0.08);
 }
 
+/* Card Header: League & Status */
 .goal-card-header {
   display: flex;
   align-items: center;
@@ -334,13 +197,13 @@
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #a855f7;
+  background: #2563eb;
 }
 
 .goal-league-text {
   font-size: 0.74rem;
-  color: #94a3b8;
-  font-weight: 600;
+  color: #64748b;
+  font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.03em;
   white-space: nowrap;
@@ -351,8 +214,9 @@
 .goal-time-badge {
   font-size: 0.74rem;
   font-weight: 600;
-  color: #cbd5e1;
-  background: rgba(255, 255, 255, 0.05);
+  color: #475569;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
   padding: 3px 8px;
   border-radius: 6px;
 }
@@ -363,9 +227,9 @@
   gap: 5px;
   font-size: 0.72rem;
   font-weight: 700;
-  color: #ef4444;
-  background: rgba(239, 68, 68, 0.12);
-  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #dc2626;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
   padding: 3px 8px;
   border-radius: 6px;
 }
@@ -387,9 +251,9 @@
 .goal-ft-badge {
   font-size: 0.72rem;
   font-weight: 700;
-  color: #10b981;
-  background: rgba(16, 185, 129, 0.12);
-  border: 1px solid rgba(16, 185, 129, 0.3);
+  color: #059669;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
   padding: 3px 8px;
   border-radius: 6px;
 }
@@ -416,10 +280,10 @@
 }
 
 .goal-team-name {
-  font-size: 0.95rem;
-  font-weight: 700;
-  color: #f8fafc;
-  line-height: 1.2;
+  font-size: 0.96rem;
+  font-weight: 750;
+  color: #0f172a;
+  line-height: 1.25;
 }
 
 .goal-vs-divider {
@@ -430,22 +294,22 @@
 }
 
 .goal-vs-text {
-  font-size: 0.7rem;
+  font-size: 0.72rem;
   font-weight: 800;
-  color: #475569;
+  color: #94a3b8;
 }
 
 .goal-live-score {
-  font-size: 1.1rem;
+  font-size: 1.15rem;
   font-weight: 800;
-  color: #38bdf8;
+  color: #2563eb;
   letter-spacing: 0.05em;
 }
 
-/* Hero Section */
+/* Hero Prediction Pill Inside Card */
 .goal-hero-section {
-  background: rgba(10, 15, 29, 0.7);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
   border-radius: 12px;
   padding: 10px 14px;
 }
@@ -471,7 +335,7 @@
   font-size: 0.86rem;
   font-weight: 800;
   letter-spacing: 0.02em;
-  color: #ffffff;
+  color: #0f172a;
 }
 
 .goal-prob-pill {
@@ -481,9 +345,9 @@
 }
 
 .goal-prob-val {
-  font-size: 1.05rem;
+  font-size: 1.08rem;
   font-weight: 800;
-  color: #34d399;
+  color: #059669;
   line-height: 1;
 }
 
@@ -491,6 +355,7 @@
   font-size: 0.65rem;
   color: #64748b;
   text-transform: uppercase;
+  font-weight: 600;
 }
 
 .goal-tier-pill {
@@ -504,14 +369,14 @@
   white-space: nowrap;
 }
 
-/* Locked Banner */
+/* Locked Banner Inside Card */
 .goal-locked-banner {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
   cursor: pointer;
-  padding: 4px 0;
+  padding: 6px 4px;
 }
 
 .goal-lock-icon {
@@ -527,24 +392,29 @@
 .goal-locked-title {
   font-size: 0.85rem;
   font-weight: 700;
-  color: #cbd5e1;
+  color: #1e293b;
 }
 
 .goal-locked-sub {
   font-size: 0.7rem;
-  color: #a855f7;
+  color: #7c3aed;
   font-weight: 600;
 }
 
 .goal-unlock-pill-btn {
-  background: rgba(168, 85, 247, 0.2);
-  border: 1px solid rgba(168, 85, 247, 0.4);
-  color: #d8b4fe;
+  background: #7c3aed;
+  border: none;
+  color: #ffffff;
   font-size: 0.75rem;
   font-weight: 700;
-  padding: 4px 10px;
+  padding: 5px 12px;
   border-radius: 8px;
   cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.goal-unlock-pill-btn:hover {
+  background: #6d28d9;
 }
 
 /* Micro Stats Grid */
@@ -552,7 +422,8 @@
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 8px;
-  background: rgba(10, 15, 29, 0.4);
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
   border-radius: 10px;
   padding: 8px 10px;
 }
@@ -572,13 +443,13 @@
 }
 
 .stat-val {
-  font-size: 0.85rem;
+  font-size: 0.86rem;
   font-weight: 700;
-  color: #e2e8f0;
+  color: #0f172a;
 }
 
 .stat-val.highlight {
-  color: #38bdf8;
+  color: #2563eb;
 }
 
 /* Settlement Status Strip */
@@ -594,21 +465,21 @@
 }
 
 .goal-settlement-strip.status-won {
-  background: rgba(16, 185, 129, 0.12);
-  border: 1px solid rgba(16, 185, 129, 0.25);
-  color: #6ee7b7;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  color: #065f46;
 }
 
 .goal-settlement-strip.status-lost {
-  background: rgba(239, 68, 68, 0.1);
-  border: 1px solid rgba(239, 68, 68, 0.25);
-  color: #fca5a5;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #991b1b;
 }
 
 .goal-settlement-strip.status-void {
-  background: rgba(100, 116, 139, 0.12);
-  border: 1px solid rgba(100, 116, 139, 0.25);
-  color: #cbd5e1;
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  color: #475569;
 }
 
 .settlement-left {
@@ -628,7 +499,7 @@
 
 .ht-score-tag {
   font-size: 0.72rem;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.05);
   padding: 2px 6px;
   border-radius: 4px;
 }
@@ -643,16 +514,17 @@
   justify-content: center;
   padding: 60px 20px;
   text-align: center;
-  background: rgba(15, 23, 42, 0.4);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 20px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
 }
 
 .goals-spinner {
   width: 40px;
   height: 40px;
-  border: 3px solid rgba(139, 92, 246, 0.2);
-  border-top-color: #8b5cf6;
+  border: 3px solid #e2e8f0;
+  border-top-color: #2563eb;
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
   margin-bottom: 16px;
@@ -669,7 +541,7 @@
 
 .reset-filter-btn,
 .goals-retry-btn {
-  background: #7c3aed;
+  background: #0f172a;
   color: #ffffff;
   border: none;
   padding: 8px 18px;
@@ -678,25 +550,18 @@
   font-weight: 700;
   margin-top: 14px;
   cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.reset-filter-btn:hover,
+.goals-retry-btn:hover {
+  background: #1e293b;
 }
 
 /* Mobile Responsiveness (390px - 768px) */
 @media (max-width: 768px) {
   .goals-page-container {
     padding: 12px 12px 60px 12px;
-  }
-
-  .goals-hero-banner {
-    padding: 16px;
-  }
-
-  .goals-hero-title {
-    font-size: 1.4rem;
-  }
-
-  .goals-metric-strip {
-    width: 100%;
-    justify-content: space-around;
   }
 
   .goals-cards-grid {
