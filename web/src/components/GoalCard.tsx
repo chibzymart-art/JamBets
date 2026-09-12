@@ -163,7 +163,13 @@ export const GoalCard: React.FC<GoalCardProps> = ({
 
   // Tier Color Config (Maintains all rankings)
   const tierMeta = React.useMemo(() => {
-    switch (prediction.confidence_tier) {
+    let tier = prediction.confidence_tier;
+    if ((tier === 'LOCKED' || !tier) && !isLocked) {
+      const prob = prediction.probability || 0.70;
+      tier = prob >= 0.80 ? (isOver25 ? 'GOAL_MACHINE' : 'EARLY_STRIKE') : (prob >= 0.70 ? (isOver25 ? 'OVER_25_LOCK' : 'TEMPO_HIGH') : 'LEAN_OVER');
+    }
+
+    switch (tier) {
       case 'GOAL_MACHINE':
         return { label: 'GOAL MACHINE 🔥', bg: '#fef2f2', border: '#ef4444', text: '#b91c1c' };
       case 'OVER_25_LOCK':
@@ -175,9 +181,12 @@ export const GoalCard: React.FC<GoalCardProps> = ({
       default:
         return { label: 'LEAN OVER 📈', bg: '#eff6ff', border: '#3b82f6', text: '#1d4ed8' };
     }
-  }, [prediction.confidence_tier]);
+  }, [prediction.confidence_tier, isLocked, prediction.probability, isOver25]);
 
-  const probPercent = prediction.probability ? `${(prediction.probability * 100).toFixed(1)}%` : '--%';
+  const effectiveProbability = prediction.probability ?? (
+    !isLocked && prediction.xg_combined ? Math.min(0.88, Math.max(0.62, (prediction.xg_combined / 4.0) * 0.85)) : null
+  );
+  const probPercent = effectiveProbability ? `${(effectiveProbability * 100).toFixed(1)}%` : '--%';
 
   // Score display (no Won or Lose, just the score)
   const scoreDisplay = prediction.actual_score || (f && f.home_score !== null && f.home_score !== undefined && f.away_score !== null && f.away_score !== undefined ? `${f.home_score} - ${f.away_score}` : null);

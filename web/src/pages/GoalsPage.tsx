@@ -75,10 +75,14 @@ export const GoalsPage: React.FC<GoalsPageProps> = ({
       setLoading(true);
       setError(null);
 
-      // Attempt Edge API first, gracefully fallback to Supabase query
+      // Attempt Edge API first with user auth token, gracefully fallback to Supabase query
       let data: GoalPredictionItem[] = [];
       try {
-        const res = await fetch('/api/goals-feed');
+        const token = (await supabase.auth.getSession()).data.session?.access_token;
+        const headers: Record<string, string> = { Accept: 'application/json' };
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+
+        const res = await fetch('/api/goals-feed', { headers });
         if (res.ok) {
           const contentType = res.headers.get('content-type') || '';
           if (contentType.includes('application/json')) {
