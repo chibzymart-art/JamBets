@@ -765,7 +765,7 @@ body {
   display: flex;
   justify-content: center; /* Centered on Desktop */
   align-items: center;
-  gap: 10px;
+  gap: 12px; /* Distinct gap between each card */
   margin: 10px auto 14px;
   width: 100%;
   max-width: 100%;
@@ -775,16 +775,18 @@ body {
   background: #ffffff;
   border: 1px solid var(--border-subtle);
   border-radius: 9px;
-  padding: 5px 10px;
+  padding: 6px 12px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   cursor: pointer;
   transition: all 0.15s ease;
   box-shadow: var(--shadow-xs);
-  min-width: 130px;
-  max-width: 180px;
-  flex: 0 1 180px;
+  min-width: 170px;
+  max-width: 220px;
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
 .sport-card:hover {
@@ -802,7 +804,9 @@ body {
 .sport-card-left {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
+  min-width: 0;
+  flex: 1 1 auto;
 }
 
 .sport-icon-circle {
@@ -824,6 +828,8 @@ body {
 .sport-info-titles {
   display: flex;
   flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .sport-title-text {
@@ -832,6 +838,7 @@ body {
   font-weight: 800;
   color: var(--text-primary);
   line-height: 1.15;
+  white-space: nowrap;
 }
 
 .sport-card.active .sport-title-text {
@@ -842,6 +849,9 @@ body {
   font-size: 9px;
   color: var(--text-muted);
   line-height: 1.1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .sport-card.active .sport-sub-text {
@@ -849,7 +859,7 @@ body {
 }
 
 .sport-count-pill {
-  padding: 1px 6px;
+  padding: 1px 7px;
   border-radius: 9999px;
   font-size: 9.5px;
   font-weight: 800;
@@ -857,7 +867,8 @@ body {
   background: #f1f5f9;
   color: var(--text-secondary);
   border: 1px solid var(--border-subtle);
-  margin-left: 3px;
+  margin-left: 8px;
+  flex-shrink: 0;
 }
 
 .sport-card.active .sport-count-pill {
@@ -10455,8 +10466,8 @@ body {
     overflow-x: auto !important;
     -webkit-overflow-scrolling: touch !important;
     scroll-snap-type: x mandatory !important;
-    gap: 8px !important;
-    padding: 2px 4px 6px !important;
+    gap: 12px !important; /* Distinct gap between each card */
+    padding: 2px 6px 8px !important;
     margin: 6px 0 12px !important;
     width: 100% !important;
     max-width: 100% !important;
@@ -10469,13 +10480,36 @@ body {
   }
 
   .sport-card {
-    flex: 0 0 138px !important;
-    min-width: 138px !important;
-    max-width: 138px !important;
-    padding: 5px 8px !important;
+    flex: 0 0 auto !important;
+    min-width: 175px !important;
+    max-width: none !important;
+    padding: 6px 12px !important;
     scroll-snap-align: start !important;
     box-sizing: border-box !important;
     white-space: nowrap !important;
+    overflow: hidden !important;
+  }
+
+  .sport-card-left {
+    min-width: 0 !important;
+    flex: 1 1 auto !important;
+    gap: 7px !important;
+  }
+
+  .sport-info-titles {
+    min-width: 0 !important;
+    overflow: hidden !important;
+  }
+
+  .sport-sub-text {
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+
+  .sport-count-pill {
+    flex-shrink: 0 !important;
+    margin-left: 8px !important;
   }
 
   /* Daily Scorecard Section */
