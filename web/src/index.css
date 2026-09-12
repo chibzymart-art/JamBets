@@ -763,9 +763,12 @@ body {
    ===================================================================== */
 .sport-categories-bar {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin: 10px 0 12px;
+  justify-content: center; /* Centered on Desktop */
+  align-items: center;
+  gap: 10px;
+  margin: 10px auto 14px;
+  width: 100%;
+  max-width: 100%;
 }
 
 .sport-card {
@@ -781,7 +784,7 @@ body {
   box-shadow: var(--shadow-xs);
   min-width: 130px;
   max-width: 180px;
-  flex: 1 1 auto;
+  flex: 0 1 180px;
 }
 
 .sport-card:hover {
@@ -10442,15 +10445,19 @@ body {
     justify-content: center !important;
   }
 
-  /* Sport categories horizontal scroll swipe */
+  /* Sport categories strictly single-line horizontal scroll on mobile */
   .sport-categories-bar {
     display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important; /* STRICTLY SINGLE LINE - NO WRAPPING INTO 2 OR 3 LINES */
+    justify-content: flex-start !important;
+    align-items: center !important;
     overflow-x: auto !important;
     -webkit-overflow-scrolling: touch !important;
     scroll-snap-type: x mandatory !important;
     gap: 8px !important;
-    padding: 2px 2px 8px !important;
-    margin: 8px 0 14px !important;
+    padding: 2px 4px 6px !important;
+    margin: 6px 0 12px !important;
     width: 100% !important;
     max-width: 100% !important;
     box-sizing: border-box !important;
@@ -10462,10 +10469,13 @@ body {
   }
 
   .sport-card {
-    flex: 0 0 135px !important;
+    flex: 0 0 138px !important;
+    min-width: 138px !important;
+    max-width: 138px !important;
     padding: 5px 8px !important;
     scroll-snap-align: start !important;
     box-sizing: border-box !important;
+    white-space: nowrap !important;
   }
 
   /* Daily Scorecard Section */
