@@ -5695,100 +5695,193 @@ body {
   animation: pulse 1s infinite alternate;
 }
 
-.launchpad-button-row {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 16px;
+/* Compact Grouped Engine Launchpad Controls */
+.compact-launchpad {
+  padding: 16px 20px !important;
 }
 
-@media (max-width: 768px) {
-  .launchpad-button-row {
+.compact-header {
+  margin-bottom: 12px !important;
+}
+
+.engine-groups-container {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px;
+  width: 100%;
+}
+
+@media (max-width: 900px) {
+  .engine-groups-container {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+}
+
+.engine-group-box {
+  background: rgba(15, 23, 42, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
+}
+
+.engine-group-box.core-football-box {
+  border-left: 3px solid #10b981;
+}
+
+.engine-group-box.goals-specialist-box {
+  border-left: 3px solid #f97316;
+}
+
+.engine-group-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.group-icon {
+  font-size: 1rem;
+}
+
+.group-title {
+  font-family: var(--font-heading);
+  font-size: 0.85rem;
+  font-weight: 800;
+  color: #f8fafc;
+  letter-spacing: 0.02em;
+}
+
+.group-tag {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #94a3b8;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 2px 7px;
+  border-radius: 6px;
+  margin-left: auto;
+}
+
+.engine-group-triggers {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+@media (max-width: 520px) {
+  .engine-group-triggers {
     grid-template-columns: 1fr;
   }
 }
 
-.btn-cyber-trigger {
-  padding: 18px 24px;
-  border-radius: 14px;
-  cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+.compact-trigger-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 8px;
   border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
   text-align: left;
 }
 
-.btn-inner {
-  display: flex;
-  align-items: center;
-  gap: 16px;
+.compact-trigger-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
 }
 
-.btn-icon {
-  font-size: 28px;
+.compact-trigger-btn .trigger-icon {
+  font-size: 1.1rem;
   line-height: 1;
+  flex-shrink: 0;
 }
 
-.btn-copy-col {
+.trigger-copy {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 1px;
+  overflow: hidden;
 }
 
-.btn-title {
-  font-family: var(--font-heading);
-  font-size: 16px;
-  font-weight: 900;
-  letter-spacing: 0.03em;
-}
-
-.btn-meta {
-  font-size: 12px;
-  font-weight: 500;
-  opacity: 0.85;
-}
-
-.btn-cook-predictions {
-  background: linear-gradient(135deg, #065f46 0%, #059669 50%, #10b981 100%);
+.compact-trigger-btn .trigger-label {
+  font-size: 0.78rem;
+  font-weight: 750;
   color: #ffffff;
-  box-shadow: 0 8px 25px -4px rgba(16, 185, 129, 0.4);
-  border-color: rgba(52, 211, 153, 0.4);
+  white-space: nowrap;
 }
 
-.btn-cook-predictions:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 12px 30px -4px rgba(16, 185, 129, 0.6);
+.compact-trigger-btn .trigger-meta {
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.65);
+  white-space: nowrap;
+}
+
+/* Specific theme gradients */
+.btn-football-pred {
+  background: linear-gradient(135deg, rgba(6, 95, 70, 0.9) 0%, rgba(5, 150, 105, 0.9) 100%);
+  border-color: rgba(52, 211, 153, 0.35);
+  color: #ffffff;
+  box-shadow: 0 3px 10px rgba(16, 185, 129, 0.2);
+}
+
+.btn-football-pred:hover:not(:disabled) {
+  background: linear-gradient(135deg, #065f46 0%, #059669 100%);
   border-color: #34d399;
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.4);
 }
 
-.btn-bag-wins {
-  background: linear-gradient(135deg, #1e40af 0%, #2563eb 50%, #3b82f6 100%);
+.btn-football-settle {
+  background: linear-gradient(135deg, rgba(30, 64, 175, 0.9) 0%, rgba(37, 99, 235, 0.9) 100%);
+  border-color: rgba(96, 165, 250, 0.35);
   color: #ffffff;
-  box-shadow: 0 8px 25px -4px rgba(59, 130, 246, 0.4);
-  border-color: rgba(96, 165, 250, 0.4);
+  box-shadow: 0 3px 10px rgba(59, 130, 246, 0.2);
 }
 
-.btn-bag-wins:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 12px 30px -4px rgba(59, 130, 246, 0.6);
+.btn-football-settle:hover:not(:disabled) {
+  background: linear-gradient(135deg, #1e40af 0%, #2563eb 100%);
   border-color: #60a5fa;
+  box-shadow: 0 4px 14px rgba(59, 130, 246, 0.4);
 }
 
-.btn-cook-goals {
-  background: linear-gradient(135deg, #7c2d12 0%, #ea580c 50%, #f97316 100%);
+.btn-goals-pred {
+  background: linear-gradient(135deg, rgba(124, 45, 18, 0.9) 0%, rgba(234, 88, 12, 0.9) 100%);
+  border-color: rgba(251, 146, 60, 0.35);
   color: #ffffff;
-  box-shadow: 0 8px 25px -4px rgba(234, 88, 12, 0.4);
-  border-color: rgba(251, 146, 60, 0.4);
+  box-shadow: 0 3px 10px rgba(234, 88, 12, 0.2);
 }
 
-.btn-cook-goals:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 12px 30px -4px rgba(234, 88, 12, 0.6);
+.btn-goals-pred:hover:not(:disabled) {
+  background: linear-gradient(135deg, #7c2d12 0%, #ea580c 100%);
   border-color: #fb923c;
+  box-shadow: 0 4px 14px rgba(234, 88, 12, 0.4);
 }
 
-.btn-cyber-trigger:disabled {
-  opacity: 0.6;
+.btn-goals-settle {
+  background: linear-gradient(135deg, rgba(15, 118, 110, 0.9) 0%, rgba(13, 148, 136, 0.9) 100%);
+  border-color: rgba(45, 212, 191, 0.35);
+  color: #ffffff;
+  box-shadow: 0 3px 10px rgba(20, 184, 166, 0.2);
+}
+
+.btn-goals-settle:hover:not(:disabled) {
+  background: linear-gradient(135deg, #0f766e 0%, #0d9488 100%);
+  border-color: #2dd4bf;
+  box-shadow: 0 4px 14px rgba(20, 184, 166, 0.4);
+}
+
+.compact-trigger-btn:disabled {
+  opacity: 0.45;
   cursor: not-allowed;
   transform: none;
+}
+
+.compact-trigger-btn.cooking {
+  animation: pulse 1s infinite alternate;
 }
 
 /* Real-time Telemetry Grid */

@@ -615,11 +615,21 @@ class AdminTaskPoller(threading.Thread):
                     )
                     print(f"[POLLER] Admin task {task_name} finished successfully with status: COMPLETED", flush=True)
 
-                elif task_name in ("RUN_SETTLEMENTS", "RUN_SETTLEMENT_ENGINE"):
+                elif task_name in ("RUN_SETTLEMENTS", "RUN_SETTLEMENT_ENGINE", "SETTLE_ALL"):
                     print("[POLLER] Executing settlement cycle (backward-looking override)...", flush=True)
                     from python.src.football.settlement_scheduler import SettlementScheduler
                     settler = SettlementScheduler(supabase_client=supabase)
                     result = settler.run_settlement_cycle(force=True)
+
+                    # Also execute Goals Specialist settlement pass so all predictions settle together
+                    try:
+                        print("[POLLER] Also executing Goals Specialist settlement pass...", flush=True)
+                        from python.src.goals.goals_settlement import GoalsSettlementEngine
+                        goals_res = GoalsSettlementEngine(db=supabase).settle()
+                        result["goals_settlement"] = goals_res
+                    except Exception as g_err:
+                        print(f"[POLLER WARN] Goals settlement pass error: {g_err}", flush=True)
+
                     supabase.update_admin_task(
                         task_id=task_id,
                         status="COMPLETED",
@@ -627,7 +637,29 @@ class AdminTaskPoller(threading.Thread):
                     )
                     print(f"[POLLER] Admin task {task_name} finished successfully", flush=True)
 
-                elif task_name in ("RUN_GOALS_ENGINE", "RUN_GOALS_PREDICTIONS", "RUN_GOALS_CYCLE"):
+                elif task_name in ("RUN_GOALS_SETTLEMENT", "SETTLE_GOALS", "GOALS_SETTLEMENT"):
+                    print("[POLLER] Executing dedicated Goals Specialist settlement engine...", flush=True)
+                    from python.src.goals.goals_settlement import GoalsSettlementEngine
+                    goals_res = GoalsSettlementEngine(db=supabase).settle()
+                    supabase.update_admin_task(
+                        task_id=task_id,
+                        status="COMPLETED",
+                        metadata={"status": "COMPLETED", "goals_settlement": goals_res}
+                    )
+                    print(f"[POLLER] Admin task {task_name} finished successfully with {goals_res.get('settled', 0)} settled", flush=True)
+
+                elif task_name in ("RUN_GOALS_PREDICTIONS", "PREDICT_GOALS"):
+                    print("[POLLER] Executing Goals Specialist prediction pass...", flush=True)
+                    from python.src.goals.run_goals_cycle import run_cycle
+                    result = run_cycle(predict=True, settle=False)
+                    supabase.update_admin_task(
+                        task_id=task_id,
+                        status="COMPLETED",
+                        metadata=result
+                    )
+                    print(f"[POLLER] Admin task {task_name} finished successfully", flush=True)
+
+                elif task_name in ("RUN_GOALS_ENGINE", "RUN_GOALS_CYCLE"):
                     print("[POLLER] Executing Goals Specialist simulation & settlement cycle...", flush=True)
                     from python.src.goals.run_goals_cycle import run_cycle
                     result = run_cycle(predict=True, settle=True)

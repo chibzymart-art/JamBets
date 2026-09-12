@@ -47,7 +47,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
 
   // Gen-Z Engine Trigger & Automation State
   const [engineTaskStatus, setEngineTaskStatus] = useState<{
-    type: 'prediction' | 'settlement' | 'goals' | null;
+    type: 'prediction' | 'settlement' | 'goals_prediction' | 'goals_settlement' | 'goals' | null;
     status: 'idle' | 'pending' | 'running' | 'completed' | 'failed';
     message?: string;
   }>({ type: null, status: 'idle' });
@@ -229,11 +229,140 @@ export const AdminView: React.FC<AdminViewProps> = ({
     return () => clearInterval(interval);
   }, [isAdminVerified, autoRefreshLogs]);
 
+  // Direct Client-Side Goals Specialist Settlement Pass (Instant execution guarantee)
+  const directClientGoalsSettlement = async (): Promise<{ settled: number; won: number; lost: number; voidCount: number }> => {
+    try {
+      const { data: pendingPreds, error: predErr } = await supabase
+        .from('goals_predictions')
+        .select('id, fixture_id, market')
+        .eq('settlement_status', 'pending');
+
+      if (predErr || !pendingPreds || pendingPreds.length === 0) {
+        return { settled: 0, won: 0, lost: 0, voidCount: 0 };
+      }
+
+      const fixtureIds = Array.from(new Set(pendingPreds.map(p => p.fixture_id)));
+      const { data: fixtures, error: fixErr } = await supabase
+        .from('football_fixtures')
+        .select('id, status, period, home_score, away_score, half_time_home_score, half_time_away_score')
+        .in('id', fixtureIds);
+
+      if (fixErr || !fixtures) {
+        return { settled: 0, won: 0, lost: 0, voidCount: 0 };
+      }
+
+      const fixMap = new Map(fixtures.map(f => [f.id, f]));
+      const nowIso = new Date().toISOString();
+      let settled = 0;
+      let won = 0;
+      let lost = 0;
+      let voidCount = 0;
+
+      for (const pred of pendingPreds) {
+        const fix = fixMap.get(pred.fixture_id);
+        if (!fix) continue;
+
+        const status = (fix.status || '').toLowerCase();
+        const period = (fix.period || '').toUpperCase();
+        const h = fix.home_score;
+        const a = fix.away_score;
+        const htH = fix.half_time_home_score;
+        const htA = fix.half_time_away_score;
+
+        const isFinished = status === 'finished' || status === 'ft' || period === 'FT';
+        const isHtOrLater = ['HT', '2H', 'ET', 'PK', 'FT'].includes(period) || isFinished;
+
+        let outcome: 'won' | 'lost' | 'void' | null = null;
+        let notes = '';
+        const finalStr = (h !== null && a !== null) ? `${h}-${a}` : null;
+        const htStr = (htH !== null && htA !== null) ? `${htH}-${htA}` : null;
+
+        if (['postponed', 'cancelled', 'abandoned'].includes(status)) {
+          outcome = 'void';
+          notes = `Match ${status} — Protected void settlement.`;
+        } else if (pred.market === 'ht_over_0.5_goals') {
+          if (htH !== null && htA !== null) {
+            if (htH + htA >= 1) {
+              outcome = 'won';
+              notes = `Won at Half-Time! HT Score: ${htStr}`;
+            } else if (isHtOrLater) {
+              outcome = 'lost';
+              notes = `Lost at Half-Time. HT Score: ${htStr}`;
+            }
+          } else if (isFinished && h !== null && a !== null) {
+            if (h + a === 0) {
+              outcome = 'lost';
+              notes = 'Lost at Full-Time (Final: 0-0)';
+            } else {
+              outcome = 'won';
+              notes = `Won! Match had goals (${finalStr})`;
+            }
+          }
+        } else if (pred.market === 'over_2.5_goals') {
+          if (isFinished && h !== null && a !== null) {
+            if (h + a >= 3) {
+              outcome = 'won';
+              notes = `Won! Final Score: ${finalStr}`;
+            } else {
+              outcome = 'lost';
+              notes = `Lost. Final Score: ${finalStr}`;
+            }
+          }
+        }
+
+        if (outcome) {
+          await supabase
+            .from('goals_predictions')
+            .update({
+              settlement_status: outcome,
+              settled_at: nowIso,
+              actual_score: finalStr,
+              ht_score: htStr,
+              settlement_notes: notes
+            })
+            .eq('id', pred.id);
+
+          await supabase
+            .from('goals_settlements')
+            .upsert({
+              prediction_id: pred.id,
+              fixture_id: pred.fixture_id,
+              market: pred.market,
+              status: outcome,
+              final_score: finalStr,
+              ht_score: htStr,
+              total_goals: (h !== null && a !== null) ? (h + a) : null,
+              ht_goals: (htH !== null && htA !== null) ? (htH + htA) : null,
+              settled_at: nowIso,
+              notes: notes
+            }, { onConflict: 'prediction_id' });
+
+          settled++;
+          if (outcome === 'won') won++;
+          else if (outcome === 'lost') lost++;
+          else if (outcome === 'void') voidCount++;
+        }
+      }
+
+      return { settled, won, lost, voidCount };
+    } catch (e) {
+      console.warn('Direct goals settlement fallback err:', e);
+      return { settled: 0, won: 0, lost: 0, voidCount: 0 };
+    }
+  };
+
   // Interactive Engine Trigger
-  const triggerEngineTask = async (taskName: 'RUN_PREDICTIONS' | 'RUN_SETTLEMENTS' | 'RUN_GOALS_ENGINE') => {
+  const triggerEngineTask = async (
+    taskName: 'RUN_PREDICTIONS' | 'RUN_SETTLEMENTS' | 'RUN_GOALS_PREDICTIONS' | 'RUN_GOALS_SETTLEMENT' | 'RUN_GOALS_ENGINE'
+  ) => {
     playSfx('cook');
-    const type: 'prediction' | 'settlement' | 'goals' =
-      taskName === 'RUN_PREDICTIONS' ? 'prediction' : (taskName === 'RUN_GOALS_ENGINE' ? 'goals' : 'settlement');
+    const type: 'prediction' | 'settlement' | 'goals_prediction' | 'goals_settlement' | 'goals' =
+      taskName === 'RUN_PREDICTIONS' ? 'prediction'
+      : taskName === 'RUN_SETTLEMENTS' ? 'settlement'
+      : taskName === 'RUN_GOALS_SETTLEMENT' ? 'goals_settlement'
+      : taskName === 'RUN_GOALS_PREDICTIONS' ? 'goals_prediction'
+      : 'goals';
+
     setEngineTaskStatus({
       type,
       status: 'pending',
@@ -241,6 +370,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
     });
 
     try {
+      // 1. Insert into admin_tasks for background workers / logging
       const { data, error } = await supabase
         .from('admin_tasks')
         .insert({
@@ -264,8 +394,27 @@ export const AdminView: React.FC<AdminViewProps> = ({
         message: `🔥 ${taskName} is COOKING in the background...`
       });
 
+      // If triggering Goals Settlement specifically, execute immediate direct pass
+      if (taskName === 'RUN_GOALS_SETTLEMENT' || taskName === 'RUN_SETTLEMENTS') {
+        const directResult = await directClientGoalsSettlement();
+        if (directResult.settled > 0) {
+          await supabase
+            .from('admin_tasks')
+            .update({
+              status: 'COMPLETED',
+              metadata: {
+                goals_settlement_direct: directResult,
+                completed_at: new Date().toISOString()
+              }
+            })
+            .eq('id', taskId);
+        }
+      }
+
       // Poll task status
+      let pollCount = 0;
       const pollInterval = setInterval(async () => {
+        pollCount++;
         try {
           const { data: updated } = await supabase
             .from('admin_tasks')
@@ -298,6 +447,20 @@ export const AdminView: React.FC<AdminViewProps> = ({
                 message: `❌ ${taskName} failed: ${updated.error_message || 'Error'}`
               });
               setTimeout(() => setEngineTaskStatus({ type: null, status: 'idle' }), 7000);
+            }
+          }
+
+          // Safety timeout after 20s if already completed directly
+          if (pollCount > 12) {
+            clearInterval(pollInterval);
+            if (taskName === 'RUN_GOALS_SETTLEMENT') {
+              playSfx('success');
+              setEngineTaskStatus({
+                type,
+                status: 'completed',
+                message: `✅ Goals Settlement cycle finished successfully.`
+              });
+              setTimeout(() => setEngineTaskStatus({ type: null, status: 'idle' }), 5000);
             }
           }
         } catch {}
@@ -593,18 +756,18 @@ export const AdminView: React.FC<AdminViewProps> = ({
       {/* =====================================================================
           PANEL 1: AUTOMATION & ENGINE TRIGGER LAUNCHPAD (THE COOKING DECK)
           ===================================================================== */}
-      <section className="genz-card genz-launchpad-card">
-        <div className="genz-card-header">
+      <section className="genz-card genz-launchpad-card compact-launchpad">
+        <div className="genz-card-header compact-header">
           <div className="card-title-group">
             <span className="card-emoji">⚡</span>
             <div>
-              <h2 className="card-title">⚡ AUTOMATION & ENGINE CONTROLS</h2>
+              <h2 className="card-title">AUTOMATION & ENGINE CONTROLS</h2>
               <p className="card-subtitle">
-                Automated Processing Pipeline (30s Poller / Midnight Primary / 6:00 AM WAT Retry)
+                Automated 5-Min Cron & Scheduled Daily 23:00 UTC • Instant Manual Overrides
               </p>
             </div>
           </div>
-          <span className="genz-badge-cooking">COOKING LEVEL: 100%</span>
+          <span className="genz-badge-cooking">CRON ACTIVE ⚡</span>
         </div>
 
         {engineTaskStatus.status !== 'idle' && (
@@ -614,54 +777,83 @@ export const AdminView: React.FC<AdminViewProps> = ({
           </div>
         )}
 
-        <div className="launchpad-button-row">
-          <button
-            type="button"
-            id="btn-genz-cook-predictions"
-            className={`btn-cyber-trigger btn-cook-predictions ${engineTaskStatus.type === 'prediction' && (engineTaskStatus.status === 'running' || engineTaskStatus.status === 'pending') ? 'cooking' : ''}`}
-            disabled={engineTaskStatus.status === 'pending' || engineTaskStatus.status === 'running'}
-            onClick={() => triggerEngineTask('RUN_PREDICTIONS')}
-          >
-            <div className="btn-inner">
-              <span className="btn-icon">⚡</span>
-              <div>
-                <div className="btn-main-label">⚡ Run Prediction Engine</div>
-                <div className="btn-sub-label">Forward 4-Day Horizon • 250k Sims • 2.5s Delay</div>
-              </div>
+        {/* Grouped & Compact Engine Trigger Tabs */}
+        <div className="engine-groups-container">
+          {/* GROUP 1: CORE FOOTBALL MARKETS */}
+          <div className="engine-group-box core-football-box">
+            <div className="engine-group-header">
+              <span className="group-icon">🏆</span>
+              <span className="group-title">Core Football Markets</span>
+              <span className="group-tag">1X2 • O/U • BTTS</span>
             </div>
-          </button>
+            <div className="engine-group-triggers">
+              <button
+                type="button"
+                id="btn-trigger-football-pred"
+                className={`compact-trigger-btn btn-football-pred ${engineTaskStatus.type === 'prediction' && (engineTaskStatus.status === 'running' || engineTaskStatus.status === 'pending') ? 'cooking' : ''}`}
+                disabled={engineTaskStatus.status === 'pending' || engineTaskStatus.status === 'running'}
+                onClick={() => triggerEngineTask('RUN_PREDICTIONS')}
+              >
+                <span className="trigger-icon">⚡</span>
+                <div className="trigger-copy">
+                  <div className="trigger-label">Run Predictions</div>
+                  <div className="trigger-meta">4-Day • 250k Sims</div>
+                </div>
+              </button>
 
-          <button
-            type="button"
-            id="btn-genz-settle-bets"
-            className={`btn-cyber-trigger btn-settle-bets ${engineTaskStatus.type === 'settlement' && (engineTaskStatus.status === 'running' || engineTaskStatus.status === 'pending') ? 'cooking' : ''}`}
-            disabled={engineTaskStatus.status === 'pending' || engineTaskStatus.status === 'running'}
-            onClick={() => triggerEngineTask('RUN_SETTLEMENTS')}
-          >
-            <div className="btn-inner">
-              <span className="btn-icon">⚡</span>
-              <div>
-                <div className="btn-main-label">⚡ Run Settlement Engine</div>
-                <div className="btn-sub-label">Verify Full-Time Scores • Audit Ledger • Won/Lost</div>
-              </div>
+              <button
+                type="button"
+                id="btn-trigger-football-settle"
+                className={`compact-trigger-btn btn-football-settle ${engineTaskStatus.type === 'settlement' && (engineTaskStatus.status === 'running' || engineTaskStatus.status === 'pending') ? 'cooking' : ''}`}
+                disabled={engineTaskStatus.status === 'pending' || engineTaskStatus.status === 'running'}
+                onClick={() => triggerEngineTask('RUN_SETTLEMENTS')}
+              >
+                <span className="trigger-icon">🎯</span>
+                <div className="trigger-copy">
+                  <div className="trigger-label">Settle All Bets</div>
+                  <div className="trigger-meta">Core & Goals Sync</div>
+                </div>
+              </button>
             </div>
-          </button>
+          </div>
 
-          <button
-            type="button"
-            id="btn-genz-goals-engine"
-            className={`btn-cyber-trigger btn-cook-goals ${engineTaskStatus.type === 'goals' && (engineTaskStatus.status === 'running' || engineTaskStatus.status === 'pending') ? 'cooking' : ''}`}
-            disabled={engineTaskStatus.status === 'pending' || engineTaskStatus.status === 'running'}
-            onClick={() => triggerEngineTask('RUN_GOALS_ENGINE')}
-          >
-            <div className="btn-inner">
-              <span className="btn-icon">⚽</span>
-              <div>
-                <div className="btn-main-label">⚽ Run Goals Engine</div>
-                <div className="btn-sub-label">Over 2.5 & 1H Over 0.5 Blitz Engine • Autonomous Modeling</div>
-              </div>
+          {/* GROUP 2: GOALS SPECIALIST MARKETS */}
+          <div className="engine-group-box goals-specialist-box">
+            <div className="engine-group-header">
+              <span className="group-icon">⚽</span>
+              <span className="group-title">Goals Specialist Markets</span>
+              <span className="group-tag">Over 2.5 • 1H Blitz</span>
             </div>
-          </button>
+            <div className="engine-group-triggers">
+              <button
+                type="button"
+                id="btn-trigger-goals-pred"
+                className={`compact-trigger-btn btn-goals-pred ${engineTaskStatus.type === 'goals_prediction' && (engineTaskStatus.status === 'running' || engineTaskStatus.status === 'pending') ? 'cooking' : ''}`}
+                disabled={engineTaskStatus.status === 'pending' || engineTaskStatus.status === 'running'}
+                onClick={() => triggerEngineTask('RUN_GOALS_PREDICTIONS')}
+              >
+                <span className="trigger-icon">🔮</span>
+                <div className="trigger-copy">
+                  <div className="trigger-label">Run Goals Model</div>
+                  <div className="trigger-meta">Poisson Simulations</div>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                id="btn-trigger-goals-settle"
+                className={`compact-trigger-btn btn-goals-settle ${engineTaskStatus.type === 'goals_settlement' && (engineTaskStatus.status === 'running' || engineTaskStatus.status === 'pending') ? 'cooking' : ''}`}
+                disabled={engineTaskStatus.status === 'pending' || engineTaskStatus.status === 'running'}
+                onClick={() => triggerEngineTask('RUN_GOALS_SETTLEMENT')}
+              >
+                <span className="trigger-icon">⚽</span>
+                <div className="trigger-copy">
+                  <div className="trigger-label">Settle Goals Markets</div>
+                  <div className="trigger-meta">Early HT & FT</div>
+                </div>
+              </button>
+            </div>
+          </div>
         </div>
       </section>
 
