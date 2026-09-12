@@ -51,30 +51,17 @@ export default function App() {
   }
 
 
-  // Theme State: Dark View / Light View (Persisted in localStorage)
-  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
-    try {
-      const saved = localStorage.getItem('jambets_theme');
-      if (saved === 'dark' || saved === 'light') return saved;
-      return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-    } catch {
-      return 'light';
-    }
-  });
-
+  // Remove any legacy theme attributes to guarantee permanent light mode
   useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme);
-    document.body.setAttribute('data-theme', theme);
+    document.documentElement.removeAttribute('data-theme');
+    document.body.removeAttribute('data-theme');
     try {
-      localStorage.setItem('jambets_theme', theme);
+      localStorage.removeItem('jambets_theme');
+      localStorage.removeItem('jambets-theme');
     } catch {
-      // Ignore localStorage security errors if sandboxed
+      // Ignore localStorage errors
     }
-  }, [theme]);
-
-  const toggleTheme = () => {
-    setTheme((prev) => (prev === 'light' ? 'dark' : 'light'));
-  };
+  }, []);
 
   // Sports Category Selector with Cloud Supabase Dynamic Availability
   const [selectedSport, setSelectedSport] = useState<string>('football');
@@ -692,20 +679,6 @@ export default function App() {
     }
   };
 
-  const formatWatDateDisplay = (dateStr: string) => {
-    try {
-      const [year, month, day] = dateStr.split('-').map(Number);
-      const d = new Date(year, month - 1, day, 12, 0, 0);
-      return d.toLocaleDateString('en-GB', {
-        weekday: 'short',
-        day: 'numeric',
-        month: 'short'
-      });
-    } catch {
-      return dateStr;
-    }
-  };
-
   // Dynamic Lagos (WAT / UTC+1) relative calendar dates
   // Strictly dynamic: Yesterday, Today, Tomorrow, date, date
   const dynamicDateTabs = useMemo(() => {
@@ -1170,17 +1143,6 @@ export default function App() {
           </div>
 
           <div className="header-right-actions">
-            {/* Theme Toggle: Dark View / Light View */}
-            <button
-              type="button"
-              className="theme-toggle-btn"
-              onClick={toggleTheme}
-              title={theme === 'dark' ? 'Switch to Light View' : 'Switch to Dark View'}
-              aria-label="Toggle light or dark view"
-            >
-              {theme === 'dark' ? '☀️ Light' : '🌙 Dark'}
-            </button>
-
             {location.pathname === '/' && (
               <Link to="/dashboard" className="landing-nav-cta">
                 {currentUser ? '📊 Dashboard →' : '📊 Predictions →'}
@@ -1785,70 +1747,6 @@ export default function App() {
 
           {/* CENTER MAIN STREAM: FIXTURES & PREDICTIONS */}
           <div className="fixtures-stream-column">
-            {/* Stream Section Banner Header */}
-            <div className="stream-section-banner">
-              <div className="stream-banner-left">
-                <div className="calendar-green-box">📅</div>
-                <div>
-                  <div className="stream-title-text">
-                    <span>
-                      {selectedDate === 'all'
-                        ? 'All Queue Dates Fixtures'
-                        : selectedDate === dynamicDateTabs.yesterday.id
-                        ? `Yesterday's Fixtures (${dynamicDateTabs.yesterday.subLabel})`
-                        : selectedDate === dynamicDateTabs.today.id
-                        ? `Today's Fixtures (${dynamicDateTabs.today.subLabel})`
-                        : selectedDate === dynamicDateTabs.tomorrow.id
-                        ? `Tomorrow's Fixtures (${dynamicDateTabs.tomorrow.subLabel})`
-                        : `${formatWatDateDisplay(selectedDate)} Fixtures`}
-                    </span>
-                    {selectedDate === dynamicDateTabs.today.id && (
-                      <span className="live-today-pill">LIVE TODAY</span>
-                    )}
-                  </div>
-                  <p className="stream-sub-text">
-                    Matches scheduled & live settlement tracking strictly in West Africa Time (WAT / UTC+1)
-                  </p>
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                {(selectedTier !== 'all' || settlementFilter !== 'all' || scoreStatusFilter !== 'all' || selectedLeague !== 'all') && (
-                  <button
-                    type="button"
-                    className="active-filter-reset-pill"
-                    onClick={resetAllFilters}
-                    title="Click to reset active filters"
-                  >
-                    ✕ Reset Filter
-                  </button>
-                )}
-                <div className="stream-fixtures-count-badge">
-                  Fixtures: <strong>{filteredFixtures.length} Matches</strong>
-                </div>
-                <div className="expand-collapse-group">
-                  <button
-                    type="button"
-                    className="btn-toggle-expand"
-                    onClick={() => {
-                      setExpandedFixtures(new Set(fixtures.map((f) => f.id)));
-                    }}
-                  >
-                    Expand All
-                  </button>
-                  <button
-                    type="button"
-                    className="btn-toggle-expand"
-                    onClick={() => {
-                      setExpandedFixtures(new Set());
-                    }}
-                  >
-                    Collapse All
-                  </button>
-                </div>
-              </div>
-            </div>
-
             {/* Loading / Error States */}
             {error && (
               <div style={{ padding: 16, background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 12, color: '#b91c1c', fontSize: 13 }}>

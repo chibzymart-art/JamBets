@@ -247,29 +247,6 @@ body {
   object-fit: contain;
 }
 
-/* Theme Toggle Button in Header Navigation */
-.theme-toggle-btn {
-  background: #f1f5f9;
-  border: 1px solid #cbd5e1;
-  border-radius: 9999px;
-  padding: 4px 11px;
-  font-size: 11.5px;
-  font-weight: 700;
-  color: #334155;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  transition: all 0.15s ease;
-  user-select: none;
-}
-
-.theme-toggle-btn:hover {
-  background: #e2e8f0;
-  border-color: #94a3b8;
-  color: #0f172a;
-}
-
 /* Universal Top Regulatory Compliance Banner - White Background Single Line Sliding Ticker */
 .regulatory-top-banner {
   background: #ffffff !important;
@@ -1127,11 +1104,12 @@ body {
    ===================================================================== */
 .scorecard-two-cards-row {
   display: flex;
+  flex-direction: column;
   align-items: stretch;
-  gap: 10px;
+  gap: 8px;
   margin-top: 8px;
   margin-bottom: 12px;
-  flex-wrap: wrap;
+  width: 100%;
 }
 
 .compact-kpi-card {
@@ -1140,25 +1118,26 @@ body {
   border-radius: 10px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
   overflow: hidden;
-  height: 48px;
+  height: 46px;
   box-sizing: border-box;
 }
 
-/* Card 1: Win Rates inside one single-card footprint (~360px) */
+/* Card 1: Win Rates Deck - Spans full container on Desktop View */
 .winrates-kpi-card {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  width: 370px;
+  width: 100%;
   max-width: 100%;
 }
 
 .compact-kpi-segment {
-  padding: 4px 8px;
+  padding: 6px 20px;
   cursor: pointer;
   transition: all 0.15s ease;
   display: flex;
-  flex-direction: column;
-  justify-content: center;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
   background: #ffffff;
   user-select: none;
   border-right: 2px solid #cbd5e1; /* Dividing line */
@@ -1190,30 +1169,27 @@ body {
 .compact-kpi-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 3px;
-  margin-bottom: 1px;
+  gap: 8px;
+  margin-bottom: 0;
 }
 
 .compact-kpi-title {
-  font-size: 9.5px;
+  font-size: 12.5px;
   font-weight: 800;
   letter-spacing: 0.2px;
   text-transform: uppercase;
   color: var(--text-primary);
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .banger-seg .compact-kpi-title { color: #b45309; }
 .toppick-seg .compact-kpi-title { color: #c2410c; }
 
 .compact-kpi-pill {
-  font-size: 8px;
+  font-size: 9.5px;
   font-weight: 700;
-  padding: 0 4px;
-  border-radius: 3px;
+  padding: 1px 6px;
+  border-radius: 4px;
   background: #f1f5f9;
   color: #475569;
   white-space: nowrap;
@@ -1232,12 +1208,12 @@ body {
 .compact-kpi-val-row {
   display: flex;
   align-items: baseline;
-  gap: 4px;
+  gap: 8px;
 }
 
 .compact-kpi-pct {
   font-family: var(--font-heading);
-  font-size: 15px;
+  font-size: 17px;
   font-weight: 900;
   color: #059669;
   line-height: 1;
@@ -1247,28 +1223,29 @@ body {
 .compact-kpi-pct.toppick-text { color: #ea580c; }
 
 .compact-kpi-ratio {
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 600;
   color: var(--text-muted);
   white-space: nowrap;
 }
 
-/* Card 2: Activity & Settlement inside one single-card footprint (~420px) */
+/* Card 2: Activity & Settlement inside full container */
 .activity-kpi-card {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
-  width: 420px;
+  width: 100%;
   max-width: 100%;
 }
 
 .compact-act-segment {
-  padding: 4px 5px;
+  padding: 5px 12px;
   cursor: pointer;
   transition: all 0.15s ease;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   justify-content: center;
   align-items: center;
+  gap: 8px;
   text-align: center;
   background: #ffffff;
   user-select: none;
@@ -1304,12 +1281,12 @@ body {
 }
 
 .act-seg-label {
-  font-size: 8.5px;
+  font-size: 10.5px;
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.3px;
   color: var(--text-muted);
-  margin-bottom: 1px;
+  margin-bottom: 0;
   white-space: nowrap;
 }
 
@@ -1320,11 +1297,10 @@ body {
 
 .act-seg-val {
   font-family: var(--font-heading);
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 900;
   color: var(--text-primary);
   line-height: 1;
-  margin-bottom: 1px;
 }
 
 .act-seg-val.won-text { color: #15803d; }
@@ -1332,13 +1308,13 @@ body {
 .act-seg-val.pending-text { color: #0284c7; }
 
 .act-live-sub {
-  font-size: 8.5px;
+  font-size: 10px;
   font-weight: 700;
   color: #e11d48;
 }
 
 .act-seg-sub {
-  font-size: 8px;
+  font-size: 10px;
   font-weight: 600;
   color: var(--text-muted);
   white-space: nowrap;
@@ -10546,16 +10522,78 @@ body {
     border-radius: 3px !important;
   }
 
-  /* Decongested Scorecard Compact Decks on Mobile */
+  /* Reduced height of prediction scorecard KPI decks on mobile ONLY */
   .scorecard-two-cards-row {
     flex-direction: column !important;
     width: 100% !important;
+    gap: 6px !important;
+    margin-top: 4px !important;
+    margin-bottom: 8px !important;
+  }
+
+  .compact-kpi-card {
+    height: 38px !important; /* Shrunk from 48px */
+    border-radius: 8px !important;
   }
 
   .winrates-kpi-card,
   .activity-kpi-card {
     width: 100% !important;
     max-width: 100% !important;
+  }
+
+  .compact-kpi-segment {
+    padding: 2px 4px !important;
+    flex-direction: column !important;
+    justify-content: center !important;
+    border-right-width: 1.5px !important;
+  }
+
+  .compact-kpi-header {
+    gap: 2px !important;
+    margin-bottom: 0 !important;
+  }
+
+  .compact-kpi-title {
+    font-size: 8.5px !important;
+  }
+
+  .compact-kpi-pill {
+    font-size: 7px !important;
+    padding: 0 3px !important;
+  }
+
+  .compact-kpi-val-row {
+    gap: 2px !important;
+  }
+
+  .compact-kpi-pct {
+    font-size: 12px !important;
+  }
+
+  .compact-kpi-ratio {
+    font-size: 7.5px !important;
+  }
+
+  .compact-act-segment {
+    padding: 2px 2px !important;
+    flex-direction: column !important;
+    justify-content: center !important;
+    gap: 0 !important;
+    border-right-width: 1.5px !important;
+  }
+
+  .act-seg-label {
+    font-size: 7.5px !important;
+    margin-bottom: 0 !important;
+  }
+
+  .act-seg-val {
+    font-size: 11.5px !important;
+  }
+
+  .act-seg-sub {
+    display: none !important; /* Conceal to minimize vertical height on mobile */
   }
 
   /* Hide Daily 90% Bangers sidebar ONLY on mobile view */
@@ -10644,20 +10682,91 @@ body {
     overflow-x: hidden !important;
   }
 
-  .fixture-card {
-    padding: 14px 12px !important;
+  /* Shrunken Prediction Cards on Mobile ONLY */
+  .fixture-card,
+  .glance-fixture-box {
+    padding: 5px 8px !important;
+    margin-bottom: 6px !important;
+    min-height: 38px !important;
+    border-radius: 8px !important;
     width: 100% !important;
     max-width: 100% !important;
     box-sizing: border-box !important;
     overflow-x: hidden !important;
   }
 
-  .team-name {
-    font-size: 13px !important;
+  .glance-top-row {
+    margin-bottom: 2px !important;
+    gap: 4px !important;
+  }
+
+  .glance-favorite-btn {
+    padding: 1px 6px !important;
+    font-size: 9px !important;
+  }
+
+  .glance-league-pill {
+    padding: 1px 5px !important;
+    font-size: 9px !important;
+  }
+
+  .glance-kickoff-time {
+    font-size: 9px !important;
+  }
+
+  .glance-status-badge {
+    padding: 1px 4px !important;
+    font-size: 8px !important;
+  }
+
+  .glance-settlement-badge {
+    padding: 1px 4px !important;
+    font-size: 8px !important;
+  }
+
+  .glance-teams-row {
+    gap: 4px !important;
+  }
+
+  .glance-team-name {
+    font-size: 11.5px !important;
+    font-weight: 700 !important;
+  }
+
+  .glance-vs-pill {
+    font-size: 8px !important;
+    padding: 0 3px !important;
+  }
+
+  .glance-score-display {
+    font-size: 11px !important;
+  }
+
+  .glance-key-pick-card {
+    padding: 2px 5px !important;
+  }
+
+  .key-pick-outcome {
+    font-size: 10.5px !important;
+  }
+
+  .key-pick-tier-badge {
+    font-size: 7.5px !important;
+    padding: 0 3px !important;
+  }
+
+  .key-pick-prob {
+    font-size: 8.5px !important;
+  }
+
+  .glance-chevron-btn {
+    width: 20px !important;
+    height: 20px !important;
+    font-size: 9px !important;
   }
 
   .prediction-summary-box {
-    padding: 10px !important;
+    padding: 6px !important;
     width: 100% !important;
     box-sizing: border-box !important;
   }
@@ -10785,310 +10894,6 @@ body {
   .mobile-tab-label {
     line-height: 1 !important;
   }
-}
-
-/* =====================================================================
-   DARK THEME STYLESHEET SYSTEM ([data-theme="dark"])
-   ===================================================================== */
-[data-theme="dark"] {
-  --bg-primary: #0b0f19;
-  --bg-secondary: #0f172a;
-  --bg-tertiary: #1e293b;
-  --bg-card: #111827;
-  --bg-card-hover: #1f2937;
-  --border-subtle: #1e293b;
-  --border-strong: #334155;
-  --text-primary: #f8fafc;
-  --text-secondary: #cbd5e1;
-  --text-muted: #94a3b8;
-  --text-light: #64748b;
-}
-
-[data-theme="dark"] body,
-body[data-theme="dark"],
-[data-theme="dark"] .app-wrapper,
-[data-theme="dark"] #fixtures-view-section {
-  background-color: #0b0f19 !important;
-  color: #f8fafc !important;
-}
-
-[data-theme="dark"] .site-header {
-  background: #111827 !important;
-  border-bottom-color: #1e293b !important;
-}
-
-[data-theme="dark"] .header-brand {
-  color: #f8fafc !important;
-}
-
-[data-theme="dark"] .nav-link-btn {
-  color: #cbd5e1 !important;
-}
-
-[data-theme="dark"] .nav-link-btn:hover,
-[data-theme="dark"] .nav-link-btn.active {
-  background: #1e293b !important;
-  color: #f8fafc !important;
-}
-
-[data-theme="dark"] .theme-toggle-btn {
-  background: #1e293b !important;
-  border-color: #334155 !important;
-  color: #f8fafc !important;
-}
-
-[data-theme="dark"] .theme-toggle-btn:hover {
-  background: #334155 !important;
-  color: #ffffff !important;
-}
-
-[data-theme="dark"] .user-profile-pill {
-  background: #1e293b !important;
-  border-color: #334155 !important;
-  color: #f8fafc !important;
-}
-
-[data-theme="dark"] .regulatory-top-banner {
-  background: #111827 !important;
-  border-bottom-color: #1e293b !important;
-}
-
-[data-theme="dark"] .regulatory-ticker-text {
-  color: #cbd5e1 !important;
-}
-
-[data-theme="dark"] .sport-card {
-  background: #111827 !important;
-  border-color: #1e293b !important;
-}
-
-[data-theme="dark"] .sport-card:hover {
-  border-color: #334155 !important;
-  background: #1a2234 !important;
-}
-
-[data-theme="dark"] .sport-icon-circle {
-  background: #1e293b !important;
-  color: #f8fafc !important;
-}
-
-[data-theme="dark"] .sport-title-text {
-  color: #f8fafc !important;
-}
-
-[data-theme="dark"] .sport-sub-text {
-  color: #94a3b8 !important;
-}
-
-[data-theme="dark"] .sport-count-pill {
-  background: #1e293b !important;
-  color: #cbd5e1 !important;
-  border-color: #334155 !important;
-}
-
-[data-theme="dark"] .scorecard-date-header .current-date-badge {
-  background: #111827 !important;
-  border-color: #1e293b !important;
-  color: #f8fafc !important;
-}
-
-[data-theme="dark"] .date-pill-btn {
-  background: #111827 !important;
-  border-color: #1e293b !important;
-  color: #f8fafc !important;
-}
-
-[data-theme="dark"] .date-pill-btn:hover {
-  background: #1e293b !important;
-  border-color: #334155 !important;
-}
-
-[data-theme="dark"] .date-pill-btn.active {
-  background: #065f46 !important;
-  border-color: #059669 !important;
-}
-
-[data-theme="dark"] .date-pill-sub-label {
-  color: #94a3b8 !important;
-}
-
-[data-theme="dark"] .date-pill-winloss {
-  background: rgba(255, 255, 255, 0.1) !important;
-  color: #cbd5e1 !important;
-}
-
-[data-theme="dark"] .compact-kpi-card {
-  background: #111827 !important;
-  border-color: #334155 !important;
-}
-
-[data-theme="dark"] .compact-kpi-segment,
-[data-theme="dark"] .compact-act-segment {
-  background: #111827 !important;
-  border-right-color: #334155 !important;
-}
-
-[data-theme="dark"] .compact-kpi-segment:hover,
-[data-theme="dark"] .compact-act-segment:hover {
-  background: #1e293b !important;
-}
-
-[data-theme="dark"] .compact-kpi-title,
-[data-theme="dark"] .act-seg-val {
-  color: #f8fafc !important;
-}
-
-[data-theme="dark"] .compact-kpi-pill {
-  background: #1e293b !important;
-  color: #cbd5e1 !important;
-}
-
-[data-theme="dark"] .act-seg-label,
-[data-theme="dark"] .compact-kpi-ratio,
-[data-theme="dark"] .act-seg-sub {
-  color: #94a3b8 !important;
-}
-
-[data-theme="dark"] .league-pill-btn {
-  background: #111827 !important;
-  border-color: #1e293b !important;
-  color: #cbd5e1 !important;
-}
-
-[data-theme="dark"] .league-pill-btn:hover {
-  background: #1e293b !important;
-  border-color: #334155 !important;
-  color: #f8fafc !important;
-}
-
-[data-theme="dark"] .league-pill-btn.active {
-  background: #065f46 !important;
-  border-color: #059669 !important;
-  color: #ffffff !important;
-}
-
-/* Prediction Cards in Dark Mode */
-[data-theme="dark"] .glance-fixture-box.card-state-default {
-  background: #111827 !important;
-  border-color: #1e293b !important;
-}
-
-[data-theme="dark"] .glance-fixture-box.card-state-default:hover {
-  background: #1a2234 !important;
-  border-color: #334155 !important;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4) !important;
-}
-
-[data-theme="dark"] .glance-fixture-box.card-state-won {
-  background: #064e3b !important;
-  border-color: #059669 !important;
-}
-
-[data-theme="dark"] .glance-fixture-box.card-state-won:hover {
-  background: #065f46 !important;
-  border-color: #10b981 !important;
-  box-shadow: 0 4px 14px rgba(5, 150, 105, 0.25) !important;
-}
-
-[data-theme="dark"] .glance-fixture-box.card-state-lost {
-  background: #450a0a !important;
-  border-color: #dc2626 !important;
-}
-
-[data-theme="dark"] .glance-fixture-box.card-state-lost:hover {
-  background: #5c0f0f !important;
-  border-color: #ef4444 !important;
-  box-shadow: 0 4px 14px rgba(220, 38, 38, 0.25) !important;
-}
-
-[data-theme="dark"] .glance-team-name {
-  color: #f8fafc !important;
-}
-
-[data-theme="dark"] .glance-favorite-btn {
-  background: #1e293b !important;
-  border-color: #334155 !important;
-  color: #cbd5e1 !important;
-}
-
-[data-theme="dark"] .glance-favorite-btn:hover {
-  background: #334155 !important;
-  color: #ffffff !important;
-}
-
-[data-theme="dark"] .glance-league-pill {
-  background: #1e293b !important;
-  border-color: #334155 !important;
-  color: #cbd5e1 !important;
-}
-
-[data-theme="dark"] .glance-vs-pill {
-  background: #1e293b !important;
-  border-color: #334155 !important;
-  color: #94a3b8 !important;
-}
-
-[data-theme="dark"] .glance-key-pick-card {
-  background: #1e293b !important;
-  border-color: #334155 !important;
-}
-
-[data-theme="dark"] .key-pick-outcome {
-  color: #f8fafc !important;
-}
-
-[data-theme="dark"] .glance-chevron-btn {
-  background: #1e293b !important;
-  border-color: #334155 !important;
-  color: #cbd5e1 !important;
-}
-
-[data-theme="dark"] .glance-chevron-btn:hover {
-  background: #334155 !important;
-  color: #ffffff !important;
-}
-
-[data-theme="dark"] .bangers-sidebar-card {
-  background: #111827 !important;
-  border-color: #1e293b !important;
-}
-
-[data-theme="dark"] .banger-item-tile {
-  background: #1e293b !important;
-  border-color: #334155 !important;
-}
-
-[data-theme="dark"] .banger-item-tile:hover {
-  background: #273549 !important;
-  border-color: #475569 !important;
-}
-
-[data-theme="dark"] .stream-section-banner {
-  background: #111827 !important;
-  border-color: #1e293b !important;
-}
-
-[data-theme="dark"] .stream-title-text {
-  color: #f8fafc !important;
-}
-
-[data-theme="dark"] .expanded-breakdown-body {
-  background: #0f172a !important;
-  border-color: #1e293b !important;
-}
-
-[data-theme="dark"] .site-footer {
-  background: #090d16 !important;
-  border-top-color: #1e293b !important;
-}
-
-[data-theme="dark"] .mobile-app-bottom-bar {
-  background: rgba(17, 24, 39, 0.98) !important;
-  border-top-color: #1e293b !important;
-}
-
-[data-theme="dark"] .mobile-tab-item {
-  color: #94a3b8 !important;
 }
 
 
