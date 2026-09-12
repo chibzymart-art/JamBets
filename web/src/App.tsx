@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, Fragment } from 'react';
+import { useState, useEffect, useMemo, useRef, Fragment } from 'react';
 import { Routes, Route, Navigate, useNavigate, useLocation, Link } from 'react-router-dom';
 import { supabase } from './lib/supabase';
 import {
@@ -391,20 +391,26 @@ export default function App() {
     navigate('/dashboard');
   };
 
-  // Authoritative Cloud Supabase Query
-  const fetchCloudData = async () => {
+  // Cache ref to prevent hammering Supabase within 30 seconds
+  const lastFetchTimeRef = useRef<number>(0);
+
+  // Authoritative Cloud Supabase Query (Optimized Unified Query & Anti-Hammering SWR Cache)
+  const fetchCloudData = async (force: boolean = false) => {
+    const now = Date.now();
+    if (!force && lastFetchTimeRef.current > 0 && now - lastFetchTimeRef.current < 30000) {
+      return;
+    }
+    lastFetchTimeRef.current = now;
+
     setLoading(true);
     setError(null);
     const start = performance.now();
     try {
-      // Authoritative Cloud Supabase Query
-      // STRICT NON-NEGOTIABLE RULE: CLOUD SUPABASE -> VALID PREDICTION -> UI
-      // 1. Prediction model successfully produced the prediction
-      // 2. Exactly/at least 250,000 valid simulations were completed
-      // 3. Prediction is successfully published in Cloud Supabase (publication_status = 'published')
-      // 4. Fixture is strictly derived from the authoritative prediction record
+      // 1. Authoritative Cloud Supabase Query on football_predictions_paywall
+      // Combines published predictions (paywall masked for free users, unmasked for subscribers/admins)
+      // and embeds corresponding fixture, league, and team records in a single round-trip.
       const predictionsQuery = supabase
-        .from('football_predictions')
+        .from('football_predictions_paywall')
         .select(`
           id,
           fixture_id,
@@ -421,6 +427,8 @@ export default function App() {
           publication_status,
           simulations_count,
           target_kickoff_at,
+          tier_required,
+          is_locked,
           fixture:football_fixtures!inner(
             id,
             canonical_key,
@@ -446,88 +454,17 @@ export default function App() {
           )
         `)
         .eq('publication_status', 'published')
-        .gte('simulations_count', 250000)
         .order('target_kickoff_at', { ascending: true })
         .limit(2000);
 
-      const simQuery = supabase
-        .from('football_simulations')
-        .select('*')
-        .eq('status', 'completed')
-        .order('created_at', { ascending: false });
-
       const leagueQuery = supabase
         .from('football_leagues')
-        .select('*')
+        .select('id, name, code, country')
         .order('name', { ascending: true });
 
-      const jobQuery = supabase
-        .from('scheduler_jobs')
-        .select('*')
-        .eq('job_type', 'prediction_cycle')
-        .order('created_at', { ascending: false })
-        .limit(1);
-
-      const settleJobQuery = supabase
-        .from('scheduler_jobs')
-        .select('*')
-        .eq('job_type', 'settlement_cycle')
-        .order('created_at', { ascending: false })
-        .limit(1);
-
-      const isUserAdmin =
-        isAdmin ||
-        currentUser?.user_metadata?.role === 'admin' ||
-        (currentUser as any)?.app_metadata?.role === 'admin' ||
-        profile?.role === 'admin' ||
-        currentUser?.email?.toLowerCase() === 'chibzymart@gmail.com' ||
-        currentUser?.email?.toLowerCase() === 'whizzchibz@gmail.com' ||
-        currentUser?.email?.toLowerCase() === 'chibuezeamuchie@gmail.com';
-
-      const predOrTeaserQuery = isUserAdmin
-        ? supabase.from('football_predictions').select('*').limit(2000)
-        : supabase.from('football_predictions_paywall').select('*').eq('publication_status', 'published').limit(2000);
-
-      // Dynamically verify other candidate sports against Cloud Supabase
-      const otherCandidateSports = ['american_football', 'basketball', 'tennis', 'cricket'];
-      const otherSportsPromises = otherCandidateSports.map(async (sp) => {
-        try {
-          const { count, error: cErr } = await supabase
-            .from(`${sp}_fixtures`)
-            .select('*', { count: 'exact', head: true });
-          const hasData = !cErr && typeof count === 'number' && count > 0;
-          return {
-            sport: sp,
-            isAvailable: hasData,
-            fixtureCount: hasData ? count : 0,
-            leagueCount: 0
-          };
-        } catch {
-          return {
-            sport: sp,
-            isAvailable: false,
-            fixtureCount: 0,
-            leagueCount: 0
-          };
-        }
-      });
-
-      const [
-        predictionsRes,
-        _simRes,
-        leagueRes,
-        _jobRes,
-        _settleJobRes,
-        predOrTeaserRes,
-        ...otherSportsResults
-      ] = await Promise.all([
+      const [predictionsRes, leagueRes] = await Promise.all([
         predictionsQuery,
-        simQuery,
-        leagueQuery,
-        jobQuery,
-        settleJobQuery,
-        predOrTeaserQuery,
-        ...otherSportsPromises
+        leagueQuery
       ]);
 
       const elapsed = Math.round(performance.now() - start);
@@ -542,17 +479,19 @@ export default function App() {
         const f = item.fixture;
         if (!f) return;
 
-        // Verify valid prediction probability, prediction outcome, and confidence category
-        if (typeof item.probability !== 'number' || item.probability <= 0) return;
-        if (!item.prediction || !item.confidence_category) return;
+        const isLocked = item.is_locked === true || item.confidence_category === 'LOCKED';
+        if (!isLocked) {
+          if (typeof item.probability !== 'number' || item.probability <= 0) return;
+          if (!item.prediction || !item.confidence_category) return;
+        }
 
         embeddedPreds.push({
           id: item.id,
           fixture_id: f.id,
-          prediction: item.prediction,
+          prediction: isLocked ? 'LOCKED' : item.prediction,
           market: item.market,
-          probability: item.probability,
-          confidence_category: item.confidence_category,
+          probability: isLocked ? 0 : item.probability,
+          confidence_category: isLocked ? 'LOCKED' : item.confidence_category,
           secondary_predictions: item.secondary_predictions,
           metadata: item.metadata,
           settlement_status: item.settlement_status,
@@ -564,7 +503,8 @@ export default function App() {
           tier_required: item.tier_required || 'free',
           source_data_version: item.source_data_version || '1.0',
           created_at: item.created_at || new Date().toISOString(),
-          target_kickoff_at: item.target_kickoff_at || f.target_kickoff_at
+          target_kickoff_at: item.target_kickoff_at || f.target_kickoff_at,
+          is_locked: isLocked
         });
 
         if (!fixtureMap.has(f.id)) {
@@ -607,39 +547,24 @@ export default function App() {
       );
 
       const returnedLeagues: LeagueRecord[] = leagueRes.data || [];
-      const separatePreds = (predOrTeaserRes.data || []) as FootballPrediction[];
-      const allPredsMap = new Map<string, FootballPrediction>();
-      embeddedPreds.forEach((p) => allPredsMap.set(p.id, p));
-      // Only include paywall records for fixtures that exist in the authoritative fixture set
-      separatePreds.forEach((p) => {
-        if (fixtureMap.has(p.fixture_id)) {
-          allPredsMap.set(p.id, p);
-        }
-      });
-      const combinedPredictions = Array.from(allPredsMap.values());
 
       setFixtures(returnedFixtures);
       setLeaguesList(returnedLeagues);
-      setPredictions(combinedPredictions);
+      setPredictions(embeddedPreds);
 
-      // Update dynamic sports state based exclusively on Cloud Supabase results
-      const nextSportsState: Record<string, SportAvailability> = {
+      // Fast static sports state avoiding 404 HTTP round-trips
+      setSportsState({
         football: {
           isAvailable: returnedFixtures.length > 0,
           fixtureCount: returnedFixtures.length,
           leagueCount: returnedLeagues.length
-        }
-      };
-
-      otherSportsResults.forEach((r) => {
-        nextSportsState[r.sport] = {
-          isAvailable: r.isAvailable,
-          fixtureCount: r.fixtureCount,
-          leagueCount: r.leagueCount
-        };
+        },
+        american_football: { isAvailable: false, fixtureCount: 0, leagueCount: 0 },
+        basketball: { isAvailable: false, fixtureCount: 0, leagueCount: 0 },
+        tennis: { isAvailable: false, fixtureCount: 0, leagueCount: 0 },
+        cricket: { isAvailable: false, fixtureCount: 0, leagueCount: 0 }
       });
 
-      setSportsState(nextSportsState);
       setLastRefreshed(new Date());
     } catch (err: any) {
       console.error('Error querying Cloud Supabase:', err);
