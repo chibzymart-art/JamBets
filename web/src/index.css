@@ -247,6 +247,29 @@ body {
   object-fit: contain;
 }
 
+/* Theme Toggle Button in Header Navigation */
+.theme-toggle-btn {
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  border-radius: 9999px;
+  padding: 4px 11px;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #334155;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.theme-toggle-btn:hover {
+  background: #e2e8f0;
+  border-color: #94a3b8;
+  color: #0f172a;
+}
+
 /* Universal Top Regulatory Compliance Banner - White Background Single Line Sliding Ticker */
 .regulatory-top-banner {
   background: #ffffff !important;
@@ -759,26 +782,29 @@ body {
 }
 
 /* =====================================================================
-   TOP SPORT CATEGORY SELECTOR BAR
+   TOP SPORT CATEGORY SELECTOR BAR (SHRUNK HEIGHTS & WIDTHS)
    ===================================================================== */
 .sport-categories-bar {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 12px;
-  margin: 16px 0 20px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 10px 0 12px;
 }
 
 .sport-card {
   background: #ffffff;
   border: 1px solid var(--border-subtle);
-  border-radius: 14px;
-  padding: 12px 16px;
+  border-radius: 9px;
+  padding: 5px 10px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   cursor: pointer;
   transition: all 0.15s ease;
   box-shadow: var(--shadow-xs);
+  min-width: 130px;
+  max-width: 180px;
+  flex: 1 1 auto;
 }
 
 .sport-card:hover {
@@ -796,22 +822,23 @@ body {
 .sport-card-left {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 7px;
 }
 
 .sport-icon-circle {
-  width: 36px;
-  height: 36px;
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
   background: #f1f5f9;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 18px;
+  font-size: 13px;
+  flex-shrink: 0;
 }
 
 .sport-card.active .sport-icon-circle {
-  background: rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.18);
 }
 
 .sport-info-titles {
@@ -821,9 +848,10 @@ body {
 
 .sport-title-text {
   font-family: var(--font-heading);
-  font-size: 14px;
+  font-size: 11.5px;
   font-weight: 800;
   color: var(--text-primary);
+  line-height: 1.15;
 }
 
 .sport-card.active .sport-title-text {
@@ -831,8 +859,9 @@ body {
 }
 
 .sport-sub-text {
-  font-size: 11px;
+  font-size: 9px;
   color: var(--text-muted);
+  line-height: 1.1;
 }
 
 .sport-card.active .sport-sub-text {
@@ -840,14 +869,15 @@ body {
 }
 
 .sport-count-pill {
-  padding: 3px 8px;
+  padding: 1px 6px;
   border-radius: 9999px;
-  font-size: 11px;
+  font-size: 9.5px;
   font-weight: 800;
   font-family: var(--font-mono);
   background: #f1f5f9;
   color: var(--text-secondary);
   border: 1px solid var(--border-subtle);
+  margin-left: 3px;
 }
 
 .sport-card.active .sport-count-pill {
@@ -1093,37 +1123,37 @@ body {
 }
 
 /* =====================================================================
-   DECONGESTED SCORECARD KPI SECTION (1 CONSOLIDATED DECK, 2 TABS DEMARCATED BY BOLD LINE)
+   DECONGESTED SCORECARD KPI SECTION (TWO COMPACT CARDS WITH INNER DIVIDERS)
    ===================================================================== */
-.scorecard-consolidated-deck {
-  display: grid;
-  grid-template-columns: 1.15fr 4px 0.85fr;
+.scorecard-two-cards-row {
+  display: flex;
   align-items: stretch;
+  gap: 10px;
+  margin-top: 8px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.compact-kpi-card {
   background: #ffffff;
   border: 1.5px solid #cbd5e1;
-  border-radius: 12px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  border-radius: 10px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
   overflow: hidden;
-  margin-top: 12px;
-  margin-bottom: 14px;
+  height: 48px;
+  box-sizing: border-box;
 }
 
-/* Bold demarcation line separating the two tabs */
-.consolidated-bold-demarcation {
-  background: #0f172a;
-  width: 4px;
-  min-height: 100%;
-}
-
-/* Tab 1: Win Rates (3 children separated by thick lines) */
-.consolidated-tab-winrates {
+/* Card 1: Win Rates inside one single-card footprint (~360px) */
+.winrates-kpi-card {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  align-items: stretch;
+  width: 370px;
+  max-width: 100%;
 }
 
-.compact-winrate-cell {
-  padding: 8px 12px;
+.compact-kpi-segment {
+  padding: 4px 8px;
   cursor: pointer;
   transition: all 0.15s ease;
   display: flex;
@@ -1131,44 +1161,44 @@ body {
   justify-content: center;
   background: #ffffff;
   user-select: none;
-  border-right: 2.5px solid #cbd5e1; /* Thick line separating children */
+  border-right: 2px solid #cbd5e1; /* Dividing line */
 }
 
-.compact-winrate-cell:last-child {
+.compact-kpi-segment:last-child {
   border-right: none;
 }
 
-.compact-winrate-cell:hover {
+.compact-kpi-segment:hover {
   background: #f8fafc;
 }
 
-.compact-winrate-cell.active-cell {
+.compact-kpi-segment.active-seg {
   background: #f0fdf4;
   box-shadow: inset 0 -3px 0 #059669;
 }
 
-.compact-winrate-cell.banger-cell.active-cell {
+.compact-kpi-segment.banger-seg.active-seg {
   background: #fffbeb;
   box-shadow: inset 0 -3px 0 #d97706;
 }
 
-.compact-winrate-cell.toppick-cell.active-cell {
+.compact-kpi-segment.toppick-seg.active-seg {
   background: #fff7ed;
   box-shadow: inset 0 -3px 0 #ea580c;
 }
 
-.compact-cell-header {
+.compact-kpi-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 6px;
-  margin-bottom: 3px;
+  gap: 3px;
+  margin-bottom: 1px;
 }
 
-.compact-cell-title {
-  font-size: 10.5px;
+.compact-kpi-title {
+  font-size: 9.5px;
   font-weight: 800;
-  letter-spacing: 0.3px;
+  letter-spacing: 0.2px;
   text-transform: uppercase;
   color: var(--text-primary);
   white-space: nowrap;
@@ -1176,75 +1206,63 @@ body {
   text-overflow: ellipsis;
 }
 
-.banger-cell .compact-cell-title {
-  color: #b45309;
-}
+.banger-seg .compact-kpi-title { color: #b45309; }
+.toppick-seg .compact-kpi-title { color: #c2410c; }
 
-.toppick-cell .compact-cell-title {
-  color: #c2410c;
-}
-
-.compact-pill-badge {
-  font-size: 9.5px;
+.compact-kpi-pill {
+  font-size: 8px;
   font-weight: 700;
-  padding: 1px 5px;
-  border-radius: 4px;
+  padding: 0 4px;
+  border-radius: 3px;
   background: #f1f5f9;
   color: #475569;
   white-space: nowrap;
 }
 
-.compact-pill-badge.banger-badge {
+.banger-pill {
   background: #fef9c3;
   color: #854d0e;
-  border: 1px solid #fef08a;
 }
 
-.compact-pill-badge.toppick-badge {
+.toppick-pill {
   background: #ffedd5;
   color: #9a3412;
-  border: 1px solid #fed7aa;
 }
 
-.compact-cell-value-row {
+.compact-kpi-val-row {
   display: flex;
   align-items: baseline;
-  gap: 6px;
+  gap: 4px;
 }
 
-.compact-pct-val {
+.compact-kpi-pct {
   font-family: var(--font-heading);
-  font-size: 18px;
+  font-size: 15px;
   font-weight: 900;
-  letter-spacing: -0.4px;
   color: #059669;
   line-height: 1;
 }
 
-.compact-pct-val.banger-text {
-  color: #d97706;
-}
+.compact-kpi-pct.banger-text { color: #d97706; }
+.compact-kpi-pct.toppick-text { color: #ea580c; }
 
-.compact-pct-val.toppick-text {
-  color: #ea580c;
-}
-
-.compact-sub-ratio {
-  font-size: 10.5px;
+.compact-kpi-ratio {
+  font-size: 9px;
   font-weight: 600;
   color: var(--text-muted);
   white-space: nowrap;
 }
 
-/* Tab 2: Activity & Settlement (5 children separated by thick lines) */
-.consolidated-tab-activity {
+/* Card 2: Activity & Settlement inside one single-card footprint (~420px) */
+.activity-kpi-card {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
-  align-items: stretch;
+  width: 420px;
+  max-width: 100%;
 }
 
-.compact-activity-cell {
-  padding: 8px 6px;
+.compact-act-segment {
+  padding: 4px 5px;
   cursor: pointer;
   transition: all 0.15s ease;
   display: flex;
@@ -1254,74 +1272,73 @@ body {
   text-align: center;
   background: #ffffff;
   user-select: none;
-  border-right: 2.5px solid #cbd5e1; /* Thick line separating children */
+  border-right: 2px solid #cbd5e1; /* Dividing line */
 }
 
-.compact-activity-cell:last-child {
+.compact-act-segment:last-child {
   border-right: none;
 }
 
-.compact-activity-cell:hover {
+.compact-act-segment:hover {
   background: #f8fafc;
 }
 
-.compact-activity-cell.active-cell {
+.compact-act-segment.active-seg {
   background: #f0fdf4;
   box-shadow: inset 0 -3px 0 #059669;
 }
 
-.compact-activity-cell.won-cell.active-cell {
+.compact-act-segment.won-seg.active-seg {
   background: #f0fdf4;
   box-shadow: inset 0 -3px 0 #15803d;
 }
 
-.compact-activity-cell.lost-cell.active-cell {
+.compact-act-segment.lost-seg.active-seg {
   background: #fef2f2;
   box-shadow: inset 0 -3px 0 #dc2626;
 }
 
-.compact-activity-cell.pending-cell.active-cell {
+.compact-act-segment.pending-seg.active-seg {
   background: #f0f9ff;
   box-shadow: inset 0 -3px 0 #0284c7;
 }
 
-.compact-act-label {
-  font-size: 9.5px;
+.act-seg-label {
+  font-size: 8.5px;
   font-weight: 800;
   text-transform: uppercase;
-  letter-spacing: 0.4px;
+  letter-spacing: 0.3px;
   color: var(--text-muted);
-  margin-bottom: 2px;
+  margin-bottom: 1px;
   white-space: nowrap;
 }
 
-.won-cell .compact-act-label { color: #166534; }
-.lost-cell .compact-act-label { color: #991b1b; }
-.rate-cell .compact-act-label { color: #166534; }
-.pending-cell .compact-act-label { color: #0369a1; }
+.won-seg .act-seg-label { color: #166534; }
+.lost-seg .act-seg-label { color: #991b1b; }
+.rate-seg .act-seg-label { color: #166534; }
+.pending-seg .act-seg-label { color: #0369a1; }
 
-.compact-act-val {
+.act-seg-val {
   font-family: var(--font-heading);
-  font-size: 16.5px;
+  font-size: 14px;
   font-weight: 900;
   color: var(--text-primary);
-  line-height: 1.1;
-  margin-bottom: 2px;
+  line-height: 1;
+  margin-bottom: 1px;
 }
 
-.compact-act-val.won-text { color: #15803d; }
-.compact-act-val.lost-text { color: #dc2626; }
-.compact-act-val.pending-text { color: #0284c7; }
+.act-seg-val.won-text { color: #15803d; }
+.act-seg-val.lost-text { color: #dc2626; }
+.act-seg-val.pending-text { color: #0284c7; }
 
-.compact-live-sub {
-  font-size: 9.5px;
+.act-live-sub {
+  font-size: 8.5px;
   font-weight: 700;
   color: #e11d48;
-  display: inline-block;
 }
 
-.compact-act-sub {
-  font-size: 9.5px;
+.act-seg-sub {
+  font-size: 8px;
   font-weight: 600;
   color: var(--text-muted);
   white-space: nowrap;
@@ -8719,29 +8736,59 @@ body {
    AT-A-GLANCE FIXTURE CARD REDESIGN (Exact Mockup Match)
    ========================================================================== */
 .glance-fixture-box {
-  background: #f0fdf4 !important; /* light green */
-  border: 1.5px solid #86efac !important; /* clear start/end border */
-  border-radius: 12px !important;
-  padding: 10px 16px !important; /* shrunk padding */
-  margin-bottom: 12px !important; /* visible separation */
-  box-shadow: 0 1px 3px rgba(22, 101, 52, 0.05) !important;
+  border-radius: 10px !important;
+  padding: 7px 14px !important; /* Shrunk padding */
+  margin-bottom: 10px !important; /* Shrunk margin */
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04) !important;
   transition: all 0.15s ease !important;
   cursor: pointer !important;
 }
 
-.glance-fixture-box:hover {
+/* 1. Default (Pending) - Pure White */
+.glance-fixture-box.card-state-default {
+  background: #ffffff !important;
+  border: 1.5px solid #e2e8f0 !important;
+}
+
+.glance-fixture-box.card-state-default:hover {
+  background: #f8fafc !important;
+  border-color: #cbd5e1 !important;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.06) !important;
+  transform: translateY(-1px);
+}
+
+/* 2. Won - Light Green */
+.glance-fixture-box.card-state-won {
+  background: #f0fdf4 !important;
+  border: 1.5px solid #86efac !important;
+}
+
+.glance-fixture-box.card-state-won:hover {
   background: #dcfce7 !important;
   border-color: #22c55e !important;
   box-shadow: 0 4px 14px rgba(22, 101, 52, 0.12) !important;
   transform: translateY(-1px);
 }
 
+/* 3. Lost - Light Red */
+.glance-fixture-box.card-state-lost {
+  background: #fef2f2 !important;
+  border: 1.5px solid #fca5a5 !important;
+}
+
+.glance-fixture-box.card-state-lost:hover {
+  background: #fee2e2 !important;
+  border-color: #ef4444 !important;
+  box-shadow: 0 4px 14px rgba(185, 28, 28, 0.12) !important;
+  transform: translateY(-1px);
+}
+
 .glance-top-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   flex-wrap: wrap;
-  margin-bottom: 8px !important; /* shrunk from 12px */
+  margin-bottom: 4px !important; /* Shrunk from 8px */
 }
 
 .glance-favorite-btn {
@@ -8897,7 +8944,7 @@ body {
 }
 
 .glance-team-name {
-  font-size: 14.5px !important; /* reduced from 18px */
+  font-size: 13.5px !important; /* reduced from 14.5px */
   font-weight: 800 !important;
   color: #0f172a !important;
   letter-spacing: -0.2px !important;
@@ -9006,17 +9053,25 @@ body {
 
 .glance-key-pick-card {
   background: #ffffff !important;
-  border: 1.5px solid #86efac !important;
-  border-radius: 10px !important;
-  padding: 6px 14px !important; /* shrunk from 10px 20px */
+  border: 1.5px solid #cbd5e1 !important;
+  border-radius: 8px !important;
+  padding: 4px 10px !important; /* shrunk padding */
   text-align: center;
-  min-width: 175px !important;
+  min-width: 155px !important;
   cursor: pointer;
   transition: all 0.15s ease;
 }
 
+.card-state-won .glance-key-pick-card {
+  border-color: #86efac !important;
+}
+
+.card-state-lost .glance-key-pick-card {
+  border-color: #fca5a5 !important;
+}
+
 .glance-key-pick-card:hover {
-  background: #f0fdf4 !important;
+  background: #f8fafc !important;
   border-color: #16a34a !important;
   box-shadow: 0 2px 8px rgba(22, 163, 74, 0.15) !important;
 }
@@ -9027,12 +9082,12 @@ body {
   justify-content: center;
   gap: 4px;
   font-family: var(--font-mono, monospace);
-  font-size: 9px !important;
+  font-size: 8.5px !important;
   font-weight: 800 !important;
   color: #0f766e;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  margin-bottom: 2px !important;
+  margin-bottom: 1px !important;
 }
 
 .key-pick-spark {
@@ -9041,31 +9096,31 @@ body {
 }
 
 .key-pick-outcome {
-  font-size: 13.5px !important; /* shrunk from 15px */
+  font-size: 12.5px !important; /* shrunk from 13.5px */
   font-weight: 800 !important;
   color: #0f172a;
-  line-height: 1.25;
-  margin-bottom: 2px !important;
+  line-height: 1.2;
+  margin-bottom: 1px !important;
 }
 
 .key-pick-prob {
-  font-size: 12px !important; /* shrunk from 14px */
+  font-size: 11px !important; /* shrunk from 12px */
   font-weight: 800;
   color: #059669;
   font-family: var(--font-mono, monospace);
 }
 
 .glance-chevron-btn {
-  width: 28px !important;
-  height: 28px !important;
+  width: 26px !important;
+  height: 26px !important;
   border-radius: 50%;
-  border: 1.5px solid #86efac !important;
+  border: 1.5px solid #cbd5e1 !important;
   background: #ffffff !important;
-  color: #15803d !important;
+  color: #475569 !important;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 13px !important;
+  font-size: 12px !important;
   font-weight: 800;
   cursor: pointer;
   transition: all 0.15s ease;
@@ -9073,15 +9128,15 @@ body {
 }
 
 .glance-chevron-btn:hover {
-  background: #dcfce7 !important;
-  border-color: #16a34a !important;
-  color: #166534 !important;
+  background: #f1f5f9 !important;
+  border-color: #94a3b8 !important;
+  color: #0f172a !important;
 }
 
 .glance-chevron-btn.expanded {
-  background: #15803d !important;
+  background: #0f172a !important;
   color: #ffffff !important;
-  border-color: #15803d !important;
+  border-color: #0f172a !important;
 }
 
 /* ==========================================================================
@@ -10431,8 +10486,8 @@ body {
   }
 
   .sport-card {
-    flex: 0 0 180px !important;
-    padding: 10px 12px !important;
+    flex: 0 0 135px !important;
+    padding: 5px 8px !important;
     scroll-snap-align: start !important;
     box-sizing: border-box !important;
   }
@@ -10491,15 +10546,21 @@ body {
     border-radius: 3px !important;
   }
 
-  /* Decongested Scorecard Consolidated Deck */
-  .scorecard-consolidated-deck {
-    grid-template-columns: 1fr !important;
+  /* Decongested Scorecard Compact Decks on Mobile */
+  .scorecard-two-cards-row {
+    flex-direction: column !important;
+    width: 100% !important;
   }
 
-  .consolidated-bold-demarcation {
+  .winrates-kpi-card,
+  .activity-kpi-card {
     width: 100% !important;
-    height: 4px !important;
-    min-height: 4px !important;
+    max-width: 100% !important;
+  }
+
+  /* Hide Daily 90% Bangers sidebar ONLY on mobile view */
+  .bangers-sidebar-card {
+    display: none !important;
   }
 
   /* Horizontal Leagues Filter Bar */
@@ -10725,5 +10786,310 @@ body {
     line-height: 1 !important;
   }
 }
+
+/* =====================================================================
+   DARK THEME STYLESHEET SYSTEM ([data-theme="dark"])
+   ===================================================================== */
+[data-theme="dark"] {
+  --bg-primary: #0b0f19;
+  --bg-secondary: #0f172a;
+  --bg-tertiary: #1e293b;
+  --bg-card: #111827;
+  --bg-card-hover: #1f2937;
+  --border-subtle: #1e293b;
+  --border-strong: #334155;
+  --text-primary: #f8fafc;
+  --text-secondary: #cbd5e1;
+  --text-muted: #94a3b8;
+  --text-light: #64748b;
+}
+
+[data-theme="dark"] body,
+body[data-theme="dark"],
+[data-theme="dark"] .app-wrapper,
+[data-theme="dark"] #fixtures-view-section {
+  background-color: #0b0f19 !important;
+  color: #f8fafc !important;
+}
+
+[data-theme="dark"] .site-header {
+  background: #111827 !important;
+  border-bottom-color: #1e293b !important;
+}
+
+[data-theme="dark"] .header-brand {
+  color: #f8fafc !important;
+}
+
+[data-theme="dark"] .nav-link-btn {
+  color: #cbd5e1 !important;
+}
+
+[data-theme="dark"] .nav-link-btn:hover,
+[data-theme="dark"] .nav-link-btn.active {
+  background: #1e293b !important;
+  color: #f8fafc !important;
+}
+
+[data-theme="dark"] .theme-toggle-btn {
+  background: #1e293b !important;
+  border-color: #334155 !important;
+  color: #f8fafc !important;
+}
+
+[data-theme="dark"] .theme-toggle-btn:hover {
+  background: #334155 !important;
+  color: #ffffff !important;
+}
+
+[data-theme="dark"] .user-profile-pill {
+  background: #1e293b !important;
+  border-color: #334155 !important;
+  color: #f8fafc !important;
+}
+
+[data-theme="dark"] .regulatory-top-banner {
+  background: #111827 !important;
+  border-bottom-color: #1e293b !important;
+}
+
+[data-theme="dark"] .regulatory-ticker-text {
+  color: #cbd5e1 !important;
+}
+
+[data-theme="dark"] .sport-card {
+  background: #111827 !important;
+  border-color: #1e293b !important;
+}
+
+[data-theme="dark"] .sport-card:hover {
+  border-color: #334155 !important;
+  background: #1a2234 !important;
+}
+
+[data-theme="dark"] .sport-icon-circle {
+  background: #1e293b !important;
+  color: #f8fafc !important;
+}
+
+[data-theme="dark"] .sport-title-text {
+  color: #f8fafc !important;
+}
+
+[data-theme="dark"] .sport-sub-text {
+  color: #94a3b8 !important;
+}
+
+[data-theme="dark"] .sport-count-pill {
+  background: #1e293b !important;
+  color: #cbd5e1 !important;
+  border-color: #334155 !important;
+}
+
+[data-theme="dark"] .scorecard-date-header .current-date-badge {
+  background: #111827 !important;
+  border-color: #1e293b !important;
+  color: #f8fafc !important;
+}
+
+[data-theme="dark"] .date-pill-btn {
+  background: #111827 !important;
+  border-color: #1e293b !important;
+  color: #f8fafc !important;
+}
+
+[data-theme="dark"] .date-pill-btn:hover {
+  background: #1e293b !important;
+  border-color: #334155 !important;
+}
+
+[data-theme="dark"] .date-pill-btn.active {
+  background: #065f46 !important;
+  border-color: #059669 !important;
+}
+
+[data-theme="dark"] .date-pill-sub-label {
+  color: #94a3b8 !important;
+}
+
+[data-theme="dark"] .date-pill-winloss {
+  background: rgba(255, 255, 255, 0.1) !important;
+  color: #cbd5e1 !important;
+}
+
+[data-theme="dark"] .compact-kpi-card {
+  background: #111827 !important;
+  border-color: #334155 !important;
+}
+
+[data-theme="dark"] .compact-kpi-segment,
+[data-theme="dark"] .compact-act-segment {
+  background: #111827 !important;
+  border-right-color: #334155 !important;
+}
+
+[data-theme="dark"] .compact-kpi-segment:hover,
+[data-theme="dark"] .compact-act-segment:hover {
+  background: #1e293b !important;
+}
+
+[data-theme="dark"] .compact-kpi-title,
+[data-theme="dark"] .act-seg-val {
+  color: #f8fafc !important;
+}
+
+[data-theme="dark"] .compact-kpi-pill {
+  background: #1e293b !important;
+  color: #cbd5e1 !important;
+}
+
+[data-theme="dark"] .act-seg-label,
+[data-theme="dark"] .compact-kpi-ratio,
+[data-theme="dark"] .act-seg-sub {
+  color: #94a3b8 !important;
+}
+
+[data-theme="dark"] .league-pill-btn {
+  background: #111827 !important;
+  border-color: #1e293b !important;
+  color: #cbd5e1 !important;
+}
+
+[data-theme="dark"] .league-pill-btn:hover {
+  background: #1e293b !important;
+  border-color: #334155 !important;
+  color: #f8fafc !important;
+}
+
+[data-theme="dark"] .league-pill-btn.active {
+  background: #065f46 !important;
+  border-color: #059669 !important;
+  color: #ffffff !important;
+}
+
+/* Prediction Cards in Dark Mode */
+[data-theme="dark"] .glance-fixture-box.card-state-default {
+  background: #111827 !important;
+  border-color: #1e293b !important;
+}
+
+[data-theme="dark"] .glance-fixture-box.card-state-default:hover {
+  background: #1a2234 !important;
+  border-color: #334155 !important;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4) !important;
+}
+
+[data-theme="dark"] .glance-fixture-box.card-state-won {
+  background: #064e3b !important;
+  border-color: #059669 !important;
+}
+
+[data-theme="dark"] .glance-fixture-box.card-state-won:hover {
+  background: #065f46 !important;
+  border-color: #10b981 !important;
+  box-shadow: 0 4px 14px rgba(5, 150, 105, 0.25) !important;
+}
+
+[data-theme="dark"] .glance-fixture-box.card-state-lost {
+  background: #450a0a !important;
+  border-color: #dc2626 !important;
+}
+
+[data-theme="dark"] .glance-fixture-box.card-state-lost:hover {
+  background: #5c0f0f !important;
+  border-color: #ef4444 !important;
+  box-shadow: 0 4px 14px rgba(220, 38, 38, 0.25) !important;
+}
+
+[data-theme="dark"] .glance-team-name {
+  color: #f8fafc !important;
+}
+
+[data-theme="dark"] .glance-favorite-btn {
+  background: #1e293b !important;
+  border-color: #334155 !important;
+  color: #cbd5e1 !important;
+}
+
+[data-theme="dark"] .glance-favorite-btn:hover {
+  background: #334155 !important;
+  color: #ffffff !important;
+}
+
+[data-theme="dark"] .glance-league-pill {
+  background: #1e293b !important;
+  border-color: #334155 !important;
+  color: #cbd5e1 !important;
+}
+
+[data-theme="dark"] .glance-vs-pill {
+  background: #1e293b !important;
+  border-color: #334155 !important;
+  color: #94a3b8 !important;
+}
+
+[data-theme="dark"] .glance-key-pick-card {
+  background: #1e293b !important;
+  border-color: #334155 !important;
+}
+
+[data-theme="dark"] .key-pick-outcome {
+  color: #f8fafc !important;
+}
+
+[data-theme="dark"] .glance-chevron-btn {
+  background: #1e293b !important;
+  border-color: #334155 !important;
+  color: #cbd5e1 !important;
+}
+
+[data-theme="dark"] .glance-chevron-btn:hover {
+  background: #334155 !important;
+  color: #ffffff !important;
+}
+
+[data-theme="dark"] .bangers-sidebar-card {
+  background: #111827 !important;
+  border-color: #1e293b !important;
+}
+
+[data-theme="dark"] .banger-item-tile {
+  background: #1e293b !important;
+  border-color: #334155 !important;
+}
+
+[data-theme="dark"] .banger-item-tile:hover {
+  background: #273549 !important;
+  border-color: #475569 !important;
+}
+
+[data-theme="dark"] .stream-section-banner {
+  background: #111827 !important;
+  border-color: #1e293b !important;
+}
+
+[data-theme="dark"] .stream-title-text {
+  color: #f8fafc !important;
+}
+
+[data-theme="dark"] .expanded-breakdown-body {
+  background: #0f172a !important;
+  border-color: #1e293b !important;
+}
+
+[data-theme="dark"] .site-footer {
+  background: #090d16 !important;
+  border-top-color: #1e293b !important;
+}
+
+[data-theme="dark"] .mobile-app-bottom-bar {
+  background: rgba(17, 24, 39, 0.98) !important;
+  border-top-color: #1e293b !important;
+}
+
+[data-theme="dark"] .mobile-tab-item {
+  color: #94a3b8 !important;
+}
+
 
 

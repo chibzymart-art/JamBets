@@ -51,6 +51,31 @@ export default function App() {
   }
 
 
+  // Theme State: Dark View / Light View (Persisted in localStorage)
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    try {
+      const saved = localStorage.getItem('jambets_theme');
+      if (saved === 'dark' || saved === 'light') return saved;
+      return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    } catch {
+      return 'light';
+    }
+  });
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    document.body.setAttribute('data-theme', theme);
+    try {
+      localStorage.setItem('jambets_theme', theme);
+    } catch {
+      // Ignore localStorage security errors if sandboxed
+    }
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme((prev) => (prev === 'light' ? 'dark' : 'light'));
+  };
+
   // Sports Category Selector with Cloud Supabase Dynamic Availability
   const [selectedSport, setSelectedSport] = useState<string>('football');
   const [sportsState, setSportsState] = useState<Record<string, SportAvailability>>({
@@ -1145,6 +1170,17 @@ export default function App() {
           </div>
 
           <div className="header-right-actions">
+            {/* Theme Toggle: Dark View / Light View */}
+            <button
+              type="button"
+              className="theme-toggle-btn"
+              onClick={toggleTheme}
+              title={theme === 'dark' ? 'Switch to Light View' : 'Switch to Dark View'}
+              aria-label="Toggle light or dark view"
+            >
+              {theme === 'dark' ? '☀️ Light' : '🌙 Dark'}
+            </button>
+
             {location.pathname === '/' && (
               <Link to="/dashboard" className="landing-nav-cta">
                 {currentUser ? '📊 Dashboard →' : '📊 Predictions →'}
@@ -1523,13 +1559,13 @@ export default function App() {
             })}
           </div>
 
-          {/* 4. DECONGESTED SCORECARD KPI SECTION (1 CONSOLIDATED DECK, 2 TABS DEMARCATED BY BOLD LINE) */}
-          <div className="scorecard-consolidated-deck">
-            {/* Tab 1: 3 Win Rate Metrics inside one tab, separated by thick lines */}
-            <div className="consolidated-tab-winrates">
-              {/* Segment 1: All Prediction Win Rate */}
+          {/* 4. DECONGESTED SCORECARD KPI SECTION (TWO COMPACT CARDS WITH INNER DIVIDER LINES) */}
+          <div className="scorecard-two-cards-row">
+            {/* Card 1: 3 Win Rate Metrics inside one single-card footprint, separated by lines */}
+            <div className="compact-kpi-card winrates-kpi-card">
+              {/* Option 1: All Predictions */}
               <div
-                className={`compact-winrate-cell ${selectedTier === 'all' && settlementFilter === 'all' && scoreStatusFilter === 'all' ? 'active-cell' : ''}`}
+                className={`compact-kpi-segment ${selectedTier === 'all' && settlementFilter === 'all' && scoreStatusFilter === 'all' ? 'active-seg' : ''}`}
                 onClick={() => {
                   setSelectedTier('all');
                   setSettlementFilter('all');
@@ -1537,113 +1573,110 @@ export default function App() {
                 }}
                 title="Click to reset filters and view all predictions"
               >
-                <div className="compact-cell-header">
-                  <span className="compact-cell-title">All Predictions</span>
-                  <span className="compact-pill-badge">{scorecardStats.allDecided} M</span>
+                <div className="compact-kpi-header">
+                  <span className="compact-kpi-title">All Preds</span>
+                  <span className="compact-kpi-pill">{scorecardStats.allDecided}M</span>
                 </div>
-                <div className="compact-cell-value-row">
-                  <span className="compact-pct-val">{scorecardStats.allWinRate}%</span>
-                  <span className="compact-sub-ratio">{scorecardStats.allWon}W • {scorecardStats.allLost}L</span>
+                <div className="compact-kpi-val-row">
+                  <span className="compact-kpi-pct">{scorecardStats.allWinRate}%</span>
+                  <span className="compact-kpi-ratio">{scorecardStats.allWon}W • {scorecardStats.allLost}L</span>
                 </div>
               </div>
 
-              {/* Segment 2: Daily Banger Win Rate */}
+              {/* Option 2: Daily Bangers */}
               <div
-                className={`compact-winrate-cell banger-cell ${selectedTier === 'BANGER' ? 'active-cell' : ''}`}
+                className={`compact-kpi-segment banger-seg ${selectedTier === 'BANGER' ? 'active-seg' : ''}`}
                 onClick={() => setSelectedTier(selectedTier === 'BANGER' ? 'all' : 'BANGER')}
                 title="Click to filter by 90%+ Banger Locks"
               >
-                <div className="compact-cell-header">
-                  <span className="compact-cell-title">⭐ Bangers</span>
-                  <span className="compact-pill-badge banger-badge">{scorecardStats.bangerTotal} M</span>
+                <div className="compact-kpi-header">
+                  <span className="compact-kpi-title">⭐ Bangers</span>
+                  <span className="compact-kpi-pill banger-pill">{scorecardStats.bangerTotal}M</span>
                 </div>
-                <div className="compact-cell-value-row">
-                  <span className="compact-pct-val banger-text">{scorecardStats.bangerWinRate}%</span>
-                  <span className="compact-sub-ratio">{scorecardStats.bangerWon}W • {scorecardStats.bangerLost}L</span>
+                <div className="compact-kpi-val-row">
+                  <span className="compact-kpi-pct banger-text">{scorecardStats.bangerWinRate}%</span>
+                  <span className="compact-kpi-ratio">{scorecardStats.bangerWon}W • {scorecardStats.bangerLost}L</span>
                 </div>
               </div>
 
-              {/* Segment 3: Daily Top Prediction Win Rate */}
+              {/* Option 3: Daily Top Picks */}
               <div
-                className={`compact-winrate-cell toppick-cell ${selectedTier === 'TOP PICK' ? 'active-cell' : ''}`}
+                className={`compact-kpi-segment toppick-seg ${selectedTier === 'TOP PICK' ? 'active-seg' : ''}`}
                 onClick={() => setSelectedTier(selectedTier === 'TOP PICK' ? 'all' : 'TOP PICK')}
                 title="Click to filter by Daily Top Predictions"
               >
-                <div className="compact-cell-header">
-                  <span className="compact-cell-title">👑 Top Picks</span>
-                  <span className="compact-pill-badge toppick-badge">{scorecardStats.topPickTotal} M</span>
+                <div className="compact-kpi-header">
+                  <span className="compact-kpi-title">👑 Top Picks</span>
+                  <span className="compact-kpi-pill toppick-pill">{scorecardStats.topPickTotal}M</span>
                 </div>
-                <div className="compact-cell-value-row">
-                  <span className="compact-pct-val toppick-text">{scorecardStats.topPickWinRate}%</span>
-                  <span className="compact-sub-ratio">{scorecardStats.topPickWon}W • {scorecardStats.topPickLost}L</span>
+                <div className="compact-kpi-val-row">
+                  <span className="compact-kpi-pct toppick-text">{scorecardStats.topPickWinRate}%</span>
+                  <span className="compact-kpi-ratio">{scorecardStats.topPickWon}W • {scorecardStats.topPickLost}L</span>
                 </div>
               </div>
             </div>
 
-            {/* BOLD DEMARCATION LINE BETWEEN THE TWO TABS */}
-            <div className="consolidated-bold-demarcation" aria-hidden="true" />
-
-            {/* Tab 2: Activity & Settlement Metrics, separated by thick lines */}
-            <div className="consolidated-tab-activity">
-              {/* Item 1: Settled Matches */}
+            {/* Card 2: Activity & Settlement Metrics inside one single-card footprint, separated by lines */}
+            <div className="compact-kpi-card activity-kpi-card">
+              {/* Option 1: Settled */}
               <div
-                className={`compact-activity-cell ${scoreStatusFilter === 'finished' ? 'active-cell' : ''}`}
+                className={`compact-act-segment ${scoreStatusFilter === 'finished' ? 'active-seg' : ''}`}
                 onClick={() => setScoreStatusFilter(scoreStatusFilter === 'finished' ? 'all' : 'finished')}
                 title="Click to filter by settled finished matches"
               >
-                <span className="compact-act-label">Settled</span>
-                <span className="compact-act-val">{scorecardStats.settledMatchesCount}</span>
-                <span className="compact-act-sub">Verified FT</span>
+                <span className="act-seg-label">Settled</span>
+                <span className="act-seg-val">{scorecardStats.settledMatchesCount}</span>
+                <span className="act-seg-sub">FT</span>
               </div>
 
-              {/* Item 2: Won Picks */}
+              {/* Option 2: Won */}
               <div
-                className={`compact-activity-cell won-cell ${settlementFilter === 'won' ? 'active-cell' : ''}`}
+                className={`compact-act-segment won-seg ${settlementFilter === 'won' ? 'active-seg' : ''}`}
                 onClick={() => setSettlementFilter(settlementFilter === 'won' ? 'all' : 'won')}
                 title="Click to filter by won predictions"
               >
-                <span className="compact-act-label">Won</span>
-                <span className="compact-act-val won-text">{scorecardStats.allWon}</span>
-                <span className="compact-act-sub">Verified Wins</span>
+                <span className="act-seg-label">Won</span>
+                <span className="act-seg-val won-text">{scorecardStats.allWon}</span>
+                <span className="act-seg-sub">Wins</span>
               </div>
 
-              {/* Item 3: Lost */}
+              {/* Option 3: Lost */}
               <div
-                className={`compact-activity-cell lost-cell ${settlementFilter === 'lost' ? 'active-cell' : ''}`}
+                className={`compact-act-segment lost-seg ${settlementFilter === 'lost' ? 'active-seg' : ''}`}
                 onClick={() => setSettlementFilter(settlementFilter === 'lost' ? 'all' : 'lost')}
                 title="Click to filter by lost predictions"
               >
-                <span className="compact-act-label">Lost</span>
-                <span className="compact-act-val lost-text">{scorecardStats.allLost}</span>
-                <span className="compact-act-sub">Audit Trail</span>
+                <span className="act-seg-label">Lost</span>
+                <span className="act-seg-val lost-text">{scorecardStats.allLost}</span>
+                <span className="act-seg-sub">Audit</span>
               </div>
 
-              {/* Item 4: Daily Win Rate */}
+              {/* Option 4: Win Rate */}
               <div
-                className="compact-activity-cell rate-cell"
+                className="compact-act-segment rate-seg"
                 onClick={() => {
                   setSettlementFilter('all');
                   setScoreStatusFilter('all');
                 }}
                 title="Click to reset win/loss filters"
               >
-                <span className="compact-act-label">Win Rate</span>
-                <span className="compact-act-val won-text">{scorecardStats.allWinRate}%</span>
-                <span className="compact-act-sub">{scorecardStats.allWon}/{scorecardStats.allDecided}</span>
+                <span className="act-seg-label">Win Rate</span>
+                <span className="act-seg-val won-text">{scorecardStats.allWinRate}%</span>
+                <span className="act-seg-sub">{scorecardStats.allWon}/{scorecardStats.allDecided}</span>
               </div>
 
-              {/* Item 5: Inplay */}
+              {/* Option 5: In-Play */}
               <div
-                className={`compact-activity-cell pending-cell ${settlementFilter === 'pending' ? 'active-cell' : ''}`}
+                className={`compact-act-segment pending-seg ${settlementFilter === 'pending' ? 'active-seg' : ''}`}
                 onClick={() => setSettlementFilter(settlementFilter === 'pending' ? 'all' : 'pending')}
                 title="Click to filter by in-play / pending picks"
               >
-                <span className="compact-act-label">In-Play</span>
-                <span className="compact-act-val pending-text">
+                <span className="act-seg-label">In-Play</span>
+                <span className="act-seg-val pending-text">
                   {scorecardStats.allPending}
-                  {scorecardStats.liveCount > 0 && <span className="compact-live-sub"> ({scorecardStats.liveCount})</span>}
+                  {scorecardStats.liveCount > 0 && <span className="act-live-sub"> ({scorecardStats.liveCount})</span>}
                 </span>
-                <span className="compact-act-sub">Active</span>
+                <span className="act-seg-sub">Active</span>
               </div>
             </div>
           </div>

@@ -647,7 +647,7 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
   return (
     <div
       id={`fixture-${fixture.id}`}
-      className="fixture-card glance-fixture-box"
+      className={`fixture-card glance-fixture-box ${isWon ? 'card-state-won' : isLost ? 'card-state-lost' : 'card-state-default'}`}
       onClick={onToggleExpand}
       style={{ cursor: 'pointer' }}
     >
