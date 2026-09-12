@@ -10512,9 +10512,11 @@ body {
     margin-left: 8px !important;
   }
 
-  /* Daily Scorecard Section */
+  /* Daily Scorecard Section (Reduced parent container height on mobile only) */
   .daily-scorecard-section {
-    padding: 14px 12px !important;
+    padding: 6px 10px 8px !important;
+    margin-bottom: 10px !important;
+    border-radius: 12px !important;
     width: 100% !important;
     max-width: 100% !important;
     box-sizing: border-box !important;
