@@ -267,7 +267,9 @@ class SimulationPipeline:
                 else:
                     self.supabase.post("football_predictions", pred_payload)
 
-                self.supabase.patch("football_fixtures", {"status": "scheduled"}, {"id": f"eq.{fixture_id}"})
+                curr_f = self.supabase.get("football_fixtures", {"id": f"eq.{fixture_id}", "select": "status"})
+                if curr_f and curr_f[0].get("status") not in ("finished", "ft", "settled"):
+                    self.supabase.patch("football_fixtures", {"status": "scheduled"}, {"id": f"eq.{fixture_id}"})
                 persisted_count = 1
 
             except Exception as exc:

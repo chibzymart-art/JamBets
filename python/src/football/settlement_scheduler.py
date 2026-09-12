@@ -463,6 +463,19 @@ class SettlementScheduler:
                                 "notes": decision.notes
                             }
                             self.supabase.upsert_settlement(settle_record)
+                            if not decision.is_early_settlement or decision.status in (SettlementStatus.LOST, SettlementStatus.VOID):
+                                try:
+                                    cur_fix = self.supabase.get("football_fixtures", {"id": f"eq.{fix_id}", "select": "status"})
+                                    if cur_fix and cur_fix[0].get("status") in ("scheduled", "in_play", "live", "halftime"):
+                                        fix_patch = {"status": "finished"}
+                                        if decision.status == SettlementStatus.VOID:
+                                            fix_patch["period"] = "FT"
+                                        elif match_state and match_state.period:
+                                            fix_patch["period"] = match_state.period
+                                        self.supabase.patch("football_fixtures", fix_patch, {"id": f"eq.{fix_id}"})
+                                except Exception as fix_patch_err:
+                                    print(f"    [WARN] Could not patch fixture {fix_id} status on settlement: {fix_patch_err}")
+
                             early_tag = "[EARLY] " if decision.is_early_settlement else ""
                             print(f"    • {early_tag}SETTLED: {pred.get('market')} ({pred.get('prediction')}) -> {decision.status.value.upper()} ({decision.notes})")
                         else:

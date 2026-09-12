@@ -406,72 +406,97 @@ export default function App() {
     setError(null);
     const start = performance.now();
     try {
-      // 1. Authoritative Cloud Supabase Query on football_predictions_paywall
-      // Combines published predictions (paywall masked for free users, unmasked for subscribers/admins)
-      // and embeds corresponding fixture, league, and team records in a single round-trip.
-      const predictionsQuery = supabase
-        .from('football_predictions_paywall')
-        .select(`
-          id,
-          fixture_id,
-          prediction,
-          market,
-          probability,
-          confidence_category,
-          secondary_predictions,
-          metadata,
-          settlement_status,
-          settlement_notes,
-          settled_at,
-          actual_score,
-          publication_status,
-          simulations_count,
-          target_kickoff_at,
-          tier_required,
-          is_locked,
-          fixture:football_fixtures!inner(
+      let rawPredRecords: any[] = [];
+      let returnedLeagues: LeagueRecord[] = [];
+
+      // Edge CDN Acceleration: Query global edge cache for high-concurrency visitor traffic
+      let usedEdgeCache = false;
+      if (!isAdmin && !canViewPredictions && typeof window !== 'undefined') {
+        try {
+          const edgeRes = await fetch('/api/predictions-feed', {
+            headers: { Accept: 'application/json' },
+            cache: 'default'
+          });
+          if (edgeRes.ok) {
+            const edgeData = await edgeRes.json();
+            if (edgeData.success && Array.isArray(edgeData.predictions) && edgeData.predictions.length > 0) {
+              rawPredRecords = edgeData.predictions;
+              returnedLeagues = edgeData.leagues || [];
+              usedEdgeCache = true;
+            }
+          }
+        } catch {
+          // Graceful fallback to direct Supabase PostgREST query
+        }
+      }
+
+      if (!usedEdgeCache) {
+        // Direct Supabase Query (Used for Admins, Paid Subscribers, or when Edge is local/unavailable)
+        const predictionsQuery = supabase
+          .from('football_predictions_paywall')
+          .select(`
             id,
-            canonical_key,
-            target_kickoff_at,
-            status,
-            queue_day,
-            in_prediction_queue,
-            home_score,
-            away_score,
-            match_minute,
-            period,
-            half_time_home_score,
-            half_time_away_score,
-            corners_home,
-            corners_away,
-            postponed_at,
-            cancelled_at,
-            venue,
+            fixture_id,
+            prediction,
+            market,
+            probability,
+            confidence_category,
+            secondary_predictions,
             metadata,
-            league:football_leagues!inner(id, name, code, country),
-            home_team:football_teams!football_fixtures_home_team_id_fkey(id, name),
-            away_team:football_teams!football_fixtures_away_team_id_fkey(id, name)
-          )
-        `)
-        .eq('publication_status', 'published')
-        .order('target_kickoff_at', { ascending: true })
-        .limit(2000);
+            settlement_status,
+            settlement_notes,
+            settled_at,
+            actual_score,
+            publication_status,
+            simulations_count,
+            target_kickoff_at,
+            tier_required,
+            is_locked,
+            fixture:football_fixtures!inner(
+              id,
+              canonical_key,
+              target_kickoff_at,
+              status,
+              queue_day,
+              in_prediction_queue,
+              home_score,
+              away_score,
+              match_minute,
+              period,
+              half_time_home_score,
+              half_time_away_score,
+              corners_home,
+              corners_away,
+              postponed_at,
+              cancelled_at,
+              venue,
+              metadata,
+              league:football_leagues!inner(id, name, code, country),
+              home_team:football_teams!football_fixtures_home_team_id_fkey(id, name),
+              away_team:football_teams!football_fixtures_away_team_id_fkey(id, name)
+            )
+          `)
+          .eq('publication_status', 'published')
+          .order('target_kickoff_at', { ascending: true })
+          .limit(2000);
 
-      const leagueQuery = supabase
-        .from('football_leagues')
-        .select('id, name, code, country')
-        .order('name', { ascending: true });
+        const leagueQuery = supabase
+          .from('football_leagues')
+          .select('id, name, code, country')
+          .order('name', { ascending: true });
 
-      const [predictionsRes, leagueRes] = await Promise.all([
-        predictionsQuery,
-        leagueQuery
-      ]);
+        const [predictionsRes, leagueRes] = await Promise.all([
+          predictionsQuery,
+          leagueQuery
+        ]);
+
+        if (predictionsRes.error) throw predictionsRes.error;
+        rawPredRecords = predictionsRes.data || [];
+        returnedLeagues = leagueRes.data || [];
+      }
 
       const elapsed = Math.round(performance.now() - start);
       setLatencyMs(elapsed);
-
-      if (predictionsRes.error) throw predictionsRes.error;
-      const rawPredRecords = predictionsRes.data || [];
       const embeddedPreds: FootballPrediction[] = [];
       const fixtureMap = new Map<string, QueueFixture>();
 
@@ -546,7 +571,7 @@ export default function App() {
         (a, b) => new Date(a.target_kickoff_at).getTime() - new Date(b.target_kickoff_at).getTime()
       );
 
-      const returnedLeagues: LeagueRecord[] = leagueRes.data || [];
+
 
       setFixtures(returnedFixtures);
       setLeaguesList(returnedLeagues);
@@ -832,13 +857,7 @@ export default function App() {
 
     sourceList.forEach((item: any) => {
       if (!activeFixtureIds.has(item.fixture_id)) return;
-      const f = fixtures.find((fix) => fix.id === item.fixture_id);
-      const isFinished = f?.status === 'finished' || f?.period === 'FT';
       let st = item.settlement_status || 'pending';
-      // "Lost should be when a fixture has been completely ended and result confirmed"
-      if (st === 'lost' && !isFinished) {
-        st = 'pending';
-      }
       const cat = item.confidence_category;
 
       if (st === 'won') allWon++;
@@ -881,7 +900,12 @@ export default function App() {
         (f.period && ['1H', 'HT', '2H', 'ET', 'PK'].includes(f.period.toUpperCase()))
       );
     }).length;
-    const settledMatchesCount = scopedFixtures.filter((f) => f.status === 'finished' || f.period === 'FT').length;
+    const settledMatchesCount = scopedFixtures.filter((f) => {
+      const isFinished = f.status === 'finished' || f.period === 'FT';
+      const preds = predsByFixture.get(f.id) || [];
+      const hasSettledPred = preds.some((p) => p.settlement_status === 'won' || p.settlement_status === 'lost' || p.settlement_status === 'void' || p.settlement_status === 'voided');
+      return isFinished || hasSettledPred;
+    }).length;
 
     return {
       allWon,
@@ -955,10 +979,6 @@ export default function App() {
         if (canViewPredictions) {
           const hasStatus = fixturePreds.some((p) => {
             let st = p.settlement_status || 'pending';
-            // "Lost should be when a fixture has been completely ended and result confirmed"
-            if (st === 'lost' && !isFinished) {
-              st = 'pending';
-            }
             if (settlementFilter === 'void') return st === 'void' || st === 'voided';
             return st === settlementFilter;
           });

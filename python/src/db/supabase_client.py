@@ -100,12 +100,23 @@ class SupabaseClient:
         """
         Upserts a canonical fixture record using canonical_key for deduplication.
         If canonical_key exists in database, updates the fixture; otherwise inserts.
+        Preserves finished/settled status so forward-looking calendar scrapes never revert finished games.
         """
         canonical_key = fixture_payload.get("canonical_key")
         if canonical_key:
-            existing = self.get("football_fixtures", {"canonical_key": f"eq.{canonical_key}", "select": "id"})
+            existing = self.get("football_fixtures", {"canonical_key": f"eq.{canonical_key}", "select": "id,status"})
             if existing:
                 fixture_id = existing[0]["id"]
+                curr_status = existing[0].get("status")
+                # CRITICAL: If fixture is already finished or settled, never overwrite its status or scores back to scheduled
+                if curr_status in ("finished", "ft", "settled"):
+                    safe_payload = dict(fixture_payload)
+                    safe_payload.pop("status", None)
+                    safe_payload.pop("home_score", None)
+                    safe_payload.pop("away_score", None)
+                    safe_payload.pop("period", None)
+                    resp = self.patch("football_fixtures", safe_payload, {"id": f"eq.{fixture_id}"})
+                    return resp[0] if resp else existing[0]
                 # Update existing record
                 resp = self.patch("football_fixtures", fixture_payload, {"id": f"eq.{fixture_id}"})
                 return resp[0] if resp else existing[0]

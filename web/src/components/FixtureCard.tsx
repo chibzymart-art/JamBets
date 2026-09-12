@@ -600,11 +600,8 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
   // If the match is live and the prediction has been met or settled while live, it settles the match by showing WON.
   const isWon = prediction?.settlement_status === 'won';
 
-  // Lost should be when a fixture has been completely ended and result confirmed.
-  // Never show LOST while the match is live!
-  const isLost = prediction?.settlement_status === 'lost' && isFinished;
-
-  const isVoid = (prediction?.settlement_status === 'void' || prediction?.settlement_status === 'voided') && isFinished;
+  const isLost = prediction?.settlement_status === 'lost';
+  const isVoid = prediction?.settlement_status === 'void' || prediction?.settlement_status === 'voided';
   const isPending = !isWon && !isLost && !isVoid;
 
   const isNoBanker = prediction?.market === 'NO_SAFE_BANKER' ||
