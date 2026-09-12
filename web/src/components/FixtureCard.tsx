@@ -729,7 +729,9 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
                 )}
                 {isVoid && (
                   <span className="glance-settle-pill">
-                    <span style={{ color: '#64748b', fontWeight: 800 }}>⊘ VOID</span>
+                    <span style={{ color: isNoBanker ? '#475569' : '#64748b', fontWeight: 800 }}>
+                      {isNoBanker ? '🛡️ SETTLED (PASSED)' : '⊘ VOID'}
+                    </span>
                   </span>
                 )}
               </>
@@ -799,6 +801,11 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
                 {isLive && !isWon && (
                   <span style={{ marginLeft: 6, padding: '1px 6px', background: '#ea580c', color: '#fff', borderRadius: 4, fontSize: 10, fontWeight: 900 }}>
                     ⚡ LIVE
+                  </span>
+                )}
+                {isVoid && (
+                  <span style={{ marginLeft: 6, padding: '1px 6px', background: '#475569', color: '#fff', borderRadius: 4, fontSize: 10, fontWeight: 900 }}>
+                    {isNoBanker ? '🛡️ SETTLED' : '⊘ VOID'}
                   </span>
                 )}
               </div>
