@@ -31,7 +31,7 @@ export default async function handler(req: Request) {
 
     const [goalsRes, leagueRes] = await Promise.all([
       fetch(
-        `${SUPABASE_URL}/rest/v1/goals_predictions_paywall?select=${selectQuery}&order=target_kickoff_at.asc&limit=1000`,
+        `${SUPABASE_URL}/rest/v1/goals_predictions_paywall?select=${selectQuery}&order=probability.desc&limit=1000`,
         { headers }
       ),
       fetch(

@@ -1,7 +1,7 @@
 /* ==========================================================================
-   JamBets — Goals Specialist Hub (Bright Modern Gen-Z Stylesheet)
-   Clean, crisp, bright white design system matching JamBets dashboard aesthetics.
-   High contrast typography, vivid sporty accents, zero visual clutter.
+   JamBets — Goals Specialist Hub (Bright Modern 2-Line List Stylesheet)
+   Clean, bright white aesthetics, 2 lines per match, thick border separators,
+   highest ratings sorted descending, zero visual clutter.
    ========================================================================== */
 
 .goals-page-container {
@@ -13,7 +13,7 @@
   background: transparent;
 }
 
-/* 1. Controls & Filter Bar (Sticky/Crisp Top Position) */
+/* 1. Controls & Filter Bar */
 .goals-controls-bar {
   display: flex;
   flex-direction: column;
@@ -61,7 +61,7 @@
   box-shadow: 0 3px 10px rgba(15, 23, 42, 0.18);
 }
 
-/* Sub-filters (Dates + Search) */
+/* Sub-filters (Dynamic 4-Day Dates + Search) */
 .goals-subfilters-row {
   display: flex;
   align-items: center;
@@ -73,9 +73,17 @@
 .goals-date-pills {
   display: flex;
   gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  scrollbar-width: none;
+}
+
+.goals-date-pills::-webkit-scrollbar {
+  display: none;
 }
 
 .date-pill {
+  white-space: nowrap;
   background: #ffffff;
   border: 1px solid #e2e8f0;
   color: #475569;
@@ -153,84 +161,82 @@
   color: #475569;
 }
 
-/* 2. Goal Card (Bright Modern Gen-Z Mobile First) */
+/* 2. Single Line Match Items Container with Thick Border Separators */
 .goals-cards-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
-  gap: 16px;
-}
-
-.goal-card-genz {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
   background: #ffffff;
   border: 1px solid #e2e8f0;
   border-radius: 16px;
-  padding: 16px;
+  overflow: hidden;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+}
+
+/* Individual 2-Line Row */
+.goal-item-row {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  position: relative;
-  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.02);
+  justify-content: center;
+  gap: 10px;
+  padding: 16px 20px;
+  background: #ffffff;
+  border-bottom: 2.5px solid #e2e8f0; /* Thick border separator! */
+  transition: background 0.15s ease;
 }
 
-.goal-card-genz:hover {
-  transform: translateY(-2px);
-  border-color: #cbd5e1;
-  box-shadow: 0 10px 22px -4px rgba(0, 0, 0, 0.08);
+.goal-item-row:last-child {
+  border-bottom: none;
 }
 
-/* Card Header: League & Status */
-.goal-card-header {
+.goal-item-row:hover {
+  background: #f8fafc;
+}
+
+/* LINE 1: Fixture Details (League, Kickoff, Matchup Clubs, Live Score) */
+.goal-row-line-1 {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 14px;
+}
+
+.goal-meta-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 170px;
 }
 
 .goal-league-chip {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  max-width: 65%;
-}
-
-.goal-league-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #2563eb;
-}
-
-.goal-league-text {
-  font-size: 0.74rem;
-  color: #64748b;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.goal-time-badge {
-  font-size: 0.74rem;
-  font-weight: 600;
+  font-size: 0.72rem;
+  font-weight: 750;
   color: #475569;
   background: #f1f5f9;
   border: 1px solid #e2e8f0;
-  padding: 3px 8px;
+  padding: 2px 8px;
   border-radius: 6px;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
+.goal-time-chip {
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: #64748b;
+  white-space: nowrap;
 }
 
 .goal-live-badge {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 5px;
   font-size: 0.72rem;
-  font-weight: 700;
+  font-weight: 750;
   color: #dc2626;
   background: #fef2f2;
   border: 1px solid #fecaca;
-  padding: 3px 8px;
+  padding: 2px 8px;
   border-radius: 6px;
 }
 
@@ -250,258 +256,155 @@
 
 .goal-ft-badge {
   font-size: 0.72rem;
+  font-weight: 750;
+  color: #059669;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+
+.goal-clubs-matchup {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 1.02rem;
+  font-weight: 750;
+  color: #0f172a;
+  flex: 1;
+}
+
+.club-name {
+  color: #0f172a;
+  font-weight: 750;
+  line-height: 1.25;
+}
+
+.club-vs-sep {
+  font-size: 0.74rem;
+  font-weight: 800;
+  color: #94a3b8;
+  text-transform: uppercase;
+  padding: 0 2px;
+}
+
+.goal-score-right {
+  min-width: 90px;
+  text-align: right;
+}
+
+.goal-score-pill {
+  font-size: 0.88rem;
   font-weight: 700;
   color: #059669;
   background: #ecfdf5;
   border: 1px solid #a7f3d0;
-  padding: 3px 8px;
-  border-radius: 6px;
+  padding: 3px 10px;
+  border-radius: 8px;
+  white-space: nowrap;
 }
 
-/* Matchup Teams */
-.goal-teams-row {
+/* LINE 2: Market Prediction, Rating Ranking, Confidence %, Settlement Score */
+.goal-row-line-2 {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 4px 0;
+  flex-wrap: wrap;
 }
 
-.goal-team-block {
-  flex: 1;
-}
-
-.goal-team-block.home {
-  text-align: right;
-}
-
-.goal-team-block.away {
-  text-align: left;
-}
-
-.goal-team-name {
-  font-size: 0.96rem;
-  font-weight: 750;
-  color: #0f172a;
-  line-height: 1.25;
-}
-
-.goal-vs-divider {
+.goal-pred-left {
   display: flex;
   align-items: center;
-  justify-content: center;
-  min-width: 44px;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
-.goal-vs-text {
-  font-size: 0.72rem;
+.goal-market-pill {
+  font-size: 0.82rem;
   font-weight: 800;
-  color: #94a3b8;
-}
-
-.goal-live-score {
-  font-size: 1.15rem;
-  font-weight: 800;
-  color: #2563eb;
-  letter-spacing: 0.05em;
-}
-
-/* Hero Prediction Pill Inside Card */
-.goal-hero-section {
+  color: #0f172a;
   background: #f8fafc;
   border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  padding: 10px 14px;
-}
-
-.goal-hero-unlocked {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.goal-market-badge {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.goal-market-icon {
-  font-size: 1.1rem;
-}
-
-.goal-market-label {
-  font-size: 0.86rem;
-  font-weight: 800;
+  padding: 4px 10px;
+  border-radius: 8px;
   letter-spacing: 0.02em;
-  color: #0f172a;
 }
 
-.goal-prob-pill {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-
-.goal-prob-val {
-  font-size: 1.08rem;
-  font-weight: 800;
-  color: #059669;
-  line-height: 1;
-}
-
-.goal-prob-sub {
-  font-size: 0.65rem;
-  color: #64748b;
-  text-transform: uppercase;
+.goal-confidence-pill {
+  font-size: 0.84rem;
   font-weight: 600;
+  color: #334155;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  padding: 3px 10px;
+  border-radius: 8px;
 }
 
-.goal-tier-pill {
-  font-size: 0.7rem;
-  font-weight: 700;
+.goal-confidence-pill strong {
+  color: #16a34a;
+  font-weight: 800;
+}
+
+.goal-tier-badge {
+  font-size: 0.74rem;
+  font-weight: 750;
   border-width: 1px;
   border-style: solid;
-  padding: 3px 8px;
-  border-radius: 6px;
-  letter-spacing: 0.03em;
+  padding: 3px 10px;
+  border-radius: 8px;
+  letter-spacing: 0.02em;
   white-space: nowrap;
 }
 
-/* Locked Banner Inside Card */
-.goal-locked-banner {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  cursor: pointer;
-  padding: 6px 4px;
-}
-
-.goal-lock-icon {
-  font-size: 1.2rem;
-}
-
-.goal-locked-info {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-}
-
-.goal-locked-title {
-  font-size: 0.85rem;
+.goal-xg-pill {
+  font-size: 0.74rem;
   font-weight: 700;
-  color: #1e293b;
+  color: #2563eb;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  padding: 3px 8px;
+  border-radius: 6px;
 }
 
-.goal-locked-sub {
-  font-size: 0.7rem;
+.goal-locked-pill {
+  font-size: 0.78rem;
+  font-weight: 750;
   color: #7c3aed;
-  font-weight: 600;
-}
-
-.goal-unlock-pill-btn {
-  background: #7c3aed;
-  border: none;
-  color: #ffffff;
-  font-size: 0.75rem;
-  font-weight: 700;
-  padding: 5px 12px;
+  background: #f5f3ff;
+  border: 1px solid #ddd6fe;
+  padding: 4px 12px;
   border-radius: 8px;
   cursor: pointer;
-  transition: background 0.15s ease;
+  transition: all 0.15s ease;
 }
 
-.goal-unlock-pill-btn:hover {
-  background: #6d28d9;
+.goal-locked-pill:hover {
+  background: #ede9fe;
 }
 
-/* Micro Stats Grid */
-.goal-stats-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 10px;
-  padding: 8px 10px;
-}
-
-.goal-stat-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-}
-
-.stat-label {
-  font-size: 0.65rem;
-  color: #64748b;
-  text-transform: uppercase;
-  font-weight: 600;
-}
-
-.stat-val {
-  font-size: 0.86rem;
-  font-weight: 700;
-  color: #0f172a;
-}
-
-.stat-val.highlight {
-  color: #2563eb;
-}
-
-/* Settlement Status Strip */
-.goal-settlement-strip {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 8px 12px;
-  border-radius: 10px;
-  font-size: 0.78rem;
-  font-weight: 600;
-}
-
-.goal-settlement-strip.status-won {
-  background: #ecfdf5;
-  border: 1px solid #a7f3d0;
-  color: #065f46;
-}
-
-.goal-settlement-strip.status-lost {
-  background: #fef2f2;
-  border: 1px solid #fecaca;
-  color: #991b1b;
-}
-
-.goal-settlement-strip.status-void {
-  background: #f1f5f9;
-  border: 1px solid #cbd5e1;
-  color: #475569;
-}
-
-.settlement-left {
+/* Settlement Score: NO Won or Lose, Just the Score */
+.goal-settlement-inline {
   display: flex;
   align-items: center;
   gap: 6px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #334155;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  padding: 4px 12px;
+  border-radius: 6px;
 }
 
-.settlement-status-tag {
-  font-weight: 800;
+.settlement-score-label strong {
+  color: #059669;
 }
 
-.settlement-note {
+.settlement-ht-note {
   font-size: 0.72rem;
-  opacity: 0.85;
-}
-
-.ht-score-tag {
-  font-size: 0.72rem;
-  background: rgba(0, 0, 0, 0.05);
-  padding: 2px 6px;
-  border-radius: 4px;
+  color: #64748b;
+  font-weight: 600;
 }
 
 /* Empty & Loading States */
@@ -561,22 +464,51 @@
 /* Mobile Responsiveness (390px - 768px) */
 @media (max-width: 768px) {
   .goals-page-container {
-    padding: 12px 12px 60px 12px;
+    padding: 12px 10px 60px 10px;
   }
 
-  .goals-cards-grid {
-    grid-template-columns: 1fr;
-    gap: 12px;
+  .goal-item-row {
+    padding: 14px 14px;
+    gap: 8px;
+    border-bottom-width: 2px;
   }
 
-  .goal-stats-grid {
-    grid-template-columns: repeat(2, 1fr);
-    gap: 10px;
+  .goal-row-line-1 {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
   }
 
-  .goals-subfilters-row {
+  .goal-meta-left {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .goal-clubs-matchup {
+    font-size: 0.94rem;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .goal-score-right {
+    min-width: auto;
+  }
+
+  .goal-row-line-2 {
+    gap: 8px;
+  }
+
+  .goal-pred-left {
+    gap: 6px;
+  }
+
+  .goal-subfilters-row {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .goals-date-pills {
+    width: 100%;
   }
 
   .goals-search-box {

@@ -20,6 +20,7 @@ export interface GoalPredictionItem {
   ht_score: string | null;
   settlement_notes: string | null;
   is_locked: boolean;
+  metadata?: any;
   fixture?: {
     id: string;
     target_kickoff_at: string;
@@ -43,6 +44,86 @@ interface GoalCardProps {
   prediction: GoalPredictionItem;
   isPaidUser: boolean;
   onOpenUpgrade?: () => void;
+}
+
+const KNOWN_CLUB_OVERRIDES: Record<string, string> = {
+  'scr-altach': 'SCR Altach',
+  'grazer-ak': 'Grazer AK',
+  'ofi-crete': 'OFI Crete',
+  'st-pauli': 'FC St. Pauli',
+  'atletico-mg': 'Atlético Mineiro',
+  'vasco-da-gama': 'Vasco da Gama',
+  'tottenham-hotspur': 'Tottenham Hotspur',
+  'ac-milan': 'AC Milan',
+  'inter-milan': 'Inter Milan',
+  'internazionale': 'Inter Milan',
+  'werder-bremen': 'Werder Bremen',
+  'al-hilal': 'Al-Hilal',
+  'al-taawoun': 'Al-Taawoun',
+  'st-gallen': 'FC St. Gallen',
+  'cologne': '1. FC Köln',
+  'lazio': 'SS Lazio',
+  'ss-lazio': 'SS Lazio',
+  'man-city': 'Manchester City',
+  'man-united': 'Manchester United',
+  'manchester-city': 'Manchester City',
+  'manchester-united': 'Manchester United',
+  'paris-saint-germain': 'PSG',
+  'psg': 'PSG',
+  'bayern-munich': 'Bayern Munich',
+  'borussia-dortmund': 'Borussia Dortmund',
+  'bayer-leverkusen': 'Bayer Leverkusen',
+  'rb-leipzig': 'RB Leipzig',
+  'real-madrid': 'Real Madrid',
+  'barcelona': 'FC Barcelona',
+  'fc-barcelona': 'FC Barcelona',
+  'atletico-madrid': 'Atlético Madrid',
+  'athletic-bilbao': 'Athletic Bilbao',
+  'real-sociedad': 'Real Sociedad',
+  'real-betis': 'Real Betis',
+  'sporting-cp': 'Sporting CP',
+  'porto': 'FC Porto',
+  'benfica': 'SL Benfica',
+  'cremonese': 'US Cremonese',
+  'cesena': 'Cesena FC',
+  'elche': 'Elche CF',
+  'everton': 'Everton',
+  'gremio': 'Grêmio',
+  'fluminense': 'Fluminense',
+  'grasshopper': 'Grasshoppers Zurich',
+  'sion': 'FC Sion'
+};
+
+const CLUB_ACRONYMS = new Set([
+  'fc', 'fk', 'afc', 'cf', 'sc', 'cd', 'ud', 'sk', 'ac', 'as', 'ae', 'rc',
+  'ss', 'us', 'tsg', 'vfb', 'vfl', 'fsv', 'bsc', 'sv', 'la', 'nyc', 'dc',
+  'cp', 'ca', 'cr', 'rb', 'psv', 'h&h', 'ii', 'iii', 'iv', 'scr', 'ak', 'ofi'
+]);
+
+export function formatClubName(name?: string | null): string {
+  if (!name) return 'Club';
+  const raw = name.trim();
+  const slug = raw.toLowerCase().replace(/\s+/g, '-');
+  if (KNOWN_CLUB_OVERRIDES[slug]) {
+    return KNOWN_CLUB_OVERRIDES[slug];
+  }
+  return raw
+    .replace(/[-_]+/g, ' ')
+    .split(' ')
+    .filter(Boolean)
+    .map((word) => {
+      const lower = word.toLowerCase();
+      if (CLUB_ACRONYMS.has(lower)) {
+        if (lower === 'vfb') return 'VfB';
+        if (lower === 'vfl') return 'VfL';
+        return lower.toUpperCase();
+      }
+      if (lower === 'da' || lower === 'de' || lower === 'del' || lower === 'la' || lower === 'van' || lower === 'von') {
+        return lower;
+      }
+      return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+    })
+    .join(' ');
 }
 
 export const GoalCard: React.FC<GoalCardProps> = ({
@@ -69,14 +150,18 @@ export const GoalCard: React.FC<GoalCardProps> = ({
     }
   }, [prediction.target_kickoff_at]);
 
-  const homeName = f?.home_team?.name || f?.home_team_name || 'Home Club';
-  const awayName = f?.away_team?.name || f?.away_team_name || 'Away Club';
-  const leagueName = f?.league?.name || f?.league_name || 'World Football';
+  const rawHome = f?.home_team?.name || f?.home_team_name || (prediction.metadata as any)?.home_team || 'Home Club';
+  const rawAway = f?.away_team?.name || f?.away_team_name || (prediction.metadata as any)?.away_team || 'Away Club';
+  const rawLeague = f?.league?.name || f?.league_name || (prediction.metadata as any)?.league || 'World Football';
+
+  const homeName = formatClubName(rawHome);
+  const awayName = formatClubName(rawAway);
+  const leagueName = rawLeague.toUpperCase();
 
   const isLive = f?.status === 'live' || f?.status === 'in_progress' || f?.status === 'halftime';
   const isFinished = f?.status === 'finished' || f?.period === 'FT' || prediction.settlement_status !== 'pending';
 
-  // Tier Color Config (Bright Theme Optimized)
+  // Tier Color Config (Maintains all rankings)
   const tierMeta = React.useMemo(() => {
     switch (prediction.confidence_tier) {
       case 'GOAL_MACHINE':
@@ -94,131 +179,92 @@ export const GoalCard: React.FC<GoalCardProps> = ({
 
   const probPercent = prediction.probability ? `${(prediction.probability * 100).toFixed(1)}%` : '--%';
 
+  // Score display (no Won or Lose, just the score)
+  const scoreDisplay = prediction.actual_score || (f && f.home_score !== null && f.home_score !== undefined && f.away_score !== null && f.away_score !== undefined ? `${f.home_score} - ${f.away_score}` : null);
+
   return (
-    <div className={`goal-card-genz ${isLocked ? 'goal-card-locked' : ''}`}>
-      {/* Top Meta Line: League, Kickoff Time, Status */}
-      <div className="goal-card-header">
-        <div className="goal-league-chip">
-          <span className="goal-league-dot" />
-          <span className="goal-league-text">{leagueName}</span>
+    <div className={`goal-item-row ${isLocked ? 'goal-item-locked' : ''}`}>
+      {/* LINE 1: Fixture Matchup, League & Time/Live/Score */}
+      <div className="goal-row-line-1">
+        <div className="goal-meta-left">
+          <span className="goal-league-chip">{leagueName}</span>
+          <span className="goal-time-chip">
+            {isLive ? (
+              <span className="goal-live-badge">
+                <span className="live-pulse-dot" /> LIVE {f?.match_minute ? `${f.match_minute}'` : ''}
+              </span>
+            ) : isFinished ? (
+              <span className="goal-ft-badge">FT</span>
+            ) : (
+              `🕒 ${kickoffStr} WAT`
+            )}
+          </span>
         </div>
 
-        <div className="goal-status-group">
-          {isLive ? (
-            <span className="goal-live-badge">
-              <span className="live-pulse-dot" />
-              LIVE {f?.match_minute ? `${f.match_minute}'` : (f?.period || '')}
-            </span>
-          ) : isFinished ? (
-            <span className="goal-ft-badge">
-              FT {f && f.home_score !== null && f.home_score !== undefined && f.away_score !== null && f.away_score !== undefined ? `${f.home_score}-${f.away_score}` : ''}
-            </span>
-          ) : (
-            <span className="goal-time-badge">
-              🕒 {kickoffStr} WAT
+        <div className="goal-clubs-matchup">
+          <span className="club-name home">{homeName}</span>
+          <span className="club-vs-sep">vs</span>
+          <span className="club-name away">{awayName}</span>
+        </div>
+
+        <div className="goal-score-right">
+          {scoreDisplay && (
+            <span className="goal-score-pill">
+              Score: <strong>{scoreDisplay}</strong>
             </span>
           )}
         </div>
       </div>
 
-      {/* Matchup Teams */}
-      <div className="goal-teams-row">
-        <div className="goal-team-block home">
-          <span className="goal-team-name">{homeName}</span>
-        </div>
-        <div className="goal-vs-divider">
-          {isFinished || isLive ? (
-            <span className="goal-live-score">
-              {f?.home_score ?? 0} : {f?.away_score ?? 0}
+      {/* LINE 2: Market, Rating Ranking, Confidence %, and Settlement (Score Only) */}
+      <div className="goal-row-line-2">
+        <div className="goal-pred-left">
+          <span className="goal-market-pill">
+            {isOver25 ? '🎯 Over 2.5 Goals' : '⏱️ 1st Half Over 0.5'}
+          </span>
+
+          {isLocked ? (
+            <span className="goal-locked-pill" onClick={onOpenUpgrade}>
+              🔒 VIP Access Required • Tap to Unlock
             </span>
           ) : (
-            <span className="goal-vs-text">VS</span>
+            <>
+              <span className="goal-confidence-pill">
+                <strong>{probPercent}</strong> Confidence
+              </span>
+
+              <span
+                className="goal-tier-badge"
+                style={{
+                  background: tierMeta.bg,
+                  borderColor: tierMeta.border,
+                  color: tierMeta.text
+                }}
+              >
+                {tierMeta.label}
+              </span>
+
+              {prediction.xg_combined && (
+                <span className="goal-xg-pill">
+                  xG {prediction.xg_combined.toFixed(2)}
+                </span>
+              )}
+            </>
           )}
         </div>
-        <div className="goal-team-block away">
-          <span className="goal-team-name">{awayName}</span>
-        </div>
-      </div>
 
-      {/* Hero Prediction Pill */}
-      <div className="goal-hero-section">
-        {isLocked ? (
-          <div className="goal-locked-banner" onClick={onOpenUpgrade}>
-            <span className="goal-lock-icon">🔒</span>
-            <div className="goal-locked-info">
-              <span className="goal-locked-title">
-                {isOver25 ? 'Over 2.5 Goal Signal' : '1st Half Over 0.5 Signal'}
-              </span>
-              <span className="goal-locked-sub">VIP & Paid Tier Access Required</span>
-            </div>
-            <button className="goal-unlock-pill-btn">Unlock</button>
-          </div>
-        ) : (
-          <div className="goal-hero-unlocked">
-            <div className="goal-market-badge">
-              <span className="goal-market-icon">{isOver25 ? '🎯' : '⏱️'}</span>
-              <span className="goal-market-label">
-                {isOver25 ? 'OVER 2.5 GOALS' : '1ST HALF OVER 0.5'}
-              </span>
-            </div>
-
-            <div className="goal-prob-pill">
-              <span className="goal-prob-val">{probPercent}</span>
-              <span className="goal-prob-sub">Confidence</span>
-            </div>
-
-            <div
-              className="goal-tier-pill"
-              style={{
-                background: tierMeta.bg,
-                borderColor: tierMeta.border,
-                color: tierMeta.text
-              }}
-            >
-              {tierMeta.label}
-            </div>
+        {/* Settlement: Just the score, NO won/lose */}
+        {prediction.settlement_status !== 'pending' && (
+          <div className="goal-settlement-inline">
+            <span className="settlement-score-label">
+              Result Score: <strong>{scoreDisplay || 'Awaiting Score'}</strong>
+            </span>
+            {prediction.ht_score && isOver25 && (
+              <span className="settlement-ht-note">(HT: {prediction.ht_score})</span>
+            )}
           </div>
         )}
       </div>
-
-      {/* Micro Stats Matrix (Single Row Mobile Friendly) */}
-      {!isLocked && (
-        <div className="goal-stats-grid">
-          <div className="goal-stat-item">
-            <span className="stat-label">Combined xG</span>
-            <span className="stat-val highlight">{prediction.xg_combined?.toFixed(2) || '2.85'}</span>
-          </div>
-          <div className="goal-stat-item">
-            <span className="stat-label">Over 2.5 Form</span>
-            <span className="stat-val">
-              {Math.round(((prediction.home_over25_rate || 65) + (prediction.away_over25_rate || 65)) / 2)}%
-            </span>
-          </div>
-          <div className="goal-stat-item">
-            <span className="stat-label">1H Goal %</span>
-            <span className="stat-val">{prediction.ht_goal_frequency || 80}%</span>
-          </div>
-          <div className="goal-stat-item">
-            <span className="stat-label">Est. 1st Goal</span>
-            <span className="stat-val">{prediction.avg_first_goal_minute || 24}'</span>
-          </div>
-        </div>
-      )}
-
-      {/* Settlement Result Footer (If Settled) */}
-      {prediction.settlement_status !== 'pending' && (
-        <div className={`goal-settlement-strip status-${prediction.settlement_status}`}>
-          <div className="settlement-left">
-            <span className="settlement-status-tag">
-              {prediction.settlement_status === 'won' ? '✓ WON' : (prediction.settlement_status === 'lost' ? '✗ LOST' : '⊘ VOID')}
-            </span>
-            <span className="settlement-note">{prediction.settlement_notes || 'Verified official score'}</span>
-          </div>
-          {prediction.ht_score && isOver25 && (
-            <span className="ht-score-tag">HT: {prediction.ht_score}</span>
-          )}
-        </div>
-      )}
     </div>
   );
 };
