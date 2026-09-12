@@ -50,7 +50,6 @@ export default function App() {
     leagueCount: number;
   }
 
-  const [isMobileNoticeExpanded, setIsMobileNoticeExpanded] = useState(false);
 
   // Sports Category Selector with Cloud Supabase Dynamic Availability
   const [selectedSport, setSelectedSport] = useState<string>('football');
@@ -1100,22 +1099,16 @@ export default function App() {
   // Unified Platform View (Header, Top Regulatory Notice & Footer on all pages)
   return (
     <div className="app-wrapper">
-      {/* 0. PINNED UNIVERSAL REGULATORY BANNER (ALL PAGES) */}
+      {/* 0. PINNED UNIVERSAL REGULATORY BANNER (WHITE BACKGROUND, SINGLE LINE SLIDING TICKER) */}
       <aside className="regulatory-top-banner" role="note" aria-label="Strict Regulatory Notice">
-        <div className="regulatory-top-banner-inner">
-          <span className="regulatory-top-icon" aria-hidden="true">🛡️</span>
-          <div className="regulatory-top-content">
-            <p className={`regulatory-top-text ${isMobileNoticeExpanded ? 'expanded' : 'collapsed'}`}>
-              <strong>STRICT REGULATORY NOTICE:</strong> Predictions are probabilistic estimates derived from mathematical simulations for informational purposes only. They are not guarantees of outcomes, and JamGames does not place bets on anyone's behalf. Sports predictive modeling entails variance and uncertainty; please make decisions responsibly. JamGames will not take responsibility for any financial losses. This is STRICTLY FOR EDUCATIONAL purposes only and NOT A FINANCIAL OR INVESTMENT ADVICE;
-            </p>
-            <button
-              type="button"
-              className="regulatory-mobile-toggle-btn"
-              onClick={() => setIsMobileNoticeExpanded((prev) => !prev)}
-              aria-label={isMobileNoticeExpanded ? 'Collapse regulatory notice' : 'Expand full regulatory notice'}
-            >
-              {isMobileNoticeExpanded ? '▴ Less' : '▾ Full Notice'}
-            </button>
+        <div className="regulatory-ticker-wrap">
+          <div className="regulatory-ticker-track">
+            <span className="regulatory-ticker-text">
+              <strong className="regulatory-prefix">🛡️ STRICT REGULATORY NOTICE:</strong> Predictions are probabilistic estimates derived from mathematical simulations for informational purposes only. They are not guarantees of outcomes, and JamGames does not place bets on anyone's behalf. Sports predictive modeling entails variance and uncertainty; please make decisions responsibly. JamGames will not take responsibility for any financial losses. This is STRICTLY FOR EDUCATIONAL purposes only and NOT A FINANCIAL OR INVESTMENT ADVICE. &nbsp;&nbsp;&nbsp;&nbsp;✦&nbsp;&nbsp;&nbsp;&nbsp;
+            </span>
+            <span className="regulatory-ticker-text" aria-hidden="true">
+              <strong className="regulatory-prefix">🛡️ STRICT REGULATORY NOTICE:</strong> Predictions are probabilistic estimates derived from mathematical simulations for informational purposes only. They are not guarantees of outcomes, and JamGames does not place bets on anyone's behalf. Sports predictive modeling entails variance and uncertainty; please make decisions responsibly. JamGames will not take responsibility for any financial losses. This is STRICTLY FOR EDUCATIONAL purposes only and NOT A FINANCIAL OR INVESTMENT ADVICE. &nbsp;&nbsp;&nbsp;&nbsp;✦&nbsp;&nbsp;&nbsp;&nbsp;
+            </span>
           </div>
         </div>
       </aside>
@@ -1448,61 +1441,11 @@ export default function App() {
           <>
             {/* 3. DAILY VERIFIED SCORECARD SECTION */}
         <section className="daily-scorecard-section">
-          <div className="scorecard-header-row">
-            <div>
-              <div className="scorecard-meta-tags">
-                <span className="tag-scorecard-verified">● Daily Verified Scorecard</span>
-                <span className="tag-scorecard-sport">● {currentSportObj.name}</span>
-                {watDateStr && <span className="tag-scorecard-sport">● WAT Live Date: {watDateStr}</span>}
-              </div>
-              <h2 className="scorecard-title-main">
-                {selectedDate === 'all'
-                  ? `All Queue Dates Performance (${dynamicDateTabs.all.count} Matches)`
-                  : selectedDate === dynamicDateTabs.yesterday.id
-                  ? `Yesterday's Verified Performance (${dynamicDateTabs.yesterday.subLabel})`
-                  : selectedDate === dynamicDateTabs.today.id
-                  ? `Today's Verified Performance (${dynamicDateTabs.today.subLabel})`
-                  : selectedDate === dynamicDateTabs.tomorrow.id
-                  ? `Tomorrow's Upcoming Predictions (${dynamicDateTabs.tomorrow.subLabel})`
-                  : `${formatWatDateDisplay(selectedDate)} Performance`}
-              </h2>
-              <p className="scorecard-subtitle-main">
-                Real-time livescore settlements and calibrated bivariate Poisson predictions for{' '}
-                {selectedDate === 'all'
-                  ? 'all dates'
-                  : selectedDate === dynamicDateTabs.yesterday.id
-                  ? `Yesterday (${dynamicDateTabs.yesterday.subLabel})`
-                  : selectedDate === dynamicDateTabs.today.id
-                  ? `Today (${dynamicDateTabs.today.subLabel})`
-                  : selectedDate === dynamicDateTabs.tomorrow.id
-                  ? `Tomorrow (${dynamicDateTabs.tomorrow.subLabel})`
-                  : formatWatDateDisplay(selectedDate)}
-              </p>
-            </div>
-
-            <div className="choose-date-selector">
-              <span className="choose-date-label">Choose Date:</span>
-              <select
-                className="choose-date-select"
-                value={selectedDate}
-                onChange={(e) => setSelectedDate(e.target.value)}
-              >
-                <option value="all">All Dates ({dynamicDateTabs.all.count} matches)</option>
-                <option value={dynamicDateTabs.yesterday.id}>
-                  Yesterday — {dynamicDateTabs.yesterday.subLabel} ({dynamicDateTabs.yesterday.count} matches)
-                </option>
-                <option value={dynamicDateTabs.today.id}>
-                  Today — {dynamicDateTabs.today.subLabel} ({dynamicDateTabs.today.count} matches) [CURRENT]
-                </option>
-                <option value={dynamicDateTabs.tomorrow.id}>
-                  Tomorrow — {dynamicDateTabs.tomorrow.subLabel} ({dynamicDateTabs.tomorrow.count} matches)
-                </option>
-                {dynamicDateTabs.futureDates.map((fd) => (
-                  <option key={fd.id} value={fd.id}>
-                    {fd.subLabel} — {fd.label} ({fd.count} matches)
-                  </option>
-                ))}
-              </select>
+          {/* Top Date Header: Only Current Date Displayed */}
+          <div className="scorecard-date-header">
+            <div className="current-date-badge">
+              <span className="current-date-live-dot" />
+              <span className="current-date-val">{watDateStr || 'Today'}</span>
             </div>
           </div>
 
@@ -1580,121 +1523,128 @@ export default function App() {
             })}
           </div>
 
-          {/* 4. SCORECARD KPI CARDS (2 ROWS) - ALL INTERACTIVELY CLICKABLE */}
-          {/* Row 1: 3 Hero KPI Cards */}
-          <div className="hero-kpi-grid">
-            {/* Card 1: All Predictions Win Rate (Dark Navy) */}
-            <div
-              className={`hero-kpi-dark-card hero-kpi-clickable ${selectedTier === 'all' && settlementFilter === 'all' && scoreStatusFilter === 'all' ? 'active-filter' : ''}`}
-              onClick={() => {
-                setSelectedTier('all');
-                setSettlementFilter('all');
-                setScoreStatusFilter('all');
-              }}
-              title="Click to reset filters and view all predictions"
-            >
-              <div className="hero-kpi-header">
-                <span className="hero-kpi-title">All Predictions Win Rate</span>
-                <span className="hero-kpi-pill-badge">{scorecardStats.allDecided} Matches</span>
+          {/* 4. DECONGESTED SCORECARD KPI SECTION (1 CONSOLIDATED DECK, 2 TABS DEMARCATED BY BOLD LINE) */}
+          <div className="scorecard-consolidated-deck">
+            {/* Tab 1: 3 Win Rate Metrics inside one tab, separated by thick lines */}
+            <div className="consolidated-tab-winrates">
+              {/* Segment 1: All Prediction Win Rate */}
+              <div
+                className={`compact-winrate-cell ${selectedTier === 'all' && settlementFilter === 'all' && scoreStatusFilter === 'all' ? 'active-cell' : ''}`}
+                onClick={() => {
+                  setSelectedTier('all');
+                  setSettlementFilter('all');
+                  setScoreStatusFilter('all');
+                }}
+                title="Click to reset filters and view all predictions"
+              >
+                <div className="compact-cell-header">
+                  <span className="compact-cell-title">All Predictions</span>
+                  <span className="compact-pill-badge">{scorecardStats.allDecided} M</span>
+                </div>
+                <div className="compact-cell-value-row">
+                  <span className="compact-pct-val">{scorecardStats.allWinRate}%</span>
+                  <span className="compact-sub-ratio">{scorecardStats.allWon}W • {scorecardStats.allLost}L</span>
+                </div>
               </div>
-              <div className="hero-kpi-value-row">
-                {scorecardStats.allWinRate}% Win. {scorecardStats.allWon}/{scorecardStats.allDecided}.
+
+              {/* Segment 2: Daily Banger Win Rate */}
+              <div
+                className={`compact-winrate-cell banger-cell ${selectedTier === 'BANGER' ? 'active-cell' : ''}`}
+                onClick={() => setSelectedTier(selectedTier === 'BANGER' ? 'all' : 'BANGER')}
+                title="Click to filter by 90%+ Banger Locks"
+              >
+                <div className="compact-cell-header">
+                  <span className="compact-cell-title">⭐ Bangers</span>
+                  <span className="compact-pill-badge banger-badge">{scorecardStats.bangerTotal} M</span>
+                </div>
+                <div className="compact-cell-value-row">
+                  <span className="compact-pct-val banger-text">{scorecardStats.bangerWinRate}%</span>
+                  <span className="compact-sub-ratio">{scorecardStats.bangerWon}W • {scorecardStats.bangerLost}L</span>
+                </div>
               </div>
-              <div className="hero-kpi-sub-stats">
-                {scorecardStats.allWon} Won • {scorecardStats.allLost} Lost • {scorecardStats.allPending} Pending
+
+              {/* Segment 3: Daily Top Prediction Win Rate */}
+              <div
+                className={`compact-winrate-cell toppick-cell ${selectedTier === 'TOP PICK' ? 'active-cell' : ''}`}
+                onClick={() => setSelectedTier(selectedTier === 'TOP PICK' ? 'all' : 'TOP PICK')}
+                title="Click to filter by Daily Top Predictions"
+              >
+                <div className="compact-cell-header">
+                  <span className="compact-cell-title">👑 Top Picks</span>
+                  <span className="compact-pill-badge toppick-badge">{scorecardStats.topPickTotal} M</span>
+                </div>
+                <div className="compact-cell-value-row">
+                  <span className="compact-pct-val toppick-text">{scorecardStats.topPickWinRate}%</span>
+                  <span className="compact-sub-ratio">{scorecardStats.topPickWon}W • {scorecardStats.topPickLost}L</span>
+                </div>
               </div>
             </div>
 
-            {/* Card 2: Daily Banger Win Rate */}
-            <div
-              className={`hero-kpi-banger-card hero-kpi-clickable ${selectedTier === 'BANGER' ? 'active-filter' : ''}`}
-              onClick={() => setSelectedTier(selectedTier === 'BANGER' ? 'all' : 'BANGER')}
-              title="Click to filter by 90%+ Banger Locks"
-            >
-              <div className="hero-kpi-header">
-                <span className="hero-kpi-title">⭐ Daily Banger Win Rate</span>
-                <span className="hero-kpi-pill-badge">{scorecardStats.bangerTotal} Bangers</span>
-              </div>
-              <div className="hero-kpi-value-row">
-                {scorecardStats.bangerWinRate}% Win. {scorecardStats.bangerWon}/{scorecardStats.bangerDecided}.
-              </div>
-              <div className="hero-kpi-sub-stats">
-                {scorecardStats.bangerWon} Won • {scorecardStats.bangerLost} Lost • {scorecardStats.bangerPending} Pending
-              </div>
-            </div>
+            {/* BOLD DEMARCATION LINE BETWEEN THE TWO TABS */}
+            <div className="consolidated-bold-demarcation" aria-hidden="true" />
 
-            {/* Card 3: Daily Top Pick Win Rate */}
-            <div
-              className={`hero-kpi-toppick-card hero-kpi-clickable ${selectedTier === 'TOP PICK' ? 'active-filter' : ''}`}
-              onClick={() => setSelectedTier(selectedTier === 'TOP PICK' ? 'all' : 'TOP PICK')}
-              title="Click to filter by Daily Top Picks"
-            >
-              <div className="hero-kpi-header">
-                <span className="hero-kpi-title">👑 Daily Top Pick Win Rate</span>
-                <span className="hero-kpi-pill-badge">{scorecardStats.topPickTotal} Top Picks</span>
+            {/* Tab 2: Activity & Settlement Metrics, separated by thick lines */}
+            <div className="consolidated-tab-activity">
+              {/* Item 1: Settled Matches */}
+              <div
+                className={`compact-activity-cell ${scoreStatusFilter === 'finished' ? 'active-cell' : ''}`}
+                onClick={() => setScoreStatusFilter(scoreStatusFilter === 'finished' ? 'all' : 'finished')}
+                title="Click to filter by settled finished matches"
+              >
+                <span className="compact-act-label">Settled</span>
+                <span className="compact-act-val">{scorecardStats.settledMatchesCount}</span>
+                <span className="compact-act-sub">Verified FT</span>
               </div>
-              <div className="hero-kpi-value-row">
-                {scorecardStats.topPickWinRate}% Win. {scorecardStats.topPickWon}/{scorecardStats.topPickDecided}.
+
+              {/* Item 2: Won Picks */}
+              <div
+                className={`compact-activity-cell won-cell ${settlementFilter === 'won' ? 'active-cell' : ''}`}
+                onClick={() => setSettlementFilter(settlementFilter === 'won' ? 'all' : 'won')}
+                title="Click to filter by won predictions"
+              >
+                <span className="compact-act-label">Won</span>
+                <span className="compact-act-val won-text">{scorecardStats.allWon}</span>
+                <span className="compact-act-sub">Verified Wins</span>
               </div>
-              <div className="hero-kpi-sub-stats">
-                {scorecardStats.topPickWon} Won • {scorecardStats.topPickLost} Lost • {scorecardStats.topPickPending} Pending
+
+              {/* Item 3: Lost */}
+              <div
+                className={`compact-activity-cell lost-cell ${settlementFilter === 'lost' ? 'active-cell' : ''}`}
+                onClick={() => setSettlementFilter(settlementFilter === 'lost' ? 'all' : 'lost')}
+                title="Click to filter by lost predictions"
+              >
+                <span className="compact-act-label">Lost</span>
+                <span className="compact-act-val lost-text">{scorecardStats.allLost}</span>
+                <span className="compact-act-sub">Audit Trail</span>
               </div>
-            </div>
-          </div>
 
-          {/* Row 2: 5 Status Sub-Tiles - ALL INTERACTIVELY CLICKABLE */}
-          <div className="status-tiles-grid">
-            <div
-              className={`status-tile status-tile-clickable ${scoreStatusFilter === 'finished' ? 'active-filter' : ''}`}
-              onClick={() => setScoreStatusFilter(scoreStatusFilter === 'finished' ? 'all' : 'finished')}
-              title="Click to filter by settled finished matches"
-            >
-              <div className="status-tile-label">Settled Matches</div>
-              <div className="status-tile-val">{scorecardStats.settledMatchesCount}</div>
-              <div className="status-tile-sub">Verified Full Time</div>
-            </div>
+              {/* Item 4: Daily Win Rate */}
+              <div
+                className="compact-activity-cell rate-cell"
+                onClick={() => {
+                  setSettlementFilter('all');
+                  setScoreStatusFilter('all');
+                }}
+                title="Click to reset win/loss filters"
+              >
+                <span className="compact-act-label">Win Rate</span>
+                <span className="compact-act-val won-text">{scorecardStats.allWinRate}%</span>
+                <span className="compact-act-sub">{scorecardStats.allWon}/{scorecardStats.allDecided}</span>
+              </div>
 
-            <div
-              className={`status-tile won status-tile-clickable ${settlementFilter === 'won' ? 'active-filter' : ''}`}
-              onClick={() => setSettlementFilter(settlementFilter === 'won' ? 'all' : 'won')}
-              title="Click to filter by won predictions"
-            >
-              <div className="status-tile-label">Won Picks</div>
-              <div className="status-tile-val">{scorecardStats.allWon}</div>
-              <div className="status-tile-sub">Verified Wins</div>
-            </div>
-
-            <div
-              className={`status-tile lost status-tile-clickable ${settlementFilter === 'lost' ? 'active-filter' : ''}`}
-              onClick={() => setSettlementFilter(settlementFilter === 'lost' ? 'all' : 'lost')}
-              title="Click to filter by lost predictions"
-            >
-              <div className="status-tile-label">Lost Picks</div>
-              <div className="status-tile-val">{scorecardStats.allLost}</div>
-              <div className="status-tile-sub">Transparent Audit Trail</div>
-            </div>
-
-            <div
-              className="status-tile rate status-tile-clickable"
-              onClick={() => {
-                setSettlementFilter('all');
-                setScoreStatusFilter('all');
-              }}
-              title="Click to reset win/loss filters"
-            >
-              <div className="status-tile-label">Day Win Rate</div>
-              <div className="status-tile-val">{scorecardStats.allWinRate}%</div>
-              <div className="status-tile-sub">{scorecardStats.allWon} of {scorecardStats.allDecided} won</div>
-            </div>
-
-            <div
-              className={`status-tile pending status-tile-clickable ${settlementFilter === 'pending' ? 'active-filter' : ''}`}
-              onClick={() => setSettlementFilter(settlementFilter === 'pending' ? 'all' : 'pending')}
-              title="Click to filter by pending / in-play picks"
-            >
-              <div className="status-tile-label">In-Play / Pending</div>
-              <div className="status-tile-val">{scorecardStats.allPending} ({scorecardStats.liveCount} Live)</div>
-              <div className="status-tile-sub">Auto-settles every 15 mins</div>
+              {/* Item 5: Inplay */}
+              <div
+                className={`compact-activity-cell pending-cell ${settlementFilter === 'pending' ? 'active-cell' : ''}`}
+                onClick={() => setSettlementFilter(settlementFilter === 'pending' ? 'all' : 'pending')}
+                title="Click to filter by in-play / pending picks"
+              >
+                <span className="compact-act-label">In-Play</span>
+                <span className="compact-act-val pending-text">
+                  {scorecardStats.allPending}
+                  {scorecardStats.liveCount > 0 && <span className="compact-live-sub"> ({scorecardStats.liveCount})</span>}
+                </span>
+                <span className="compact-act-sub">Active</span>
+              </div>
             </div>
           </div>
         </section>
@@ -1727,138 +1677,6 @@ export default function App() {
               {lg.name} ({lg.count})
             </button>
           ))}
-        </div>
-
-        {/* 6. MULTI-FILTER & ACTION BAR */}
-        <div className="actions-filter-bar">
-          <div className="filter-dropdowns-row">
-            <span className="filter-prefix-label">⚙ Filters:</span>
-
-            {/* League Dropdown with all 30 leagues */}
-            <select
-              className="filter-select-input"
-              value={selectedLeague}
-              onChange={(e) => setSelectedLeague(e.target.value)}
-            >
-              <option value="all">League: All 30 Leagues ({fixtures.length})</option>
-              {allLeaguesWithCounts.map((lg) => (
-                <option key={lg.code} value={lg.code}>
-                  {lg.name} ({lg.count} {lg.count === 1 ? 'match' : 'matches'})
-                </option>
-              ))}
-            </select>
-
-            <select
-              className="filter-select-input"
-              value={settlementFilter}
-              onChange={(e: any) => setSettlementFilter(e.target.value)}
-            >
-              <option value="all">Outcome: All Statuses</option>
-              <option value="pending">⏳ Pending In-Flight</option>
-              <option value="won">✓ Won Only</option>
-              <option value="lost">✗ Lost Only</option>
-              <option value="void">⊘ Void Only</option>
-            </select>
-
-            <select
-              className="filter-select-input"
-              value={selectedMarket}
-              onChange={(e) => setSelectedMarket(e.target.value)}
-            >
-              <option value="all">Market: All Markets</option>
-              <option value="1x2">Match Result (1X2)</option>
-              <option value="double_chance">Double Chance</option>
-              <option value="over_under_1.5">Goals O/U 1.5</option>
-              <option value="over_under_2.5">Goals O/U 2.5</option>
-              <option value="over_under_3.5">Goals O/U 3.5</option>
-              <option value="btts">Both Teams To Score</option>
-              <option value="ht_goals_0.5">HT Goals O/U 0.5</option>
-            </select>
-
-            <select
-              className="filter-select-input"
-              value={selectedTier}
-              onChange={(e) => setSelectedTier(e.target.value)}
-            >
-              <option value="all">Banker: All Ratings</option>
-              <option value="BANGER">🔥 BANGER (96%–100%)</option>
-              <option value="TOP PICK">TOP PICK (90%–95.99%)</option>
-              <option value="HIGH CONFIDENCE">HIGH CONFIDENCE (83%–89.99%)</option>
-              <option value="MID CONFIDENCE">MID CONFIDENCE (70%–82.99%)</option>
-              <option value="LOW CONFIDENCE">LOW CONFIDENCE (60%–69.99%)</option>
-              <option value="RISKY">RISKY (45%–59.99%)</option>
-            </select>
-
-            <select
-              className="filter-select-input"
-              value={scoreStatusFilter}
-              onChange={(e) => setScoreStatusFilter(e.target.value)}
-            >
-              <option value="all">Score: All Scores</option>
-              <option value="live">🔴 Live In-Play Only</option>
-              <option value="finished">🏁 Finished Matches</option>
-              <option value="scheduled">⏱ Scheduled Fixtures</option>
-            </select>
-
-            <input
-              type="text"
-              className="filter-select-input"
-              placeholder="Search teams..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              style={{ minWidth: 160 }}
-            />
-          </div>
-
-          <div className="filter-bottom-actions">
-            <div className="active-filter-chips">
-              <span className="active-chip">
-                📅 {selectedDate === 'all'
-                  ? 'All Dates'
-                  : selectedDate === dynamicDateTabs.yesterday.id
-                  ? `Yesterday (${dynamicDateTabs.yesterday.subLabel})`
-                  : selectedDate === dynamicDateTabs.today.id
-                  ? `Today (${dynamicDateTabs.today.subLabel})`
-                  : selectedDate === dynamicDateTabs.tomorrow.id
-                  ? `Tomorrow (${dynamicDateTabs.tomorrow.subLabel})`
-                  : formatWatDateDisplay(selectedDate)}
-              </span>
-              <button
-                type="button"
-                className="btn-reset-filters"
-                onClick={resetAllFilters}
-              >
-                🔄 Reset Filters
-              </button>
-            </div>
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-              <span className="matches-count-text">
-                Showing <strong>{filteredFixtures.length}</strong> of {fixtures.length} matches
-              </span>
-
-              <div className="expand-collapse-group">
-                <button
-                  type="button"
-                  className="btn-toggle-expand"
-                  onClick={() => {
-                    setExpandedFixtures(new Set(fixtures.map((f) => f.id)));
-                  }}
-                >
-                  Expand All
-                </button>
-                <button
-                  type="button"
-                  className="btn-toggle-expand"
-                  onClick={() => {
-                    setExpandedFixtures(new Set());
-                  }}
-                >
-                  Collapse All
-                </button>
-              </div>
-            </div>
-          </div>
         </div>
 
         {/* 7. MAIN DASHBOARD 3-COLUMN GRID */}
@@ -1961,8 +1779,40 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="stream-fixtures-count-badge">
-                Fixtures: <strong>{filteredFixtures.length} Matches</strong>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                {(selectedTier !== 'all' || settlementFilter !== 'all' || scoreStatusFilter !== 'all' || selectedLeague !== 'all') && (
+                  <button
+                    type="button"
+                    className="active-filter-reset-pill"
+                    onClick={resetAllFilters}
+                    title="Click to reset active filters"
+                  >
+                    ✕ Reset Filter
+                  </button>
+                )}
+                <div className="stream-fixtures-count-badge">
+                  Fixtures: <strong>{filteredFixtures.length} Matches</strong>
+                </div>
+                <div className="expand-collapse-group">
+                  <button
+                    type="button"
+                    className="btn-toggle-expand"
+                    onClick={() => {
+                      setExpandedFixtures(new Set(fixtures.map((f) => f.id)));
+                    }}
+                  >
+                    Expand All
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-toggle-expand"
+                    onClick={() => {
+                      setExpandedFixtures(new Set());
+                    }}
+                  >
+                    Collapse All
+                  </button>
+                </div>
               </div>
             </div>
 

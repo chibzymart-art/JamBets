@@ -645,14 +645,22 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
       : `${leagueDisplay} • Official Stadium`;
 
   return (
-    <div id={`fixture-${fixture.id}`} className="fixture-card glance-fixture-box">
+    <div
+      id={`fixture-${fixture.id}`}
+      className="fixture-card glance-fixture-box"
+      onClick={onToggleExpand}
+      style={{ cursor: 'pointer' }}
+    >
       {/* 1. TOP META ROW: FAVORITE, LIVE SCORE, LEAGUE, TIME */}
       <div className="glance-top-row">
         <button
           type="button"
           className={`glance-favorite-btn ${isStarred ? 'starred' : ''}`}
           title={isStarred ? 'Remove from Favorites' : 'Add to Favorites'}
-          onClick={() => onToggleFavorite(fixture.id)}
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleFavorite(fixture.id);
+          }}
         >
           {isStarred ? '★ FAVORITE' : '☆ FAVORITE'}
         </button>
@@ -822,7 +830,7 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
 
       {/* 3. EXPANDABLE BREAKDOWN BODY */}
       {isExpanded && (
-        <div className="expanded-breakdown-body">
+        <div className="expanded-breakdown-body" onClick={(e) => e.stopPropagation()}>
           {isLocked ? (
             /* CRITICAL DIRECTIVE 3: PAYWALL UI BLURRED LOCK STATE */
             <div className="paywall-lock-container">
