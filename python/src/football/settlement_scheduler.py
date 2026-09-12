@@ -178,48 +178,80 @@ class SettlementScheduler:
         }
 
         try:
-            # Step 2: Retrieve Candidate Fixtures from Cloud Supabase in active window [-36h, +2h]
-            print("[STEP 1] Retrieving monitored candidate fixtures from Cloud Supabase in active settlement window...")
+            # Step 2: Retrieve Monitored Active Fixtures
+            # User Invariant: "No hardcoded settlements. Look for any settlement not done, fill it.
+            # Skip any filled settlement, except settlements that are live."
+            print("[STEP 1] Querying unsettled predictions and active match states...")
             now_utc = datetime.now(timezone.utc)
             w_start = (now_utc - timedelta(hours=36)).strftime("%Y-%m-%dT%H:%M:%SZ")
             w_end = (now_utc + timedelta(hours=2)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-            # 1. Fetch fixtures in the active settlement window [-36h, +2h]
-            raw_window_fixes = self.supabase.get("football_fixtures", {
-                "target_kickoff_at": f"gte.{w_start}",
-                "order": "target_kickoff_at.asc",
-                "limit": "200"
-            })
-            candidate_fixtures = [f for f in raw_window_fixes if f.get("target_kickoff_at", "") <= w_end]
-            candidate_fix_ids = {f.get("id") for f in candidate_fixtures}
-
-            # 2. Also fetch any fixtures currently marked 'live'
-            try:
-                live_fixes = self.supabase.get("football_fixtures", {"status": "eq.live", "limit": "50"})
-                for lf in live_fixes:
-                    if lf.get("id") not in candidate_fix_ids:
-                        candidate_fixtures.append(lf)
-                        candidate_fix_ids.add(lf.get("id"))
-            except Exception as live_err:
-                print(f"  [NOTE] Live fixture query: {live_err}")
-
+            # 1. Fetch all published predictions pending settlement
             unsettled_by_fix_id: Dict[str, List[Dict[str, Any]]] = {}
-            # 3. Augment with fixtures that have unsettled published predictions whose kickoff has arrived or passed
             try:
                 unsettled_all = self.supabase.get_unsettled_predictions()
                 for p in unsettled_all:
                     f_id = p.get("fixture_id")
                     if f_id:
                         unsettled_by_fix_id.setdefault(f_id, []).append(p)
-                    if f_id and f_id not in candidate_fix_ids:
-                        p_ko = p.get("target_kickoff_at", "")
-                        if p_ko and p_ko <= w_end:
-                            m_fixes = self.supabase.get("football_fixtures", {"id": f"eq.{f_id}", "limit": "1"})
-                            if m_fixes:
-                                candidate_fixtures.append(m_fixes[0])
-                                candidate_fix_ids.add(f_id)
-            except Exception as aug_err:
-                print(f"  [NOTE] Candidate fixture augmentation: {aug_err}")
+                print(f"  • Found {len(unsettled_all)} pending predictions across {len(unsettled_by_fix_id)} fixtures")
+            except Exception as pred_err:
+                print(f"  [WARN] Unsettled predictions query: {pred_err}")
+
+            # 2. Gather candidate fixtures:
+            candidate_fixtures_raw: List[Dict[str, Any]] = []
+            seen_fix_ids = set()
+
+            # A. Live or in-progress fixtures (ALWAYS monitored to update live scores and minutes)
+            try:
+                live_fixes = self.supabase.get("football_fixtures", {"status": "eq.live", "limit": "50"})
+                for lf in live_fixes:
+                    if lf.get("id") not in seen_fix_ids:
+                        candidate_fixtures_raw.append(lf)
+                        seen_fix_ids.add(lf.get("id"))
+            except Exception as live_err:
+                print(f"  [NOTE] Live fixtures query: {live_err}")
+
+            # B. Fixtures with unsettled predictions whose kickoff has arrived or passed (or arriving in next 15m)
+            cutoff_15m = (now_utc + timedelta(minutes=15)).strftime("%Y-%m-%dT%H:%M:%SZ")
+            for f_id, preds in unsettled_by_fix_id.items():
+                if f_id not in seen_fix_ids:
+                    p_ko = preds[0].get("target_kickoff_at", "")
+                    if p_ko and p_ko <= cutoff_15m:
+                        m_fixes = self.supabase.get("football_fixtures", {"id": f"eq.{f_id}", "limit": "1"})
+                        if m_fixes:
+                            candidate_fixtures_raw.append(m_fixes[0])
+                            seen_fix_ids.add(f_id)
+
+            # C. Scheduled fixtures in the window whose kickoff has arrived or passed (kickoff <= now + 15m)
+            try:
+                started_window_fixes = self.supabase.get("football_fixtures", {
+                    "target_kickoff_at": f"gte.{w_start}",
+                    "status": "eq.scheduled",
+                    "order": "target_kickoff_at.asc",
+                    "limit": "100"
+                })
+                for uf in started_window_fixes:
+                    if uf.get("target_kickoff_at", "") <= cutoff_15m and uf.get("id") not in seen_fix_ids:
+                        candidate_fixtures_raw.append(uf)
+                        seen_fix_ids.add(uf.get("id"))
+            except Exception as unstarted_err:
+                print(f"  [NOTE] Started window query: {unstarted_err}")
+
+            # 3. Apply Strict Filter: SKIP ANY FILLED SETTLEMENT
+            # If a fixture is FINISHED, has scores, and has NO unsettled predictions -> SKIP COMPLETELY
+            candidate_fixtures = []
+            skipped_settled = 0
+            for f in candidate_fixtures_raw:
+                fid = f.get("id")
+                is_fin = (f.get("status") == "finished" or f.get("period") == "FT")
+                has_sc = (f.get("home_score") is not None and f.get("away_score") is not None)
+                has_pending = (fid in unsettled_by_fix_id and len(unsettled_by_fix_id[fid]) > 0)
+
+                if is_fin and has_sc and not has_pending:
+                    skipped_settled += 1
+                    continue
+                candidate_fixtures.append(f)
 
             # Populate league_code on every candidate fixture from canonical_key if missing
             for f in candidate_fixtures:
@@ -227,7 +259,7 @@ class SettlementScheduler:
                     f["league_code"] = f["canonical_key"].split(":")[0]
 
             stats["fixtures_inspected"] = len(candidate_fixtures)
-            print(f"  • Retrieved {len(candidate_fixtures)} monitored candidate fixtures in active window")
+            print(f"  • Candidate fixtures to process: {len(candidate_fixtures)} (Skipped {skipped_settled} already settled matches)")
 
             # Collect active leagues strictly from candidate fixtures
             leagues_in_play = set(f.get("league_code") for f in candidate_fixtures if f.get("league_code"))

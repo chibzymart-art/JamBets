@@ -90,18 +90,33 @@ class GoogleScoreAdapter(BaseSourceAdapter):
             except Exception:
                 pass
 
-        # Look for score pattern in Google Sports card
-        # Pattern 1: home_score - away_score in proximity to team names
-        h_token = home_team.split()[0].lower()
-        a_token = away_team.split()[0].lower()
+        # Check if an official Google Sports results block exists
+        sports_block_match = re.search(r'(<div[^>]*id="liveresults-sports-immersive"[^>]*>.*?</div>\s*</div>)', html_text, re.DOTALL)
+        if not sports_block_match:
+            sports_block_match = re.search(r'(<div[^>]*class="[^"]*imso_mh[^"]*"[^>]*>.*?</div>\s*</div>)', html_text, re.DOTALL)
+        if not sports_block_match:
+            sports_block_match = re.search(r'(<div[^>]*class="[^"]*imso-loa[^"]*"[^>]*>.*?</div>\s*</div>)', html_text, re.DOTALL)
 
-        # Check for standard Google Sports score markup (e.g. data-live-score or team names near digits)
-        score_candidates = re.findall(r'(\d+)\s*[-–:]\s*(\d+)', html_text)
+        # If a dedicated sports container exists, extract scores specifically within it
+        search_target = sports_block_match.group(1) if sports_block_match else ""
+        if not search_target:
+            # Fallback: only match if both team tokens are in the immediate vicinity of a score
+            h_tok = re.escape(home_team.split()[0].lower())
+            a_tok = re.escape(away_team.split()[0].lower())
+            team_snippet = re.search(rf'({h_tok}.{{0,120}}{a_tok}|{a_tok}.{{0,120}}{h_tok})', html_text, re.IGNORECASE | re.DOTALL)
+            if team_snippet:
+                search_target = team_snippet.group(1)
+            else:
+                self._score_cache[cache_key] = None
+                return None
+
+        # Look for score pattern specifically within the matched target container
+        score_candidates = re.findall(r'(\d{1,2})\s*[-–:]\s*(\d{1,2})', search_target)
         
         # Look for plausible football scores (typically 0-9)
         valid_scores = [
             (int(s[0]), int(s[1])) for s in score_candidates
-            if int(s[0]) <= 15 and int(s[1]) <= 15
+            if int(s[0]) <= 9 and int(s[1]) <= 9
         ]
 
         if not valid_scores:
