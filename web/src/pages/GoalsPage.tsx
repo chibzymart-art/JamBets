@@ -11,6 +11,15 @@ interface GoalsPageProps {
   onOpenSubscription: () => void;
 }
 
+export const getTodayIsoDate = (): string => {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Africa/Lagos',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).format(new Date());
+};
+
 export const GoalsPage: React.FC<GoalsPageProps> = ({
   currentUser,
   userRole,
@@ -22,7 +31,8 @@ export const GoalsPage: React.FC<GoalsPageProps> = ({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [marketFilter, setMarketFilter] = useState<'all' | 'over_2.5_goals' | 'ht_over_0.5_goals' | 'settled'>('all');
-  const [dateFilter, setDateFilter] = useState<string>('all');
+  // The default view MUST always be in the current day ("Today")
+  const [dateFilter, setDateFilter] = useState<string>(getTodayIsoDate);
   const [searchQuery, setSearchQuery] = useState('');
 
   // Check if current user has authoritative paid access
@@ -32,11 +42,9 @@ export const GoalsPage: React.FC<GoalsPageProps> = ({
     return false;
   }, [isAdmin, userRole]);
 
-  // Dynamic 4-day Date Options in Africa/Lagos (WAT / UTC+1)
+  // Dynamic 4-day Date Options in Africa/Lagos (WAT / UTC+1) starting with Today as the primary active option
   const dateOptions = useMemo(() => {
-    const list: { key: string; label: string }[] = [
-      { key: 'all', label: 'All Matches (4 Days)' }
-    ];
+    const list: { key: string; label: string }[] = [];
 
     const now = new Date();
     for (let i = 0; i < 4; i++) {
@@ -65,6 +73,8 @@ export const GoalsPage: React.FC<GoalsPageProps> = ({
 
       list.push({ key: isoDate, label });
     }
+
+    list.push({ key: 'all', label: 'All (4 Days)' });
 
     return list;
   }, []);
@@ -243,7 +253,7 @@ export const GoalsPage: React.FC<GoalsPageProps> = ({
             className={`goals-tab-btn ${marketFilter === 'all' ? 'active' : ''}`}
             onClick={() => setMarketFilter('all')}
           >
-            🔥 All Matches ({groupedMatches.length})
+            🔥 All Matches ({filteredMatches.length})
           </button>
           <button
             className={`goals-tab-btn ${marketFilter === 'over_2.5_goals' ? 'active' : ''}`}
@@ -311,12 +321,12 @@ export const GoalsPage: React.FC<GoalsPageProps> = ({
           <div className="goals-empty-state">
             <span className="empty-icon">⚽</span>
             <h3>No Matches Found</h3>
-            <p>No games matched your current market or date filter. Try selecting "All Matches".</p>
+            <p>No games matched your current market or date filter. Try selecting "All (4 Days)".</p>
             <button
               className="reset-filter-btn"
-              onClick={() => { setMarketFilter('all'); setDateFilter('all'); setSearchQuery(''); }}
+              onClick={() => { setMarketFilter('all'); setDateFilter(getTodayIsoDate()); setSearchQuery(''); }}
             >
-              Reset Filters
+              Reset to Today
             </button>
           </div>
         ) : (
