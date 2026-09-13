@@ -1,47 +1,31 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 200" width="800" height="200">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 5 445 118" width="100%" height="100%" fill="none">
   <defs>
-    <linearGradient id="cyanGoldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#38BDF8" />
-      <stop offset="50%" stop-color="#818CF8" />
-      <stop offset="100%" stop-color="#FBBF24" />
+    <!-- Deep/Vibrant Green for the main text -->
+    <linearGradient id="emeraldGreen" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#10B981" />
+      <stop offset="100%" stop-color="#059669" />
     </linearGradient>
-    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#FDE047" />
-      <stop offset="100%" stop-color="#F59E0B" />
+    
+    <!-- Neon Red specifically for the accent star -->
+    <linearGradient id="brandRed" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#F43F5E" />
+      <stop offset="100%" stop-color="#E11D48" />
     </linearGradient>
-    <linearGradient id="cyanGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#FFFFFF" />
-      <stop offset="100%" stop-color="#38BDF8" />
-    </linearGradient>
-    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
-      <feGaussianBlur stdDeviation="6" result="blur" />
-      <feComposite in="SourceGraphic" in2="blur" operator="over" />
-    </filter>
   </defs>
 
-  <!-- Left Emblem / Crest -->
-  <g transform="translate(40, 20)">
-    <!-- Hexagonal Glow Backing -->
-    <polygon points="80,10 145,45 145,115 80,150 15,115 15,45" fill="#0f172a" stroke="url(#cyanGoldGrad)" stroke-width="4" filter="url(#glow)"/>
-    <!-- Inner dynamic football lines / radar arc -->
-    <path d="M 80,25 L 80,135" stroke="#38BDF8" stroke-width="3" stroke-linecap="round" stroke-dasharray="6,6" opacity="0.8"/>
-    <path d="M 30,55 Q 80,95 130,55" fill="none" stroke="#FBBF24" stroke-width="3.5" stroke-linecap="round"/>
-    <path d="M 30,105 Q 80,65 130,105" fill="none" stroke="#38BDF8" stroke-width="3.5" stroke-linecap="round"/>
-    <!-- Central Lightning Spark -->
-    <polygon points="85,35 60,82 82,82 72,125 105,74 83,74" fill="url(#goldGrad)" />
+  <g transform="translate(10, 80)">
+    <!-- Main Typographic Wordmark -->
+    <text x="0" y="0" font-family="'Outfit', system-ui, -apple-system, sans-serif" font-weight="900" font-size="82" letter-spacing="-2.5">
+      <!-- Deep Forest Green for high contrast on white -->
+      <tspan fill="#064E3B">Odds</tspan><tspan fill="url(#emeraldGreen)">Banta</tspan>
+    </text>
+    
+    <!-- Red Accent Spark / Star -->
+    <path d="M 405 -65 Q 405 -45 425 -45 Q 405 -45 405 -25 Q 405 -45 385 -45 Q 405 -45 405 -65" fill="url(#brandRed)"/>
+
+    <!-- Clean, AI-Free Subtitle -->
+    <text x="3" y="32" font-family="'Inter', system-ui, -apple-system, sans-serif" font-weight="800" font-size="13" letter-spacing="3.5">
+      <tspan fill="#475569">SMART SPORTS ANALYSIS AND PREDICTION</tspan>
+    </text>
   </g>
-
-  <!-- Wordmark "ODDSBANTA" -->
-  <text x="215" y="112" font-family="'Outfit', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif" font-weight="900" font-size="78" letter-spacing="-1">
-    <tspan fill="url(#cyanGrad)">ODDS</tspan>
-    <tspan fill="url(#goldGrad)">BANTA</tspan>
-  </text>
-
-  <!-- AI Sentinel Badge & Tagline -->
-  <rect x="220" y="128" width="54" height="22" rx="6" fill="rgba(56,189,248,0.15)" stroke="#38BDF8" stroke-width="1.5"/>
-  <text x="247" y="143" font-family="'JetBrains Mono', monospace" font-weight="800" font-size="12" fill="#38BDF8" text-anchor="middle">AI 2.0</text>
-  
-  <text x="286" y="144" font-family="'Inter', -apple-system, BlinkMacSystemFont, sans-serif" font-weight="600" font-size="14" fill="#94A3B8" letter-spacing="3">
-    PRECISION SPORTS PREDICTION QUEUE
-  </text>
 </svg>
