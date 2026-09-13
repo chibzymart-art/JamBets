@@ -405,7 +405,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           )}
 
           <div className="ledger-light-footer">
-            <Link to="/dashboard" className="btn-light-view-all">
+            <Link to={currentUser ? '/dashboard' : '/predictions'} className="btn-light-view-all">
               {currentUser ? 'Inspect Complete Dashboard Archive →' : 'View Complete Match Predictions →'}
             </Link>
           </div>

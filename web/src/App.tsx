@@ -33,6 +33,8 @@ export default function App() {
   const [subscription, setSubscription] = useState<UserSubscription | null>(null);
   const [entitlement, setEntitlement] = useState<UserEntitlement | null>(null);
   const [isAuthChecking, setIsAuthChecking] = useState<boolean>(true);
+  const targetPredictionsPath = currentUser ? '/dashboard' : '/predictions';
+  const isPredictionsOrDashboard = location.pathname.startsWith('/dashboard') || location.pathname.startsWith('/predictions');
 
   // Modals
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
@@ -1049,8 +1051,8 @@ export default function App() {
             {/* Clean Unified Navigation Links */}
           <div className="header-center-links">
             <Link
-              to="/dashboard"
-              className={`nav-link-btn ${location.pathname.startsWith('/dashboard') ? 'active' : ''}`}
+              to={targetPredictionsPath}
+              className={`nav-link-btn ${isPredictionsOrDashboard ? 'active' : ''}`}
             >
               {currentUser ? 'Dashboard' : 'Predictions'}
             </Link>
@@ -1073,7 +1075,7 @@ export default function App() {
 
           <div className="header-right-actions">
             {location.pathname === '/' && (
-              <Link to="/dashboard" className="landing-nav-cta">
+              <Link to={targetPredictionsPath} className="landing-nav-cta">
                 {currentUser ? '📊 Dashboard →' : '📊 Predictions →'}
               </Link>
             )}
@@ -1249,12 +1251,12 @@ export default function App() {
                     )}
 
                     <Link
-                      to="/dashboard"
+                      to={targetPredictionsPath}
                       className="hamburger-menu-item"
                       onClick={() => setIsHamburgerOpen(false)}
                     >
                       <span className="hamburger-item-icon">📊</span>
-                      <span className="hamburger-item-label">Predictions Dashboard</span>
+                      <span className="hamburger-item-label">{currentUser ? 'Predictions Dashboard' : 'Predictions'}</span>
                     </Link>
 
                     {isAdmin && (
@@ -1345,18 +1347,14 @@ export default function App() {
             }
           />
 
-          {/* REDIRECT ALIASES TO DASHBOARD */}
+          {/* REDIRECT ALIASES */}
           <Route
             path="/analytics"
-            element={<Navigate to="/dashboard" replace />}
-          />
-          <Route
-            path="/predictions"
-            element={<Navigate to="/dashboard" replace />}
+            element={<Navigate to={targetPredictionsPath} replace />}
           />
           <Route
             path="/dashboard/predictions"
-            element={<Navigate to="/dashboard" replace />}
+            element={<Navigate to={targetPredictionsPath} replace />}
           />
 
           {/* ROUTE: GOALS SPECIALIST HUB (OVER 2.5 & 1H OVER 0.5) */}
@@ -1417,11 +1415,18 @@ export default function App() {
               )
             }
           />
-          {/* ROUTE 5: PREDICTIONS FIXTURE DASHBOARD */}
-          <Route
-            path="/dashboard"
-            element={
-              <div id="fixtures-view-section">
+          {/* ROUTE 5 & 6: PREDICTIONS (VISITORS) & DASHBOARD (AUTHENTICATED MEMBERS) */}
+          {['/dashboard', '/predictions'].map((pathName) => (
+            <Route
+              key={pathName}
+              path={pathName}
+              element={
+                pathName === '/dashboard' && !currentUser && !isAuthChecking ? (
+                  <Navigate to="/predictions" replace />
+                ) : pathName === '/predictions' && currentUser ? (
+                  <Navigate to="/dashboard" replace />
+                ) : (
+                  <div id="fixtures-view-section">
         {/* 2. TOP SPORT CATEGORIES HORIZONTAL SELECTOR BAR */}
         <div className="sport-categories-bar">
           {sportsList.map((sp) => (
@@ -2011,9 +2016,11 @@ export default function App() {
         </div>
             </>
           )}
-        </div>
-            }
-          />
+                  </div>
+                )
+              }
+            />
+          ))}
 
           {/* FALLBACK ROUTE */}
           <Route path="*" element={<Navigate to="/" replace />} />
@@ -2030,10 +2037,11 @@ export default function App() {
         onOpenLeaguesModal={() => setIsAllLeaguesModalOpen(true)}
         onSelectDateFilter={(date) => {
           setSelectedDate(date);
-          navigate('/dashboard');
+          navigate(targetPredictionsPath);
           window.scrollTo({ top: 0, behavior: 'smooth' });
         }}
         userRole={isAdmin ? 'admin' : profile?.role}
+        currentUser={currentUser}
       />
 
       {/* MOBILE APP BOTTOM TAB BAR (Native App Experience on Mobile Screens <= 768px) */}
@@ -2042,7 +2050,7 @@ export default function App() {
           <span className="mobile-tab-icon">🏠</span>
           <span className="mobile-tab-label">Home</span>
         </Link>
-        <Link to="/dashboard" className={`mobile-tab-item ${location.pathname === '/dashboard' ? 'active' : ''}`}>
+        <Link to={targetPredictionsPath} className={`mobile-tab-item ${isPredictionsOrDashboard ? 'active' : ''}`}>
           <span className="mobile-tab-icon">📊</span>
           <span className="mobile-tab-label">{currentUser ? 'Dashboard' : 'Predictions'}</span>
         </Link>

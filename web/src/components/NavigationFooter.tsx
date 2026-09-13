@@ -7,15 +7,18 @@ interface NavigationFooterProps {
   onOpenLeaguesModal?: () => void;
   onSelectDateFilter?: (date: string) => void;
   userRole?: string;
+  currentUser?: any;
 }
 
 export const NavigationFooter: React.FC<NavigationFooterProps> = ({
   onOpenAuthModal,
   onOpenFaqModal,
   onOpenLeaguesModal,
-  userRole
+  userRole,
+  currentUser
 }) => {
   const currentYear = new Date().getFullYear();
+  const targetPath = currentUser ? '/dashboard' : '/predictions';
 
   const handleScrollToTop = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -63,22 +66,22 @@ export const NavigationFooter: React.FC<NavigationFooterProps> = ({
             <h4 className="footer-col-heading">PREDICTIONS & HORIZON</h4>
             <ul className="footer-nav-list">
               <li>
-                <Link to="/dashboard" className="footer-nav-link">
+                <Link to={targetPath} className="footer-nav-link">
                   📅 Match Predictions Schedule
                 </Link>
               </li>
               <li>
-                <Link to="/dashboard" className="footer-nav-link">
+                <Link to={targetPath} className="footer-nav-link">
                   ✓ Settled Match Win Ledger
                 </Link>
               </li>
               <li>
-                <Link to="/dashboard" className="footer-nav-link">
+                <Link to={targetPath} className="footer-nav-link">
                   🎯 Daily Banker Picks Radar
                 </Link>
               </li>
               <li>
-                <Link to="/dashboard" className="footer-nav-link">
+                <Link to={targetPath} className="footer-nav-link">
                   🗓 4-Day Horizon Forward Queue
                 </Link>
               </li>
