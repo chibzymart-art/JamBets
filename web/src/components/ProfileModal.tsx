@@ -46,10 +46,19 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
     if (!profile) return;
     setTelegramLoading(true);
     try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+      if (!accessToken) {
+        alert('Authentication session missing. Please sign in again.');
+        return;
+      }
+
       const res = await fetch('/api/telegram-auth', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: profile.id })
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`
+        }
       });
       const data = await res.json();
       if (data.success) {
