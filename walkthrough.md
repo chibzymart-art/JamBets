@@ -188,4 +188,32 @@ Non-logged-in visitors were still seeing `🔥 Over 2.5 Hub` on `/predictions` b
 - Verified on `https://jambets.vercel.app/predictions` as unauthenticated visitor: **Header only displays `Predictions` and `Pricing`**; Over 2.5 Hub is completely gone.
 - Attempted direct navigation to `https://jambets.vercel.app/goals` as unauthenticated visitor: **Automatically redirected to `/predictions`**.
 
+---
 
+## 7. Security Hardening & Load Resilience Progress
+
+### Phase 1: Database RLS Hardening & Privilege Escalation Prevention (SEC-02) — COMPLETED
+- **Migration Applied:** [`supabase/migrations/20260913000002_harden_rls_and_prevent_privilege_escalation.sql`](file:///c:/Users/HP/Documents/JamBets/supabase/migrations/20260913000002_harden_rls_and_prevent_privilege_escalation.sql)
+- **Changes Applied to Production Database:**
+  1. **`public.subscriptions` Table:**
+     - Dropped permissive `FOR ALL` policy.
+     - Created `subscriptions_select_policy`: Users can only read their own records (`auth.uid() = user_id OR public.is_admin()`).
+     - Created `subscriptions_admin_write_policy`: Strictly limits `INSERT`, `UPDATE`, and `DELETE` to administrators and service role (`public.is_admin() OR auth.role() = 'service_role'`).
+  2. **`public.entitlements` Table:**
+     - Dropped permissive `FOR ALL` policy.
+     - Created `entitlements_select_policy`: Users can only read their own records (`auth.uid() = user_id OR public.is_admin()`).
+     - Created `entitlements_admin_write_policy`: Strictly limits `INSERT`, `UPDATE`, and `DELETE` to administrators and service role (`public.is_admin() OR auth.role() = 'service_role'`).
+  3. **`public.payments` Table:**
+     - Dropped permissive `FOR ALL` policy.
+     - Created `payments_select_policy`: Users can only read their own payments.
+     - Created `payments_admin_write_policy`: Strictly limits writing payments to administrators and service role.
+  4. **`public.users` Table & Trigger:**
+     - Maintained `users_select_policy` and `users_update_policy` for own-profile viewing.
+     - Implemented PostgreSQL `BEFORE UPDATE` trigger `trg_protect_user_roles_and_status` executing `public.protect_user_roles_and_status()`.
+     - Completely blocks non-administrators from tampering with or escalating `role`, `status`, or `is_deleted` columns, raising an immediate security exception if attempted.
+- **Verification Results:**
+  - Tested via automated test script `scratch/test_rls_security.py`:
+    - Unauthorized `INSERT` to `subscriptions` -> Blocked by PostgreSQL RLS with `error code 42501` (`new row violates row-level security policy`).
+    - Unauthorized `INSERT` to `entitlements` -> Blocked by PostgreSQL RLS with `error code 42501` (`new row violates row-level security policy`).
+    - Unauthorized role tampering -> Blocked by `protect_user_roles_and_status()` trigger and RLS filtering.
+  - Changes committed and pushed to `main` branch.
