@@ -1,3 +1,5 @@
+import { checkRateLimit, getClientIp } from './rate-limiter';
+
 export const config = {
   runtime: 'edge',
 };
@@ -13,6 +15,28 @@ export default async function handler(req: Request) {
       status: 405,
       headers: { 'Content-Type': 'application/json' },
     });
+  }
+
+  // Rate Limiting (SEC-04): Max 5 link code requests per minute per IP
+  const clientIp = getClientIp(req);
+  const rateLimit = checkRateLimit(`tg-auth:${clientIp}`, 5, 60);
+  if (!rateLimit.allowed) {
+    return new Response(
+      JSON.stringify({
+        success: false,
+        error: 'Too many connection attempts. Please wait a moment before trying again.',
+      }),
+      {
+        status: 429,
+        headers: {
+          'Content-Type': 'application/json',
+          'Retry-After': String(rateLimit.resetSec),
+          'X-RateLimit-Limit': '5',
+          'X-RateLimit-Remaining': '0',
+          'X-RateLimit-Reset': String(rateLimit.resetSec),
+        },
+      }
+    );
   }
 
   try {
