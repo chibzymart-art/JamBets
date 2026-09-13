@@ -351,3 +351,46 @@ Non-logged-in visitors were still seeing `🔥 Over 2.5 Hub` on `/predictions` b
     - Tested `/goals`: 112 matches with Goals / Over / BTTS alignment.
   - Frontend production build (`npm run build`) succeeded with zero errors.
 
+---
+
+## 4. UI Fix: Floating Hanging Favorites Widget Toggle Behavior
+
+- **Problem Addressed:**
+  - On both mobile and desktop, clicking the floating draggable favorites/slip widget previously only opened the drawer (`onOpenDrawer={() => setIsFavoritesDrawerOpen(true)}`). Clicking it again while open did not close the drawer.
+- **Files Modified:**
+  - [`web/src/components/FloatingFavoritesWidget.tsx`](file:///c:/Users/HP/Documents/JamBets/web/src/components/FloatingFavoritesWidget.tsx):
+    - Added `isOpen?: boolean` and `onToggleDrawer: () => void` props.
+    - Updated all interaction handlers (`handleTouchEnd`, `onMouseUp`, `handleClick`, `onKeyDown`) to toggle drawer state.
+    - Dynamic visual representation:
+      - When closed: shows `⭐ SLIP` icon with saved predictions badge count.
+      - When open: dynamically transforms to `✕ CLOSE` with rose-accented radar aura.
+  - [`web/src/App.tsx`](file:///c:/Users/HP/Documents/JamBets/web/src/App.tsx):
+    - Passed `isOpen={isFavoritesDrawerOpen}` and `onToggleDrawer={() => setIsFavoritesDrawerOpen(prev => !prev)}`.
+  - [`web/src/index.css`](file:///c:/Users/HP/Documents/JamBets/web/src/index.css):
+    - Added `.floating-favorites-chatbot-widget.is-open` styles for smooth transition into close mode.
+- **Verification Results:**
+  - Verified on live production:
+    - Click 1 -> Drawer opens smoothly, widget transforms into `✕ CLOSE`.
+    - Click 2 -> Drawer closes smoothly, widget reverts to `⭐ SLIP`.
+
+---
+
+## 5. Production Domain Activation: Spaceship DNS & Vercel Configuration
+
+- **Domain Configured:** **`oddsbanta.com`** & **`www.oddsbanta.com`**
+- **Registrar:** Spaceship
+- **Hosting Platform:** Vercel (`jam-bets` project)
+- **Configuration Steps Executed via Browser Automation:**
+  1. Identified domain `oddsbanta.com` on Spaceship Domain Manager.
+  2. Added `oddsbanta.com` and `www.oddsbanta.com` to Vercel project domains with automatic 308 redirect from apex to `www`.
+  3. Configured DNS records in Spaceship Advanced DNS Manager:
+     - `A` Record: Host `@` -> Points to `216.198.79.1` (Vercel Anycast IP)
+     - `CNAME` Record: Host `www` -> Points to `392d94eef86ad56f.vercel-dns-017.com.`
+  4. Verified domain status on Vercel:
+     - **Status:** `Valid Configuration` (Green checkmark)
+     - **SSL/TLS Certificates:** Automatically provisioned and active.
+  5. Live browser navigation to `https://www.oddsbanta.com`:
+     - Confirmed site loads securely over HTTPS with zero console errors.
+     - Brand logo, navigation, banner, and predictions dashboard render cleanly.
+
+
