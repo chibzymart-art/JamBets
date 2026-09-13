@@ -393,4 +393,24 @@ Non-logged-in visitors were still seeing `🔥 Over 2.5 Hub` on `/predictions` b
      - Confirmed site loads securely over HTTPS with zero console errors.
      - Brand logo, navigation, banner, and predictions dashboard render cleanly.
 
+---
+
+## 6. Targeted UI Fixes: Desktop Favorites, Mobile Container Reduction & Bot Delivery Upsell
+
+- **Fix 1: Desktop Favorites Click-to-Toggle Resolution**:
+  - **Root Cause:** In `FloatingFavoritesWidget.tsx`, both `onMouseUp` and native DOM `click` event were calling `onToggleDrawer()`. On desktop mouse release, this caused the drawer to toggle twice in immediate succession (open then instantly close in 1 millisecond).
+  - **Solution:** Removed duplicate `onToggleDrawer()` call from `onMouseUp`, delegating the clean toggle trigger to `handleClick` with drag-suppression guard.
+  - **Verification:** Verified in browser on desktop: 1st click opens drawer, 2nd click closes drawer cleanly.
+
+- **Fix 2: Ultra-Compact Mobile Bot Container Reduction**:
+  - **Root Cause:** The homepage bot callout banner previously consumed excessive vertical real estate on mobile devices due to multi-line subtext and wrapping action buttons.
+  - **Solution:** Added targeted responsive CSS `@media (max-width: 768px)` transforming `.hero-bot-callout` into an ultra-compact, single-line pill (`padding: 6px 12px`, `margin: 4px 0 14px`, 12px clean text, and `⚡ VIP Bots ↗` gradient chip). Reduced vertical container height by over 70%.
+  - **Verification:** Verified in browser at 390x844 mobile viewport: container is slim, sleek, and sits above the fold without pushing down the CTA buttons.
+
+- **Fix 3: Catchy Bot Delivery Modal & VIP Upsell**:
+  - **Enhancement:** Revamped `BotHubModal.tsx` and aligned its wrapper class to `modal-backdrop` for centered, fixed overlay rendering across all screen sizes.
+  - **Delivery Pipeline:** Added an interactive 4-step pipeline explaining how predictions move from 250k Monte Carlo simulations -> Anti-Loss Guard -> Instant Direct Push to Telegram & WhatsApp -> In-chat On-Demand Commands.
+  - **VIP Advantage Upsell:** Added clear comparison highlighting zero odds decay and instant push notifications vs manual web checks, with a direct `⚡ View Plans & Upgrade (₦5k) →` CTA button.
+  - **Verification:** Verified opening from `.hero-bot-callout` and `btn-hero-bots` across both desktop and mobile viewports with full responsive scrolling.
+
 
