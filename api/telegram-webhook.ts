@@ -423,6 +423,62 @@ export default async function handler(req: Request) {
       return new Response(JSON.stringify({ ok: true }), { status: 200 });
     }
 
+function formatMarket(mkt: string): string {
+  const m = (mkt || '').toLowerCase().trim();
+  if (m === 'over_under_1.5') return 'Over/Under 1.5';
+  if (m === 'over_under_2.5') return 'Over/Under 2.5';
+  if (m === 'over_under_3.5') return 'Over/Under 3.5';
+  if (m === 'btts') return 'Both Teams to Score';
+  if (m === 'double_chance') return 'Double Chance';
+  if (m === 'moneyline' || m === '1x2') return 'Match Result (1X2)';
+  if (m === 'home_goals_0.5') return 'Home Over 0.5';
+  if (m === 'away_goals_0.5') return 'Away Over 0.5';
+  if (m === '1h_goals_0.5') return '1st Half Over 0.5';
+  if (m === '2h_goals_0.5') return '2nd Half Over 0.5';
+  if (m.startsWith('corners_')) return `Corners ${m.replace('corners_', '')}`;
+  return (mkt || '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+
+function formatOutcome(pick: string, market?: string): string {
+  const p = (pick || '').toLowerCase().trim();
+  if (p === 'over') return 'OVER';
+  if (p === 'under') return 'UNDER';
+  if (p === 'yes') return 'YES';
+  if (p === 'no') return 'NO';
+  if (p === '1') return 'Home Win (1)';
+  if (p === '2') return 'Away Win (2)';
+  if (p === 'x') return 'Draw (X)';
+  if (p === '1x') return 'Home or Draw (1X)';
+  if (p === 'x2') return 'Draw or Away (X2)';
+  if (p === '12') return 'Home or Away (12)';
+  return pick ? pick.toUpperCase() : '';
+}
+
+function normalizeProbability(val: any): number {
+  const n = parseFloat(val) || 0;
+  return n <= 1 && n > 0 ? Math.round(n * 100) : Math.round(n);
+}
+
+function normalizeCategory(cat: any, prob: number): string {
+  const c = String(cat || '').toUpperCase().replace(/_/g, ' ').trim();
+  if (c === 'BANGER' || c === 'SUPER BANKER' || prob >= 96) return 'BANGER';
+  if (c === 'TOP PICK' || (prob >= 90 && prob < 96)) return 'TOP PICK';
+  if (c === 'HIGH CONFIDENCE' || (prob >= 80 && prob < 90)) return 'HIGH CONFIDENCE';
+  if (c === 'MID CONFIDENCE' || (prob >= 70 && prob < 80)) return 'MID CONFIDENCE';
+  if (c === 'LOW CONFIDENCE' || (prob > 0 && prob < 70)) return 'LOW CONFIDENCE';
+  return 'CONSENSUS';
+}
+
+interface PredictionFeedItem {
+  fixture: any;
+  prediction: string;
+  market: string;
+  probability: number;
+  confidenceCategory: string;
+  targetKickoffAt: string;
+  isSecondary: boolean;
+}
+
     // 6. ROUTE PREDICTION COMMANDS: /today, /bangers, /toppicks, /high, /mid, /low, /goals
     const predCommands = ['/today', '/bangers', '/toppicks', '/top', '/high', '/mid', '/low', '/goals'];
     if (predCommands.includes(commandToken)) {
@@ -458,7 +514,7 @@ export default async function handler(req: Request) {
       };
 
       const selectFields = encodeURIComponent(
-        'id,prediction,market,probability,confidence_category,target_kickoff_at,fixture:football_fixtures!inner(id,target_kickoff_at,status,home_team:football_teams!football_fixtures_home_team_id_fkey(name),away_team:football_teams!football_fixtures_away_team_id_fkey(name),league:football_leagues!inner(code,name,country))'
+        'id,prediction,market,probability,confidence_category,target_kickoff_at,secondary_predictions,fixture:football_fixtures!inner(id,target_kickoff_at,status,home_team:football_teams!football_fixtures_home_team_id_fkey(name),away_team:football_teams!football_fixtures_away_team_id_fkey(name),league:football_leagues!inner(code,name,country))'
       );
 
       const res = await fetch(
@@ -471,64 +527,112 @@ export default async function handler(req: Request) {
         return new Response(JSON.stringify({ ok: true }), { status: 200 });
       }
 
-      let preds: any[] = await res.json();
-      if (!Array.isArray(preds) || preds.length === 0) {
+      const rawPreds: any[] = await res.json();
+      if (!Array.isArray(rawPreds) || rawPreds.length === 0) {
         await sendTelegramMessage(chatId, '⚽ No upcoming scheduled predictions found in the active queue.');
         return new Response(JSON.stringify({ ok: true }), { status: 200 });
       }
 
-      // CRITICAL: Filter out SKIP and NO_SAFE_BANKER predictions
-      preds = preds.filter((p: any) => {
-        const predStr = (p.prediction || '').toUpperCase().trim();
-        const mktStr = (p.market || '').toUpperCase().trim();
-        const catStr = (p.confidence_category || '').toUpperCase().trim();
-        return predStr !== 'SKIP' && mktStr !== 'NO_SAFE_BANKER' && catStr !== 'NO_SAFE_BANKER';
-      });
+      // Flatten primary + secondary predictions into unified feed items
+      const allItems: PredictionFeedItem[] = [];
 
-      let categoryTitle = 'ALL ACTIONABLE PREDICTIONS';
+      for (const p of rawPreds) {
+        const prob = normalizeProbability(p.probability);
+        const predStr = String(p.prediction || '').trim();
+        const mktStr = String(p.market || '').trim();
+        const catStr = normalizeCategory(p.confidence_category, prob);
 
-      if (commandToken === '/bangers') {
-        categoryTitle = '🔥 SUPER BANGERS (P ≥ 85%)';
-        preds = preds.filter((p: any) =>
-          ['BANGER', 'SUPER_BANKER'].includes(p.confidence_category) || (p.probability && p.probability >= 85)
-        );
-      } else if (commandToken === '/toppicks' || commandToken === '/top') {
-        categoryTitle = '⭐ TOP PICKS (90% - 95%)';
-        preds = preds.filter((p: any) => {
-          const cat = (p.confidence_category || '').toUpperCase();
-          const prob = p.probability || 0;
-          return cat === 'TOP_PICK' || cat === 'TOPPICK' || (prob >= 90 && prob < 96);
-        });
-      } else if (commandToken === '/high') {
-        categoryTitle = '🟢 HIGH CONFIDENCE (80% - 89%)';
-        preds = preds.filter((p: any) => {
-          const cat = (p.confidence_category || '').toUpperCase();
-          const prob = p.probability || 0;
-          return cat === 'HIGH_CONFIDENCE' || (prob >= 80 && prob < 90);
-        });
-      } else if (commandToken === '/mid') {
-        categoryTitle = '🔵 MID CONFIDENCE (70% - 79%)';
-        preds = preds.filter((p: any) => {
-          const cat = (p.confidence_category || '').toUpperCase();
-          const prob = p.probability || 0;
-          return cat === 'MID_CONFIDENCE' || (prob >= 70 && prob < 80);
-        });
-      } else if (commandToken === '/low') {
-        categoryTitle = '🟡 LOW CONFIDENCE VALUE LEANS (< 70%)';
-        preds = preds.filter((p: any) => {
-          const cat = (p.confidence_category || '').toUpperCase();
-          const prob = p.probability || 0;
-          return cat === 'LOW_CONFIDENCE' || (prob > 0 && prob < 70);
-        });
-      } else if (commandToken === '/goals') {
-        categoryTitle = '⚡ OVER 2.5 &amp; GOALS HUB';
-        preds = preds.filter((p: any) =>
-          (p.market && (p.market.toLowerCase().includes('over') || p.market.toLowerCase().includes('under') || p.market.toLowerCase().includes('goal') || p.market.toLowerCase().includes('btts'))) ||
-          (p.prediction && (p.prediction.toLowerCase().includes('over') || p.prediction.toLowerCase().includes('under') || p.prediction.toLowerCase().includes('goal')))
-        );
+        if (
+          predStr &&
+          predStr.toUpperCase() !== 'SKIP' &&
+          mktStr.toUpperCase() !== 'NO_SAFE_BANKER' &&
+          catStr !== 'NO SAFE BANKER'
+        ) {
+          allItems.push({
+            fixture: p.fixture,
+            prediction: predStr,
+            market: mktStr,
+            probability: prob,
+            confidenceCategory: catStr,
+            targetKickoffAt: p.target_kickoff_at || p.fixture?.target_kickoff_at,
+            isSecondary: false,
+          });
+        }
+
+        let sec = p.secondary_predictions;
+        if (typeof sec === 'string') {
+          try {
+            sec = JSON.parse(sec);
+          } catch {
+            sec = [];
+          }
+        }
+        if (Array.isArray(sec)) {
+          for (const s of sec) {
+            const sProb = normalizeProbability(s.probability || s.prob);
+            const sPred = String(s.prediction || '').trim();
+            const sMkt = String(s.market || '').trim();
+            const sCat = normalizeCategory(s.confidence_tier || s.tier, sProb);
+
+            if (
+              sPred &&
+              sMkt &&
+              sPred.toUpperCase() !== 'SKIP' &&
+              sMkt.toUpperCase() !== 'NO_SAFE_BANKER'
+            ) {
+              allItems.push({
+                fixture: p.fixture,
+                prediction: sPred,
+                market: sMkt,
+                probability: sProb,
+                confidenceCategory: sCat,
+                targetKickoffAt: p.target_kickoff_at || p.fixture?.target_kickoff_at,
+                isSecondary: true,
+              });
+            }
+          }
+        }
       }
 
-      if (preds.length === 0) {
+      let categoryTitle = 'ALL ACTIONABLE PREDICTIONS';
+      let filtered: PredictionFeedItem[] = [];
+
+      if (commandToken === '/today') {
+        categoryTitle = 'ALL ACTIVE PREDICTIONS';
+        filtered = allItems.filter(i => !i.isSecondary || i.probability >= 80);
+      } else if (commandToken === '/bangers') {
+        categoryTitle = '🔥 SUPER BANGERS (P ≥ 85%)';
+        filtered = allItems.filter(i => i.confidenceCategory === 'BANGER' || i.probability >= 85);
+      } else if (commandToken === '/toppicks' || commandToken === '/top') {
+        categoryTitle = '⭐ TOP PICKS (90% - 95%)';
+        filtered = allItems.filter(i => i.confidenceCategory === 'TOP PICK' || (i.probability >= 90 && i.probability < 96));
+      } else if (commandToken === '/high') {
+        categoryTitle = '🟢 HIGH CONFIDENCE (80% - 89%)';
+        filtered = allItems.filter(i => i.confidenceCategory === 'HIGH CONFIDENCE' || (i.probability >= 80 && i.probability < 90));
+      } else if (commandToken === '/mid') {
+        categoryTitle = '🔵 MID CONFIDENCE (70% - 79%)';
+        filtered = allItems.filter(i => i.confidenceCategory === 'MID CONFIDENCE' || (i.probability >= 70 && i.probability < 80));
+      } else if (commandToken === '/low') {
+        categoryTitle = '🟡 LOW CONFIDENCE VALUE LEANS (< 70%)';
+        filtered = allItems.filter(i => i.confidenceCategory === 'LOW CONFIDENCE' || (i.probability > 0 && i.probability < 70));
+      } else if (commandToken === '/goals') {
+        categoryTitle = '⚡ OVER 2.5 &amp; GOALS HUB';
+        filtered = allItems.filter(i => {
+          const m = i.market.toLowerCase();
+          const pr = i.prediction.toLowerCase();
+          return (
+            m.includes('over') ||
+            m.includes('under') ||
+            m.includes('goal') ||
+            m.includes('btts') ||
+            pr.includes('over') ||
+            pr.includes('under') ||
+            pr.includes('goal')
+          );
+        });
+      }
+
+      if (filtered.length === 0) {
         await sendTelegramMessage(
           chatId,
           `⚽ No matching actionable predictions found for <b>${escapeHtml(commandToken)}</b> right now.\n\nUse /today to see all active predictions, or check back after the next automated simulation run!`
@@ -541,29 +645,30 @@ export default async function handler(req: Request) {
       reply += `🏷️ <b>Filter:</b> ${categoryTitle}\n`;
       reply += `📅 Generated with 250,000 Poisson-Monte Carlo draws\n\n`;
 
-      preds.slice(0, 10).forEach((p: any, idx: number) => {
-        const f = p.fixture;
+      filtered.slice(0, 10).forEach((item, idx) => {
+        const f = item.fixture;
         const home = escapeHtml(f?.home_team?.name?.replace(/-/g, ' ') || 'Home');
         const away = escapeHtml(f?.away_team?.name?.replace(/-/g, ' ') || 'Away');
         const league = escapeHtml(f?.league?.code || f?.league?.name || 'League');
-        const prob = Math.round(p.probability || 0);
-        const pick = escapeHtml(p.prediction || '');
-        const mkt = escapeHtml(p.market || '');
-        const cat = escapeHtml(p.confidence_category || 'CONSENSUS');
-        const time = new Date(p.target_kickoff_at || f?.target_kickoff_at).toLocaleTimeString('en-GB', {
+        const prob = item.probability;
+        const formattedMkt = escapeHtml(formatMarket(item.market));
+        const formattedPick = escapeHtml(formatOutcome(item.prediction, item.market));
+        const cat = escapeHtml(item.confidenceCategory);
+        const tag = item.isSecondary ? ' <i>[Value Lean]</i>' : '';
+        const time = new Date(item.targetKickoffAt).toLocaleTimeString('en-GB', {
           hour: '2-digit',
           minute: '2-digit',
           timeZone: 'Africa/Lagos',
         });
 
-        reply += `<b>${idx + 1}. ${home} vs ${away}</b>\n`;
+        reply += `<b>${idx + 1}. ${home} vs ${away}</b>${tag}\n`;
         reply += `🏆 ${league} • ⏰ ${time} WAT\n`;
-        reply += `🎯 Pick: <b>${pick}</b> (${mkt})\n`;
+        reply += `🎯 Pick: <b>${formattedPick}</b> (${formattedMkt})\n`;
         reply += `📊 Certainty: <b>${prob}%</b> • Tier: <code>${cat}</code>\n\n`;
       });
 
-      if (preds.length > 10) {
-        reply += `<i>...and ${preds.length - 10} more fixtures on <a href="https://oddsbanta.com/dashboard">Oddsbanta Dashboard</a></i>\n\n`;
+      if (filtered.length > 10) {
+        reply += `<i>...and ${filtered.length - 10} more fixtures on <a href="https://oddsbanta.com/dashboard">Oddsbanta Dashboard</a></i>\n\n`;
       }
 
       reply += `Quick Filters: /bangers | /toppicks | /high | /mid | /low | /goals`;
