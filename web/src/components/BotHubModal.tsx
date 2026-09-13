@@ -73,7 +73,7 @@ export const BotHubModal: React.FC<BotHubModalProps> = ({
   const isTelegramLinked = Boolean(profile?.telegram_chat_id);
 
   return (
-    <div className="modal-overlay" onClick={onClose} style={{ zIndex: 10002 }}>
+    <div className="modal-backdrop" onClick={onClose} style={{ zIndex: 10002 }}>
       <div
         className="bot-hub-modal-card"
         onClick={(e) => e.stopPropagation()}
