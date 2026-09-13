@@ -165,3 +165,27 @@ Non-registered visitors were seeing `https://jambets.vercel.app/dashboard` in th
 - **Visitor Experience**: Clicking "Predictions" or navigating to `/` routes to `https://jambets.vercel.app/predictions`.
 - **Direct `/dashboard` Attempt**: Logged-out visitors navigating directly to `/dashboard` are immediately redirected to `https://jambets.vercel.app/predictions`.
 
+---
+
+## 6. Over 2.5 Hub Strict Member-Only Gating
+
+### Investigation Findings
+Non-logged-in visitors were still seeing `🔥 Over 2.5 Hub` on `/predictions` because:
+1. Header nav, mobile tab bar, and hamburger menu checked `!isLandingPage` instead of checking `Boolean(currentUser)`. On `/predictions`, `isLandingPage` was `false`, causing the link to render for visitors.
+2. The direct route `/goals` lacked an unauthenticated redirect guard, allowing direct access.
+
+### Fix Applied in `web/src/App.tsx`
+1. **Nav Link Conditioning**:
+   - Replaced `!isLandingPage` with `Boolean(currentUser)` across:
+     - Top Navigation Bar center links
+     - Mobile slide-out hamburger menu
+     - Mobile bottom app tab bar
+2. **Direct Route Access Protection**:
+   - `<Route path="/goals" element={!currentUser && !isAuthChecking ? <Navigate to="/predictions" replace /> : <GoalsPage ... />} />`
+   - Non-logged-in visitors who attempt to navigate directly to `https://jambets.vercel.app/goals` are instantly redirected to `https://jambets.vercel.app/predictions`.
+
+### Verification Results
+- Verified on `https://jambets.vercel.app/predictions` as unauthenticated visitor: **Header only displays `Predictions` and `Pricing`**; Over 2.5 Hub is completely gone.
+- Attempted direct navigation to `https://jambets.vercel.app/goals` as unauthenticated visitor: **Automatically redirected to `/predictions`**.
+
+
