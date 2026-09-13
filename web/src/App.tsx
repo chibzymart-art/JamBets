@@ -16,6 +16,8 @@ import { PricingModal } from './components/PricingModal';
 import { FaqModal } from './components/FaqModal';
 import { NavigationFooter } from './components/NavigationFooter';
 import { FixtureCard, formatPredictionOutcome } from './components/FixtureCard';
+import { FavoritesDrawer, FavoritePredictionItem } from './components/FavoritesDrawer';
+import { FloatingFavoritesWidget } from './components/FloatingFavoritesWidget';
 import { LandingPage } from './pages/Landing';
 import { SubscriptionPage } from './pages/Subscription';
 import { PasswordRecoveryPage } from './pages/PasswordRecovery';
@@ -116,26 +118,78 @@ export default function App() {
     });
   };
 
-  // Favorites / Watchlist State
-  const [favorites, setFavorites] = useState<string[]>(() => {
+  // Favorites & Custom Slip Drawer State
+  const [isFavoritesDrawerOpen, setIsFavoritesDrawerOpen] = useState(false);
+
+  // Granular Favorite Prediction Items State
+  const [favoriteItems, setFavoriteItems] = useState<FavoritePredictionItem[]>(() => {
     try {
-      const saved = localStorage.getItem('jambets_favorites');
-      return saved ? JSON.parse(saved) : [];
+      const saved = localStorage.getItem('oddsbanta_favorites_v2');
+      if (saved) return JSON.parse(saved);
+      return [];
     } catch {
       return [];
     }
   });
 
-  const toggleFavorite = (fixtureId: string) => {
-    setFavorites((prev) => {
-      const next = prev.includes(fixtureId)
-        ? prev.filter((id) => id !== fixtureId)
-        : [...prev, fixtureId];
+  // Keep fixture string IDs in sync for any UI checking fixture ID
+  const favorites = useMemo(() => {
+    return Array.from(new Set(favoriteItems.map((f) => f.fixtureId)));
+  }, [favoriteItems]);
+
+  const toggleFavoriteItem = (item: FavoritePredictionItem) => {
+    setFavoriteItems((prev) => {
+      const exists = prev.some((f) => f.id === item.id);
+      const next = exists
+        ? prev.filter((f) => f.id !== item.id)
+        : [...prev, item];
       try {
-        localStorage.setItem('jambets_favorites', JSON.stringify(next));
+        localStorage.setItem('oddsbanta_favorites_v2', JSON.stringify(next));
       } catch {}
       return next;
     });
+  };
+
+  const isFavoriteItem = (fixtureId: string, market: string, pick: string) => {
+    const targetId = `${fixtureId}::${market}::${pick}`;
+    return favoriteItems.some((f) => f.id === targetId);
+  };
+
+  const clearAllFavorites = () => {
+    setFavoriteItems([]);
+    try {
+      localStorage.removeItem('oddsbanta_favorites_v2');
+      localStorage.removeItem('jambets_favorites');
+    } catch {}
+  };
+
+  // Fallback toggleFavorite for fixture-level toggles
+  const toggleFavorite = (fixtureId: string) => {
+    const fixture = fixtures.find((f) => f.id === fixtureId);
+    const pred = predsByFixture.get(fixtureId)?.[0];
+    if (fixture && pred && pred.prediction !== 'SKIP' && pred.market !== 'NO_SAFE_BANKER') {
+      toggleFavoriteItem({
+        id: `${fixtureId}::${pred.market}::${pred.prediction}`,
+        fixtureId,
+        homeTeam: fixture.home_team_name,
+        awayTeam: fixture.away_team_name,
+        league: fixture.league_name || fixture.league_code,
+        targetKickoffAt: fixture.target_kickoff_at,
+        market: pred.market || '',
+        prediction: pred.prediction || '',
+        probability: pred.probability ? (pred.probability <= 1 ? pred.probability * 100 : pred.probability) : 0,
+        confidenceCategory: pred.confidence_category || undefined,
+      });
+    } else {
+      setFavoriteItems((prev) => {
+        const hasAny = prev.some((f) => f.fixtureId === fixtureId);
+        const next = hasAny ? prev.filter((f) => f.fixtureId !== fixtureId) : prev;
+        try {
+          localStorage.setItem('oddsbanta_favorites_v2', JSON.stringify(next));
+        } catch {}
+        return next;
+      });
+    }
   };
 
   const [, setLatencyMs] = useState<number | null>(null);
@@ -975,10 +1029,10 @@ export default function App() {
         <div className="regulatory-ticker-wrap">
           <div className="regulatory-ticker-track">
             <span className="regulatory-ticker-text">
-              <strong className="regulatory-prefix">🛡️ STRICT REGULATORY NOTICE:</strong> Predictions are probabilistic estimates derived from mathematical simulations for informational purposes only. They are not guarantees of outcomes, and JamGames does not place bets on anyone's behalf. Sports predictive modeling entails variance and uncertainty; please make decisions responsibly. JamGames will not take responsibility for any financial losses. This is STRICTLY FOR EDUCATIONAL purposes only and NOT A FINANCIAL OR INVESTMENT ADVICE. &nbsp;&nbsp;&nbsp;&nbsp;✦&nbsp;&nbsp;&nbsp;&nbsp;
+              <strong className="regulatory-prefix">🛡️ STRICT REGULATORY NOTICE:</strong> Predictions are probabilistic estimates derived from mathematical simulations for informational purposes only. They are not guarantees of outcomes, and Oddsbanta does not place bets on anyone's behalf. Sports predictive modeling entails variance and uncertainty; please make decisions responsibly. Oddsbanta will not take responsibility for any financial losses. This is STRICTLY FOR EDUCATIONAL purposes only and NOT A FINANCIAL OR INVESTMENT ADVICE. &nbsp;&nbsp;&nbsp;&nbsp;✦&nbsp;&nbsp;&nbsp;&nbsp;
             </span>
             <span className="regulatory-ticker-text" aria-hidden="true">
-              <strong className="regulatory-prefix">🛡️ STRICT REGULATORY NOTICE:</strong> Predictions are probabilistic estimates derived from mathematical simulations for informational purposes only. They are not guarantees of outcomes, and JamGames does not place bets on anyone's behalf. Sports predictive modeling entails variance and uncertainty; please make decisions responsibly. JamGames will not take responsibility for any financial losses. This is STRICTLY FOR EDUCATIONAL purposes only and NOT A FINANCIAL OR INVESTMENT ADVICE. &nbsp;&nbsp;&nbsp;&nbsp;✦&nbsp;&nbsp;&nbsp;&nbsp;
+              <strong className="regulatory-prefix">🛡️ STRICT REGULATORY NOTICE:</strong> Predictions are probabilistic estimates derived from mathematical simulations for informational purposes only. They are not guarantees of outcomes, and Oddsbanta does not place bets on anyone's behalf. Sports predictive modeling entails variance and uncertainty; please make decisions responsibly. Oddsbanta will not take responsibility for any financial losses. This is STRICTLY FOR EDUCATIONAL purposes only and NOT A FINANCIAL OR INVESTMENT ADVICE. &nbsp;&nbsp;&nbsp;&nbsp;✦&nbsp;&nbsp;&nbsp;&nbsp;
             </span>
           </div>
         </div>
@@ -991,7 +1045,7 @@ export default function App() {
             <img src="/oddsbanta-logo.svg" alt="Oddsbanta Prediction Engine" className="brand-header-logo-img" />
           </Link>
 
-          {/* Clean Unified Navigation Links */}
+            {/* Clean Unified Navigation Links */}
           <div className="header-center-links">
             <Link
               to="/dashboard"
@@ -999,12 +1053,14 @@ export default function App() {
             >
               {currentUser ? 'Dashboard' : 'Predictions'}
             </Link>
-            <Link
-              to="/goals"
-              className={`nav-link-btn ${location.pathname === '/goals' ? 'active' : ''}`}
-            >
-              🔥 Over 2.5 Hub
-            </Link>
+            {location.pathname !== '/' && (
+              <Link
+                to="/goals"
+                className={`nav-link-btn ${location.pathname === '/goals' ? 'active' : ''}`}
+              >
+                🔥 Over 2.5 Hub
+              </Link>
+            )}
             <button
               type="button"
               className={`nav-link-btn ${location.pathname === '/subscription' ? 'active' : ''}`}
@@ -1039,6 +1095,22 @@ export default function App() {
                 Sign In
               </button>
             )}
+
+            {/* Cart-Like Favorites / Custom Slip Button across all screens */}
+            <button
+              type="button"
+              id="btn-nav-favorites-cart"
+              className="favorites-menu-cart-btn"
+              onClick={() => setIsFavoritesDrawerOpen(true)}
+              title="View Favorites & Custom Slip"
+              aria-label="Favorites & Custom Slip"
+            >
+              <span className="favorites-cart-icon">⭐</span>
+              <span>Slip</span>
+              <span className={`favorites-cart-badge ${favoriteItems.length === 0 ? 'empty' : ''}`}>
+                {favoriteItems.length}
+              </span>
+            </button>
 
             {/* Modern Hamburger Menu Button */}
             <button
@@ -1164,14 +1236,16 @@ export default function App() {
                       <span className="pricing-flat-badge" style={{ marginLeft: 'auto' }}>₦5k Flat</span>
                     </button>
 
-                    <Link
-                      to="/goals"
-                      className="hamburger-menu-item"
-                      onClick={() => setIsHamburgerOpen(false)}
-                    >
-                      <span className="hamburger-item-icon">🔥</span>
-                      <span className="hamburger-item-label">Over 2.5 & 1H Blitz Hub</span>
-                    </Link>
+                    {location.pathname !== '/' && (
+                      <Link
+                        to="/goals"
+                        className="hamburger-menu-item"
+                        onClick={() => setIsHamburgerOpen(false)}
+                      >
+                        <span className="hamburger-item-icon">🔥</span>
+                        <span className="hamburger-item-label">Over 2.5 & 1H Blitz Hub</span>
+                      </Link>
+                    )}
 
                     <Link
                       to="/dashboard"
@@ -1800,7 +1874,7 @@ export default function App() {
                     : 'No predictions available for this selection.'}
                 </div>
                 <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4, maxWidth: 460, margin: '6px auto 16px' }}>
-                  No published predictions are available for your current selection. JamBets only displays matches that have completed full mathematical simulations and met our publication confidence thresholds.
+                  No published predictions are available for your current selection. Oddsbanta only displays matches that have completed full mathematical simulations and met our publication confidence thresholds.
                 </div>
                 <button
                   type="button"
@@ -1841,6 +1915,8 @@ export default function App() {
                         canViewPredictions={canViewPredictions}
                         isStarred={favorites.includes(fixture.id)}
                         onToggleFavorite={toggleFavorite}
+                        isFavoriteItem={isFavoriteItem}
+                        onToggleFavoriteItem={toggleFavoriteItem}
                         isExpanded={expandedFixtures.has(fixture.id)}
                         onToggleExpand={() => toggleFixtureExpand(fixture.id)}
                       />
@@ -1852,62 +1928,81 @@ export default function App() {
           </div>
 
           {/* RIGHT SIDEBAR: FAVORITES / WATCHLIST */}
+          {/* RIGHT SIDEBAR: FAVORITES / WATCHLIST */}
           <aside className="watchlist-sidebar-card">
             <div className="watchlist-sidebar-header">
               <span className="watchlist-header-title">
                 <span>★</span> FAVORITES / WATCHLIST
               </span>
-              <span className="watchlist-count-badge">
-                {favorites.length} Saved
-              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span className="watchlist-count-badge">
+                  {favoriteItems.length} Saved
+                </span>
+                {favoriteItems.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setIsFavoritesDrawerOpen(true)}
+                    style={{ background: '#0284c7', color: '#fff', border: 'none', borderRadius: 6, fontSize: 10, fontWeight: 700, padding: '3px 7px', cursor: 'pointer' }}
+                    title="Open Custom Slip Drawer"
+                  >
+                    Open Slip →
+                  </button>
+                )}
+              </div>
             </div>
 
             <div className="watchlist-content-box">
-              {favorites.length === 0 ? (
+              {favoriteItems.length === 0 ? (
                 <>
                   <div className="watchlist-empty-icon">★</div>
-                  <div className="watchlist-empty-title">Watchlist Empty</div>
+                  <div className="watchlist-empty-title">Slip Empty</div>
                   <p className="watchlist-empty-sub">
-                    Click the star icon (☆) on any fixture card to pin it here for instant livescore tracking.
+                    Click the star icon (☆) or "+ Add" on any match card to pin predictions here or build your custom slip.
                   </p>
                 </>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8, textAlign: 'left' }}>
-                  {fixtures
-                    .filter((f) => favorites.includes(f.id))
-                    .map((fav) => {
-                      const time = formatKickoff(fav.target_kickoff_at);
-                      return (
-                        <div
-                          key={fav.id}
-                          className="banger-item-tile"
-                          onClick={() => setSelectedLeague(fav.league_code)}
-                        >
-                          <div className="banger-item-meta">
-                            <span>{fav.league_code}</span>
-                            <span>{time.timeStr} WAT</span>
-                          </div>
-                          <div className="banger-item-teams">
-                            {fav.home_team_name} vs {fav.away_team_name}
-                          </div>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <span style={{ fontSize: 11, fontWeight: 700, color: '#059669' }}>
-                              STATUS: {fav.status.toUpperCase()}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                toggleFavorite(fav.id);
-                              }}
-                              style={{ background: 'none', border: 'none', color: '#dc2626', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
-                            >
-                              Remove
-                            </button>
-                          </div>
+                  {favoriteItems.map((fav) => {
+                    const time = fav.targetKickoffAt ? formatKickoff(fav.targetKickoffAt) : null;
+                    return (
+                      <div
+                        key={fav.id}
+                        className="banger-item-tile"
+                        onClick={() => setIsFavoritesDrawerOpen(true)}
+                      >
+                        <div className="banger-item-meta">
+                          <span>{fav.league}</span>
+                          <span>{time ? `${time.timeStr} WAT` : 'Scheduled'}</span>
                         </div>
-                      );
-                    })}
+                        <div className="banger-item-teams">
+                          {fav.homeTeam} vs {fav.awayTeam}
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
+                          <span style={{ fontSize: 11, fontWeight: 800, color: '#0284c7' }}>
+                            🎯 {fav.prediction} <span style={{ fontSize: 10, color: '#64748b' }}>({fav.market})</span>
+                          </span>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleFavoriteItem(fav);
+                            }}
+                            style={{ background: 'none', border: 'none', color: '#dc2626', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  <button
+                    type="button"
+                    onClick={() => setIsFavoritesDrawerOpen(true)}
+                    className="btn-paywall-unlock-prominent"
+                    style={{ marginTop: 8, padding: '8px 12px', fontSize: 12, textAlign: 'center' }}
+                  >
+                    📋 View Full Slip ({favoriteItems.length}) →
+                  </button>
                 </div>
               )}
             </div>
@@ -2078,6 +2173,20 @@ export default function App() {
           </div>
         </div>
       )}
+      {/* Floating Draggable Favorites/Slip Widget */}
+      <FloatingFavoritesWidget
+        count={favoriteItems.length}
+        onOpenDrawer={() => setIsFavoritesDrawerOpen(true)}
+      />
+
+      {/* Slide-over Favorites Slip Drawer */}
+      <FavoritesDrawer
+        isOpen={isFavoritesDrawerOpen}
+        onClose={() => setIsFavoritesDrawerOpen(false)}
+        favorites={favoriteItems}
+        onRemoveItem={toggleFavoriteItem}
+        onClearAll={clearAllFavorites}
+      />
     </div>
   );
 }

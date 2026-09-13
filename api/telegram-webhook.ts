@@ -198,7 +198,7 @@ export default async function handler(req: Request) {
         if (linkResult.success) {
           await sendTelegramMessage(
             chatId,
-            `🎉 *Account Connected Successfully!*\n\nWelcome *${linkResult.email}*!\nYour Oddsbanta account is now linked to Telegram.\n\nReady to pull calibrated predictions:\n• /today - All scheduled match predictions\n• /bangers - Super Bankers (P >= 80%)\n• /goals - Over 2.5 Goals / Over 0.5 1st Half\n• /settled - Verified match settlements\n• /status - Your subscription status`
+            `🎉 *Account Connected Successfully!*\n\nWelcome *${linkResult.email}*!\nYour Oddsbanta account is now linked to Telegram.\n\nReady to pull calibrated predictions:\n• /today - All scheduled match predictions\n• /bangers - Super Bankers (P ≥ 85%)\n• /toppicks - Top Picks (90% - 95%)\n• /high - High Confidence (80% - 89%)\n• /mid - Mid Confidence (70% - 79%)\n• /low - Low Confidence Leans (< 70%)\n• /goals - Over 2.5 & Goals Hub\n• /settled - Verified match settlements\n• /status - Your subscription status\n• /help - Full FAQ & Command List`
           );
           return new Response(JSON.stringify({ ok: true }), { status: 200 });
         } else {
@@ -216,7 +216,7 @@ export default async function handler(req: Request) {
         const authInfo = await isUserPaidOrAdmin(linkedUser);
         await sendTelegramMessage(
           chatId,
-          `👋 *Welcome Back to Oddsbanta Sentinel VIP Bot!*\n\nAccount: *${linkedUser.email}*\nTier: *${authInfo.tier}*\n\nCommands:\n• /today - Today's calibrated match predictions\n• /bangers - Super Bankers (P >= 80%)\n• /goals - Over 2.5 & 1st Half Over 0.5\n• /settled - Track record & settlement\n• /status - Subscription details`
+          `👋 *Welcome Back to Oddsbanta Sentinel VIP Bot!*\n\nAccount: *${linkedUser.email}*\nTier: *${authInfo.tier}*\n\nCommands:\n• /today - All scheduled predictions\n• /bangers - Super Bankers (P ≥ 85%)\n• /toppicks - Top Picks (90% - 95%)\n• /high - High Confidence (80% - 89%)\n• /mid - Mid Confidence (70% - 79%)\n• /low - Low Confidence Leans (< 70%)\n• /goals - Over 2.5 & Goals Hub\n• /settled - Track record & settlement\n• /status - Subscription details\n• /help - Full FAQ & Guide`
         );
       } else {
         await sendTelegramMessage(
@@ -270,23 +270,51 @@ export default async function handler(req: Request) {
       return new Response(JSON.stringify({ ok: true }), { status: 200 });
     }
 
-    if (text === '/help') {
-      await sendTelegramMessage(
-        chatId,
-        `🤖 *Oddsbanta Bot Command Reference*\n\n` +
-        `• /today - All scheduled match predictions for today\n` +
-        `• /bangers - High-confidence & Super Banker picks (P >= 80%)\n` +
-        `• /goals - Over 2.5 Goals & 1st Half Over 0.5 picks\n` +
-        `• /settled - Recently settled match results\n` +
-        `• /status - Check your subscription and account status\n` +
-        `• /link <CODE> - Link your Oddsbanta website profile\n\n` +
-        `🌐 Website: https://oddsbanta.com`
-      );
+    if (text === '/help' || text === '/faq') {
+      const helpText =
+        `🤖 *ODDSBANTA INTELLIGENCE BOT — FAQS & COMMANDS*\n\n` +
+        `📖 *FREQUENTLY ASKED QUESTIONS:*\n\n` +
+        `❓ *1. What is Oddsbanta?*\n` +
+        `Oddsbanta is an automated football predictive intelligence platform. Every match runs through 250,000 Poisson and Monte Carlo draws (xG, home advantage, form weighting) to identify true statistical edges.\n\n` +
+        `❓ *2. What is a "Banger"?*\n` +
+        `A Banger is our highest-conviction classification (simulated probability ≥ 85%-96%+). It represents extreme mathematical alignment across simulations.\n\n` +
+        `❓ *3. What do the Confidence Tiers mean?*\n` +
+        `• *Banger:* ≥ 85%-96%+ simulated probability\n` +
+        `• *Top Pick:* 90% - 95% simulated probability\n` +
+        `• *High Confidence:* 80% - 89% simulated probability\n` +
+        `• *Mid Confidence:* 70% - 79% simulated probability\n` +
+        `• *Low Confidence:* < 70% statistical value leans\n\n` +
+        `❓ *4. Why are some matches passed or marked SKIP?*\n` +
+        `When no market meets our 80% Banker threshold, our Anti-Loss Guard flags the match as SKIP / NO SAFE BANKER. The bot automatically filters these out so you only receive actionable predictions.\n\n` +
+        `❓ *5. How does Match Settlement work?*\n` +
+        `Our autonomous settlement engine checks official full-time results every 5 minutes. Every published prediction is permanently marked as WON, LOST, or VOID with zero retroactive editing.\n\n` +
+        `❓ *6. What happens if a match is Postponed?*\n` +
+        `Postponed or abandoned matches are marked as ⊘ VOID. They do not count as a loss.\n\n` +
+        `━━━━━━━━━━━━━━━━━━━━\n` +
+        `📋 *BOT COMMANDS LIST:*\n\n` +
+        `• /today - All verified active predictions\n` +
+        `• /bangers - Super Bankers (P ≥ 85%)\n` +
+        `• /toppicks - Top Picks (90% - 95%)\n` +
+        `• /high - High Confidence (80% - 89%)\n` +
+        `• /mid - Mid Confidence (70% - 79%)\n` +
+        `• /low - Low Confidence value leans\n` +
+        `• /goals - Over 2.5, Over 1.5 & BTTS Hub\n` +
+        `• /settled - Live settled results track record\n` +
+        `• /status - Check account & VIP subscription status\n` +
+        `• /link <CODE> - Connect your Oddsbanta web profile\n` +
+        `• /help - Display this FAQ & command list\n\n` +
+        `🌐 *Website:* https://oddsbanta.com\n` +
+        `📊 *Dashboard:* https://oddsbanta.com/dashboard`;
+
+      await sendTelegramMessage(chatId, helpText);
       return new Response(JSON.stringify({ ok: true }), { status: 200 });
     }
 
-    // Predictions Commands: /today, /bangers, /goals, /settled
-    if (text === '/today' || text === '/bangers' || text === '/goals') {
+    // Predictions Commands: /today, /bangers, /toppicks, /high, /mid, /low, /goals
+    const predCommands = ['/today', '/bangers', '/toppicks', '/high', '/mid', '/low', '/goals'];
+    const matchingCmd = predCommands.find((cmd) => text === cmd || text.startsWith(`${cmd} `));
+
+    if (matchingCmd) {
       const user = await getLinkedUser(chatId);
       if (!user) {
         await sendTelegramMessage(
@@ -316,7 +344,7 @@ export default async function handler(req: Request) {
       );
 
       const res = await fetch(
-        `${SUPABASE_URL}/rest/v1/football_predictions?select=${selectFields}&publication_status=eq.published&settlement_status=eq.pending&order=target_kickoff_at.asc&limit=30`,
+        `${SUPABASE_URL}/rest/v1/football_predictions?select=${selectFields}&publication_status=eq.published&settlement_status=eq.pending&order=target_kickoff_at.asc&limit=100`,
         { headers }
       );
 
@@ -331,30 +359,74 @@ export default async function handler(req: Request) {
         return new Response(JSON.stringify({ ok: true }), { status: 200 });
       }
 
-      if (text === '/bangers') {
+      // CRITICAL: Filter out SKIP and NO_SAFE_BANKER predictions
+      preds = preds.filter((p: any) => {
+        const predStr = (p.prediction || '').toUpperCase().trim();
+        const mktStr = (p.market || '').toUpperCase().trim();
+        const catStr = (p.confidence_category || '').toUpperCase().trim();
+        return predStr !== 'SKIP' && mktStr !== 'NO_SAFE_BANKER' && catStr !== 'NO_SAFE_BANKER';
+      });
+
+      let categoryTitle = 'ALL ACTIONABLE PREDICTIONS';
+
+      if (matchingCmd === '/bangers') {
+        categoryTitle = '🔥 SUPER BANGERS (P ≥ 85%)';
         preds = preds.filter((p: any) =>
-          ['HIGH_CONFIDENCE', 'SUPER_BANKER'].includes(p.confidence_category) || (p.probability && p.probability >= 80)
+          ['BANGER', 'SUPER_BANKER'].includes(p.confidence_category) || (p.probability && p.probability >= 85)
         );
-      } else if (text === '/goals') {
+      } else if (matchingCmd === '/toppicks') {
+        categoryTitle = '⭐ TOP PICKS (90% - 95%)';
+        preds = preds.filter((p: any) => {
+          const cat = (p.confidence_category || '').toUpperCase();
+          const prob = p.probability || 0;
+          return cat === 'TOP_PICK' || cat === 'TOPPICK' || (prob >= 90 && prob < 96);
+        });
+      } else if (matchingCmd === '/high') {
+        categoryTitle = '🟢 HIGH CONFIDENCE (80% - 89%)';
+        preds = preds.filter((p: any) => {
+          const cat = (p.confidence_category || '').toUpperCase();
+          const prob = p.probability || 0;
+          return cat === 'HIGH_CONFIDENCE' || (prob >= 80 && prob < 90);
+        });
+      } else if (matchingCmd === '/mid') {
+        categoryTitle = '🔵 MID CONFIDENCE (70% - 79%)';
+        preds = preds.filter((p: any) => {
+          const cat = (p.confidence_category || '').toUpperCase();
+          const prob = p.probability || 0;
+          return cat === 'MID_CONFIDENCE' || (prob >= 70 && prob < 80);
+        });
+      } else if (matchingCmd === '/low') {
+        categoryTitle = '🟡 LOW CONFIDENCE VALUE LEANS (< 70%)';
+        preds = preds.filter((p: any) => {
+          const cat = (p.confidence_category || '').toUpperCase();
+          const prob = p.probability || 0;
+          return cat === 'LOW_CONFIDENCE' || (prob > 0 && prob < 70);
+        });
+      } else if (matchingCmd === '/goals') {
+        categoryTitle = '⚡ OVER 2.5 & GOALS HUB';
         preds = preds.filter((p: any) =>
-          (p.market && (p.market.includes('Over') || p.market.includes('Under') || p.market.includes('Goal'))) ||
-          (p.prediction && (p.prediction.includes('OVER') || p.prediction.includes('UNDER')))
+          (p.market && (p.market.toLowerCase().includes('over') || p.market.toLowerCase().includes('under') || p.market.toLowerCase().includes('goal') || p.market.toLowerCase().includes('btts'))) ||
+          (p.prediction && (p.prediction.toLowerCase().includes('over') || p.prediction.toLowerCase().includes('under') || p.prediction.toLowerCase().includes('goal')))
         );
       }
 
       if (preds.length === 0) {
-        await sendTelegramMessage(chatId, `⚽ No matching fixtures found for *${text}* right now. Check back soon!`);
+        await sendTelegramMessage(
+          chatId,
+          `⚽ No matching actionable predictions found for *${matchingCmd}* right now.\n\nUse /today to see all active predictions, or check back after the next automated simulation run!`
+        );
         return new Response(JSON.stringify({ ok: true }), { status: 200 });
       }
 
       // Build Telegram message
-      let reply = `⚽ *Oddsbanta VIP Predictions (${text.toUpperCase()})*\n`;
-      reply += `📅 Generated with 250,000 Dixon-Coles Monte Carlo draws\n\n`;
+      let reply = `⚽ *Oddsbanta VIP Predictions*\n`;
+      reply += `🏷️ *Filter:* ${categoryTitle}\n`;
+      reply += `📅 Generated with 250,000 Poisson-Monte Carlo draws\n\n`;
 
       preds.slice(0, 10).forEach((p: any, idx: number) => {
         const f = p.fixture;
-        const home = f?.home_team?.name || 'Home';
-        const away = f?.away_team?.name || 'Away';
+        const home = f?.home_team?.name?.replace(/-/g, ' ') || 'Home';
+        const away = f?.away_team?.name?.replace(/-/g, ' ') || 'Away';
         const league = f?.league?.code || f?.league?.name || 'League';
         const prob = Math.round(p.probability || 0);
         const time = new Date(p.target_kickoff_at || f?.target_kickoff_at).toLocaleTimeString('en-GB', {
@@ -365,13 +437,15 @@ export default async function handler(req: Request) {
 
         reply += `*${idx + 1}. ${home} vs ${away}*\n`;
         reply += `🏆 ${league} • ⏰ ${time} WAT\n`;
-        reply += `🎯 Pick: *${p.prediction}* (${prob}%)\n`;
-        reply += `📊 Category: \`${p.confidence_category || 'CONSENSUS'}\`\n\n`;
+        reply += `🎯 Pick: *${p.prediction}* (${p.market})\n`;
+        reply += `📊 Certainty: *${prob}%* • Tier: \`${p.confidence_category || 'CONSENSUS'}\`\n\n`;
       });
 
       if (preds.length > 10) {
-        reply += `_...and ${preds.length - 10} more fixtures on [Oddsbanta Dashboard](https://oddsbanta.com/dashboard)_`;
+        reply += `_...and ${preds.length - 10} more fixtures on [Oddsbanta Dashboard](https://oddsbanta.com/dashboard)_\n\n`;
       }
+
+      reply += `Quick Filters: /bangers | /toppicks | /high | /mid | /low | /goals`;
 
       await sendTelegramMessage(chatId, reply);
       return new Response(JSON.stringify({ ok: true }), { status: 200 });

@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { QueueFixture, FootballPrediction, SecondaryPrediction, PoissonParameters, SimulationOutlines } from '../types';
+import { FavoritePredictionItem } from './FavoritesDrawer';
 
 export interface TierDisplayConfig {
   label: string;
@@ -402,8 +403,10 @@ export interface FixtureCardProps {
   prediction?: FootballPrediction | null;
   isAdmin: boolean;
   canViewPredictions: boolean;
-  isStarred: boolean;
-  onToggleFavorite: (id: string) => void;
+  isStarred?: boolean;
+  onToggleFavorite?: (id: string) => void;
+  isFavoriteItem?: (fixtureId: string, market: string, pick: string) => boolean;
+  onToggleFavoriteItem?: (item: FavoritePredictionItem) => void;
   isExpanded: boolean;
   onToggleExpand: () => void;
 }
@@ -519,8 +522,10 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
   prediction,
   isAdmin,
   canViewPredictions,
-  isStarred,
+  isStarred = false,
   onToggleFavorite,
+  isFavoriteItem,
+  onToggleFavoriteItem,
   isExpanded,
   onToggleExpand
 }) => {
@@ -645,6 +650,32 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
       ? `${country} • Official Stadium`
       : `${leagueDisplay} • Official Stadium`;
 
+  const primaryPick = prediction?.prediction;
+  const primaryMarket = prediction?.market;
+  const isPrimaryFav = isFavoriteItem && primaryMarket && primaryPick
+    ? isFavoriteItem(fixture.id, primaryMarket, primaryPick)
+    : isStarred;
+
+  const handleTogglePrimaryFav = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (onToggleFavoriteItem && primaryMarket && primaryPick && !isNoBanker) {
+      onToggleFavoriteItem({
+        id: `${fixture.id}::${primaryMarket}::${primaryPick}`,
+        fixtureId: fixture.id,
+        homeTeam: formatTeamName(fixture.home_team_name),
+        awayTeam: formatTeamName(fixture.away_team_name),
+        league: fixture.league_name || fixture.league_code,
+        targetKickoffAt: fixture.target_kickoff_at,
+        market: formatMarketName(primaryMarket),
+        prediction: formatPredictionOutcome(primaryPick),
+        probability: Number(probPct) || 0,
+        confidenceCategory: prediction?.confidence_category || undefined,
+      });
+    } else if (onToggleFavorite) {
+      onToggleFavorite(fixture.id);
+    }
+  };
+
   return (
     <div
       id={`fixture-${fixture.id}`}
@@ -656,14 +687,11 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
       <div className="glance-top-row">
         <button
           type="button"
-          className={`glance-favorite-btn ${isStarred ? 'starred' : ''}`}
-          title={isStarred ? 'Remove from Favorites' : 'Add to Favorites'}
-          onClick={(e) => {
-            e.stopPropagation();
-            onToggleFavorite(fixture.id);
-          }}
+          className={`glance-favorite-btn ${isPrimaryFav ? 'starred' : ''}`}
+          title={isPrimaryFav ? 'Remove from Favorites' : 'Add to Favorites'}
+          onClick={handleTogglePrimaryFav}
         >
-          {isStarred ? '★ FAVORITE' : '☆ FAVORITE'}
+          {isPrimaryFav ? '★ FAVORITE' : '☆ FAVORITE'}
         </button>
 
         {isLive && (
@@ -929,6 +957,14 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
                       🎯 PRIMARY PREDICTION (TOP BANKER)
                     </span>
                     <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                      <button
+                        type="button"
+                        className={`primary-card-fav-btn ${isPrimaryFav ? 'active' : ''}`}
+                        onClick={handleTogglePrimaryFav}
+                        title={isPrimaryFav ? 'Remove Banker from Favorites Slip' : 'Save Banker to Favorites Slip'}
+                      >
+                        {isPrimaryFav ? '★ In Slip' : '+ Add to Slip'}
+                      </button>
                       {isWon && <span className="badge-settled-won">✓ WON {isLive ? '(IN-PLAY)' : ''}</span>}
                       {isLost && <span className="badge-settled-lost">✗ LOST</span>}
                       {isVoid && <span className="badge-settled-void">⊘ VOID</span>}
@@ -1121,6 +1157,28 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
                         : sec.prob != null ? sec.prob : 0;
                       const secPct = (secProb <= 1 ? secProb * 100 : secProb).toFixed(1);
 
+                      const isSecFav = isFavoriteItem
+                        ? isFavoriteItem(fixture.id, sec.market || '', sec.prediction || '')
+                        : false;
+
+                      const handleToggleSecFav = (e: React.MouseEvent) => {
+                        e.stopPropagation();
+                        if (onToggleFavoriteItem && (sec.market || sec.prediction)) {
+                          onToggleFavoriteItem({
+                            id: `${fixture.id}::${sec.market || ''}::${sec.prediction || ''}`,
+                            fixtureId: fixture.id,
+                            homeTeam: formatTeamName(fixture.home_team_name),
+                            awayTeam: formatTeamName(fixture.away_team_name),
+                            league: fixture.league_name || fixture.league_code,
+                            targetKickoffAt: fixture.target_kickoff_at,
+                            market: formatMarketName(sec.market || ''),
+                            prediction: formatPredictionOutcome(sec.prediction || ''),
+                            probability: Number(secPct) || 0,
+                            confidenceCategory: sec.confidence_category || undefined,
+                          });
+                        }
+                      };
+
                       return (
                         <div key={idx} className="secondary-pred-card">
                           <div className="secondary-card-top">
@@ -1130,12 +1188,22 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
                               </span>
                               <span className="secondary-market-name">{formatMarketName(sec.market)}</span>
                             </div>
-                            <span
-                              className={`tier-badge ${secTier.badgeClass}`}
-                              style={{ fontSize: 9, padding: '1px 5px', color: secTier.textColor, background: secTier.bgColor, borderColor: secTier.borderColor }}
-                            >
-                              {secTier.icon} {secTier.label}
-                            </span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                              <button
+                                type="button"
+                                className={`secondary-card-fav-btn ${isSecFav ? 'active' : ''}`}
+                                onClick={handleToggleSecFav}
+                                title={isSecFav ? 'Remove prediction from slip' : 'Add prediction to favorites slip'}
+                              >
+                                {isSecFav ? '★ Slip' : '+ Add'}
+                              </button>
+                              <span
+                                className={`tier-badge ${secTier.badgeClass}`}
+                                style={{ fontSize: 9, padding: '1px 5px', color: secTier.textColor, background: secTier.bgColor, borderColor: secTier.borderColor }}
+                              >
+                                {secTier.icon} {secTier.label}
+                              </span>
+                            </div>
                           </div>
 
                           <div className="secondary-card-mid">
