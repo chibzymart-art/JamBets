@@ -88,7 +88,8 @@ class PredictionPipeline:
         away_team_canonical: str,
         kickoff_utc: datetime,
         persist_to_supabase: bool = True,
-        features: Optional[PreMatchFeatures] = None
+        features: Optional[PreMatchFeatures] = None,
+        force_repredict: bool = False
     ) -> FixturePredictionResult:
         """
         Executes an isolated prediction run for a single fixture with Phase 4.7 guarantees:
@@ -103,6 +104,30 @@ class PredictionPipeline:
         """
         if kickoff_utc.tzinfo is None:
             kickoff_utc = kickoff_utc.replace(tzinfo=timezone.utc)
+
+        # -------------------------------------------------------------
+        # 0. Publication Lock: Freeze already published predictions
+        # -------------------------------------------------------------
+        if not force_repredict and fixture_id:
+            try:
+                existing_p = self.supabase.get("football_predictions", {
+                    "fixture_id": f"eq.{fixture_id}",
+                    "publication_status": "eq.published",
+                    "select": "id,market,prediction,probability,confidence_category,secondary_predictions,publication_status"
+                })
+                if existing_p:
+                    print(f"    [PUBLICATION LOCKED] Fixture {canonical_key} ({fixture_id}) already published. Preserving immutable record.")
+                    p = existing_p[0]
+                    return FixturePredictionResult(
+                        fixture_id=fixture_id,
+                        canonical_key=canonical_key,
+                        status="PUBLISHED",
+                        primary_prediction=None,
+                        secondary_predictions=p.get("secondary_predictions") or [],
+                        persisted_predictions_count=0
+                    )
+            except Exception as e_lock:
+                pass
 
         # -------------------------------------------------------------
         # 1. Feature Engineering with Zero-Hallucination Gate

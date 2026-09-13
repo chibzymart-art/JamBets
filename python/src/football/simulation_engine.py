@@ -248,10 +248,11 @@ class MonteCarloSimulationEngine:
 
         sim_count = exact_simulations_override if exact_simulations_override is not None else self.TARGET_SIMULATIONS
 
-        # 2. Derive deterministic, auditable seed provenance
+        # 2. Derive deterministic, auditable seed provenance (cross-process stable)
         if seed is None:
-            # Deterministically hash fixture ID and timestamp for reproducible provenance
-            derived_seed = abs(hash(f"{contract.fixture_id}_{contract.scheduled_kickoff.isoformat()}")) % (2**31 - 1)
+            import hashlib
+            seed_bytes = hashlib.sha256(f"{contract.fixture_id}_{contract.scheduled_kickoff.isoformat()}".encode('utf-8')).digest()
+            derived_seed = int.from_bytes(seed_bytes[:4], 'big') % (2**31 - 1)
         else:
             derived_seed = int(seed)
 

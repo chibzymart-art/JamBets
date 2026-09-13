@@ -305,3 +305,19 @@ Non-logged-in visitors were still seeing `🔥 Over 2.5 Hub` on `/predictions` b
     - **Assertion 2 PASS:** All core prediction fields (`market`, `prediction`, `probability`, `confidence_category`, `secondary_predictions`, `target_kickoff_at`) are 100% IMMUTABLE across all 493 predictions.
     - Recorded 2 deterministic settlement transitions for completed matches (`WON`/`LOST`/`VOID`) with zero side effects.
 
+---
+
+### Phase 3: Prediction Publication Lock & Deterministic Seeding — COMPLETED
+- **Root Cause Addressed:**
+  - In Python 3, `hash()` is randomized across processes via `PYTHONHASHSEED`. Consequently, running the prediction engine in two separate processes produced different seeds for the same match contract (`derived_seed = abs(hash(...))`), resulting in slightly different Monte Carlo draws.
+  - Furthermore, running `run_predictions.py` without an explicit publication lock re-evaluated already published forward fixtures, causing probabilities and secondary recommendations to shift over time.
+- **Files Modified:**
+  - [`python/src/football/simulation_engine.py`](file:///c:/Users/HP/Documents/JamBets/python/src/football/simulation_engine.py): Replaced Python process-dependent `hash()` with cryptographically stable `hashlib.sha256(f"{contract.fixture_id}_{contract.scheduled_kickoff.isoformat()}".encode('utf-8'))` to derive deterministic, cross-process and cross-machine reproducible PCG64 simulation seeds.
+  - [`python/src/football/prediction_pipeline.py`](file:///c:/Users/HP/Documents/JamBets/python/src/football/prediction_pipeline.py): Added step 0 publication lock checking `football_predictions` for existing published predictions (`force_repredict=False`). If already published, logs `[PUBLICATION LOCKED]` and immediately returns without triggering simulation or persisting changes (0 writes).
+  - [`python/src/run_predictions.py`](file:///c:/Users/HP/Documents/JamBets/python/src/run_predictions.py): Added publication lock filter in the prediction queue to bypass already published fixtures in forward window unless `--force` / `--force-repredict-all` is explicitly passed; passes `force_repredict=force_run` to pipeline.
+  - [`scratch/test_phase3_publication_lock.py`](file:///c:/Users/HP/Documents/JamBets/scratch/test_phase3_publication_lock.py): Test suite verifying cross-process seed repeatability and zero-write publication lock.
+- **Verification Results:**
+  - Ran `scratch/test_phase3_publication_lock.py`:
+    - **Deterministic Seed Test:** Independent runs of 250,000 Monte Carlo draws for the same fixture produced identical seed `1984511406`, 100% identical simulated hits, and 100% identical market probabilities across all markets.
+    - **Publication Lock Test:** Tested against existing published fixture `42d78b15-426a-4c6c-b9f0-582789d669ce`. Verified `[PUBLICATION LOCKED]` triggered, returning status `PUBLISHED` with `persisted_predictions_count == 0` (zero database writes).
+  - Production build in `web/` tested and clean.

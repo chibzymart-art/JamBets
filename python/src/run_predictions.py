@@ -198,7 +198,17 @@ def run():
 
     forward_fixtures = sorted(forward_fixtures, key=fixture_priority)
 
-    # If argument provided, allow limiting for tests, otherwise drain the entire forward window
+    # Publication Lock: strictly filter for unpredicted fixtures unless --force or --force-repredict-all is passed
+    force_run = "--force" in sys.argv or "--force-repredict-all" in sys.argv
+    if not force_run:
+        unpredicted_fixtures = [f for f in forward_fixtures if f.get("id") not in existing_preds_map]
+        print(f"  • Publication Lock Active: {len(forward_fixtures) - len(unpredicted_fixtures)} already published fixtures locked. {len(unpredicted_fixtures)} unpredicted fixtures to process.", flush=True)
+        fixtures_to_process = unpredicted_fixtures
+    else:
+        fixtures_to_process = forward_fixtures
+        print(f"  • Force repredict active: evaluating all {len(fixtures_to_process)} forward fixtures", flush=True)
+
+    # If argument provided, allow limiting for tests, otherwise drain the eligible forward window
     drain_all = True
     batch_limit = None
     for arg in sys.argv[1:]:
@@ -208,11 +218,10 @@ def run():
             break
 
     if batch_limit:
-        fixtures_to_process = forward_fixtures[:batch_limit]
+        fixtures_to_process = fixtures_to_process[:batch_limit]
         print(f"  • Running batch limit mode: {batch_limit} fixtures", flush=True)
     else:
-        fixtures_to_process = forward_fixtures
-        print(f"  • Running EXHAUSTIVE DRAIN mode across ALL {len(fixtures_to_process)} forward fixtures", flush=True)
+        print(f"  • Running EXHAUSTIVE DRAIN mode across ALL {len(fixtures_to_process)} eligible forward fixtures", flush=True)
 
     # 6. Execute per-fixture isolated predictions
     print("\n[STEP 5] Running Phase 4.7 Zero-Hallucination & Consensus Prediction Pipeline...", flush=True)
@@ -286,7 +295,8 @@ def run():
             away_team_canonical=a_team,
             kickoff_utc=kickoff,
             persist_to_supabase=True,
-            features=features
+            features=features,
+            force_repredict=force_run
         )
 
         if res.status == "PUBLISHED":
