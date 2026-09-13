@@ -142,3 +142,26 @@ Tested against live database and verified via live webhook:
 - `/low`: **121** Low Confidence value leans (< 70%)
 - `/goals`: **337** Over/Under & BTTS picks
 - Webhook response across all commands returned HTTP 200 `{"ok":true}`.
+
+---
+
+## 5. Auth-Aware Routing: `/predictions` (Visitors) vs `/dashboard` (Members)
+
+### Problem
+Non-registered visitors were seeing `https://jambets.vercel.app/dashboard` in their browser URL bar instead of `/predictions` because:
+1. `<Route path="/predictions" element={<Navigate to="/dashboard" replace />} />` forcibly redirected visitors to `/dashboard`.
+2. Navigation buttons and CTAs hardcoded `to="/dashboard"` even when displaying the `"Predictions"` label.
+
+### Fix Applied
+1. **Dynamic Target Path**:
+   - Added `const targetPredictionsPath = currentUser ? '/dashboard' : '/predictions';`.
+   - Updated Header, Hero CTA, Hamburger Menu, Footer links, and Mobile Bottom Tab Bar to navigate to `targetPredictionsPath`.
+2. **Dual-Route Rendering with Smart Auth Guards**:
+   - Both `/predictions` and `/dashboard` render the full mathematical predictions engine without duplicating code.
+   - Non-registered visitors accessing `/dashboard` are automatically redirected to `/predictions`.
+   - Authenticated members accessing `/predictions` are automatically redirected to `/dashboard`.
+
+### Verification Results
+- **Visitor Experience**: Clicking "Predictions" or navigating to `/` routes to `https://jambets.vercel.app/predictions`.
+- **Direct `/dashboard` Attempt**: Logged-out visitors navigating directly to `/dashboard` are immediately redirected to `https://jambets.vercel.app/predictions`.
+
