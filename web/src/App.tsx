@@ -1327,11 +1327,6 @@ export default function App() {
               )
             }
           />
-          <Route path="/admin/" element={<Navigate to="/admin" replace />} />
-          <Route path="/goals/" element={<Navigate to="/goals" replace />} />
-          <Route path="/dashboard/" element={<Navigate to="/dashboard" replace />} />
-          <Route path="/subscription/" element={<Navigate to="/subscription" replace />} />
-
           {/* ROUTE 5: PREDICTIONS FIXTURE DASHBOARD */}
           <Route
             path="/dashboard"
