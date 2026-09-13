@@ -217,3 +217,26 @@ Non-logged-in visitors were still seeing `🔥 Over 2.5 Hub` on `/predictions` b
     - Unauthorized `INSERT` to `entitlements` -> Blocked by PostgreSQL RLS with `error code 42501` (`new row violates row-level security policy`).
     - Unauthorized role tampering -> Blocked by `protect_user_roles_and_status()` trigger and RLS filtering.
   - Changes committed and pushed to `main` branch.
+
+### Phase 2: Telegram Auth & IDOR Remediation (SEC-01 & SEC-05) — COMPLETED
+- **Files Modified:**
+  - [`api/telegram-auth.ts`](file:///c:/Users/HP/Documents/JamBets/api/telegram-auth.ts)
+  - [`web/src/components/ProfileModal.tsx`](file:///c:/Users/HP/Documents/JamBets/web/src/components/ProfileModal.tsx)
+- **Security Hardening Applied:**
+  1. **Session JWT Bearer Authentication (Fixes SEC-01 IDOR):**
+     - Endpoint strictly checks for `Authorization: Bearer <jwt>`.
+     - Validates the token against the Supabase Auth API (`/auth/v1/user`).
+     - Derives the user ID strictly from the authenticated cryptographic JWT (`authUserData.id`). The endpoint completely ignores any untrusted client-supplied `userId` body parameter, preventing account takeover.
+  2. **Cryptographic High-Entropy Linking Tokens (Fixes SEC-05):**
+     - Upgraded from 4-digit predictable integers (`ODDS-1000..9999`) to 8-character cryptographic alphanumeric strings generated via Web Crypto API (`crypto.getRandomValues`) using a 32-character unambiguous set (`ABCDEFGHJKLMNPQRSTUVWXYZ23456789`).
+     - Total permutations increased from 9,000 to **~1.07 Billion combinations** (`32^6`), mathematically eliminating brute-force enumeration attacks.
+  3. **Tighter Expiry Window:**
+     - Reduced token lifespan from 15 minutes to 5 minutes.
+  4. **Frontend Integration:**
+     - Updated `ProfileModal.tsx` to retrieve the active Supabase session token via `supabase.auth.getSession()` and pass it in the `Authorization` header when requesting a linking code.
+- **Verification Results:**
+  - Unauthenticated `POST /api/telegram-auth` -> Returns `401 Unauthorized: {"success":false,"error":"Unauthorized: Missing or invalid authorization token"}`.
+  - Invalid JWT `POST /api/telegram-auth` -> Returns `401 Unauthorized: {"success":false,"error":"Unauthorized: Session invalid or expired"}`.
+  - TypeScript build succeeded with zero errors.
+  - Deployed live to production on Vercel (`commit 14ed27e`).
+
