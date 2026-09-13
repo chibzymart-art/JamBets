@@ -268,3 +268,40 @@ Non-logged-in visitors were still seeing `🔥 Over 2.5 Hub` on `/predictions` b
     - Valid Secret Token -> **HTTP 200 OK** (Authorized)
   - Executed all 10 Telegram commands (`/today`, `/bangers`, `/toppicks`, `/high`, `/mid`, `/low`, `/goals`, `/settled`, `/status`, `/help`) via live webhook with 100% success (`HTTP 200 {"ok":true}`).
   - Visually audited via browser subagent across Telegram Web (`@Oddsbanta_bot`), live web app (`https://jambets.vercel.app/predictions`), and localhost (`http://localhost:5173/predictions`).
+
+---
+
+## 3. Stability & Architecture: Phase 1 Completed
+
+### Phase 1: Deterministic Multi-Column Ordering & Heap Stability — COMPLETED
+- **Root Cause Addressed:**
+  - In PostgreSQL MVCC, an `UPDATE` / `PATCH` operation creates a new row tuple at the end of the heap page and marks the previous tuple dead.
+  - When 139 fixtures share the exact same kickoff timestamp (e.g. `2026-09-12T14:00:00+00:00`), queries with `ORDER BY target_kickoff_at ASC` returned rows in arbitrary, fluctuating order whenever background settlement updated match rows.
+  - Furthermore, JavaScript's `sort()` returned `0` for identical timestamps, preserving the non-deterministic heap order and causing cards on the UI to visually rotate on refresh.
+- **Files Modified:**
+  - [`api/predictions-feed.ts`](file:///c:/Users/HP/Documents/JamBets/api/predictions-feed.ts): Added deterministic secondary tie-breaker `order=target_kickoff_at.asc,id.asc&limit=2000`.
+  - [`web/src/App.tsx`](file:///c:/Users/HP/Documents/JamBets/web/src/App.tsx): Added deterministic `.order('id', { ascending: true })` to direct Supabase queries, and updated both client-side sorting routines (lines 556 and 985) to include `a.id.localeCompare(b.id)` when kickoff times are identical.
+  - [`python/src/db/supabase_client.py`](file:///c:/Users/HP/Documents/JamBets/python/src/db/supabase_client.py): Updated `get_prediction_queue` and `get_forward_prediction_queue` to use `order: "target_kickoff_at.asc,id.asc"`.
+- **Verification Results:**
+  - Production build compiled cleanly with zero errors (`npm run build` in `web/`).
+  - Ran automated test suite `scratch/test_heap_stability.py`:
+    - Verified 493 rows returned in 100% identical sequence across queries.
+    - Verified all 63 simultaneous kickoff groups (including the 139-match tie at 14:00) maintain strictly sorted, immutable positions regardless of database row updates.
+  - Verified local dev server HMR updated cleanly and rendered all cards with zero console errors.
+
+---
+
+### Phase 2: Settlement Isolation & Database Immutability Trigger — COMPLETED
+- **Root Cause Addressed:**
+  - Guaranteed that the automated settlement engine runs strictly as an isolated evaluation pass against existing prediction rows without ever generating synthetic predictions, inserting new rows into `football_predictions`, or modifying prediction markets, probabilities, or confidence tiers.
+- **Files Modified / Added:**
+  - [`supabase/migrations/20260913000003_protect_prediction_immutability.sql`](file:///c:/Users/HP/Documents/JamBets/supabase/migrations/20260913000003_protect_prediction_immutability.sql): Created migration defining `protect_published_prediction_immutability()` PostgreSQL trigger and enforcing `UNIQUE(canonical_key)` on `football_fixtures`.
+  - [`scratch/test_settlement_isolation.py`](file:///c:/Users/HP/Documents/JamBets/scratch/test_settlement_isolation.py): Automated test harness capturing database prediction snapshots before and after settlement runs.
+- **Verification Results:**
+  - Executed automated settlement isolation suite `scratch/test_settlement_isolation.py` against live database:
+    - **Total predictions before settlement:** 493.
+    - **Total predictions after settlement:** 493.
+    - **Assertion 1 PASS:** Total prediction count is 100% IDENTICAL (zero additions, zero deletions).
+    - **Assertion 2 PASS:** All core prediction fields (`market`, `prediction`, `probability`, `confidence_category`, `secondary_predictions`, `target_kickoff_at`) are 100% IMMUTABLE across all 493 predictions.
+    - Recorded 2 deterministic settlement transitions for completed matches (`WON`/`LOST`/`VOID`) with zero side effects.
+
