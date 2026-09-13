@@ -3,8 +3,9 @@ export const config = {
 };
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || 'https://vepcoopomlfjageijsew.supabase.co';
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZlcGNvb3BvbWxmamFnZWlqc2V3Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4ODg1Mzg3MiwiZXhwIjoyMTA0NDI5ODcyfQ.GN9S6B0YUsq3oz5ouMgI27i0Vu0SRAdEO0aaPLewfQk';
-const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '8606037569:AAH_QOJolgxND26su_AXCyxv6z8iCp4WzbA';
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
+const TELEGRAM_WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET || '';
 
 // Universal Admin email list for direct Telegram fallback access
 const ADMIN_EMAILS = [
@@ -198,6 +199,27 @@ export default async function handler(req: Request) {
   if (req.method !== 'POST') {
     return new Response(JSON.stringify({ ok: true, status: 'Oddsbanta Telegram Webhook Active' }), {
       status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  // SEC-03: Validate Telegram Webhook Secret Token
+  if (TELEGRAM_WEBHOOK_SECRET) {
+    const incomingSecret = req.headers.get('x-telegram-bot-api-secret-token');
+    if (!incomingSecret || incomingSecret !== TELEGRAM_WEBHOOK_SECRET) {
+      console.warn('Blocked unauthorized Telegram webhook call: missing or invalid secret');
+      return new Response(JSON.stringify({ success: false, error: 'Unauthorized: Invalid webhook secret' }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+  }
+
+  // SEC-06: Fail securely if server credentials are not configured
+  if (!SUPABASE_SERVICE_ROLE_KEY || !TELEGRAM_BOT_TOKEN) {
+    console.error('Server credentials missing: SUPABASE_SERVICE_ROLE_KEY or TELEGRAM_BOT_TOKEN');
+    return new Response(JSON.stringify({ success: false, error: 'Server credentials misconfigured' }), {
+      status: 500,
       headers: { 'Content-Type': 'application/json' },
     });
   }
