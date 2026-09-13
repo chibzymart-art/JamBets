@@ -18,6 +18,7 @@ import { NavigationFooter } from './components/NavigationFooter';
 import { FixtureCard, formatPredictionOutcome } from './components/FixtureCard';
 import { FavoritesDrawer, FavoritePredictionItem } from './components/FavoritesDrawer';
 import { FloatingFavoritesWidget } from './components/FloatingFavoritesWidget';
+import { BotHubModal } from './components/BotHubModal';
 import { LandingPage } from './pages/Landing';
 import { SubscriptionPage } from './pages/Subscription';
 import { PasswordRecoveryPage } from './pages/PasswordRecovery';
@@ -41,6 +42,7 @@ export default function App() {
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [isPricingModalOpen, setIsPricingModalOpen] = useState(false);
   const [isFaqModalOpen, setIsFaqModalOpen] = useState(false);
+  const [isBotHubModalOpen, setIsBotHubModalOpen] = useState(false);
 
   // Authoritative Cloud Data State
   const [fixtures, setFixtures] = useState<QueueFixture[]>([]);
@@ -1213,6 +1215,42 @@ export default function App() {
                   <div className="hamburger-divider" />
 
                   <div className="hamburger-menu-list">
+                    {/* High-Visibility Telegram & WhatsApp Bot Hub Feature */}
+                    <button
+                      type="button"
+                      className="hamburger-menu-item hamburger-bot-item"
+                      onClick={() => {
+                        setIsHamburgerOpen(false);
+                        setIsBotHubModalOpen(true);
+                      }}
+                      style={{
+                        background: 'linear-gradient(135deg, rgba(2, 132, 199, 0.1) 0%, rgba(22, 163, 74, 0.1) 100%)',
+                        border: '1px solid rgba(2, 132, 199, 0.3)',
+                        borderRadius: '10px',
+                        padding: '10px 14px',
+                        margin: '2px 0 8px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '12px',
+                        textAlign: 'left',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <span style={{ fontSize: '20px' }}>🤖</span>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: 800, fontSize: '13px', color: '#0284c7', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span>Telegram & WhatsApp Bots</span>
+                          <span style={{ background: '#22c55e', color: '#ffffff', fontSize: '9px', fontWeight: 900, padding: '1px 5px', borderRadius: '4px' }}>
+                            SIGNALS
+                          </span>
+                        </div>
+                        <div style={{ fontSize: '11px', color: '#64748b', marginTop: '1px' }}>
+                          {profile?.telegram_chat_id ? '✓ Telegram Connected • Open Bot' : 'Get all predictions on your phone ↗'}
+                        </div>
+                      </div>
+                      <span style={{ fontSize: '14px', color: '#0284c7', fontWeight: 700 }}>→</span>
+                    </button>
+
                     <button
                       type="button"
                       className="hamburger-menu-item"
@@ -1323,6 +1361,7 @@ export default function App() {
                 userRole={profile?.role}
                 onOpenFaq={() => setIsFaqModalOpen(true)}
                 onOpenPricing={() => setIsPricingModalOpen(true)}
+                onOpenBotHub={() => setIsBotHubModalOpen(true)}
               />
             }
           />
@@ -2128,6 +2167,18 @@ export default function App() {
         profile={profile}
         subscription={subscription}
         entitlement={entitlement}
+        onProfileUpdated={fetchCloudData}
+      />
+
+      <BotHubModal
+        isOpen={isBotHubModalOpen}
+        onClose={() => setIsBotHubModalOpen(false)}
+        currentUser={currentUser}
+        profile={profile}
+        onOpenAuth={(mode) => {
+          setAuthModalMode(mode);
+          setIsAuthModalOpen(true);
+        }}
         onProfileUpdated={fetchCloudData}
       />
 

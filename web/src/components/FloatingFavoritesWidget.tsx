@@ -22,7 +22,9 @@ export const FloatingFavoritesWidget: React.FC<FloatingFavoritesWidgetProps> = (
     posX: 0,
     posY: 0,
   });
+  const touchStartTimeRef = useRef<number>(0);
   const hasMovedRef = useRef<boolean>(false);
+  const isDragActiveRef = useRef<boolean>(false);
   const widgetRef = useRef<HTMLDivElement>(null);
 
   // Initialize position to bottom right once mounted
@@ -49,13 +51,14 @@ export const FloatingFavoritesWidget: React.FC<FloatingFavoritesWidgetProps> = (
     return () => window.removeEventListener('resize', handleResize);
   }, [position.x]);
 
-  // Touch Drag Handlers
+  // Touch Drag Handlers (tuned for mobile tap & drag)
   const handleTouchStart = (e: React.TouchEvent) => {
     if (e.touches.length !== 1) return;
     const touch = e.touches[0];
     const currentX = position.x ?? (window.innerWidth - 72);
     const currentY = position.y ?? (window.innerHeight - 100);
 
+    touchStartTimeRef.current = Date.now();
     dragStartRef.current = {
       startX: touch.clientX,
       startY: touch.clientY,
@@ -63,36 +66,56 @@ export const FloatingFavoritesWidget: React.FC<FloatingFavoritesWidgetProps> = (
       posY: currentY,
     };
     hasMovedRef.current = false;
-    setIsDragging(true);
+    isDragActiveRef.current = false;
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
-    if (!isDragging || e.touches.length !== 1) return;
+    if (e.touches.length !== 1) return;
     const touch = e.touches[0];
     const deltaX = touch.clientX - dragStartRef.current.startX;
     const deltaY = touch.clientY - dragStartRef.current.startY;
+    const moveDist = Math.hypot(deltaX, deltaY);
 
-    if (Math.abs(deltaX) > 4 || Math.abs(deltaY) > 4) {
+    // Only treat as drag if moved beyond finger touch slop (12px)
+    if (moveDist > 12) {
       hasMovedRef.current = true;
+      isDragActiveRef.current = true;
+      if (!isDragging) setIsDragging(true);
+
+      const newX = Math.min(Math.max(12, dragStartRef.current.posX + deltaX), window.innerWidth - 68);
+      const newY = Math.min(Math.max(55, dragStartRef.current.posY + deltaY), window.innerHeight - 75);
+
+      setPosition({ x: newX, y: newY });
     }
-
-    const newX = Math.min(Math.max(12, dragStartRef.current.posX + deltaX), window.innerWidth - 68);
-    const newY = Math.min(Math.max(55, dragStartRef.current.posY + deltaY), window.innerHeight - 75);
-
-    setPosition({ x: newX, y: newY });
   };
 
-  const handleTouchEnd = () => {
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    const touchDuration = Date.now() - touchStartTimeRef.current;
     setIsDragging(false);
-    if (!hasMovedRef.current) {
+
+    // If tap was quick (<350ms) or movement was below slop, open the drawer!
+    if (!hasMovedRef.current || touchDuration < 300) {
+      hasMovedRef.current = false;
+      isDragActiveRef.current = false;
       onOpenDrawer();
+      if (e.cancelable) {
+        e.preventDefault();
+      }
+    } else {
+      // Small cooldown to prevent synthetic click from immediately reopening/closing
+      setTimeout(() => {
+        hasMovedRef.current = false;
+        isDragActiveRef.current = false;
+      }, 100);
     }
   };
 
-  // Mouse Drag Handlers (for testing on desktop mobile view)
+  // Mouse Drag Handlers (for desktop testing & interaction)
   const handleMouseDown = (e: React.MouseEvent) => {
+    if (e.button !== 0) return; // Only primary mouse button
     const currentX = position.x ?? (window.innerWidth - 72);
     const currentY = position.y ?? (window.innerHeight - 100);
+    const mouseStartTime = Date.now();
 
     dragStartRef.current = {
       startX: e.clientX,
@@ -101,24 +124,26 @@ export const FloatingFavoritesWidget: React.FC<FloatingFavoritesWidgetProps> = (
       posY: currentY,
     };
     hasMovedRef.current = false;
-    setIsDragging(true);
 
     const onMouseMove = (moveEv: MouseEvent) => {
       const deltaX = moveEv.clientX - dragStartRef.current.startX;
       const deltaY = moveEv.clientY - dragStartRef.current.startY;
-      if (Math.abs(deltaX) > 4 || Math.abs(deltaY) > 4) {
+      if (Math.hypot(deltaX, deltaY) > 10) {
         hasMovedRef.current = true;
+        setIsDragging(true);
+        const nextX = Math.min(Math.max(12, dragStartRef.current.posX + deltaX), window.innerWidth - 68);
+        const nextY = Math.min(Math.max(55, dragStartRef.current.posY + deltaY), window.innerHeight - 75);
+        setPosition({ x: nextX, y: nextY });
       }
-      const nextX = Math.min(Math.max(12, dragStartRef.current.posX + deltaX), window.innerWidth - 68);
-      const nextY = Math.min(Math.max(55, dragStartRef.current.posY + deltaY), window.innerHeight - 75);
-      setPosition({ x: nextX, y: nextY });
     };
 
     const onMouseUp = () => {
       setIsDragging(false);
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('mouseup', onMouseUp);
-      if (!hasMovedRef.current) {
+
+      if (!hasMovedRef.current || (Date.now() - mouseStartTime < 300)) {
+        hasMovedRef.current = false;
         onOpenDrawer();
       }
     };
@@ -127,26 +152,48 @@ export const FloatingFavoritesWidget: React.FC<FloatingFavoritesWidgetProps> = (
     window.addEventListener('mouseup', onMouseUp);
   };
 
+  const handleClick = (e: React.MouseEvent) => {
+    // If it was a genuine drag, suppress click
+    if (hasMovedRef.current) {
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
+    onOpenDrawer();
+  };
+
   const inlineStyle: React.CSSProperties = {
     position: 'fixed',
     left: position.x !== null ? `${position.x}px` : 'auto',
     top: position.y !== null ? `${position.y}px` : 'auto',
     right: position.x === null ? '18px' : 'auto',
     bottom: position.y === null ? '85px' : 'auto',
-    zIndex: 9999,
+    zIndex: 10001,
     touchAction: 'none',
-    cursor: isDragging ? 'grabbing' : 'grab',
+    cursor: isDragging ? 'grabbing' : 'pointer',
+    userSelect: 'none',
+    WebkitUserSelect: 'none',
+    pointerEvents: 'auto',
   };
 
   return (
     <div
       ref={widgetRef}
+      role="button"
+      tabIndex={0}
       className={`floating-favorites-chatbot-widget ${isDragging ? 'dragging' : ''}`}
       style={inlineStyle}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
       onMouseDown={handleMouseDown}
+      onClick={handleClick}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onOpenDrawer();
+        }
+      }}
       aria-label="Saved Predictions Custom Slip"
       title="Tap to view Saved Predictions & Custom Slip (Draggable)"
     >

@@ -8,13 +8,15 @@ interface LandingPageProps {
   userRole?: string;
   onOpenFaq?: () => void;
   onOpenPricing?: () => void;
+  onOpenBotHub?: () => void;
 }
 
 export const LandingPage: React.FC<LandingPageProps> = ({
   onOpenAuth,
   currentUser,
   onOpenFaq,
-  onOpenPricing
+  onOpenPricing,
+  onOpenBotHub
 }) => {
   const [settledPicks, setSettledPicks] = useState<any[]>([]);
   const [loadingSettled, setLoadingSettled] = useState(true);
@@ -124,6 +126,46 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               delivered daily, with a public track record you can audit.
             </p>
 
+            {/* Direct Bot Delivery Callout Banner */}
+            <div
+              className="hero-bot-callout"
+              onClick={onOpenBotHub}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '12px',
+                background: 'linear-gradient(135deg, rgba(2, 132, 199, 0.08) 0%, rgba(22, 163, 74, 0.08) 100%)',
+                border: '1px solid rgba(2, 132, 199, 0.25)',
+                borderRadius: '12px',
+                padding: '10px 16px',
+                margin: '12px 0 20px',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+                boxShadow: '0 2px 10px rgba(0, 0, 0, 0.03)',
+              }}
+            >
+              <span style={{ fontSize: '22px' }}>🤖</span>
+              <div style={{ textAlign: 'left' }}>
+                <div style={{ fontSize: '13px', fontWeight: 800, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span>Get All Predictions on Telegram Bot & WhatsApp Bot</span>
+                  <span style={{ background: '#22c55e', color: '#ffffff', fontSize: '9px', fontWeight: 900, padding: '1px 6px', borderRadius: '9999px' }}>
+                    BOT ALERTS
+                  </span>
+                </div>
+                <div style={{ fontSize: '12px', color: '#475569', marginTop: '2px' }}>
+                  Instant /today, /bangers, Over 2.5 goals & kickoff alerts on your messaging apps ↗
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: '6px', marginLeft: 'auto' }}>
+                <span style={{ background: '#0284c7', color: '#ffffff', fontSize: '11px', fontWeight: 700, padding: '4px 10px', borderRadius: '6px' }}>
+                  ✈️ Telegram
+                </span>
+                <span style={{ background: '#16a34a', color: '#ffffff', fontSize: '11px', fontWeight: 700, padding: '4px 10px', borderRadius: '6px' }}>
+                  💬 WhatsApp
+                </span>
+              </div>
+            </div>
+
             {/* CTA Buttons Row */}
             <div className="hero-light-cta-row">
               {currentUser ? (
@@ -138,6 +180,17 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                   onClick={() => onOpenAuth('register')}
                 >
                   Start free
+                </button>
+              )}
+              {onOpenBotHub && (
+                <button
+                  type="button"
+                  id="btn-hero-bots"
+                  className="btn-hero-outline"
+                  style={{ borderColor: '#0284c7', color: '#0284c7', fontWeight: 700 }}
+                  onClick={onOpenBotHub}
+                >
+                  🤖 Bot Delivery (Telegram & WhatsApp)
                 </button>
               )}
               <button
@@ -294,12 +347,12 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             </div>
           </div>
 
-          <div className="trust-light-item">
-            <div className="trust-light-icon-wrap">🎧</div>
+          <div className="trust-light-item" onClick={onOpenBotHub} style={{ cursor: 'pointer' }}>
+            <div className="trust-light-icon-wrap" style={{ background: '#e0f2fe', color: '#0284c7' }}>🤖</div>
             <div>
-              <h4 className="trust-light-title">Human support</h4>
+              <h4 className="trust-light-title">WhatsApp & Telegram VIP Bots</h4>
               <p className="trust-light-desc">
-                Real sports analytics professionals answer billing and model questions every day of the week.
+                Receive instant daily 90%+ banker drops, live kickoff alerts, and automated /today queries directly on WhatsApp and Telegram.
               </p>
             </div>
           </div>
