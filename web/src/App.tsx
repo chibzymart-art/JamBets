@@ -26,7 +26,6 @@ import { GoalsPage } from './pages/GoalsPage';
 export default function App() {
   const navigate = useNavigate();
   const location = useLocation();
-  const isLandingPage = location.pathname === '/' || location.pathname === '';
   // Authentication & Entitlement State
   const [currentUser, setCurrentUser] = useState<any | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -1056,7 +1055,7 @@ export default function App() {
             >
               {currentUser ? 'Dashboard' : 'Predictions'}
             </Link>
-            {!isLandingPage && (
+            {Boolean(currentUser) && (
               <Link
                 to="/goals"
                 className={`nav-link-btn ${location.pathname === '/goals' ? 'active' : ''}`}
@@ -1239,7 +1238,7 @@ export default function App() {
                       <span className="pricing-flat-badge" style={{ marginLeft: 'auto' }}>₦5k Flat</span>
                     </button>
 
-                    {!isLandingPage && (
+                    {Boolean(currentUser) && (
                       <Link
                         to="/goals"
                         className="hamburger-menu-item"
@@ -1357,23 +1356,27 @@ export default function App() {
             element={<Navigate to={targetPredictionsPath} replace />}
           />
 
-          {/* ROUTE: GOALS SPECIALIST HUB (OVER 2.5 & 1H OVER 0.5) */}
+          {/* ROUTE: GOALS SPECIALIST HUB (OVER 2.5 & 1H OVER 0.5 - LOGGED IN ONLY) */}
           <Route
             path="/goals"
             element={
-              <GoalsPage
-                currentUser={currentUser}
-                userRole={profile?.role}
-                isAdmin={isAdmin}
-                onOpenAuth={(mode) => {
-                  setAuthModalMode(mode);
-                  setIsAuthModalOpen(true);
-                }}
-                onOpenSubscription={() => setIsPricingModalOpen(true)}
-              />
+              !currentUser && !isAuthChecking ? (
+                <Navigate to="/predictions" replace />
+              ) : (
+                <GoalsPage
+                  currentUser={currentUser}
+                  userRole={profile?.role}
+                  isAdmin={isAdmin}
+                  onOpenAuth={(mode) => {
+                    setAuthModalMode(mode);
+                    setIsAuthModalOpen(true);
+                  }}
+                  onOpenSubscription={() => setIsPricingModalOpen(true)}
+                />
+              )
             }
           />
-          <Route path="/over-2-5" element={<Navigate to="/goals" replace />} />
+          <Route path="/over-2-5" element={<Navigate to={currentUser ? "/goals" : "/predictions"} replace />} />
 
           {/* ROUTE 4: ADMIN COMMAND DECK (STRICTLY GATED) */}
           <Route
@@ -2054,7 +2057,7 @@ export default function App() {
           <span className="mobile-tab-icon">📊</span>
           <span className="mobile-tab-label">{currentUser ? 'Dashboard' : 'Predictions'}</span>
         </Link>
-        {!isLandingPage && (
+        {Boolean(currentUser) && (
           <Link to="/goals" className={`mobile-tab-item ${location.pathname === '/goals' ? 'active' : ''}`}>
             <span className="mobile-tab-icon">⚽</span>
             <span className="mobile-tab-label">Over 2.5</span>
