@@ -462,6 +462,7 @@ export default function App() {
           `)
           .eq('publication_status', 'published')
           .order('target_kickoff_at', { ascending: true })
+          .order('id', { ascending: true })
           .limit(2000);
 
         const leagueQuery = supabase
@@ -552,10 +553,12 @@ export default function App() {
       });
 
       const returnedFixtures: QueueFixture[] = Array.from(fixtureMap.values());
-      // Strictly earliest kickoff time first
-      returnedFixtures.sort(
-        (a, b) => new Date(a.target_kickoff_at).getTime() - new Date(b.target_kickoff_at).getTime()
-      );
+      // Strictly earliest kickoff time first with deterministic ID tie-breaker
+      returnedFixtures.sort((a, b) => {
+        const timeDiff = new Date(a.target_kickoff_at).getTime() - new Date(b.target_kickoff_at).getTime();
+        if (timeDiff !== 0) return timeDiff;
+        return a.id.localeCompare(b.id);
+      });
 
 
 
@@ -982,7 +985,11 @@ export default function App() {
       }
 
       return true;
-    }).sort((a, b) => new Date(a.target_kickoff_at).getTime() - new Date(b.target_kickoff_at).getTime());
+    }).sort((a, b) => {
+      const timeDiff = new Date(a.target_kickoff_at).getTime() - new Date(b.target_kickoff_at).getTime();
+      if (timeDiff !== 0) return timeDiff;
+      return a.id.localeCompare(b.id);
+    });
   }, [
     fixtures,
     predsByFixture,

@@ -130,7 +130,7 @@ class SupabaseClient:
         """
         params: Dict[str, Any] = {
             "select": "*",
-            "order": "target_kickoff_at.asc",
+            "order": "target_kickoff_at.asc,id.asc",
             "limit": str(limit)
         }
         if queue_day is not None:
@@ -162,7 +162,7 @@ class SupabaseClient:
         params: Dict[str, Any] = {
             "select": "*",
             "target_kickoff_at": f"gte.{now_iso}",
-            "order": "target_kickoff_at.asc",
+            "order": "target_kickoff_at.asc,id.asc",
             "limit": str(fetch_limit)
         }
         try:

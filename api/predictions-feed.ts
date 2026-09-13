@@ -32,7 +32,7 @@ async function fetchFromUpstream(headers: Record<string, string>): Promise<FeedD
 
   const [predRes, leagueRes] = await Promise.all([
     fetch(
-      `${SUPABASE_URL}/rest/v1/football_predictions_paywall?select=${selectQuery}&publication_status=eq.published&order=target_kickoff_at.asc&limit=2000`,
+      `${SUPABASE_URL}/rest/v1/football_predictions_paywall?select=${selectQuery}&publication_status=eq.published&order=target_kickoff_at.asc,id.asc&limit=2000`,
       { headers }
     ),
     fetch(
