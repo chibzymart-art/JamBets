@@ -260,5 +260,11 @@ Non-logged-in visitors were still seeing `🔥 Over 2.5 Hub` on `/predictions` b
      - Synced `api/goals-feed.ts` with `web/api/goals-feed.ts` for consistent club `short_name` attributes and probability sorting.
 - **Verification Results:**
   - Registered secret with Telegram API via `scripts/register_telegram_webhook.py`: verified `setWebhook` returned `ok: true` and `pending_update_count: 0`.
-  - TypeScript compilation and Vite production build succeeded with 0 errors.
-  - Deployed live to production on Vercel (`commit 5db04e1`).
+  - Configured `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET`, and `SUPABASE_SERVICE_ROLE_KEY` in Vercel project settings via automated browser subagent.
+  - Redeployed to Vercel production (`commit 82c7b0d`).
+  - Tested live security via automated suite `scratch/test_webhook_security.py`:
+    - Missing Secret Token -> **HTTP 401 Unauthorized** (Blocked)
+    - Invalid Secret Token -> **HTTP 401 Unauthorized** (Blocked)
+    - Valid Secret Token -> **HTTP 200 OK** (Authorized)
+  - Executed all 10 Telegram commands (`/today`, `/bangers`, `/toppicks`, `/high`, `/mid`, `/low`, `/goals`, `/settled`, `/status`, `/help`) via live webhook with 100% success (`HTTP 200 {"ok":true}`).
+  - Visually audited via browser subagent across Telegram Web (`@Oddsbanta_bot`), live web app (`https://jambets.vercel.app/predictions`), and localhost (`http://localhost:5173/predictions`).
