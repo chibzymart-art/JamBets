@@ -109,3 +109,36 @@ We have completed the full rebrand to **Oddsbanta** (`oddsbanta.com`), activated
   - Definition of Banger signals and Anti-Loss Guard rules.
   - Automated 5-minute settlement cycle and void rules (zero leakage).
   - Official Telegram command autocomplete registered via `setMyCommands`.
+
+---
+
+## 4. Telegram Bot Confidence Tier Resolution (`/mid`, `/high`, `/low`)
+
+### Root Cause Diagnosed
+1. **Category String Representation**:
+   - The database stores categories with spaces: `'HIGH CONFIDENCE'`, `'MID CONFIDENCE'`, `'TOP PICK'`, whereas the code checked for underscores (`HIGH_CONFIDENCE`, `MID_CONFIDENCE`, `TOP_PICK`).
+2. **Probability Numerical Scale**:
+   - The database stores model probabilities as floats between `0.0` and `1.0` (e.g. `0.861`), but the filtering condition tested `p.probability >= 80`. Because `0.861 < 80`, all probability checks evaluated to `false`.
+3. **Absence of Secondary Leans**:
+   - `secondary_predictions` was omitted from the Supabase query. Low-confidence matches are typically passed on primary markets (flagged as `SKIP` or `NO_SAFE_BANKER`), but valid `LOW CONFIDENCE` value leans reside within `secondary_predictions` (121+ matches).
+
+### Fix Applied in `api/telegram-webhook.ts` & `web/api/telegram-webhook.ts`
+- **Helper Functions Added**:
+  - `normalizeProbability(val)`: Scales `0.0 <= p <= 1.0` to `0 - 100%`.
+  - `normalizeCategory(cat, prob)`: Replaces `_` with spaces and maps confidence categories consistently.
+  - `formatMarket(market)`: Converts raw tokens (`over_under_1.5`, `btts`, `double_chance`) into clean human-readable names (`Over/Under 1.5`, `Both Teams to Score`, `Double Chance`).
+  - `formatOutcome(pick)`: Formats picks like `1` -> `Home Win (1)`, `1x` -> `Home or Draw (1X)`, `over` -> `OVER`.
+- **Unified Extraction Engine**:
+  - Queries `secondary_predictions` and flattens primary Banker selections and secondary value leans into a unified `PredictionFeedItem[]` feed.
+  - Filters out `SKIP` and `NO_SAFE_BANKER` picks completely.
+
+### Verification Results
+Tested against live database and verified via live webhook:
+- `/today`: **221** verified predictions
+- `/bangers`: **107** Super Bankers (P ≥ 85%)
+- `/toppicks`: **50** Top Picks (90% - 95%)
+- `/high`: **161** High Confidence matches (80% - 89%)
+- `/mid`: **100** Mid Confidence matches (70% - 79%)
+- `/low`: **121** Low Confidence value leans (< 70%)
+- `/goals`: **337** Over/Under & BTTS picks
+- Webhook response across all commands returned HTTP 200 `{"ok":true}`.

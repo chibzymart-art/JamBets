@@ -26,6 +26,7 @@ import { GoalsPage } from './pages/GoalsPage';
 export default function App() {
   const navigate = useNavigate();
   const location = useLocation();
+  const isLandingPage = location.pathname === '/' || location.pathname === '';
   // Authentication & Entitlement State
   const [currentUser, setCurrentUser] = useState<any | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -1053,7 +1054,7 @@ export default function App() {
             >
               {currentUser ? 'Dashboard' : 'Predictions'}
             </Link>
-            {location.pathname !== '/' && (
+            {!isLandingPage && (
               <Link
                 to="/goals"
                 className={`nav-link-btn ${location.pathname === '/goals' ? 'active' : ''}`}
@@ -1236,7 +1237,7 @@ export default function App() {
                       <span className="pricing-flat-badge" style={{ marginLeft: 'auto' }}>₦5k Flat</span>
                     </button>
 
-                    {location.pathname !== '/' && (
+                    {!isLandingPage && (
                       <Link
                         to="/goals"
                         className="hamburger-menu-item"
@@ -2045,10 +2046,12 @@ export default function App() {
           <span className="mobile-tab-icon">📊</span>
           <span className="mobile-tab-label">{currentUser ? 'Dashboard' : 'Predictions'}</span>
         </Link>
-        <Link to="/goals" className={`mobile-tab-item ${location.pathname === '/goals' ? 'active' : ''}`}>
-          <span className="mobile-tab-icon">⚽</span>
-          <span className="mobile-tab-label">Over 2.5</span>
-        </Link>
+        {!isLandingPage && (
+          <Link to="/goals" className={`mobile-tab-item ${location.pathname === '/goals' ? 'active' : ''}`}>
+            <span className="mobile-tab-icon">⚽</span>
+            <span className="mobile-tab-label">Over 2.5</span>
+          </Link>
+        )}
         <button
           type="button"
           className={`mobile-tab-item ${location.pathname === '/subscription' ? 'active' : ''}`}
