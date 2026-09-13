@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
-import { SystemHealthStatus, AuditRecord, UserProfile, LeagueRecord } from '../types';
+import { SystemHealthStatus, AuditRecord, UserProfile, LeagueRecord, PaymentRecord } from '../types';
 
 interface AdminViewProps {
   currentUserProfile: UserProfile | null;
@@ -30,7 +30,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
   const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
   const [autoRefreshLogs, setAutoRefreshLogs] = useState<boolean>(true);
 
-  // Users management
+  // Users & Subscriptions management
   const [usersList, setUsersList] = useState<UserProfile[]>([]);
   const [usersLoading, setUsersLoading] = useState<boolean>(false);
   const [userSearch, setUserSearch] = useState<string>('');
@@ -38,6 +38,19 @@ export const AdminView: React.FC<AdminViewProps> = ({
   const [roleChangeUserId, setRoleChangeUserId] = useState<string>('');
   const [newRole, setNewRole] = useState<'free' | 'standard' | 'bigbang' | 'admin'>('standard');
   const [roleReason, setRoleReason] = useState<string>('');
+
+  // Payments & Financial activity tracking
+  const [paymentsList, setPaymentsList] = useState<PaymentRecord[]>([]);
+  const [paymentsLoading, setPaymentsLoading] = useState<boolean>(false);
+  const [paymentSearch, setPaymentSearch] = useState<string>('');
+  const [paymentStatusFilter, setPaymentStatusFilter] = useState<string>('all');
+  const [isManualPaymentModalOpen, setIsManualPaymentModalOpen] = useState<boolean>(false);
+  const [manualPayUserId, setManualPayUserId] = useState<string>('');
+  const [manualPayAmount, setManualPayAmount] = useState<number>(5000);
+  const [manualPayCurrency, setManualPayCurrency] = useState<string>('ngn');
+  const [manualPayPlan, setManualPayPlan] = useState<string>('Standard VIP Monthly (₦5,000)');
+  const [manualPayProvider, setManualPayProvider] = useState<string>('manual_bank_transfer');
+  const [manualPayNotes, setManualPayNotes] = useState<string>('');
 
   // Leagues management
   const [leaguesList, setLeaguesList] = useState<LeagueRecord[]>([]);
@@ -176,17 +189,35 @@ export const AdminView: React.FC<AdminViewProps> = ({
     }
   };
 
-  // 4. Fetch users for role management
+  // 4. Fetch users with their subscriptions and entitlements
   const fetchUsers = async () => {
     setUsersLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('users')
-        .select('id, email, display_name, role, is_deleted, status, disclaimer_age_accepted, disclaimer_financial_accepted, created_at')
-        .order('created_at', { ascending: false })
-        .limit(50);
-      if (error) throw error;
-      setUsersList(data || []);
+      const [usersRes, subsRes, entsRes] = await Promise.all([
+        supabase
+          .from('users')
+          .select('id, email, display_name, role, is_deleted, status, disclaimer_age_accepted, disclaimer_financial_accepted, created_at, updated_at')
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('subscriptions')
+          .select('id, user_id, tier, status, current_period_end, created_at, updated_at'),
+        supabase
+          .from('entitlements')
+          .select('id, user_id, tier, features, valid_until, updated_at')
+      ]);
+
+      if (usersRes.error) throw usersRes.error;
+
+      const subsMap = new Map((subsRes.data || []).map(s => [s.user_id, s]));
+      const entsMap = new Map((entsRes.data || []).map(e => [e.user_id, e]));
+
+      const combined: UserProfile[] = (usersRes.data || []).map(u => ({
+        ...u,
+        subscription: subsMap.get(u.id) || null,
+        entitlement: entsMap.get(u.id) || null
+      }));
+
+      setUsersList(combined);
     } catch (err: any) {
       console.error('Failed to fetch users:', err);
     } finally {
@@ -194,7 +225,25 @@ export const AdminView: React.FC<AdminViewProps> = ({
     }
   };
 
-  // 5. Fetch leagues
+  // 5. Fetch financial payments & transactions
+  const fetchPayments = async () => {
+    setPaymentsLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('payments')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(100);
+      if (error) throw error;
+      setPaymentsList((data as PaymentRecord[]) || []);
+    } catch (err: any) {
+      console.error('Failed to fetch payments:', err);
+    } finally {
+      setPaymentsLoading(false);
+    }
+  };
+
+  // 6. Fetch leagues
   const fetchLeagues = async () => {
     setLeaguesLoading(true);
     try {
@@ -216,6 +265,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
       fetchHealth();
       fetchAuditLogs();
       fetchUsers();
+      fetchPayments();
       fetchLeagues();
     }
   }, [isAdminVerified]);
@@ -509,34 +559,83 @@ export const AdminView: React.FC<AdminViewProps> = ({
     }
   };
 
-  // Interactive User Role Change
-  const handleUpdateUserRole = async (userId: string, targetRole: 'free' | 'standard' | 'bigbang' | 'admin') => {
+  // Comprehensive User Tier & Subscription Allocation
+  const handleAllocateTier = async (
+    userId: string,
+    targetTier: 'free' | 'standard' | 'bigbang' | 'admin',
+    targetStatus: 'active' | 'disabled' | 'suspended' = 'active',
+    durationDays: number | null = null,
+    reason?: string
+  ) => {
     playSfx('click');
     setActionLoading(userId);
     setActionError(null);
     setActionSuccess(null);
 
+    let validUntilIso: string | null = null;
+    if (durationDays && durationDays > 0) {
+      const d = new Date();
+      d.setDate(d.getDate() + durationDays);
+      validUntilIso = d.toISOString();
+    }
+
     try {
-      const { error } = await supabase
-        .from('users')
-        .update({ role: targetRole })
-        .eq('id', userId);
-
-      if (error) throw error;
-
-      await supabase.from('audit_logs').insert({
-        actor_id: currentUserProfile?.id,
-        actor_email: currentUserProfile?.email,
-        actor_role: 'admin',
-        action: 'admin_user_role_update',
-        affected_table: 'users',
-        affected_record_id: userId,
-        new_state: { role: targetRole },
-        reason: roleReason || `Admin role updated to ${targetRole}`
+      // 1. Invoke authoritative database procedure
+      const { error: rpcErr } = await supabase.rpc('admin_manage_user_tier', {
+        p_target_user_id: userId,
+        p_new_tier: targetTier,
+        p_status: targetStatus,
+        p_valid_until: validUntilIso,
+        p_reason: reason || roleReason || `Admin allocated ${targetTier.toUpperCase()} tier`
       });
 
+      if (rpcErr) {
+        console.warn('RPC admin_manage_user_tier failed, executing direct tables update fallback:', rpcErr);
+        await supabase.from('users').update({
+          role: targetTier,
+          status: targetStatus,
+          is_deleted: targetStatus === 'disabled',
+          updated_at: new Date().toISOString()
+        }).eq('id', userId);
+
+        const features = targetTier === 'bigbang'
+          ? { football_predictions: true, simulations: true, vip: true }
+          : targetTier === 'standard'
+          ? { football_predictions: true, simulations: false }
+          : targetTier === 'admin'
+          ? { football_predictions: true, simulations: true, vip: true, admin: true }
+          : { football_predictions: false, simulations: false };
+
+        await supabase.from('entitlements').upsert({
+          user_id: userId,
+          tier: targetTier,
+          features,
+          valid_until: validUntilIso,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'user_id' });
+
+        await supabase.from('subscriptions').upsert({
+          user_id: userId,
+          tier: targetTier,
+          status: targetStatus,
+          current_period_end: validUntilIso,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'user_id' });
+
+        await supabase.from('audit_logs').insert({
+          actor_id: currentUserProfile?.id,
+          actor_email: currentUserProfile?.email,
+          actor_role: 'admin',
+          action: 'admin_user_tier_allocated_direct',
+          affected_table: 'users',
+          affected_record_id: userId,
+          new_state: { role: targetTier, status: targetStatus, valid_until: validUntilIso },
+          reason: reason || roleReason || `Admin updated tier to ${targetTier}`
+        });
+      }
+
       playSfx('success');
-      setActionSuccess(`User role promoted/updated to ${targetRole.toUpperCase()}!`);
+      setActionSuccess(`User updated: ${targetTier.toUpperCase()} (${targetStatus.toUpperCase()})${durationDays ? ` for ${durationDays} days` : ''}!`);
       setTimeout(() => setActionSuccess(null), 4000);
       setRoleReason('');
       setRoleChangeUserId('');
@@ -545,7 +644,83 @@ export const AdminView: React.FC<AdminViewProps> = ({
     } catch (err: any) {
       playSfx('error');
       console.error('Role update failed:', err);
-      setActionError(err.message || 'Failed to update user role.');
+      setActionError(err.message || 'Failed to update user tier.');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  // Toggle user account status (Disable / Soft-delete vs Activate)
+  const handleToggleUserStatus = async (user: UserProfile) => {
+    const isCurrentlyDisabled = user.is_deleted === true || user.status === 'disabled';
+    const newStatus = isCurrentlyDisabled ? 'active' : 'disabled';
+    const confirmMsg = isCurrentlyDisabled
+      ? `Re-activate platform access for ${user.email}?`
+      : `Disable/ban ${user.email}? The account will be soft-deleted and immediately blocked from access.`;
+    if (!window.confirm(confirmMsg)) return;
+
+    await handleAllocateTier(
+      user.id,
+      user.role,
+      newStatus,
+      null,
+      isCurrentlyDisabled ? 'Admin re-activated account' : 'Admin disabled/banned account'
+    );
+  };
+
+  // Record manual or offline payment
+  const handleRecordManualPayment = async () => {
+    if (!manualPayUserId) {
+      alert('Please select a user account.');
+      return;
+    }
+    setActionLoading('manual_pay');
+    setActionError(null);
+    setActionSuccess(null);
+
+    try {
+      const { error: rpcErr } = await supabase.rpc('admin_record_manual_payment', {
+        p_target_user_id: manualPayUserId,
+        p_amount_cents: Math.round(manualPayAmount * 100),
+        p_currency: manualPayCurrency.toLowerCase(),
+        p_plan_name: manualPayPlan,
+        p_provider: manualPayProvider,
+        p_reference: `MANUAL-${Date.now()}`,
+        p_notes: manualPayNotes || 'Admin manual payment recording'
+      });
+
+      if (rpcErr) {
+        console.warn('Manual payment RPC failed, inserting directly:', rpcErr);
+        const targetUser = usersList.find(u => u.id === manualPayUserId);
+        await supabase.from('payments').insert({
+          user_id: manualPayUserId,
+          amount_cents: Math.round(manualPayAmount * 100),
+          currency: manualPayCurrency.toLowerCase(),
+          status: 'succeeded',
+          provider: manualPayProvider,
+          customer_email: targetUser?.email,
+          plan_name: manualPayPlan,
+          reference: `MANUAL-${Date.now()}`,
+          metadata: { notes: manualPayNotes, recorded_by: currentUserProfile?.email }
+        });
+      }
+
+      // Automatically allocate tier
+      const targetTier = manualPayPlan.toLowerCase().includes('bigbang') ? 'bigbang' : 'standard';
+      await handleAllocateTier(manualPayUserId, targetTier, 'active', 30, `Manual payment: ${manualPayPlan}`);
+
+      playSfx('success');
+      setActionSuccess(`Payment of ₦${manualPayAmount.toLocaleString()} recorded and VIP access granted for 30 days!`);
+      setTimeout(() => setActionSuccess(null), 4000);
+      setIsManualPaymentModalOpen(false);
+      setManualPayNotes('');
+      fetchPayments();
+      fetchUsers();
+      fetchAuditLogs();
+    } catch (err: any) {
+      playSfx('error');
+      console.error('Failed to record manual payment:', err);
+      setActionError(err.message || 'Failed to record manual payment.');
     } finally {
       setActionLoading(null);
     }
@@ -573,16 +748,48 @@ export const AdminView: React.FC<AdminViewProps> = ({
     return usersList.filter((u) => {
       const matchesSearch = !userSearch ||
         u.email.toLowerCase().includes(userSearch.toLowerCase()) ||
-        (u.display_name && u.display_name.toLowerCase().includes(userSearch.toLowerCase()));
+        (u.display_name && u.display_name.toLowerCase().includes(userSearch.toLowerCase())) ||
+        u.id.toLowerCase().includes(userSearch.toLowerCase());
 
       const matchesRole = 
         userRoleFilter === 'all' ? true :
         userRoleFilter === 'disabled' ? (u.is_deleted === true || u.status === 'disabled') :
+        userRoleFilter === 'paid' ? (u.role === 'standard' || u.role === 'bigbang') :
         u.role === userRoleFilter;
 
       return matchesSearch && matchesRole;
     });
   }, [usersList, userSearch, userRoleFilter]);
+
+  // Payment Statistics Memo
+  const paymentStats = useMemo(() => {
+    const succeededPayments = paymentsList.filter(p => p.status === 'succeeded');
+    const totalRevenueNgn = succeededPayments.reduce((acc, p) => {
+      return acc + (p.amount_cents ? p.amount_cents / 100 : 0);
+    }, 0);
+    const payingUsersCount = usersList.filter(u => u.role === 'standard' || u.role === 'bigbang').length;
+    return {
+      totalRevenueNgn,
+      succeededCount: succeededPayments.length,
+      totalCount: paymentsList.length,
+      payingUsersCount
+    };
+  }, [paymentsList, usersList]);
+
+  // Filtered Payments
+  const filteredPayments = useMemo(() => {
+    return paymentsList.filter((p) => {
+      const matchesSearch = !paymentSearch ||
+        (p.reference && p.reference.toLowerCase().includes(paymentSearch.toLowerCase())) ||
+        (p.customer_email && p.customer_email.toLowerCase().includes(paymentSearch.toLowerCase())) ||
+        (p.plan_name && p.plan_name.toLowerCase().includes(paymentSearch.toLowerCase())) ||
+        (p.provider && p.provider.toLowerCase().includes(paymentSearch.toLowerCase()));
+
+      const matchesStatus = paymentStatusFilter === 'all' ? true : p.status === paymentStatusFilter;
+
+      return matchesSearch && matchesStatus;
+    });
+  }, [paymentsList, paymentSearch, paymentStatusFilter]);
 
   // Filtered Audit Logs
   const filteredLogs = useMemo(() => {
@@ -596,7 +803,8 @@ export const AdminView: React.FC<AdminViewProps> = ({
         auditFilter === 'all' ? true :
         auditFilter === 'engine' ? (log.action.includes('prediction') || log.action.includes('settle')) :
         auditFilter === 'leagues' ? log.action.includes('league') :
-        auditFilter === 'roles' ? log.action.includes('role') :
+        auditFilter === 'roles' ? (log.action.includes('role') || log.action.includes('tier')) :
+        auditFilter === 'payments' ? (log.action.includes('payment') || log.action.includes('tier')) :
         true;
 
       return matchesSearch && matchesFilter;
@@ -888,13 +1096,26 @@ export const AdminView: React.FC<AdminViewProps> = ({
         <div className="telemetry-card">
           <div className="telemetry-card-top">
             <span className="telemetry-metric-title">ACTIVE MEMBERS</span>
-            <span className="status-pill-count">{usersList.length} Loaded</span>
+            <span className="status-pill-count">{usersList.length} Total</span>
           </div>
           <div className="telemetry-value">
             {usersList.filter(u => u.role === 'admin').length} <small>Admins</small>
           </div>
           <div className="telemetry-sub">
-            {usersList.filter(u => u.is_deleted).length} Soft-Deleted / Compliance Protected
+            {paymentStats.payingUsersCount} Paying VIP Subscribers • {usersList.filter(u => u.is_deleted).length} Soft-Deleted
+          </div>
+        </div>
+
+        <div className="telemetry-card">
+          <div className="telemetry-card-top">
+            <span className="telemetry-metric-title">VERIFIED REVENUE</span>
+            <span className="status-dot-green">LEDGER ACTIVE</span>
+          </div>
+          <div className="telemetry-value">
+            ₦{paymentStats.totalRevenueNgn.toLocaleString()}
+          </div>
+          <div className="telemetry-sub">
+            {paymentStats.succeededCount} Succeeded Payments • {paymentStats.totalCount} Total Entries
           </div>
         </div>
 
@@ -996,16 +1217,16 @@ export const AdminView: React.FC<AdminViewProps> = ({
       </section>
 
       {/* =====================================================================
-          PANEL 4: INTERACTIVE USER ROLE MODERATOR & SOFT DELETE AUDIT
+          PANEL 4: INTERACTIVE USER ROLE & SUBSCRIPTION TIER CONTROL
           ===================================================================== */}
       <section className="genz-card">
         <div className="genz-card-header">
           <div className="card-title-group">
             <span className="card-emoji">👥</span>
             <div>
-              <h2 className="card-title">User Role Moderator & Compliance Audit</h2>
+              <h2 className="card-title">User Role & Subscription Tier Manager</h2>
               <p className="card-subtitle">
-                Manage entitlements and monitor soft-deleted accounts. Hard deletes are permanently disabled.
+                Allocate tiers (Free, Standard ₦5k, BigBang VIP, Admin), control subscriptions, extend validity periods, or disable/ban accounts.
               </p>
             </div>
           </div>
@@ -1013,7 +1234,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
           <div className="switchboard-controls">
             <input
               type="text"
-              placeholder="Search user email..."
+              placeholder="Search email, display name, user ID..."
               value={userSearch}
               onChange={(e) => setUserSearch(e.target.value)}
               className="genz-search-input"
@@ -1024,14 +1245,14 @@ export const AdminView: React.FC<AdminViewProps> = ({
                 className={`genz-pill ${userRoleFilter === 'all' ? 'active' : ''}`}
                 onClick={() => { playSfx('click'); setUserRoleFilter('all'); }}
               >
-                All Users
+                All Users ({usersList.length})
               </button>
               <button
                 type="button"
-                className={`genz-pill ${userRoleFilter === 'admin' ? 'active' : ''}`}
-                onClick={() => { playSfx('click'); setUserRoleFilter('admin'); }}
+                className={`genz-pill ${userRoleFilter === 'paid' ? 'active' : ''}`}
+                onClick={() => { playSfx('click'); setUserRoleFilter('paid'); }}
               >
-                Admins
+                Paid VIPs ({paymentStats.payingUsersCount})
               </button>
               <button
                 type="button"
@@ -1042,84 +1263,181 @@ export const AdminView: React.FC<AdminViewProps> = ({
               </button>
               <button
                 type="button"
+                className={`genz-pill ${userRoleFilter === 'bigbang' ? 'active' : ''}`}
+                onClick={() => { playSfx('click'); setUserRoleFilter('bigbang'); }}
+              >
+                BigBang
+              </button>
+              <button
+                type="button"
+                className={`genz-pill ${userRoleFilter === 'admin' ? 'active' : ''}`}
+                onClick={() => { playSfx('click'); setUserRoleFilter('admin'); }}
+              >
+                Admins
+              </button>
+              <button
+                type="button"
                 className={`genz-pill ${userRoleFilter === 'disabled' ? 'active' : ''}`}
                 onClick={() => { playSfx('click'); setUserRoleFilter('disabled'); }}
               >
-                Deactivated / Soft-Deleted
+                Disabled
               </button>
             </div>
           </div>
         </div>
 
         {usersLoading ? (
-          <div className="genz-table-loading">Loading users from Cloud Supabase...</div>
+          <div className="genz-table-loading">Loading users & subscriptions from Cloud Supabase...</div>
         ) : (
           <div className="genz-table-wrapper">
             <table className="genz-table">
               <thead>
                 <tr>
                   <th>User & Identity</th>
-                  <th>Current Role</th>
+                  <th>Allocated Tier</th>
+                  <th>Subscription Expiry</th>
                   <th>Account Status</th>
-                  <th>Disclaimers (18+ / Risk)</th>
-                  <th>Member Since</th>
-                  <th>Action / Promote</th>
+                  <th>Disclaimers</th>
+                  <th>Actions & Controls</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredUsers.map((u) => {
-                  const isDeactivated = u.is_deleted === true || u.status === 'disabled';
-                  return (
-                    <tr key={u.id} className={isDeactivated ? 'row-deactivated' : ''}>
-                      <td>
-                        <div className="user-email-cell">
-                          <strong>{u.email}</strong>
-                          <span className="user-display-name">{u.display_name || 'No display name'}</span>
-                        </div>
-                      </td>
-                      <td>
-                        <span className={`role-badge role-${u.role}`}>
-                          {u.role.toUpperCase()}
-                        </span>
-                      </td>
-                      <td>
-                        {isDeactivated ? (
-                          <span className="status-badge-disabled">🚫 SOFT DELETED</span>
-                        ) : (
-                          <span className="status-badge-active">✓ ACTIVE</span>
-                        )}
-                      </td>
-                      <td>
-                        <span className="disclaimer-check-tag">
-                          {u.disclaimer_age_accepted && u.disclaimer_financial_accepted ? '✓ Verified (18+ & Indemnity)' : '⚠️ Incomplete'}
-                        </span>
-                      </td>
-                      <td className="font-mono-date">
-                        {new Date(u.created_at).toLocaleDateString()}
-                      </td>
-                      <td>
-                        <div className="role-change-control">
-                          <select
-                            value={roleChangeUserId === u.id ? newRole : u.role}
-                            onChange={(e) => {
-                              const role = e.target.value as any;
-                              setRoleChangeUserId(u.id);
-                              setNewRole(role);
-                              handleUpdateUserRole(u.id, role);
-                            }}
-                            disabled={actionLoading === u.id}
-                            className="genz-role-select"
-                          >
-                            <option value="free">Free</option>
-                            <option value="standard">Standard Plan</option>
-                            <option value="bigbang">BigBang VIP</option>
-                            <option value="admin">Admin</option>
-                          </select>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
+                {filteredUsers.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
+                      No users match the search / filter criteria.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredUsers.map((u) => {
+                    const isDeactivated = u.is_deleted === true || u.status === 'disabled';
+                    const subEnd = u.subscription?.current_period_end || u.entitlement?.valid_until;
+                    const isExpired = subEnd ? new Date(subEnd) < new Date() : false;
+                    const expDays = 30;
+
+                    return (
+                      <tr key={u.id} className={isDeactivated ? 'row-deactivated' : ''}>
+                        <td>
+                          <div className="user-email-cell">
+                            <strong>{u.email}</strong>
+                            <span className="user-display-name">{u.display_name || 'No display name'}</span>
+                            <span style={{ fontSize: '0.75rem', opacity: 0.6, fontFamily: 'monospace' }}>ID: {u.id.substring(0, 8)}...</span>
+                          </div>
+                        </td>
+                        <td>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                            <span className={`role-badge role-${u.role}`}>
+                              {u.role === 'standard' ? '⭐ Standard (₦5k)' : u.role === 'bigbang' ? '💥 BigBang VIP' : u.role === 'admin' ? '🛡 Admin' : 'Free Access'}
+                            </span>
+                            <select
+                              value={roleChangeUserId === u.id ? newRole : u.role}
+                              onChange={(e) => {
+                                const role = e.target.value as any;
+                                setRoleChangeUserId(u.id);
+                                setNewRole(role);
+                                handleAllocateTier(u.id, role, u.status || 'active', expDays);
+                              }}
+                              disabled={actionLoading === u.id}
+                              className="genz-role-select"
+                              title="Select tier to immediately allocate"
+                            >
+                              <option value="free">Free Tier</option>
+                              <option value="standard">Standard Plan (₦5,000)</option>
+                              <option value="bigbang">BigBang VIP</option>
+                              <option value="admin">Administrator</option>
+                            </select>
+                          </div>
+                        </td>
+                        <td>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                            <span style={{ fontSize: '0.85rem', fontWeight: 600, color: isExpired ? '#ef4444' : subEnd ? '#10b981' : '#64748b' }}>
+                              {isExpired ? '⚠️ Expired' : subEnd ? `Valid until ${new Date(subEnd).toLocaleDateString()}` : 'Lifetime / None'}
+                            </span>
+                            <div style={{ display: 'flex', gap: '0.25rem', flexWrap: 'wrap' }}>
+                              <button
+                                type="button"
+                                className="genz-pill"
+                                style={{ padding: '2px 6px', fontSize: '0.7rem' }}
+                                disabled={actionLoading === u.id}
+                                onClick={() => handleAllocateTier(u.id, u.role, 'active', 30, 'Admin +30 Days extension')}
+                                title="Grant 30 days active access"
+                              >
+                                +30d
+                              </button>
+                              <button
+                                type="button"
+                                className="genz-pill"
+                                style={{ padding: '2px 6px', fontSize: '0.7rem' }}
+                                disabled={actionLoading === u.id}
+                                onClick={() => handleAllocateTier(u.id, u.role, 'active', 90, 'Admin +90 Days extension')}
+                                title="Grant 90 days active access"
+                              >
+                                +90d
+                              </button>
+                              <button
+                                type="button"
+                                className="genz-pill"
+                                style={{ padding: '2px 6px', fontSize: '0.7rem' }}
+                                disabled={actionLoading === u.id}
+                                onClick={() => handleAllocateTier(u.id, u.role, 'active', null, 'Admin Lifetime access')}
+                                title="Grant permanent / lifetime access"
+                              >
+                                Lifetime
+                              </button>
+                            </div>
+                          </div>
+                        </td>
+                        <td>
+                          {isDeactivated ? (
+                            <span className="status-badge-disabled">🚫 DISABLED / BANNED</span>
+                          ) : (
+                            <span className="status-badge-active">✓ ACTIVE</span>
+                          )}
+                        </td>
+                        <td>
+                          <span className="disclaimer-check-tag">
+                            {u.disclaimer_age_accepted && u.disclaimer_financial_accepted ? '✓ 18+ & Risk OK' : '⚠️ Unverified'}
+                          </span>
+                        </td>
+                        <td>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                            <button
+                              type="button"
+                              className={`action-btn-small ${isDeactivated ? 'btn-activate' : 'btn-deactivate'}`}
+                              disabled={actionLoading === u.id}
+                              onClick={() => handleToggleUserStatus(u)}
+                              style={{
+                                padding: '4px 8px',
+                                fontSize: '0.75rem',
+                                borderRadius: '6px',
+                                border: '1px solid',
+                                cursor: 'pointer',
+                                background: isDeactivated ? '#dcfce7' : '#fee2e2',
+                                color: isDeactivated ? '#166534' : '#991b1b',
+                                borderColor: isDeactivated ? '#bbf7d0' : '#fecaca',
+                                fontWeight: 600
+                              }}
+                            >
+                              {isDeactivated ? '✅ Enable Account' : '🚫 Disable Account'}
+                            </button>
+                            <button
+                              type="button"
+                              className="genz-pill"
+                              style={{ padding: '3px 8px', fontSize: '0.72rem', textAlign: 'center' }}
+                              onClick={() => {
+                                setManualPayUserId(u.id);
+                                setIsManualPaymentModalOpen(true);
+                              }}
+                              title="Record payment and grant VIP"
+                            >
+                              💳 Log Payment
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
               </tbody>
             </table>
           </div>
@@ -1127,7 +1445,161 @@ export const AdminView: React.FC<AdminViewProps> = ({
       </section>
 
       {/* =====================================================================
-          PANEL 5: LIVE SYSTEM AUDIT TERMINAL & LOGS
+          PANEL 5: FINANCIAL LEDGER & PAYMENT TRANSACTIONS
+          ===================================================================== */}
+      <section className="genz-card">
+        <div className="genz-card-header">
+          <div className="card-title-group">
+            <span className="card-emoji">💳</span>
+            <div>
+              <h2 className="card-title">Financial Ledger & Payment Transactions</h2>
+              <p className="card-subtitle">
+                Comprehensive payment records from Paystack, Flutterwave, Stripe, and manual bank transfers.
+              </p>
+            </div>
+          </div>
+
+          <div className="switchboard-controls">
+            <button
+              type="button"
+              className="compact-trigger-btn"
+              style={{ padding: '0.5rem 1rem', background: '#059669', color: '#fff', fontWeight: 600, borderRadius: '8px', border: 'none', cursor: 'pointer' }}
+              onClick={() => setIsManualPaymentModalOpen(true)}
+            >
+              + Record Manual Payment
+            </button>
+            <input
+              type="text"
+              placeholder="Search reference, email, plan..."
+              value={paymentSearch}
+              onChange={(e) => setPaymentSearch(e.target.value)}
+              className="genz-search-input"
+            />
+            <div className="genz-filter-pills">
+              <button
+                type="button"
+                className={`genz-pill ${paymentStatusFilter === 'all' ? 'active' : ''}`}
+                onClick={() => { playSfx('click'); setPaymentStatusFilter('all'); }}
+              >
+                All ({paymentsList.length})
+              </button>
+              <button
+                type="button"
+                className={`genz-pill ${paymentStatusFilter === 'succeeded' ? 'active' : ''}`}
+                onClick={() => { playSfx('click'); setPaymentStatusFilter('succeeded'); }}
+              >
+                Succeeded ({paymentStats.succeededCount})
+              </button>
+              <button
+                type="button"
+                className={`genz-pill ${paymentStatusFilter === 'pending' ? 'active' : ''}`}
+                onClick={() => { playSfx('click'); setPaymentStatusFilter('pending'); }}
+              >
+                Pending
+              </button>
+              <button
+                type="button"
+                className={`genz-pill ${paymentStatusFilter === 'failed' ? 'active' : ''}`}
+                onClick={() => { playSfx('click'); setPaymentStatusFilter('failed'); }}
+              >
+                Failed
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {paymentsLoading ? (
+          <div className="genz-table-loading">Loading payment transactions from Cloud Supabase...</div>
+        ) : (
+          <div className="genz-table-wrapper">
+            <table className="genz-table">
+              <thead>
+                <tr>
+                  <th>Transaction Ref</th>
+                  <th>Customer Email</th>
+                  <th>Plan & Description</th>
+                  <th>Amount</th>
+                  <th>Gateway / Provider</th>
+                  <th>Status</th>
+                  <th>Timestamp</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredPayments.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} style={{ textAlign: 'center', padding: '2.5rem', color: 'var(--text-muted)' }}>
+                      <div style={{ marginBottom: '0.75rem', fontSize: '1.25rem' }}>💳 No payment transactions found</div>
+                      <p style={{ fontSize: '0.875rem' }}>Transactions processed via Paystack or logged manually will appear here in real time.</p>
+                      <button
+                        type="button"
+                        className="genz-pill active-green"
+                        style={{ marginTop: '0.75rem', padding: '6px 14px' }}
+                        onClick={() => setIsManualPaymentModalOpen(true)}
+                      >
+                        + Log First Payment
+                      </button>
+                    </td>
+                  </tr>
+                ) : (
+                  filteredPayments.map((p) => {
+                    const amountVal = p.amount_cents ? p.amount_cents / 100 : 0;
+                    const isNgn = (p.currency || 'ngn').toLowerCase() === 'ngn';
+                    const amountDisplay = isNgn
+                      ? `₦${amountVal.toLocaleString()}`
+                      : `$${amountVal.toFixed(2)}`;
+
+                    return (
+                      <tr key={p.id}>
+                        <td>
+                          <span style={{ fontFamily: 'monospace', fontSize: '0.85rem', fontWeight: 600 }}>
+                            {p.reference || p.id.substring(0, 12)}
+                          </span>
+                        </td>
+                        <td>
+                          <strong>{p.customer_email || '—'}</strong>
+                        </td>
+                        <td>
+                          <span>{p.plan_name || 'Standard VIP Access'}</span>
+                        </td>
+                        <td>
+                          <span style={{ fontWeight: 700, color: '#059669', fontSize: '0.95rem' }}>
+                            {amountDisplay}
+                          </span>
+                        </td>
+                        <td>
+                          <span className="genz-tag" style={{ textTransform: 'uppercase', fontSize: '0.75rem' }}>
+                            {p.provider || 'stripe'}
+                          </span>
+                        </td>
+                        <td>
+                          <span
+                            style={{
+                              padding: '2px 8px',
+                              borderRadius: '999px',
+                              fontSize: '0.75rem',
+                              fontWeight: 700,
+                              background: p.status === 'succeeded' ? '#dcfce7' : p.status === 'pending' ? '#fef9c3' : '#fee2e2',
+                              color: p.status === 'succeeded' ? '#166534' : p.status === 'pending' ? '#854d0e' : '#991b1b'
+                            }}
+                          >
+                            {p.status.toUpperCase()}
+                          </span>
+                        </td>
+                        <td className="font-mono-date">
+                          {new Date(p.created_at).toLocaleString('en-GB', { timeZone: 'Africa/Lagos' })}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      {/* =====================================================================
+          PANEL 6: LIVE SYSTEM AUDIT TERMINAL & LOGS
           ===================================================================== */}
       <section className="genz-card">
         <div className="genz-card-header">
@@ -1247,6 +1719,219 @@ export const AdminView: React.FC<AdminViewProps> = ({
           </div>
         )}
       </section>
+
+      {/* =====================================================================
+          MANUAL / OFFLINE PAYMENT RECORDING MODAL
+          ===================================================================== */}
+      {isManualPaymentModalOpen && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 9999,
+            backgroundColor: 'rgba(0, 0, 0, 0.75)',
+            backdropFilter: 'blur(8px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '1rem',
+            animation: 'fadeIn 0.2s ease-out'
+          }}
+          onClick={() => setIsManualPaymentModalOpen(false)}
+        >
+          <div
+            style={{
+              backgroundColor: 'var(--card-bg, #1e293b)',
+              color: 'var(--text-main, #f8fafc)',
+              borderRadius: '16px',
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.6)',
+              maxWidth: '540px',
+              width: '100%',
+              padding: '2rem',
+              position: 'relative'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <span>💳</span> Record Manual Payment
+                </h3>
+                <p style={{ margin: '0.25rem 0 0', fontSize: '0.85rem', color: 'var(--text-muted, #94a3b8)' }}>
+                  Log offline bank transfers, cash or proof of payment and instantly grant VIP access.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsManualPaymentModalOpen(false)}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  fontSize: '1.5rem',
+                  color: 'var(--text-muted, #94a3b8)',
+                  cursor: 'pointer',
+                  lineHeight: 1
+                }}
+              >
+                ×
+              </button>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleRecordManualPayment();
+              }}
+              style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}
+            >
+              {/* User Selection */}
+              <div>
+                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.4rem' }}>
+                  Target User Account <span style={{ color: '#ef4444' }}>*</span>
+                </label>
+                <select
+                  className="genz-select"
+                  style={{ width: '100%', padding: '0.6rem 0.75rem', borderRadius: '8px', fontSize: '0.9rem' }}
+                  value={manualPayUserId}
+                  onChange={(e) => setManualPayUserId(e.target.value)}
+                  required
+                >
+                  <option value="">-- Select Registered User --</option>
+                  {usersList.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.email} ({u.role?.toUpperCase() || 'FREE'}) {u.display_name ? `— ${u.display_name}` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Plan Selection */}
+              <div>
+                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.4rem' }}>
+                  Subscription Plan <span style={{ color: '#ef4444' }}>*</span>
+                </label>
+                <select
+                  className="genz-select"
+                  style={{ width: '100%', padding: '0.6rem 0.75rem', borderRadius: '8px', fontSize: '0.9rem' }}
+                  value={manualPayPlan}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setManualPayPlan(val);
+                    if (val.includes('5,000')) setManualPayAmount(5000);
+                    else if (val.includes('13,500')) setManualPayAmount(13500);
+                    else if (val.includes('15,000')) setManualPayAmount(15000);
+                    else if (val.includes('40,000')) setManualPayAmount(40000);
+                  }}
+                >
+                  <option value="Standard VIP Monthly (₦5,000)">Standard VIP Monthly (₦5,000 / 30 Days)</option>
+                  <option value="Standard VIP Quarterly (₦13,500)">Standard VIP Quarterly (₦13,500 / 90 Days)</option>
+                  <option value="BigBang VIP Monthly (₦15,000)">BigBang VIP Monthly (₦15,000 / 30 Days)</option>
+                  <option value="BigBang VIP Quarterly (₦40,000)">BigBang VIP Quarterly (₦40,000 / 90 Days)</option>
+                  <option value="Custom Offline Grant">Custom Plan / Offline Grant</option>
+                </select>
+              </div>
+
+              {/* Amount and Currency */}
+              <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '0.75rem' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.4rem' }}>
+                    Amount Paid
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="100"
+                    className="genz-search-input"
+                    style={{ width: '100%', padding: '0.6rem 0.75rem', borderRadius: '8px' }}
+                    value={manualPayAmount}
+                    onChange={(e) => setManualPayAmount(Number(e.target.value) || 0)}
+                    required
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.4rem' }}>
+                    Currency
+                  </label>
+                  <select
+                    className="genz-select"
+                    style={{ width: '100%', padding: '0.6rem 0.75rem', borderRadius: '8px', fontSize: '0.9rem' }}
+                    value={manualPayCurrency}
+                    onChange={(e) => setManualPayCurrency(e.target.value)}
+                  >
+                    <option value="ngn">NGN (₦)</option>
+                    <option value="usd">USD ($)</option>
+                    <option value="gbp">GBP (£)</option>
+                    <option value="eur">EUR (€)</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Provider / Channel */}
+              <div>
+                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.4rem' }}>
+                  Payment Channel / Gateway
+                </label>
+                <select
+                  className="genz-select"
+                  style={{ width: '100%', padding: '0.6rem 0.75rem', borderRadius: '8px', fontSize: '0.9rem' }}
+                  value={manualPayProvider}
+                  onChange={(e) => setManualPayProvider(e.target.value)}
+                >
+                  <option value="manual_bank_transfer">Direct Bank Transfer (GTBank / OPay / Kuda)</option>
+                  <option value="paystack">Paystack Offline / Manual confirmation</option>
+                  <option value="flutterwave">Flutterwave Offline</option>
+                  <option value="stripe">Stripe / Card Offline</option>
+                  <option value="cash">Cash / Direct POS Deposit</option>
+                </select>
+              </div>
+
+              {/* Reference / Bank Narration */}
+              <div>
+                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.4rem' }}>
+                  Payment Reference / Narration / Notes
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. TRF/GTB/091823 or WhatsApp payment confirmation"
+                  className="genz-search-input"
+                  style={{ width: '100%', padding: '0.6rem 0.75rem', borderRadius: '8px' }}
+                  value={manualPayNotes}
+                  onChange={(e) => setManualPayNotes(e.target.value)}
+                />
+              </div>
+
+              {/* Modal Actions */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.75rem' }}>
+                <button
+                  type="button"
+                  className="genz-pill"
+                  style={{ padding: '0.6rem 1.25rem' }}
+                  onClick={() => setIsManualPaymentModalOpen(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="compact-trigger-btn"
+                  disabled={actionLoading === 'manual_pay' || !manualPayUserId}
+                  style={{
+                    padding: '0.6rem 1.5rem',
+                    background: '#059669',
+                    color: '#fff',
+                    fontWeight: 700,
+                    borderRadius: '8px',
+                    border: 'none',
+                    cursor: actionLoading === 'manual_pay' ? 'not-allowed' : 'pointer'
+                  }}
+                >
+                  {actionLoading === 'manual_pay' ? 'Recording & Granting...' : '✓ Record & Grant VIP'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -29,6 +29,7 @@ export default function App() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [subscription, setSubscription] = useState<UserSubscription | null>(null);
   const [entitlement, setEntitlement] = useState<UserEntitlement | null>(null);
+  const [isAuthChecking, setIsAuthChecking] = useState<boolean>(true);
 
   // Modals
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
@@ -204,7 +205,13 @@ export default function App() {
   };
 
   useEffect(() => {
+    let isMounted = true;
+    const authTimeout = setTimeout(() => {
+      if (isMounted) setIsAuthChecking(false);
+    }, 1500);
+
     supabase.auth.getUser().then(({ data }) => {
+      if (!isMounted) return;
       if (data?.user) {
         if (data.user.user_metadata?.status === 'disabled' || data.user.user_metadata?.is_deleted === true) {
           supabase.auth.signOut();
@@ -212,19 +219,26 @@ export default function App() {
           setProfile(null);
           setSubscription(null);
           setEntitlement(null);
+          setIsAuthChecking(false);
           return;
         }
         setCurrentUser(data.user);
-        fetchUserData(data.user.id);
+        fetchUserData(data.user.id).finally(() => {
+          if (isMounted) setIsAuthChecking(false);
+        });
       } else {
         setCurrentUser(null);
         setProfile(null);
         setSubscription(null);
         setEntitlement(null);
+        setIsAuthChecking(false);
       }
+    }).catch(() => {
+      if (isMounted) setIsAuthChecking(false);
     });
 
     const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (!isMounted) return;
       if (session?.user) {
         if (session.user.user_metadata?.status === 'disabled' || session.user.user_metadata?.is_deleted === true) {
           await supabase.auth.signOut();
@@ -232,12 +246,16 @@ export default function App() {
           setProfile(null);
           setSubscription(null);
           setEntitlement(null);
+          setIsAuthChecking(false);
           alert('This account has been deactivated (soft delete). Access to JamBets is blocked.');
           return;
         }
         setCurrentUser(session.user);
         await fetchUserData(session.user.id);
-        if (event === 'SIGNED_IN') {
+        if (isMounted) setIsAuthChecking(false);
+        // Only navigate to /dashboard if user is explicitly on the root landing page '/' upon fresh sign-in
+        // This guarantees that refreshing any subpage (/goals, /admin, /dashboard, etc.) never kicks user away
+        if (event === 'SIGNED_IN' && window.location.pathname === '/') {
           navigate('/dashboard');
         }
       } else {
@@ -245,10 +263,13 @@ export default function App() {
         setProfile(null);
         setSubscription(null);
         setEntitlement(null);
+        if (isMounted) setIsAuthChecking(false);
       }
     });
 
     return () => {
+      isMounted = false;
+      clearTimeout(authTimeout);
       authListener.subscription.unsubscribe();
     };
   }, [navigate]);
@@ -1270,7 +1291,29 @@ export default function App() {
           <Route
             path="/admin"
             element={
-              isAdmin ? (
+              isAuthChecking ? (
+                <div
+                  className="admin-loading-container"
+                  style={{
+                    minHeight: '75vh',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '1rem',
+                    padding: '2rem',
+                    textAlign: 'center'
+                  }}
+                >
+                  <div className="engine-loading-radar-ring" style={{ width: '60px', height: '60px' }} />
+                  <h3 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-primary, #0f172a)' }}>
+                    Verifying Administrative Credentials...
+                  </h3>
+                  <p style={{ color: 'var(--text-muted, #64748b)', fontSize: '0.9rem', maxWidth: '420px' }}>
+                    Authorizing cryptographic access role in Cloud Supabase session
+                  </p>
+                </div>
+              ) : isAdmin ? (
                 <AdminView
                   currentUserProfile={profile}
                   onBackToFixtures={() => navigate('/dashboard')}
@@ -1284,6 +1327,10 @@ export default function App() {
               )
             }
           />
+          <Route path="/admin/" element={<Navigate to="/admin" replace />} />
+          <Route path="/goals/" element={<Navigate to="/goals" replace />} />
+          <Route path="/dashboard/" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/subscription/" element={<Navigate to="/subscription" replace />} />
 
           {/* ROUTE 5: PREDICTIONS FIXTURE DASHBOARD */}
           <Route

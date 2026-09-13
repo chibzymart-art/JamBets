@@ -287,25 +287,47 @@ export interface UserProfile {
   status?: 'active' | 'disabled' | 'suspended';
   deleted_at?: string;
   created_at: string;
+  updated_at?: string;
+  subscription?: UserSubscription | null;
+  entitlement?: UserEntitlement | null;
 }
 
 export interface UserSubscription {
   id: string;
   user_id: string;
-  tier: 'free' | 'standard' | 'bigbang';
-  status: 'active' | 'cancelled' | 'expired';
-  starts_at: string;
+  tier: 'free' | 'standard' | 'bigbang' | 'admin';
+  status: 'active' | 'cancelled' | 'expired' | 'disabled';
+  starts_at?: string;
   expires_at?: string;
+  current_period_end?: string | null;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface UserEntitlement {
   id: string;
   user_id: string;
-  tier: 'free' | 'standard' | 'bigbang';
-  can_view_predictions: boolean;
-  can_view_detailed_stats: boolean;
-  can_view_simulation_breakdown: boolean;
+  tier: 'free' | 'standard' | 'bigbang' | 'admin';
+  can_view_predictions?: boolean;
+  can_view_detailed_stats?: boolean;
+  can_view_simulation_breakdown?: boolean;
+  features?: Record<string, any>;
+  valid_until?: string | null;
   expires_at?: string;
+}
+
+export interface PaymentRecord {
+  id: string;
+  user_id: string;
+  amount_cents: number;
+  currency: string;
+  status: 'succeeded' | 'failed' | 'refunded' | 'pending';
+  provider?: string;
+  reference?: string;
+  customer_email?: string;
+  plan_name?: string;
+  metadata?: Record<string, any>;
+  created_at: string;
 }
 
 export interface PredictionTeaser {
