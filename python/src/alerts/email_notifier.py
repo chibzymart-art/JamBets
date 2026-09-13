@@ -60,8 +60,8 @@ def send_email_alert(
 
     try:
         msg = MIMEMultipart("alternative")
-        msg["Subject"] = f"[JamBets Alert] {subject}"
-        msg["From"] = f"JamBets Engine <{sender_email}>"
+        msg["Subject"] = f"[Oddsbanta Alert] {subject}"
+        msg["From"] = f"Oddsbanta Engine <{sender_email}>"
         msg["To"] = ", ".join(target_recipients)
         msg["Date"] = datetime.now(timezone.utc).strftime("%a, %d %b %Y %H:%M:%S +0000")
 
@@ -112,18 +112,18 @@ def _build_html_wrapper(title: str, badge_color: str, badge_text: str, content_h
 <body>
   <div class="container">
     <div class="header">
-      <div class="logo">Jam<span>Bets</span> Sentinel</div>
+      <div class="logo">Odds<span>banta</span> Sentinel</div>
       <div class="badge">{badge_text}</div>
     </div>
     <div class="body">
       <h2 style="margin-top:0; color:#ffffff;">{title}</h2>
       {content_html}
       <p style="margin-top: 24px;">
-        <a href="https://jambets.vercel.app/admin" class="btn">Open JamBets Admin Deck →</a>
+        <a href="https://oddsbanta.com/admin" class="btn">Open Oddsbanta Admin Deck →</a>
       </p>
     </div>
     <div class="footer">
-      JamBets Autonomous Engine Monitoring • Timestamp: {timestamp_utc}
+      Oddsbanta Autonomous Engine Monitoring • Timestamp: {timestamp_utc}
     </div>
   </div>
 </body>
@@ -157,7 +157,7 @@ def send_pipeline_failure_alert(
     <p>Please check the GitHub Actions logs or run manual settlement via the Admin Deck if needed.</p>
     """
 
-    plain = f"[JamBets Alert] {pipeline_name} Failed\n\nError: {error}\n\nTraceback:\n{tb}"
+    plain = f"[Oddsbanta Alert] {pipeline_name} Failed\n\nError: {error}\n\nTraceback:\n{tb}"
     return send_email_alert(
         subject=f"CRITICAL: {pipeline_name} Pipeline Crash",
         html_body=_build_html_wrapper(f"{pipeline_name} Execution Failure", "#ef4444", "CRITICAL FAILURE", content),
@@ -183,7 +183,7 @@ def send_zero_predictions_alert(
     </ul>
     <div class="highlight-box">Date: {date_str}<br>Evaluated Matches: {matches_evaluated}<br>Published: 0</div>
     """
-    plain = f"[JamBets Alert] Zero Predictions Generated for {date_str} (Evaluated: {matches_evaluated})"
+    plain = f"[Oddsbanta Alert] Zero Predictions Generated for {date_str} (Evaluated: {matches_evaluated})"
     return send_email_alert(
         subject=f"WARNING: Zero Predictions Generated ({date_str})",
         html_body=_build_html_wrapper("Zero Predictions Anomaly Detected", "#f59e0b", "WARNING", content),
@@ -204,7 +204,7 @@ def send_settlement_lag_alert(
     <div class="highlight-box">Unsettled Fixtures: {unsettled_count}<br>Oldest Kickoff: {oldest_kickoff_iso}</div>
     <p>You can trigger deterministic re-settlement from the Admin Deck immediately.</p>
     """
-    plain = f"[JamBets Alert] Settlement Lag: {unsettled_count} finished fixtures unsettled since {oldest_kickoff_iso}"
+    plain = f"[Oddsbanta Alert] Settlement Lag: {unsettled_count} finished fixtures unsettled since {oldest_kickoff_iso}"
     return send_email_alert(
         subject=f"ALERT: Settlement Lag ({unsettled_count} Matches Unsettled)",
         html_body=_build_html_wrapper("Settlement Engine Lag Detected", "#f59e0b", "SETTLEMENT LAG", content),
@@ -214,7 +214,7 @@ def send_settlement_lag_alert(
 
 if __name__ == "__main__":
     # Test script: if invoked directly, attempts to send a test alert or display readiness status
-    print("Testing JamBets Email Notifier...")
+    print("Testing Oddsbanta Email Notifier...")
     sender = os.getenv("ALERT_EMAIL_SENDER")
     pwd = os.getenv("ALERT_EMAIL_PASSWORD")
     if not sender or not pwd:

@@ -188,7 +188,7 @@ export default function App() {
           setProfile(null);
           setSubscription(null);
           setEntitlement(null);
-          alert('This account has been deactivated (soft delete). Access to JamBets is blocked.');
+          alert('This account has been deactivated (soft delete). Access to Oddsbanta is blocked.');
           return;
         }
         setProfile(userRes.data as UserProfile);
@@ -247,7 +247,7 @@ export default function App() {
           setSubscription(null);
           setEntitlement(null);
           setIsAuthChecking(false);
-          alert('This account has been deactivated (soft delete). Access to JamBets is blocked.');
+          alert('This account has been deactivated (soft delete). Access to Oddsbanta is blocked.');
           return;
         }
         setCurrentUser(session.user);
@@ -286,12 +286,15 @@ export default function App() {
       'nnamdiamuchie@gmail.com'
     ];
     return (
+      profile?.role === 'admin' ||
       currentUser.user_metadata?.role === 'admin' ||
       (currentUser as any)?.app_metadata?.role === 'admin' ||
-      profile?.role === 'admin' ||
+      subscription?.tier === 'admin' ||
+      entitlement?.tier === 'admin' ||
+      (entitlement?.features as any)?.admin === true ||
       (email ? adminEmails.includes(email) : false)
     );
-  }, [currentUser, profile]);
+  }, [currentUser, profile, subscription, entitlement]);
 
   // Entitlement Permission
   const canViewPredictions = useMemo(() => {
@@ -299,9 +302,14 @@ export default function App() {
     if (isAdmin) return true;
     if (profile?.role === 'admin') return true;
     if (profile?.role === 'standard' || profile?.role === 'bigbang') return true;
+    const subTier = subscription?.tier?.toLowerCase();
+    if (subscription?.status === 'active' && subTier && ['standard', 'bigbang', 'admin', 'vip'].includes(subTier)) return true;
     if (entitlement?.can_view_predictions === true) return true;
+    const entTier = entitlement?.tier?.toLowerCase();
+    if (entTier && ['standard', 'bigbang', 'admin', 'vip'].includes(entTier)) return true;
+    if ((entitlement?.features as any)?.vip === true || (entitlement?.features as any)?.football_predictions === true) return true;
     return false;
-  }, [currentUser, isAdmin, profile, entitlement]);
+  }, [currentUser, isAdmin, profile, subscription, entitlement]);
 
   const handleAuthSuccess = async () => {
     setIsAuthModalOpen(false);
@@ -979,8 +987,8 @@ export default function App() {
       {/* 1. TOP HEADER BAR */}
       <header className={`site-header ${location.pathname === '/' ? 'landing-standalone-header' : ''}`}>
         <div className="site-header-inner">
-          <Link to="/" className="header-brand" onClick={() => resetAllFilters()} title="JamBets Home">
-            <img src="/jambets-logo.svg" alt="JamBets Sniper Engine" className="brand-header-logo-img" />
+          <Link to="/" className="header-brand" onClick={() => resetAllFilters()} title="Oddsbanta Home">
+            <img src="/oddsbanta-logo.svg" alt="Oddsbanta Prediction Engine" className="brand-header-logo-img" />
           </Link>
 
           {/* Clean Unified Navigation Links */}
@@ -1099,7 +1107,7 @@ export default function App() {
                     </div>
                   ) : (
                     <div className="hamburger-guest-header">
-                      <div className="hamburger-guest-title">Welcome to JamBets</div>
+                      <div className="hamburger-guest-title">Welcome to Oddsbanta</div>
                       <div className="hamburger-guest-sub">Sign in to unlock full VIP odds & simulations</div>
                       <div className="hamburger-auth-row">
                         <button

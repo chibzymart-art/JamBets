@@ -1,5 +1,5 @@
 """
-JamBets — Autonomous Alerting Module
+Oddsbanta — Autonomous Alerting Module
 Provides zero-cost email and webhook alerting for engine failures,
 zero-prediction misfires, and settlement anomalies.
 """

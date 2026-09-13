@@ -14,9 +14,9 @@ export const PricingModal: React.FC<PricingModalProps> = ({ isOpen, onClose, onU
       <div className="modal-card pricing-modal-card" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <div className="modal-brand">
-            <img src="/jambets-logo.svg" alt="JamBets" className="modal-brand-logo-img" />
+            <img src="/oddsbanta-logo.svg" alt="Oddsbanta" className="modal-brand-logo-img" />
             <div>
-              <h2 className="modal-title">JamBets Subscriptions</h2>
+              <h2 className="modal-title">Oddsbanta Subscriptions</h2>
               <p className="modal-subtitle">Instant mathematical edge — flat rates with verified 250k draws</p>
             </div>
           </div>

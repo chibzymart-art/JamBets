@@ -4,9 +4,9 @@ export const config = {
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || 'https://vepcoopomlfjageijsew.supabase.co';
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
-const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
+const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '8606037569:AAH_QOJolgxND26su_AXCyxv6z8iCp4WzbA';
 
-// Admin email list for direct telegram access
+// Universal Admin email list for direct Telegram fallback access
 const ADMIN_EMAILS = [
   'chibzymart@gmail.com',
   'whizzchibz@gmail.com',
@@ -81,6 +81,7 @@ async function isUserPaidOrAdmin(user: any): Promise<{ isPaid: boolean; tier: st
   if (!user) return { isPaid: false, tier: 'unlinked' };
   const email = (user.email || '').toLowerCase().trim();
 
+  // 1. Any account with role 'admin' or in universal admin email list has 100% full VIP access
   if (user.role === 'admin' || ADMIN_EMAILS.includes(email)) {
     return { isPaid: true, tier: 'Admin VIP' };
   }
@@ -90,9 +91,9 @@ async function isUserPaidOrAdmin(user: any): Promise<{ isPaid: boolean; tier: st
     Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
   };
 
-  // Check active entitlements
+  // 2. Check active entitlements
   const entRes = await fetch(
-    `${SUPABASE_URL}/rest/v1/entitlements?user_id=eq.${user.id}&select=tier,valid_until&limit=1`,
+    `${SUPABASE_URL}/rest/v1/entitlements?user_id=eq.${user.id}&select=tier,valid_until,features&limit=1`,
     { headers }
   );
   if (entRes.ok) {
@@ -100,13 +101,16 @@ async function isUserPaidOrAdmin(user: any): Promise<{ isPaid: boolean; tier: st
     if (Array.isArray(entData) && entData.length > 0) {
       const ent = entData[0];
       const validUntil = ent.valid_until ? new Date(ent.valid_until).getTime() : Infinity;
-      if (validUntil > Date.now() && ['standard', 'bigbang', 'pro', 'premium', 'admin'].includes(ent.tier)) {
+      if (validUntil > Date.now() && ['standard', 'bigbang', 'pro', 'premium', 'admin', 'vip'].includes(ent.tier)) {
         return { isPaid: true, tier: ent.tier.toUpperCase() };
+      }
+      if (ent.tier === 'admin' || (ent.features && ent.features.admin === true)) {
+        return { isPaid: true, tier: 'ADMIN VIP' };
       }
     }
   }
 
-  // Check active subscriptions
+  // 3. Check active subscriptions
   const subRes = await fetch(
     `${SUPABASE_URL}/rest/v1/subscriptions?user_id=eq.${user.id}&status=eq.active&select=tier&limit=1`,
     { headers }
@@ -138,9 +142,10 @@ async function linkUserByToken(chatId: number, username: string | undefined, tok
     { headers }
   );
   if (!searchRes.ok) return { success: false, error: 'Token verification failed.' };
+
   const users = await searchRes.json();
   if (!Array.isArray(users) || users.length === 0) {
-    return { success: false, error: 'Invalid or expired code. Please generate a new code on the website.' };
+    return { success: false, error: 'Invalid or expired code. Please generate a new code on Oddsbanta.' };
   }
 
   const user = users[0];
@@ -168,7 +173,7 @@ async function linkUserByToken(chatId: number, username: string | undefined, tok
 
 export default async function handler(req: Request) {
   if (req.method !== 'POST') {
-    return new Response(JSON.stringify({ ok: true, status: 'JamBets Telegram Webhook Active' }), {
+    return new Response(JSON.stringify({ ok: true, status: 'Oddsbanta Telegram Webhook Active' }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
     });
@@ -193,13 +198,13 @@ export default async function handler(req: Request) {
         if (linkResult.success) {
           await sendTelegramMessage(
             chatId,
-            `🎉 *Account Connected Successfully!*\n\nWelcome *${linkResult.email}*!\nYour JamBets account is now linked to Telegram.\n\nReady to pull calibrated predictions:\n• /today - All scheduled match predictions\n• /bangers - Super Bankers (P >= 80%)\n• /goals - Over 2.5 Goals / Over 0.5 1st Half\n• /settled - Verified match settlements\n• /status - Your subscription status`
+            `🎉 *Account Connected Successfully!*\n\nWelcome *${linkResult.email}*!\nYour Oddsbanta account is now linked to Telegram.\n\nReady to pull calibrated predictions:\n• /today - All scheduled match predictions\n• /bangers - Super Bankers (P >= 80%)\n• /goals - Over 2.5 Goals / Over 0.5 1st Half\n• /settled - Verified match settlements\n• /status - Your subscription status`
           );
           return new Response(JSON.stringify({ ok: true }), { status: 200 });
         } else {
           await sendTelegramMessage(
             chatId,
-            `⚠️ *Connection Failed*\n${linkResult.error}\n\nPlease visit [JamBets Dashboard](https://jambets.vercel.app/dashboard) to generate a fresh link code.`
+            `⚠️ *Connection Failed*\n${linkResult.error}\n\nPlease visit [Oddsbanta Dashboard](https://oddsbanta.com/dashboard) to generate a fresh link code.`
           );
           return new Response(JSON.stringify({ ok: true }), { status: 200 });
         }
@@ -211,12 +216,12 @@ export default async function handler(req: Request) {
         const authInfo = await isUserPaidOrAdmin(linkedUser);
         await sendTelegramMessage(
           chatId,
-          `👋 *Welcome Back to JamBets Sentinel VIP Bot!*\n\nAccount: *${linkedUser.email}*\nTier: *${authInfo.tier}*\n\nCommands:\n• /today - Today's calibrated match predictions\n• /bangers - Super Bankers (P >= 80%)\n• /goals - Over 2.5 & 1st Half Over 0.5\n• /settled - Track record & settlement\n• /status - Subscription details`
+          `👋 *Welcome Back to Oddsbanta Sentinel VIP Bot!*\n\nAccount: *${linkedUser.email}*\nTier: *${authInfo.tier}*\n\nCommands:\n• /today - Today's calibrated match predictions\n• /bangers - Super Bankers (P >= 80%)\n• /goals - Over 2.5 & 1st Half Over 0.5\n• /settled - Track record & settlement\n• /status - Subscription details`
         );
       } else {
         await sendTelegramMessage(
           chatId,
-          `👋 *Welcome to JamBets Sentinel VIP Bot!*\n\nTo access predictions on Telegram, link your JamBets account:\n\n1. Sign in to [JamBets](https://jambets.vercel.app/dashboard)\n2. Click *Connect Telegram VIP Bot*\n3. Click the instant deep link, or send:\n   \`/link YOUR_CODE\`\n\nNeed an account? Register at [JamBets](https://jambets.vercel.app/).`
+          `👋 *Welcome to Oddsbanta Sentinel VIP Bot!*\n\nTo access predictions on Telegram, link your Oddsbanta account:\n\n1. Sign in to [Oddsbanta](https://oddsbanta.com/dashboard)\n2. Click *Connect Telegram VIP Bot*\n3. Click the instant deep link, or send:\n   \`/link YOUR_CODE\`\n\nNeed an account? Register at [Oddsbanta](https://oddsbanta.com).`
         );
       }
       return new Response(JSON.stringify({ ok: true }), { status: 200 });
@@ -227,7 +232,7 @@ export default async function handler(req: Request) {
       if (parts.length < 2 || !parts[1].trim()) {
         await sendTelegramMessage(
           chatId,
-          `ℹ️ *Usage:* \`/link YOUR_CODE\`\n\nGenerate your link code inside your [JamBets Dashboard](https://jambets.vercel.app/dashboard).`
+          `ℹ️ *Usage:* \`/link YOUR_CODE\`\n\nGenerate your link code inside your [Oddsbanta Dashboard](https://oddsbanta.com/dashboard).`
         );
         return new Response(JSON.stringify({ ok: true }), { status: 200 });
       }
@@ -252,7 +257,7 @@ export default async function handler(req: Request) {
       if (!user) {
         await sendTelegramMessage(
           chatId,
-          `🔒 *Not Linked*\nYour Telegram account is not connected to a JamBets user profile.\n\nConnect your account at [JamBets Dashboard](https://jambets.vercel.app/dashboard).`
+          `🔒 *Not Linked*\nYour Telegram account is not connected to an Oddsbanta user profile.\n\nConnect your account at [Oddsbanta Dashboard](https://oddsbanta.com/dashboard).`
         );
         return new Response(JSON.stringify({ ok: true }), { status: 200 });
       }
@@ -260,7 +265,7 @@ export default async function handler(req: Request) {
       const authInfo = await isUserPaidOrAdmin(user);
       await sendTelegramMessage(
         chatId,
-        `📊 *JamBets Subscription Status*\n\n• Email: *${user.email}*\n• Access Tier: *${authInfo.tier}*\n• VIP Unlocked: *${authInfo.isPaid ? 'YES ✅' : 'NO ❌'}*\n• Bot Status: *Active 🟢*\n\n${authInfo.isPaid ? 'You have full access to all prediction feeds.' : 'Upgrade to Standard or BigBang VIP at https://jambets.vercel.app/subscription to unlock instant Telegram feeds.'}`
+        `📊 *Oddsbanta Subscription Status*\n\n• Email: *${user.email}*\n• Access Tier: *${authInfo.tier}*\n• VIP Unlocked: *${authInfo.isPaid ? 'YES ✅' : 'NO ❌'}*\n• Bot Status: *Active 🟢*\n\n${authInfo.isPaid ? 'You have full access to all prediction feeds.' : 'Upgrade to Standard or BigBang VIP at https://oddsbanta.com/subscription to unlock instant Telegram feeds.'}`
       );
       return new Response(JSON.stringify({ ok: true }), { status: 200 });
     }
@@ -268,14 +273,14 @@ export default async function handler(req: Request) {
     if (text === '/help') {
       await sendTelegramMessage(
         chatId,
-        `🤖 *JamBets Bot Command Reference*\n\n` +
+        `🤖 *Oddsbanta Bot Command Reference*\n\n` +
         `• /today - All scheduled match predictions for today\n` +
         `• /bangers - High-confidence & Super Banker picks (P >= 80%)\n` +
         `• /goals - Over 2.5 Goals & 1st Half Over 0.5 picks\n` +
         `• /settled - Recently settled match results\n` +
         `• /status - Check your subscription and account status\n` +
-        `• /link <CODE> - Link your JamBets website profile\n\n` +
-        `🌐 Website: https://jambets.vercel.app`
+        `• /link <CODE> - Link your Oddsbanta website profile\n\n` +
+        `🌐 Website: https://oddsbanta.com`
       );
       return new Response(JSON.stringify({ ok: true }), { status: 200 });
     }
@@ -286,7 +291,7 @@ export default async function handler(req: Request) {
       if (!user) {
         await sendTelegramMessage(
           chatId,
-          `🔒 *Authentication Required*\n\nPlease link your JamBets account first to pull predictions.\n\n1. Sign in at [JamBets](https://jambets.vercel.app/dashboard)\n2. Click *Connect Telegram VIP Bot*\n3. Enter the code here: \`/link YOUR_CODE\``
+          `🔒 *Authentication Required*\n\nPlease link your Oddsbanta account first to pull predictions.\n\n1. Sign in at [Oddsbanta](https://oddsbanta.com/dashboard)\n2. Click *Connect Telegram VIP Bot*\n3. Enter the code here: \`/link YOUR_CODE\``
         );
         return new Response(JSON.stringify({ ok: true }), { status: 200 });
       }
@@ -295,7 +300,7 @@ export default async function handler(req: Request) {
       if (!authInfo.isPaid) {
         await sendTelegramMessage(
           chatId,
-          `🔒 *VIP Access Required*\n\nYour account is currently on the *Free Tier*.\nTo unlock live 250,000-simulated predictions directly in Telegram, upgrade your plan:\n\n👉 [Upgrade to VIP (₦5,000/mo)](https://jambets.vercel.app/subscription)`
+          `🔒 *VIP Access Required*\n\nYour account is currently on the *Free Tier*.\nTo unlock live 250,000-simulated predictions directly in Telegram, upgrade your plan:\n\n👉 [Upgrade to VIP (₦5,000/mo)](https://oddsbanta.com/subscription)`
         );
         return new Response(JSON.stringify({ ok: true }), { status: 200 });
       }
@@ -343,7 +348,7 @@ export default async function handler(req: Request) {
       }
 
       // Build Telegram message
-      let reply = `⚽ *JamBets VIP Predictions (${text.toUpperCase()})*\n`;
+      let reply = `⚽ *Oddsbanta VIP Predictions (${text.toUpperCase()})*\n`;
       reply += `📅 Generated with 250,000 Dixon-Coles Monte Carlo draws\n\n`;
 
       preds.slice(0, 10).forEach((p: any, idx: number) => {
@@ -365,7 +370,7 @@ export default async function handler(req: Request) {
       });
 
       if (preds.length > 10) {
-        reply += `_...and ${preds.length - 10} more fixtures on [JamBets Dashboard](https://jambets.vercel.app/dashboard)_`;
+        reply += `_...and ${preds.length - 10} more fixtures on [Oddsbanta Dashboard](https://oddsbanta.com/dashboard)_`;
       }
 
       await sendTelegramMessage(chatId, reply);
@@ -398,7 +403,7 @@ export default async function handler(req: Request) {
         return new Response(JSON.stringify({ ok: true }), { status: 200 });
       }
 
-      let reply = `📊 *JamBets Verified Track Record (Recent Settlements)*\n\n`;
+      let reply = `📊 *Oddsbanta Verified Track Record (Recent Settlements)*\n\n`;
       settled.forEach((p: any) => {
         const home = p.fixture?.home_team?.name || 'Home';
         const away = p.fixture?.away_team?.name || 'Away';
@@ -406,7 +411,7 @@ export default async function handler(req: Request) {
         const score = p.actual_score || `${p.fixture?.home_score ?? '?'}-${p.fixture?.away_score ?? '?'}`;
         reply += `• *${home} vs ${away}* (${score})\n  Pick: ${p.prediction} → *${icon}*\n`;
       });
-      reply += `\nTrack record is 100% auditable at [JamBets](https://jambets.vercel.app/settlement).`;
+      reply += `\nTrack record is 100% auditable at [Oddsbanta](https://oddsbanta.com/settlement).`;
 
       await sendTelegramMessage(chatId, reply);
       return new Response(JSON.stringify({ ok: true }), { status: 200 });
@@ -415,7 +420,7 @@ export default async function handler(req: Request) {
     // Default reply
     await sendTelegramMessage(
       chatId,
-      `❓ Unrecognized command. Use /help to see all available commands.`
+      `❓ Unrecognized command. Use /help to see all available Oddsbanta commands.`
     );
     return new Response(JSON.stringify({ ok: true }), { status: 200 });
   } catch (err: any) {

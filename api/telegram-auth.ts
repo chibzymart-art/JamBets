@@ -4,7 +4,7 @@ export const config = {
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || 'https://vepcoopomlfjageijsew.supabase.co';
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
-const TELEGRAM_BOT_USERNAME = process.env.TELEGRAM_BOT_USERNAME || 'JamBets_Bot';
+const TELEGRAM_BOT_USERNAME = process.env.TELEGRAM_BOT_USERNAME || 'Oddsbanta_bot';
 
 export default async function handler(req: Request) {
   if (req.method !== 'POST') {
@@ -34,7 +34,7 @@ export default async function handler(req: Request) {
 
     // Generate a clean 6-character linking code
     const randomDigits = Math.floor(1000 + Math.random() * 9000);
-    const token = `JAM-${randomDigits}`;
+    const token = `ODDS-${randomDigits}`;
 
     // Token expires in 15 minutes
     const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();

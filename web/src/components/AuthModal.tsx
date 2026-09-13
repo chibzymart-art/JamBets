@@ -176,11 +176,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         {/* Modal Header */}
         <div className="modal-header">
           <div className="modal-brand">
-            <img src="/jambets-logo.svg" alt="JamBets" className="modal-brand-logo-img" />
+            <img src="/oddsbanta-logo.svg" alt="Oddsbanta" className="modal-brand-logo-img" />
             <div>
               <h2 className="modal-title">
-                {mode === 'signin' && 'Sign In to JamBets'}
-                {mode === 'register' && 'Create Your JamBets Account'}
+                {mode === 'signin' && 'Sign In to Oddsbanta'}
+                {mode === 'register' && 'Create Your Oddsbanta Account'}
                 {mode === 'forgot' && 'Reset Your Password'}
               </h2>
               <p className="modal-subtitle">
@@ -364,7 +364,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   required
                 />
                 <span className="disclaimer-text">
-                  <strong>Financial Indemnity & Educational Notice:</strong> I understand that the information provided is not financial advice, is for educational/informational purposes only, and I indemnify JamBets from financial losses arising from reliance on the information provided.
+                  <strong>Financial Indemnity & Educational Notice:</strong> I understand that the information provided is not financial advice, is for educational/informational purposes only, and I indemnify Oddsbanta from financial losses arising from reliance on the information provided.
                 </span>
               </label>
             </div>
@@ -437,7 +437,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         {/* Modal Footer Note */}
         <div className="modal-footer">
           <p className="footer-disclaimer-note">
-            JamBets is a statistical simulation platform utilizing Dixon-Coles bivariate Poisson modeling. Predictions are probabilistic and never guarantee sports outcomes.
+            Oddsbanta is a statistical simulation platform utilizing Dixon-Coles bivariate Poisson modeling. Predictions are probabilistic and never guarantee sports outcomes.
           </p>
         </div>
       </div>

@@ -112,7 +112,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
         timeZone: 'Africa/Lagos'
       });
 
-      let text = `🔥 *JAMBETS VIP DAILY PICKS*\n`;
+      let text = `🔥 *ODDSBANTA VIP DAILY PICKS*\n`;
       text += `⚡ *Calibrated via 250,000 Dixon-Coles Monte Carlo Draws*\n`;
       text += `📅 Date: *${todayStr}*\n\n`;
 
@@ -139,8 +139,8 @@ export const AdminView: React.FC<AdminViewProps> = ({
       }
 
       text += `🔒 Full 5-dimension breakdowns & live predictions:\n`;
-      text += `👉 https://jambets.vercel.app/dashboard\n\n`;
-      text += `_JamBets — Precision AI Football Analysis_`;
+      text += `👉 https://oddsbanta.com/dashboard\n\n`;
+      text += `_Oddsbanta — Precision AI Football Analysis_`;
 
       setBroadcastText(text);
       playSfx('success');
@@ -223,6 +223,18 @@ export const AdminView: React.FC<AdminViewProps> = ({
       if (
         isProfileAdmin ||
         (email ? adminEmails.includes(email) : false)
+      ) {
+        setIsAdminVerified(true);
+        setCheckingAuth(false);
+        return;
+      }
+
+      // Check active auth session metadata in case profile is still syncing
+      const { data: sessionData } = await supabase.auth.getSession();
+      const sessionUser = sessionData?.session?.user;
+      if (
+        sessionUser?.user_metadata?.role === 'admin' ||
+        (sessionUser as any)?.app_metadata?.role === 'admin'
       ) {
         setIsAdminVerified(true);
         setCheckingAuth(false);
@@ -984,7 +996,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
   // VIEW: AUTHORIZED GEN-Z CYBER COMMAND CENTER
   // =========================================================================
   return (
-    <div className="genz-admin-container" aria-label="JamBets Gen-Z Admin Deck">
+    <div className="genz-admin-container" aria-label="Oddsbanta Gen-Z Admin Deck">
       {/* Top Cyber Command Header */}
       <header className="genz-deck-header">
         <div className="genz-header-left">
@@ -994,7 +1006,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
             <span className="genz-pill-live">● LIVE TELEMETRY</span>
           </div>
           <h1 className="genz-deck-title">
-            JamBets Command Deck & Engine Control Center
+            Oddsbanta Command Deck & Engine Control Center
           </h1>
           <p className="genz-deck-sub">
             250,000 Monte Carlo vectorization • Cloud Supabase live polling • Rate-limited 2.5s execution • No Cap.

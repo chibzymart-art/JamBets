@@ -99,11 +99,11 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   return (
     <div className="landing-light-root">
       {/* 1. HERO SECTION (MATCHING IMAGE 1) */}
-      <section className="hero-light-section" aria-label="JamBets Hero Section">
+      <section className="hero-light-section" aria-label="Oddsbanta Hero Section">
         <div className="hero-light-backdrop">
           <img
             src="/hero-bg.jpg"
-            alt="JamBets Football Action"
+            alt="Oddsbanta Football Action"
             className="hero-light-bg-img"
             onError={(e) => {
               (e.target as HTMLImageElement).src = '/Gemini_Generated_Image_9yaair9yaair9yaa.jpg';

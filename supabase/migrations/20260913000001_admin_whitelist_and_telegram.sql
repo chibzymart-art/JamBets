@@ -4,7 +4,7 @@
 -- and adds Telegram & WhatsApp notification integration fields to public.users.
 -- =====================================================================
 
--- 1. Upgrade public.is_admin() with Full Email Whitelist
+-- 1. Upgrade public.is_admin() with Dynamic Role Checking (Universal Admin Access)
 CREATE OR REPLACE FUNCTION public.is_admin()
 RETURNS BOOLEAN
 LANGUAGE plpgsql
@@ -13,7 +13,7 @@ STABLE
 SET search_path = public
 AS $$
 BEGIN
-    -- Check 1: User table role = 'admin'
+    -- Check 1: Any user where role = 'admin' in public.users
     IF EXISTS (
         SELECT 1 FROM public.users
         WHERE (id = auth.uid() OR LOWER(email) = LOWER(auth.jwt() ->> 'email'))
@@ -22,7 +22,32 @@ BEGIN
         RETURN true;
     END IF;
 
-    -- Check 2: Hardcoded primary administrator accounts (case-insensitive & dot-normalized)
+    -- Check 2: Any user where entitlement tier = 'admin' or features ->> 'admin' = 'true'
+    IF EXISTS (
+        SELECT 1 FROM public.entitlements
+        WHERE (user_id = auth.uid())
+          AND (tier = 'admin' OR (features ->> 'admin')::boolean = true)
+    ) THEN
+        RETURN true;
+    END IF;
+
+    -- Check 3: Any user where subscription tier = 'admin'
+    IF EXISTS (
+        SELECT 1 FROM public.subscriptions
+        WHERE (user_id = auth.uid())
+          AND tier = 'admin'
+          AND status = 'active'
+    ) THEN
+        RETURN true;
+    END IF;
+
+    -- Check 4: JWT user_metadata or app_metadata role = 'admin'
+    IF (auth.jwt() -> 'user_metadata' ->> 'role') = 'admin' OR
+       (auth.jwt() -> 'app_metadata' ->> 'role') = 'admin' THEN
+        RETURN true;
+    END IF;
+
+    -- Check 5: Hardcoded primary administrator accounts fallback
     IF LOWER(auth.jwt() ->> 'email') IN (
         'chibzymart@gmail.com',
         'whizzchibz@gmail.com',
@@ -33,13 +58,7 @@ BEGIN
         RETURN true;
     END IF;
 
-    -- Check 3: JWT user/app metadata role
-    IF (auth.jwt() -> 'user_metadata' ->> 'role') = 'admin' OR
-       (auth.jwt() -> 'app_metadata' ->> 'role') = 'admin' THEN
-        RETURN true;
-    END IF;
-
-    -- Check 4: Service role key bypass
+    -- Check 6: Service role key bypass
     IF (auth.jwt() ->> 'role') = 'service_role' THEN
         RETURN true;
     END IF;
@@ -67,7 +86,7 @@ AS $$
     SELECT true
     FROM public.entitlements e
     WHERE e.user_id = auth.uid()
-      AND e.tier IN ('standard', 'bigbang', 'pro', 'premium', 'admin')
+      AND (e.tier IN ('standard', 'bigbang', 'pro', 'premium', 'admin') OR (e.features ->> 'admin')::boolean = true)
       AND (e.valid_until IS NULL OR e.valid_until > now())
     LIMIT 1
   ), (

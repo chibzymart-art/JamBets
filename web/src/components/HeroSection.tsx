@@ -20,12 +20,12 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
   onScrollToFixtures
 }) => {
   return (
-    <section className="hero-section" aria-label="JamBets Predictive Analytics Platform">
+    <section className="hero-section" aria-label="Oddsbanta Predictive Analytics Platform">
       {/* Dynamic Background with Floodlit Soccer Stadium & Action Photo (Picture 3) */}
       <div className="hero-bg-wrapper">
         <img
           src="/hero-bg.jpg"
-          alt="JamBets Live Football Prediction Engine"
+          alt="Oddsbanta Live Football Prediction Engine"
           className="hero-bg-image"
           onError={(e) => {
             // Fallback to absolute or public path if needed

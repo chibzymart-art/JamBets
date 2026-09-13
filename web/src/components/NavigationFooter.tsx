@@ -32,8 +32,8 @@ export const NavigationFooter: React.FC<NavigationFooterProps> = ({
             <div className="regulatory-alert-text">
               <strong>STRICT REGULATORY & FINANCIAL INDEMNITY NOTICE:</strong> Predictions are probabilistic estimates
               derived from quantitative mathematical modeling for informational and research purposes only. They are not
-              guarantees of sports outcomes, and JamBets does not accept wagers or place bets on anyone's behalf. Sports predictive
-              modeling entails variance and inherent risk; always make decisions responsibly. JamBets accepts zero liability for
+              guarantees of sports outcomes, and Oddsbanta does not accept wagers or place bets on anyone's behalf. Sports predictive
+              modeling entails variance and inherent risk; always make decisions responsibly. Oddsbanta accepts zero liability for
               financial losses. Strictly 18+ only.
             </div>
           </div>
@@ -43,7 +43,7 @@ export const NavigationFooter: React.FC<NavigationFooterProps> = ({
           {/* Brand & Identity Column */}
           <div className="footer-brand-col">
             <div className="footer-brand-header">
-              <img src="/jambets-logo.svg" alt="JamBets Sniper Engine" className="footer-brand-logo-img" />
+              <img src="/oddsbanta-logo.svg" alt="Oddsbanta Prediction Engine" className="footer-brand-logo-img" />
             </div>
             <p className="footer-brand-bio">
               Next-generation mathematical sports analytics platform. Rigorous bivariate modeling, verified post-match settlement
@@ -214,7 +214,7 @@ export const NavigationFooter: React.FC<NavigationFooterProps> = ({
       <div className="footer-mobile-container">
         <div className="footer-mobile-brand-row">
           <div className="footer-mobile-logo">
-            <img src="/jambets-logo.svg" alt="JamBets Sniper Engine" className="footer-brand-logo-img" />
+            <img src="/oddsbanta-logo.svg" alt="Oddsbanta Prediction Engine" className="footer-brand-logo-img" />
           </div>
           <span className="footer-live-badge compact">
             <span className="status-live-dot" />
@@ -238,14 +238,14 @@ export const NavigationFooter: React.FC<NavigationFooterProps> = ({
         </div>
 
         <p className="footer-mobile-disclaimer">
-          🔞 18+ Only. Probabilistic simulation estimates for informational & educational research. JamBets does not accept wagers.
+          🔞 18+ Only. Probabilistic simulation estimates for informational & educational research. Oddsbanta does not accept wagers.
         </p>
       </div>
 
       {/* Bottom Copyright and Telemetry Strip */}
       <div className="footer-bottom-strip">
         <div className="footer-bottom-left">
-          <span>© {currentYear} JamBets Quantitative Sports Analytics. All rights reserved.</span>
+          <span>© {currentYear} Oddsbanta Quantitative Sports Analytics. All rights reserved.</span>
         </div>
         <div className="footer-bottom-right">
           <button

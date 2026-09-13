@@ -408,7 +408,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ onBackToFixtures }
                 Statistical Governance & Mathematical Rules
               </h3>
               <p className="text-xs text-slate-500">
-                JamBets adheres to verifiable audit standards. No manipulated denominators, no hidden losses.
+                Oddsbanta adheres to verifiable audit standards. No manipulated denominators, no hidden losses.
               </p>
             </div>
           </div>

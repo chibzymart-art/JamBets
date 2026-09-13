@@ -221,7 +221,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
         <div className="profile-details-grid">
           <div className="profile-detail-card">
             <span className="detail-label">Display Name</span>
-            <span className="detail-value">{profile.display_name || 'JamBets Member'}</span>
+            <span className="detail-value">{profile.display_name || 'Oddsbanta Member'}</span>
           </div>
           <div className="profile-detail-card">
             <span className="detail-label">Current Role / Tier</span>
@@ -284,7 +284,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
                   <div style={{ background: '#1e293b', border: '1px dashed #38bdf8', padding: '12px', borderRadius: '8px', marginBottom: '12px', textAlign: 'center' }}>
                     <div style={{ fontSize: '11px', color: '#94a3b8', marginBottom: '4px' }}>Your 15-Minute Link Code:</div>
                     <div style={{ fontSize: '20px', fontWeight: 800, color: '#fbbf24', letterSpacing: '2px' }}>{telegramToken}</div>
-                    <div style={{ fontSize: '11px', color: '#64748b', marginTop: '4px' }}>Send <code>/link {telegramToken}</code> to @JamBets_Bot</div>
+                    <div style={{ fontSize: '11px', color: '#64748b', marginTop: '4px' }}>Send <code>/link {telegramToken}</code> to @Oddsbanta_bot</div>
                   </div>
                 )}
               </div>
@@ -337,7 +337,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
 
                 <div style={{ background: '#1e293b', padding: '10px 12px', borderRadius: '6px', fontSize: '12px', color: '#cbd5e1', marginBottom: '12px' }}>
                   {entitlement?.can_view_predictions ? (
-                    <span style={{ color: '#86efac' }}>✓ Your active subscription grants access to the official JamBets VIP channel.</span>
+                    <span style={{ color: '#86efac' }}>✓ Your active subscription grants access to the official Oddsbanta VIP channel.</span>
                   ) : (
                     <span style={{ color: '#f87171' }}>Requires Standard (₦5k) or BigBang VIP plan to join the private group.</span>
                   )}
@@ -347,7 +347,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
               <div>
                 {entitlement?.can_view_predictions ? (
                   <a
-                    href="https://chat.whatsapp.com/invite/JamBetsVIP"
+                    href="https://chat.whatsapp.com/invite/OddsbantaVIP"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="btn-update-password"
@@ -463,7 +463,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
             <div className="compliance-item">
               <span className="compliance-check">✓</span>
               <div>
-                <strong>Financial Indemnity & Educational Notice:</strong> Confirmed. JamBets held harmless from financial wagering loss.
+                <strong>Financial Indemnity & Educational Notice:</strong> Confirmed. Oddsbanta held harmless from financial wagering loss.
                 <div className="compliance-timestamp">
                   Recorded: {formatLagosDate(profile.disclaimer_financial_accepted_at)}
                 </div>
@@ -641,7 +641,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
               onClose();
             }}
           >
-            Sign Out of JamBets
+            Sign Out of Oddsbanta
           </button>
         </div>
       </div>

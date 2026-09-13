@@ -913,7 +913,7 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
                   </div>
 
                   <div style={{ padding: '8px 12px', background: '#ffffff', borderRadius: 6, border: '1px solid #e2e8f0', fontSize: 12, color: '#475569', lineHeight: 1.5, marginTop: 4 }}>
-                    ⚠️ <strong>Sniper Protection:</strong> No single market in this fixture achieved the strict <strong>≥ 80.00% banker certainty floor</strong> across 250,000 simulations. JamBets advises passing on this match to protect capital.
+                    ⚠️ <strong>Sniper Protection:</strong> No single market in this fixture achieved the strict <strong>≥ 80.00% banker certainty floor</strong> across 250,000 simulations. Oddsbanta advises passing on this match to protect capital.
                   </div>
 
                   {prediction.settlement_notes && (

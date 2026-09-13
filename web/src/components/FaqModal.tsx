@@ -19,7 +19,7 @@ export const FaqModal: React.FC<FaqModalProps> = ({ isOpen, onClose }) => {
   const faqs: FaqItem[] = [
     {
       question: 'What is the Dixon-Coles 250,000 Monte Carlo Engine?',
-      answer: 'JamBets uses an advanced bivariate Poisson model with low-scoring correction (Dixon & Coles 1997). For every candidate fixture across 16 world leagues, our engine computes calibrated expected goals (xG), runs 250,000 independent Monte Carlo draws using the PCG64 random generator, and outputs exact empirical probabilities.',
+      answer: 'Oddsbanta uses an advanced bivariate Poisson model with low-scoring correction (Dixon & Coles 1997). For every candidate fixture across 16 world leagues, our engine computes calibrated expected goals (xG), runs 250,000 independent Monte Carlo draws using the PCG64 random generator, and outputs exact empirical probabilities.',
       category: 'Modeling'
     },
     {
@@ -38,8 +38,8 @@ export const FaqModal: React.FC<FaqModalProps> = ({ isOpen, onClose }) => {
       category: 'Settlement'
     },
     {
-      question: 'Why does JamBets enforce a Zero-Leakage Data Policy?',
-      answer: 'JamBets only publishes fixtures that have passed strict multi-source data validation, completed 250,000 Monte Carlo simulation runs, and satisfied our mathematical publication thresholds. Any fixture with incomplete data remains strictly internal and is never published on the prediction UI. We guarantee 100% mathematical integrity with zero speculative leaks.',
+      question: 'Why does Oddsbanta enforce a Zero-Leakage Data Policy?',
+      answer: 'Oddsbanta only publishes fixtures that have passed strict multi-source data validation, completed 250,000 Monte Carlo simulation runs, and satisfied our mathematical publication thresholds. Any fixture with incomplete data remains strictly internal and is never published on the prediction UI. We guarantee 100% mathematical integrity with zero speculative leaks.',
       category: 'Integrity'
     }
   ];
@@ -49,7 +49,7 @@ export const FaqModal: React.FC<FaqModalProps> = ({ isOpen, onClose }) => {
       <div className="modal-card faq-modal-card" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <div className="modal-brand">
-            <img src="/jambets-logo.svg" alt="JamBets" className="modal-brand-logo-img" />
+            <img src="/oddsbanta-logo.svg" alt="Oddsbanta" className="modal-brand-logo-img" />
             <div>
               <h2 className="modal-title">Frequently Asked Questions</h2>
               <p className="modal-subtitle">Mathematical transparency, simulation rules, and settlement methodology</p>

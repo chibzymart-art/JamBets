@@ -115,8 +115,8 @@ export const PasswordRecoveryPage: React.FC = () => {
       <div className="recovery-card">
         {/* Brand Header */}
         <div className="recovery-header">
-          <Link to="/" className="recovery-brand-link" title="Return to JamBets Home">
-            <img src="/jambets-logo.svg" alt="JamBets Sniper Engine" className="recovery-brand-logo-img" />
+          <Link to="/" className="recovery-brand-link" title="Return to Oddsbanta Home">
+            <img src="/oddsbanta-logo.svg" alt="Oddsbanta Prediction Engine" className="recovery-brand-logo-img" />
             <span className="brand-text-tag">Account Security</span>
           </Link>
           <h1 className="recovery-title">
