@@ -2,12 +2,14 @@ import React, { useState, useRef, useEffect } from 'react';
 
 interface FloatingFavoritesWidgetProps {
   count: number;
-  onOpenDrawer: () => void;
+  isOpen?: boolean;
+  onToggleDrawer: () => void;
 }
 
 export const FloatingFavoritesWidget: React.FC<FloatingFavoritesWidgetProps> = ({
   count,
-  onOpenDrawer,
+  isOpen = false,
+  onToggleDrawer,
 }) => {
   // Draggable position state (defaults to bottom right: right: 18px, bottom: 85px)
   const [position, setPosition] = useState<{ x: number | null; y: number | null }>({
@@ -93,11 +95,11 @@ export const FloatingFavoritesWidget: React.FC<FloatingFavoritesWidgetProps> = (
     const touchDuration = Date.now() - touchStartTimeRef.current;
     setIsDragging(false);
 
-    // If tap was quick (<350ms) or movement was below slop, open the drawer!
+    // If tap was quick (<350ms) or movement was below slop, toggle the drawer!
     if (!hasMovedRef.current || touchDuration < 300) {
       hasMovedRef.current = false;
       isDragActiveRef.current = false;
-      onOpenDrawer();
+      onToggleDrawer();
       if (e.cancelable) {
         e.preventDefault();
       }
@@ -144,7 +146,7 @@ export const FloatingFavoritesWidget: React.FC<FloatingFavoritesWidgetProps> = (
 
       if (!hasMovedRef.current || (Date.now() - mouseStartTime < 300)) {
         hasMovedRef.current = false;
-        onOpenDrawer();
+        onToggleDrawer();
       }
     };
 
@@ -159,7 +161,7 @@ export const FloatingFavoritesWidget: React.FC<FloatingFavoritesWidgetProps> = (
       e.stopPropagation();
       return;
     }
-    onOpenDrawer();
+    onToggleDrawer();
   };
 
   const inlineStyle: React.CSSProperties = {
@@ -181,7 +183,7 @@ export const FloatingFavoritesWidget: React.FC<FloatingFavoritesWidgetProps> = (
       ref={widgetRef}
       role="button"
       tabIndex={0}
-      className={`floating-favorites-chatbot-widget ${isDragging ? 'dragging' : ''}`}
+      className={`floating-favorites-chatbot-widget ${isDragging ? 'dragging' : ''} ${isOpen ? 'is-open' : ''}`}
       style={inlineStyle}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
@@ -191,23 +193,25 @@ export const FloatingFavoritesWidget: React.FC<FloatingFavoritesWidgetProps> = (
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
-          onOpenDrawer();
+          onToggleDrawer();
         }
       }}
-      aria-label="Saved Predictions Custom Slip"
-      title="Tap to view Saved Predictions & Custom Slip (Draggable)"
+      aria-label={isOpen ? 'Close Saved Predictions Custom Slip' : 'Open Saved Predictions Custom Slip'}
+      title={isOpen ? 'Tap to close Custom Slip' : 'Tap to view Saved Predictions & Custom Slip (Draggable)'}
     >
       <div className="floating-widget-inner">
         {/* Glow Radar Aura */}
         <div className="floating-widget-aura" />
         {/* Main Icon */}
-        <div className="floating-widget-icon">⭐</div>
+        <div className="floating-widget-icon">{isOpen ? '✕' : '⭐'}</div>
         {/* Badge Count */}
-        <span className={`floating-widget-badge ${count > 0 ? 'active' : ''}`}>
-          {count}
-        </span>
+        {!isOpen && (
+          <span className={`floating-widget-badge ${count > 0 ? 'active' : ''}`}>
+            {count}
+          </span>
+        )}
       </div>
-      <div className="floating-widget-hint">SLIP</div>
+      <div className="floating-widget-hint">{isOpen ? 'CLOSE' : 'SLIP'}</div>
     </div>
   );
 };

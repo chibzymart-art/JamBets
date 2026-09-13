@@ -2248,7 +2248,8 @@ export default function App() {
       {/* Floating Draggable Favorites/Slip Widget */}
       <FloatingFavoritesWidget
         count={favoriteItems.length}
-        onOpenDrawer={() => setIsFavoritesDrawerOpen(true)}
+        isOpen={isFavoritesDrawerOpen}
+        onToggleDrawer={() => setIsFavoritesDrawerOpen((prev) => !prev)}
       />
 
       {/* Slide-over Favorites Slip Drawer */}
