@@ -73,6 +73,93 @@ export const AdminView: React.FC<AdminViewProps> = ({
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
+  // 1-Click WhatsApp Broadcast Station
+  const [broadcastLoading, setBroadcastLoading] = useState<boolean>(false);
+  const [broadcastText, setBroadcastText] = useState<string>('');
+  const [copiedBroadcast, setCopiedBroadcast] = useState<boolean>(false);
+
+  const generateBroadcastPicks = async () => {
+    setBroadcastLoading(true);
+    setActionError(null);
+    try {
+      const { data, error } = await supabase
+        .from('football_predictions')
+        .select(`
+          id,
+          prediction,
+          market,
+          probability,
+          confidence_category,
+          target_kickoff_at,
+          fixture:football_fixtures!inner(
+            home_team:football_teams!football_fixtures_home_team_id_fkey(name),
+            away_team:football_teams!football_fixtures_away_team_id_fkey(name),
+            league:football_leagues!inner(code,name)
+          )
+        `)
+        .eq('publication_status', 'published')
+        .eq('settlement_status', 'pending')
+        .order('target_kickoff_at', { ascending: true })
+        .limit(10);
+
+      if (error) throw error;
+      const preds = (data || []) as any[];
+
+      const todayStr = new Date().toLocaleDateString('en-GB', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+        timeZone: 'Africa/Lagos'
+      });
+
+      let text = `🔥 *JAMBETS VIP DAILY PICKS*\n`;
+      text += `⚡ *Calibrated via 250,000 Dixon-Coles Monte Carlo Draws*\n`;
+      text += `📅 Date: *${todayStr}*\n\n`;
+
+      if (preds.length === 0) {
+        text += `⚽ No active scheduled fixtures in the queue right now.\nCheck back shortly!\n\n`;
+      } else {
+        preds.forEach((p: any, idx: number) => {
+          const f = p.fixture;
+          const home = f?.home_team?.name || 'Home';
+          const away = f?.away_team?.name || 'Away';
+          const league = f?.league?.code || f?.league?.name || 'League';
+          const prob = Math.round(p.probability || 0);
+          const time = new Date(p.target_kickoff_at).toLocaleTimeString('en-GB', {
+            hour: '2-digit',
+            minute: '2-digit',
+            timeZone: 'Africa/Lagos'
+          });
+
+          text += `*${idx + 1}. ${home} vs ${away}*\n`;
+          text += `🏆 ${league} • ⏰ ${time} WAT\n`;
+          text += `🎯 Pick: *${p.prediction}* (${prob}%)\n`;
+          text += `📊 Confidence: ${p.confidence_category || 'CONSENSUS'}\n\n`;
+        });
+      }
+
+      text += `🔒 Full 5-dimension breakdowns & live predictions:\n`;
+      text += `👉 https://jambets.vercel.app/dashboard\n\n`;
+      text += `_JamBets — Precision AI Football Analysis_`;
+
+      setBroadcastText(text);
+      playSfx('success');
+    } catch (err: any) {
+      console.error('Error generating broadcast text:', err);
+      setActionError(err.message || 'Failed to fetch predictions for broadcast.');
+    } finally {
+      setBroadcastLoading(false);
+    }
+  };
+
+  const copyBroadcastText = () => {
+    if (!broadcastText) return;
+    navigator.clipboard.writeText(broadcastText);
+    setCopiedBroadcast(true);
+    playSfx('click');
+    setTimeout(() => setCopiedBroadcast(false), 3000);
+  };
+
   // Web Audio Synthesizer for Gen-Z Interactive UI Feedback
   const playSfx = (type: 'click' | 'success' | 'error' | 'cook') => {
     if (!sfxEnabled || typeof window === 'undefined') return;
@@ -124,12 +211,18 @@ export const AdminView: React.FC<AdminViewProps> = ({
   const verifyServerAdmin = async () => {
     setCheckingAuth(true);
     try {
-      const email = currentUserProfile?.email?.toLowerCase();
+      const email = currentUserProfile?.email?.toLowerCase().trim();
       const isProfileAdmin = (currentUserProfile as any)?.role === 'admin';
+      const adminEmails = [
+        'chibzymart@gmail.com',
+        'whizzchibz@gmail.com',
+        'chibuezec.amuchie@gmail.com',
+        'chibuezeamuchie@gmail.com',
+        'nnamdiamuchie@gmail.com'
+      ];
       if (
         isProfileAdmin ||
-        email === 'chibzymart@gmail.com' ||
-        email === 'whizzchibz@gmail.com'
+        (email ? adminEmails.includes(email) : false)
       ) {
         setIsAdminVerified(true);
         setCheckingAuth(false);
@@ -1060,6 +1153,72 @@ export const AdminView: React.FC<AdminViewProps> = ({
                   <div className="trigger-meta">Early HT & FT</div>
                 </div>
               </button>
+            </div>
+          </div>
+
+          {/* GROUP 3: 1-CLICK VIP BROADCAST & CHANNELS HUB */}
+          <div className="engine-group-box" style={{ borderColor: '#16a34a' }}>
+            <div className="engine-group-header">
+              <span className="group-icon">📢</span>
+              <span className="group-title">VIP Broadcast Station</span>
+              <span className="group-tag" style={{ background: '#166534', color: '#86efac' }}>WHATSAPP & TELEGRAM</span>
+            </div>
+            <div style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  id="btn-gen-broadcast"
+                  onClick={generateBroadcastPicks}
+                  disabled={broadcastLoading}
+                  className="compact-trigger-btn"
+                  style={{ flex: '1 1 140px', background: '#065f46', borderColor: '#059669', color: '#ecfdf5' }}
+                >
+                  <span className="trigger-icon">⚡</span>
+                  <div className="trigger-copy">
+                    <div className="trigger-label">{broadcastLoading ? 'Fetching Picks...' : '1. Compile VIP Picks'}</div>
+                    <div className="trigger-meta">Format Today's Top 10</div>
+                  </div>
+                </button>
+
+                {broadcastText && (
+                  <>
+                    <button
+                      type="button"
+                      id="btn-copy-broadcast"
+                      onClick={copyBroadcastText}
+                      className="compact-trigger-btn"
+                      style={{ flex: '1 1 120px', background: copiedBroadcast ? '#15803d' : '#1e293b', borderColor: '#334155', color: '#f8fafc' }}
+                    >
+                      <span className="trigger-icon">{copiedBroadcast ? '✓' : '📋'}</span>
+                      <div className="trigger-copy">
+                        <div className="trigger-label">{copiedBroadcast ? 'Copied!' : 'Copy Text'}</div>
+                        <div className="trigger-meta">To Clipboard</div>
+                      </div>
+                    </button>
+
+                    <a
+                      id="btn-whatsapp-share"
+                      href={`https://wa.me/?text=${encodeURIComponent(broadcastText)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="compact-trigger-btn"
+                      style={{ flex: '1 1 140px', background: '#15803d', borderColor: '#16a34a', color: '#fff', textDecoration: 'none' }}
+                    >
+                      <span className="trigger-icon">🟢</span>
+                      <div className="trigger-copy">
+                        <div className="trigger-label">Post to WhatsApp</div>
+                        <div className="trigger-meta">Open Broadcast</div>
+                      </div>
+                    </a>
+                  </>
+                )}
+              </div>
+
+              {broadcastText && (
+                <div style={{ background: '#0b1329', border: '1px solid #1e293b', borderRadius: '6px', padding: '10px', fontSize: '11px', color: '#94a3b8', maxHeight: '120px', overflowY: 'auto', whiteSpace: 'pre-wrap', fontFamily: 'monospace' }}>
+                  {broadcastText}
+                </div>
+              )}
             </div>
           </div>
         </div>

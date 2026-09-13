@@ -277,14 +277,19 @@ export default function App() {
   // Strict RBAC: Check whether active user is an administrator
   const isAdmin = useMemo(() => {
     if (!currentUser) return false;
-    const email = currentUser.email?.toLowerCase();
+    const email = currentUser.email?.toLowerCase().trim();
+    const adminEmails = [
+      'chibzymart@gmail.com',
+      'whizzchibz@gmail.com',
+      'chibuezec.amuchie@gmail.com',
+      'chibuezeamuchie@gmail.com',
+      'nnamdiamuchie@gmail.com'
+    ];
     return (
       currentUser.user_metadata?.role === 'admin' ||
       (currentUser as any)?.app_metadata?.role === 'admin' ||
       profile?.role === 'admin' ||
-      email === 'chibzymart@gmail.com' ||
-      email === 'whizzchibz@gmail.com' ||
-      email === 'chibuezeamuchie@gmail.com'
+      (email ? adminEmails.includes(email) : false)
     );
   }, [currentUser, profile]);
 
@@ -300,7 +305,7 @@ export default function App() {
 
   const handleAuthSuccess = async () => {
     setIsAuthModalOpen(false);
-    await fetchCloudData();
+    await fetchCloudData(true);
     navigate('/dashboard');
   };
 
@@ -413,14 +418,16 @@ export default function App() {
       const embeddedPreds: FootballPrediction[] = [];
       const fixtureMap = new Map<string, QueueFixture>();
 
+      const userCanView = isAdmin || canViewPredictions;
+
       rawPredRecords.forEach((item: any) => {
         const f = item.fixture;
         if (!f) return;
 
-        const isLocked = item.is_locked === true || item.confidence_category === 'LOCKED';
+        const isLocked = !userCanView && (item.is_locked === true || item.confidence_category === 'LOCKED');
         if (!isLocked) {
           if (typeof item.probability !== 'number' || item.probability <= 0) return;
-          if (!item.prediction || !item.confidence_category) return;
+          if (!item.prediction || item.prediction === 'LOCKED') return;
         }
 
         embeddedPreds.push({
@@ -429,7 +436,7 @@ export default function App() {
           prediction: isLocked ? 'LOCKED' : item.prediction,
           market: item.market,
           probability: isLocked ? 0 : item.probability,
-          confidence_category: isLocked ? 'LOCKED' : item.confidence_category,
+          confidence_category: isLocked ? 'LOCKED' : ((item.confidence_category && item.confidence_category !== 'LOCKED') ? item.confidence_category : 'MID_CONFIDENCE'),
           secondary_predictions: item.secondary_predictions,
           metadata: item.metadata,
           settlement_status: item.settlement_status,
@@ -513,7 +520,7 @@ export default function App() {
   };
 
   useEffect(() => {
-    fetchCloudData();
+    fetchCloudData(true);
   }, [canViewPredictions, isAdmin]);
 
   // Index maps

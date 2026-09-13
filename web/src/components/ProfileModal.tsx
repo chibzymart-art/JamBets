@@ -37,6 +37,34 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
+  // Telegram VIP Bot state
+  const [telegramToken, setTelegramToken] = useState<string | null>(null);
+  const [telegramDeepLink, setTelegramDeepLink] = useState<string | null>(null);
+  const [telegramLoading, setTelegramLoading] = useState<boolean>(false);
+
+  const handleGenerateTelegramToken = async () => {
+    if (!profile) return;
+    setTelegramLoading(true);
+    try {
+      const res = await fetch('/api/telegram-auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: profile.id })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setTelegramToken(data.token);
+        setTelegramDeepLink(data.deepLink);
+      } else {
+        alert(data.error || 'Failed to generate Telegram connection code.');
+      }
+    } catch (e: any) {
+      alert(e.message || 'Error generating Telegram token.');
+    } finally {
+      setTelegramLoading(false);
+    }
+  };
+
   if (!isOpen || !profile) return null;
 
   const currentTier = (profile.role || subscription?.tier || 'free').toLowerCase();
@@ -210,6 +238,135 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
           <div className="profile-detail-card">
             <span className="detail-label">Member Since</span>
             <span className="detail-value">{formatLagosDate(profile.created_at)}</span>
+          </div>
+        </div>
+
+        {/* VIP Telegram Bot & WhatsApp Channel Hub */}
+        <div className="settings-section vip-integrations-section">
+          <div className="settings-section-header">
+            <span className="settings-section-icon">🤖</span>
+            <div>
+              <h3 className="settings-section-title">VIP Telegram Bot & WhatsApp Hub</h3>
+              <p className="settings-section-sub">Direct access to live 250,000-simulated predictions on your phone</p>
+            </div>
+          </div>
+
+          <div className="vip-integrations-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px', marginTop: '14px' }}>
+            {/* 1. Telegram Bot Card */}
+            <div style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: '10px', padding: '16px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                  <span style={{ fontSize: '15px', fontWeight: 700, color: '#38bdf8', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    ✈️ Telegram VIP Bot
+                  </span>
+                  {profile.telegram_chat_id ? (
+                    <span style={{ background: '#166534', color: '#86efac', padding: '2px 8px', borderRadius: '9999px', fontSize: '11px', fontWeight: 700 }}>
+                      CONNECTED 🟢
+                    </span>
+                  ) : (
+                    <span style={{ background: '#334155', color: '#cbd5e1', padding: '2px 8px', borderRadius: '9999px', fontSize: '11px', fontWeight: 700 }}>
+                      NOT LINKED
+                    </span>
+                  )}
+                </div>
+                <p style={{ fontSize: '12px', color: '#94a3b8', margin: '0 0 12px 0', lineHeight: 1.5 }}>
+                  Pull real-time predictions on demand via Telegram commands (<code>/today</code>, <code>/bangers</code>, <code>/goals</code>).
+                </p>
+
+                {profile.telegram_chat_id ? (
+                  <div style={{ background: '#1e293b', padding: '10px 12px', borderRadius: '6px', fontSize: '12px', color: '#cbd5e1', marginBottom: '12px' }}>
+                    <div>Chat ID: <code>{profile.telegram_chat_id}</code></div>
+                    {profile.telegram_username && <div>Username: <code>@{profile.telegram_username}</code></div>}
+                  </div>
+                ) : null}
+
+                {telegramToken && (
+                  <div style={{ background: '#1e293b', border: '1px dashed #38bdf8', padding: '12px', borderRadius: '8px', marginBottom: '12px', textAlign: 'center' }}>
+                    <div style={{ fontSize: '11px', color: '#94a3b8', marginBottom: '4px' }}>Your 15-Minute Link Code:</div>
+                    <div style={{ fontSize: '20px', fontWeight: 800, color: '#fbbf24', letterSpacing: '2px' }}>{telegramToken}</div>
+                    <div style={{ fontSize: '11px', color: '#64748b', marginTop: '4px' }}>Send <code>/link {telegramToken}</code> to @JamBets_Bot</div>
+                  </div>
+                )}
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '8px' }}>
+                {telegramDeepLink ? (
+                  <a
+                    href={telegramDeepLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="btn-update-password"
+                    style={{ textAlign: 'center', textDecoration: 'none', background: '#0284c7', padding: '10px', display: 'block' }}
+                  >
+                    Open Bot in Telegram ↗
+                  </a>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleGenerateTelegramToken}
+                    disabled={telegramLoading}
+                    className="btn-update-password"
+                    style={{ background: '#0284c7', padding: '10px' }}
+                  >
+                    {telegramLoading ? 'Generating Link...' : (profile.telegram_chat_id ? 'Re-link Telegram Account' : 'Connect Telegram VIP Bot ⚡')}
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* 2. VIP WhatsApp Community Card */}
+            <div style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: '10px', padding: '16px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                  <span style={{ fontSize: '15px', fontWeight: 700, color: '#4ade80', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    💬 WhatsApp VIP Community
+                  </span>
+                  {entitlement?.can_view_predictions ? (
+                    <span style={{ background: '#166534', color: '#86efac', padding: '2px 8px', borderRadius: '9999px', fontSize: '11px', fontWeight: 700 }}>
+                      VIP UNLOCKED 🔓
+                    </span>
+                  ) : (
+                    <span style={{ background: '#451a03', color: '#fcd34d', padding: '2px 8px', borderRadius: '9999px', fontSize: '11px', fontWeight: 700 }}>
+                      VIP ONLY 🔒
+                    </span>
+                  )}
+                </div>
+                <p style={{ fontSize: '12px', color: '#94a3b8', margin: '0 0 12px 0', lineHeight: 1.5 }}>
+                  Receive curated daily VIP pick drops, instant kickoff reminders, and consensus discussion in our private WhatsApp channel.
+                </p>
+
+                <div style={{ background: '#1e293b', padding: '10px 12px', borderRadius: '6px', fontSize: '12px', color: '#cbd5e1', marginBottom: '12px' }}>
+                  {entitlement?.can_view_predictions ? (
+                    <span style={{ color: '#86efac' }}>✓ Your active subscription grants access to the official JamBets VIP channel.</span>
+                  ) : (
+                    <span style={{ color: '#f87171' }}>Requires Standard (₦5k) or BigBang VIP plan to join the private group.</span>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                {entitlement?.can_view_predictions ? (
+                  <a
+                    href="https://chat.whatsapp.com/invite/JamBetsVIP"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="btn-update-password"
+                    style={{ textAlign: 'center', textDecoration: 'none', background: '#16a34a', padding: '10px', display: 'block' }}
+                  >
+                    Join VIP WhatsApp Group 🟢
+                  </a>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => handleTierChange('standard')}
+                    className="btn-update-password"
+                    style={{ background: '#d97706', padding: '10px', width: '100%' }}
+                  >
+                    Upgrade to Unlock WhatsApp VIP (₦5k)
+                  </button>
+                )}
+              </div>
+            </div>
           </div>
         </div>
 

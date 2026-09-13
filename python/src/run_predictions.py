@@ -31,6 +31,7 @@ from python.src.sources.fotmob import FotMobAdapter
 from python.src.sources.sportybet import SportyBetAdapter
 from python.src.sources.google_news import GoogleNewsAdapter
 from python.src.db.supabase_client import CloudSupabaseClient
+from python.src.alerts.email_notifier import send_pipeline_failure_alert, send_zero_predictions_alert
 
 
 def run():
@@ -333,8 +334,29 @@ def run():
         print(" ✅ SUCCESS: Exhaustive queue drain complete with EXACTLY ZERO pending orphans.")
     else:
         print(f" ⚠️ WARNING: {pending_count} fixtures remain in pending status.")
+
+    if len(fixtures_to_process) > 0 and published_count == 0:
+        print(" 🚨 ZERO PREDICTIONS ALERT: Evaluated fixtures but published 0 predictions.", flush=True)
+        send_zero_predictions_alert(
+            date_str=now_utc.strftime("%Y-%m-%d"),
+            matches_evaluated=len(fixtures_to_process),
+            context={
+                "data_unavailable_count": data_unavailable_count,
+                "pending_count": pending_count
+            }
+        )
+
     print("==================================================================")
 
 
 if __name__ == "__main__":
-    run()
+    try:
+        run()
+    except Exception as e:
+        print(f"\n[CRITICAL ERROR] Prediction Pipeline Failed: {e}", file=sys.stderr)
+        send_pipeline_failure_alert(
+            pipeline_name="Prediction Engine (Daily Sniper)",
+            error=e,
+            context={"timestamp": datetime.now(timezone.utc).isoformat()}
+        )
+        sys.exit(1)

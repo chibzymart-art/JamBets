@@ -553,9 +553,13 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
 
   const isLocked = !isAdmin && !canViewPredictions && !isSettled;
 
-  const tierConfig = getTierConfig(
-    isLocked ? 'LOCKED' : prediction.confidence_category || 'MID_CONFIDENCE'
-  );
+  const effectiveCategory = isLocked
+    ? 'LOCKED'
+    : (prediction.confidence_category && prediction.confidence_category !== 'LOCKED')
+      ? prediction.confidence_category
+      : 'MID_CONFIDENCE';
+
+  const tierConfig = getTierConfig(effectiveCategory);
 
   // Parse Secondary Predictions
   const secondaryList: SecondaryPrediction[] = React.useMemo(() => {

@@ -19,6 +19,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from python.src.db.supabase_client import CloudSupabaseClient
 from python.src.football.settlement_scheduler import SettlementScheduler
+from python.src.alerts.email_notifier import send_pipeline_failure_alert
 
 
 def main():
@@ -92,4 +93,13 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:
+        print(f"\n[CRITICAL ERROR] Settlement Engine Failed: {e}", file=sys.stderr)
+        send_pipeline_failure_alert(
+            pipeline_name="Settlement Engine (Live Score & Settlement)",
+            error=e,
+            context={"timestamp": datetime.now(timezone.utc).isoformat()}
+        )
+        sys.exit(1)

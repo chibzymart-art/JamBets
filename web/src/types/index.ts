@@ -286,6 +286,9 @@ export interface UserProfile {
   is_deleted?: boolean;
   status?: 'active' | 'disabled' | 'suspended';
   deleted_at?: string;
+  telegram_chat_id?: string | null;
+  telegram_username?: string | null;
+  whatsapp_phone?: string | null;
   created_at: string;
   updated_at?: string;
   subscription?: UserSubscription | null;
