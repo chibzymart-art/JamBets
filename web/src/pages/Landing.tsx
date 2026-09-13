@@ -130,39 +130,31 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             <div
               className="hero-bot-callout"
               onClick={onOpenBotHub}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '12px',
-                background: 'linear-gradient(135deg, rgba(2, 132, 199, 0.08) 0%, rgba(22, 163, 74, 0.08) 100%)',
-                border: '1px solid rgba(2, 132, 199, 0.25)',
-                borderRadius: '12px',
-                padding: '10px 16px',
-                margin: '12px 0 20px',
-                cursor: 'pointer',
-                transition: 'all 0.2s ease',
-                boxShadow: '0 2px 10px rgba(0, 0, 0, 0.03)',
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  onOpenBotHub?.();
+                }
               }}
+              title="Click to view Telegram & WhatsApp Bot Delivery details"
+              aria-label="Telegram and WhatsApp Bot Delivery information"
             >
-              <span style={{ fontSize: '22px' }}>🤖</span>
-              <div style={{ textAlign: 'left' }}>
-                <div style={{ fontSize: '13px', fontWeight: 800, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span>Get All Predictions on Telegram Bot & WhatsApp Bot</span>
-                  <span style={{ background: '#22c55e', color: '#ffffff', fontSize: '9px', fontWeight: 900, padding: '1px 6px', borderRadius: '9999px' }}>
-                    BOT ALERTS
-                  </span>
+              <span className="hero-bot-callout-icon">🤖</span>
+              <div className="hero-bot-callout-content">
+                <div className="hero-bot-callout-title">
+                  <span>Predictions on Telegram & WhatsApp</span>
+                  <span className="hero-bot-callout-badge">BOT ALERTS</span>
                 </div>
-                <div style={{ fontSize: '12px', color: '#475569', marginTop: '2px' }}>
-                  Instant /today, /bangers, Over 2.5 goals & kickoff alerts on your messaging apps ↗
+                <div className="hero-bot-callout-sub">
+                  Instant /today, /bangers & Over 2.5 goals pushed to your phone ↗
                 </div>
               </div>
-              <div style={{ display: 'flex', gap: '6px', marginLeft: 'auto' }}>
-                <span style={{ background: '#0284c7', color: '#ffffff', fontSize: '11px', fontWeight: 700, padding: '4px 10px', borderRadius: '6px' }}>
-                  ✈️ Telegram
-                </span>
-                <span style={{ background: '#16a34a', color: '#ffffff', fontSize: '11px', fontWeight: 700, padding: '4px 10px', borderRadius: '6px' }}>
-                  💬 WhatsApp
-                </span>
+              <div className="hero-bot-callout-actions">
+                <span className="hero-bot-pill telegram">✈️ Telegram</span>
+                <span className="hero-bot-pill whatsapp">💬 WhatsApp</span>
+                <span className="hero-bot-pill-mobile">⚡ VIP Bots ↗</span>
               </div>
             </div>
 
@@ -186,9 +178,10 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 <button
                   type="button"
                   id="btn-hero-bots"
-                  className="btn-hero-outline"
-                  style={{ borderColor: '#0284c7', color: '#0284c7', fontWeight: 700 }}
+                  className="btn-hero-outline btn-hero-bots-highlight"
                   onClick={onOpenBotHub}
+                  title="Click to view Telegram & WhatsApp Bot Delivery details & VIP setup"
+                  aria-label="Bot Delivery on Telegram and WhatsApp"
                 >
                   🤖 Bot Delivery (Telegram & WhatsApp)
                 </button>

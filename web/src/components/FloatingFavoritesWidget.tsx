@@ -117,7 +117,6 @@ export const FloatingFavoritesWidget: React.FC<FloatingFavoritesWidgetProps> = (
     if (e.button !== 0) return; // Only primary mouse button
     const currentX = position.x ?? (window.innerWidth - 72);
     const currentY = position.y ?? (window.innerHeight - 100);
-    const mouseStartTime = Date.now();
 
     dragStartRef.current = {
       startX: e.clientX,
@@ -144,10 +143,13 @@ export const FloatingFavoritesWidget: React.FC<FloatingFavoritesWidgetProps> = (
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('mouseup', onMouseUp);
 
-      if (!hasMovedRef.current || (Date.now() - mouseStartTime < 300)) {
-        hasMovedRef.current = false;
-        onToggleDrawer();
+      // If user dragged, keep hasMovedRef true briefly so trailing handleClick is suppressed
+      if (hasMovedRef.current) {
+        setTimeout(() => {
+          hasMovedRef.current = false;
+        }, 120);
       }
+      // Note: We do NOT call onToggleDrawer() here! The native click event (handleClick) handles it cleanly.
     };
 
     window.addEventListener('mousemove', onMouseMove);

@@ -1112,7 +1112,7 @@ export default function App() {
               type="button"
               id="btn-nav-favorites-cart"
               className="favorites-menu-cart-btn"
-              onClick={() => setIsFavoritesDrawerOpen(true)}
+              onClick={() => setIsFavoritesDrawerOpen((prev) => !prev)}
               title="View Favorites & Custom Slip"
               aria-label="Favorites & Custom Slip"
             >
@@ -2187,6 +2187,10 @@ export default function App() {
           setIsAuthModalOpen(true);
         }}
         onProfileUpdated={fetchCloudData}
+        onOpenPricing={() => {
+          setIsBotHubModalOpen(false);
+          setIsPricingModalOpen(true);
+        }}
       />
 
       {/* ALL 30 LEAGUES DIRECTORY MODAL */}
