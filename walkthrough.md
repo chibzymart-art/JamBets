@@ -240,3 +240,25 @@ Non-logged-in visitors were still seeing `🔥 Over 2.5 Hub` on `/predictions` b
   - TypeScript build succeeded with zero errors.
   - Deployed live to production on Vercel (`commit 14ed27e`).
 
+### Phase 3: Webhook Secret Validation & Secret Hygiene (SEC-03 & SEC-06) — COMPLETED
+- **Files Modified:**
+  - [`api/telegram-webhook.ts`](file:///c:/Users/HP/Documents/JamBets/api/telegram-webhook.ts) & [`web/api/telegram-webhook.ts`](file:///c:/Users/HP/Documents/JamBets/web/api/telegram-webhook.ts)
+  - [`web/api/telegram-auth.ts`](file:///c:/Users/HP/Documents/JamBets/web/api/telegram-auth.ts)
+  - [`api/goals-feed.ts`](file:///c:/Users/HP/Documents/JamBets/api/goals-feed.ts)
+  - [`.env`](file:///c:/Users/HP/Documents/JamBets/.env) & [`.env.example`](file:///c:/Users/HP/Documents/JamBets/.env.example)
+  - [`scripts/register_telegram_webhook.py`](file:///c:/Users/HP/Documents/JamBets/scripts/register_telegram_webhook.py)
+- **Security Hardening Applied:**
+  1. **Webhook Ingestion Authentication (`SEC-03`):**
+     - Handlers inspect incoming HTTP request headers for `X-Telegram-Bot-Api-Secret-Token`.
+     - When `TELEGRAM_WEBHOOK_SECRET` is configured in the environment, any request with a missing or invalid token is immediately aborted with `HTTP 401 Unauthorized: {"success":false,"error":"Unauthorized: Invalid webhook secret"}`.
+     - Telegram's official webhook was registered with the 46-character cryptographic secret `oddsbanta_sec_eKNDOozc2xvbxWBHZmAKV7sM908wZlob` via Telegram `setWebhook` API.
+  2. **Secret Hygiene & Hardcoded Key Elimination (`SEC-06`):**
+     - Completely removed hardcoded fallbacks for `SUPABASE_SERVICE_ROLE_KEY` and `TELEGRAM_BOT_TOKEN` in `api/telegram-webhook.ts` and `web/api/telegram-webhook.ts`.
+     - Endpoints now fail safely and log an alert with `HTTP 500` if required credentials are not provisioned in the hosting environment.
+  3. **File Mirroring & API Parity:**
+     - Synced `web/api/telegram-auth.ts` with root `api/telegram-auth.ts` to guarantee identical cryptographic token generation and session JWT validation.
+     - Synced `api/goals-feed.ts` with `web/api/goals-feed.ts` for consistent club `short_name` attributes and probability sorting.
+- **Verification Results:**
+  - Registered secret with Telegram API via `scripts/register_telegram_webhook.py`: verified `setWebhook` returned `ok: true` and `pending_update_count: 0`.
+  - TypeScript compilation and Vite production build succeeded with 0 errors.
+  - Deployed live to production on Vercel (`commit 5db04e1`).
