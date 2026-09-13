@@ -250,7 +250,8 @@ export default async function handler(req: Request) {
             `Welcome <b>${escapeHtml(linkResult.email)}</b>!\n` +
             `Your Oddsbanta profile is now linked.\n\n` +
             `<b>Available Commands:</b>\n` +
-            `• /today - All scheduled match predictions\n` +
+            `• /today - All scheduled match predictions (Today WAT)\n` +
+            `• /tomorrow - Tomorrow's match predictions (WAT)\n` +
             `• /bangers - Super Bankers (P ≥ 85%)\n` +
             `• /toppicks - Top Picks (90% - 95%)\n` +
             `• /high - High Confidence (80% - 89%)\n` +
@@ -282,7 +283,8 @@ export default async function handler(req: Request) {
           `• Access Tier: <b>${escapeHtml(authInfo.tier)}</b>\n` +
           `• VIP Status: <b>${authInfo.isPaid ? 'UNLOCKED ✅' : 'LOCKED 🔒'}</b>\n\n` +
           `<b>Ready to pull calibrated predictions:</b>\n` +
-          `• /today - All active predictions\n` +
+          `• /today - All active predictions (Today WAT)\n` +
+          `• /tomorrow - Tomorrow's predictions (WAT)\n` +
           `• /bangers - Super Bankers (P ≥ 85%)\n` +
           `• /toppicks - Top Picks (90% - 95%)\n` +
           `• /high - High Confidence (80% - 89%)\n` +
@@ -326,7 +328,7 @@ export default async function handler(req: Request) {
           `🎉 <b>Account Connected Successfully!</b>\n\n` +
           `Welcome <b>${escapeHtml(linkResult.email)}</b>!\n` +
           `You can now pull predictions anytime using:\n` +
-          `• /today\n• /bangers\n• /toppicks\n• /high\n• /goals\n• /status`
+          `• /today\n• /tomorrow\n• /bangers\n• /toppicks\n• /high\n• /goals\n• /status`
         );
       } else {
         await sendTelegramMessage(
@@ -384,7 +386,8 @@ export default async function handler(req: Request) {
         `Postponed or abandoned matches are marked as ⊘ VOID. They do not count as a loss.\n\n` +
         `━━━━━━━━━━━━━━━━━━━━\n` +
         `📋 <b>BOT COMMANDS LIST:</b>\n\n` +
-        `• /today - All verified active predictions\n` +
+        `• /today - All verified active predictions (Today WAT)\n` +
+        `• /tomorrow - Tomorrow's verified predictions (WAT)\n` +
         `• /bangers - Super Bankers (P ≥ 85%)\n` +
         `• /toppicks - Top Picks (90% - 95%)\n` +
         `• /high - High Confidence (80% - 89%)\n` +
@@ -450,13 +453,18 @@ function formatMarket(mkt: string): string {
   if (m === 'over_under_1.5') return 'Over/Under 1.5';
   if (m === 'over_under_2.5') return 'Over/Under 2.5';
   if (m === 'over_under_3.5') return 'Over/Under 3.5';
+  if (m === 'over_under_4.5') return 'Over/Under 4.5';
   if (m === 'btts') return 'Both Teams to Score';
   if (m === 'double_chance') return 'Double Chance';
   if (m === 'moneyline' || m === '1x2') return 'Match Result (1X2)';
   if (m === 'home_goals_0.5') return 'Home Over 0.5';
   if (m === 'away_goals_0.5') return 'Away Over 0.5';
-  if (m === '1h_goals_0.5') return '1st Half Over 0.5';
+  if (m === 'home_goals_1.5') return 'Home Over 1.5';
+  if (m === 'away_goals_1.5') return 'Away Over 1.5';
+  if (m === '1h_goals_0.5' || m === 'ht_goals_0.5') return '1st Half Over 0.5';
+  if (m === '1h_goals_1.5' || m === 'ht_goals_1.5') return '1st Half Over 1.5';
   if (m === '2h_goals_0.5') return '2nd Half Over 0.5';
+  if (m === '2h_goals_1.5') return '2nd Half Over 1.5';
   if (m.startsWith('corners_')) return `Corners ${m.replace('corners_', '')}`;
   return (mkt || '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 }
@@ -491,18 +499,75 @@ function normalizeCategory(cat: any, prob: number): string {
   return 'CONSENSUS';
 }
 
-interface PredictionFeedItem {
-  fixture: any;
-  prediction: string;
-  market: string;
-  probability: number;
-  confidenceCategory: string;
-  targetKickoffAt: string;
-  isSecondary: boolean;
+function getLagosDateBoundaries(offsetDays: number = 0): { startUtc: string; endUtc: string; lagosDateStr: string; displayDate: string } {
+  const now = new Date();
+  const lagosTodayStr = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Africa/Lagos',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).format(now);
+
+  const [y, m, d] = lagosTodayStr.split('-').map(Number);
+  const startUtcDate = new Date(Date.UTC(y, m - 1, d + offsetDays, -1, 0, 0, 0));
+  const endUtcDate = new Date(Date.UTC(y, m - 1, d + offsetDays, 22, 59, 59, 999));
+
+  const targetDateObj = new Date(Date.UTC(y, m - 1, d + offsetDays, 12, 0, 0));
+  const targetLagosStr = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Africa/Lagos',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).format(targetDateObj);
+
+  const displayDate = targetDateObj.toLocaleDateString('en-GB', {
+    timeZone: 'UTC',
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short'
+  });
+
+  return {
+    startUtc: startUtcDate.toISOString(),
+    endUtc: endUtcDate.toISOString(),
+    lagosDateStr: targetLagosStr,
+    displayDate,
+  };
 }
 
-    // 6. ROUTE PREDICTION COMMANDS: /today, /bangers, /toppicks, /high, /mid, /low, /goals
-    const predCommands = ['/today', '/bangers', '/toppicks', '/top', '/high', '/mid', '/low', '/goals'];
+interface SecondaryLeanItem {
+  market: string;
+  prediction: string;
+  probability: number;
+  confidenceCategory: string;
+  formattedMkt: string;
+  formattedPick: string;
+}
+
+interface TelegramFixtureCard {
+  fixtureId: string;
+  homeTeam: string;
+  awayTeam: string;
+  leagueCode: string;
+  kickoffTimeWat: string;
+  targetKickoffAt: string;
+  isBankerPass: boolean;
+  primaryMarket: string;
+  primaryPick: string;
+  primaryProbability: number;
+  primaryCategory: string;
+  secondaryLeans: SecondaryLeanItem[];
+  maxProbability: number;
+  hasBanger: boolean;
+  hasTopPick: boolean;
+  hasHigh: boolean;
+  hasMid: boolean;
+  hasLow: boolean;
+  hasGoalLean: boolean;
+}
+
+    // 6. ROUTE PREDICTION COMMANDS: /today, /tomorrow, /bangers, /toppicks, /high, /mid, /low, /goals
+    const predCommands = ['/today', '/tomorrow', '/bangers', '/toppicks', '/top', '/high', '/mid', '/low', '/goals'];
     if (predCommands.includes(commandToken)) {
       const user = await getLinkedUser(chatId);
       if (!user) {
@@ -529,20 +594,24 @@ interface PredictionFeedItem {
         return new Response(JSON.stringify({ ok: true }), { status: 200 });
       }
 
-      // User is VIP/Admin! Query unredacted predictions from Supabase
+      // Date scoping strictly in Africa/Lagos (WAT, UTC+1)
+      const isTomorrow = commandToken === '/tomorrow';
+      const dateRange = getLagosDateBoundaries(isTomorrow ? 1 : 0);
+
+      // Query database with strict WAT window & deterministic tie-breaker
       const headers = {
         apikey: SUPABASE_SERVICE_ROLE_KEY,
         Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
       };
 
       const selectFields = encodeURIComponent(
-        'id,prediction,market,probability,confidence_category,target_kickoff_at,secondary_predictions,fixture:football_fixtures!inner(id,target_kickoff_at,status,home_team:football_teams!football_fixtures_home_team_id_fkey(name),away_team:football_teams!football_fixtures_away_team_id_fkey(name),league:football_leagues!inner(code,name,country))'
+        'id,fixture_id,prediction,market,probability,confidence_category,secondary_predictions,target_kickoff_at,fixture:football_fixtures!inner(id,target_kickoff_at,status,home_team:football_teams!football_fixtures_home_team_id_fkey(name),away_team:football_teams!football_fixtures_away_team_id_fkey(name),league:football_leagues!inner(code,name,country))'
       );
 
-      const res = await fetch(
-        `${SUPABASE_URL}/rest/v1/football_predictions?select=${selectFields}&publication_status=eq.published&settlement_status=eq.pending&order=target_kickoff_at.asc&limit=100`,
-        { headers }
-      );
+      const andFilter = encodeURIComponent(`(target_kickoff_at.gte.${dateRange.startUtc},target_kickoff_at.lte.${dateRange.endUtc})`);
+      const queryUrl = `${SUPABASE_URL}/rest/v1/football_predictions?select=${selectFields}&publication_status=eq.published&and=${andFilter}&order=target_kickoff_at.asc,id.asc&limit=200`;
+
+      const res = await fetch(queryUrl, { headers });
 
       if (!res.ok) {
         await sendTelegramMessage(chatId, '⚠️ Error pulling predictions from database. Please try again shortly.');
@@ -551,35 +620,40 @@ interface PredictionFeedItem {
 
       const rawPreds: any[] = await res.json();
       if (!Array.isArray(rawPreds) || rawPreds.length === 0) {
-        await sendTelegramMessage(chatId, '⚽ No upcoming scheduled predictions found in the active queue.');
+        await sendTelegramMessage(
+          chatId,
+          `⚽ No scheduled predictions found for <b>${dateRange.displayDate}</b>.\n\nUse /today or /tomorrow to check fixtures, or check back after the next automated simulation run!`
+        );
         return new Response(JSON.stringify({ ok: true }), { status: 200 });
       }
 
-      // Flatten primary + secondary predictions into unified feed items
-      const allItems: PredictionFeedItem[] = [];
+      // Group into 1 fixture = 1 card
+      const fixtureCards: TelegramFixtureCard[] = [];
 
       for (const p of rawPreds) {
-        const prob = normalizeProbability(p.probability);
-        const predStr = String(p.prediction || '').trim();
-        const mktStr = String(p.market || '').trim();
-        const catStr = normalizeCategory(p.confidence_category, prob);
+        const f = p.fixture;
+        const home = f?.home_team?.name?.replace(/-/g, ' ') || 'Home';
+        const away = f?.away_team?.name?.replace(/-/g, ' ') || 'Away';
+        const league = f?.league?.code || f?.league?.name || 'League';
+        const kickoffIso = p.target_kickoff_at || f?.target_kickoff_at;
+        const kickoffWat = new Date(kickoffIso).toLocaleTimeString('en-GB', {
+          hour: '2-digit',
+          minute: '2-digit',
+          timeZone: 'Africa/Lagos',
+        });
 
-        if (
-          predStr &&
-          predStr.toUpperCase() !== 'SKIP' &&
-          mktStr.toUpperCase() !== 'NO_SAFE_BANKER' &&
-          catStr !== 'NO SAFE BANKER'
-        ) {
-          allItems.push({
-            fixture: p.fixture,
-            prediction: predStr,
-            market: mktStr,
-            probability: prob,
-            confidenceCategory: catStr,
-            targetKickoffAt: p.target_kickoff_at || p.fixture?.target_kickoff_at,
-            isSecondary: false,
-          });
-        }
+        const rawMkt = String(p.market || '').trim();
+        const rawPred = String(p.prediction || '').trim();
+        const rawCat = String(p.confidence_category || '').trim();
+        const isPass =
+          !rawPred ||
+          rawPred.toUpperCase() === 'SKIP' ||
+          rawMkt.toUpperCase() === 'NO_SAFE_BANKER' ||
+          rawCat.toUpperCase() === 'NO_SAFE_BANKER' ||
+          rawCat.toUpperCase() === 'NO SAFE BANKER';
+
+        const primProb = normalizeProbability(p.probability);
+        const primCat = isPass ? 'NO SAFE BANKER' : normalizeCategory(p.confidence_category, primProb);
 
         let sec = p.secondary_predictions;
         if (typeof sec === 'string') {
@@ -589,75 +663,110 @@ interface PredictionFeedItem {
             sec = [];
           }
         }
+
+        const secondaryLeans: SecondaryLeanItem[] = [];
         if (Array.isArray(sec)) {
           for (const s of sec) {
             const sProb = normalizeProbability(s.probability || s.prob);
             const sPred = String(s.prediction || '').trim();
             const sMkt = String(s.market || '').trim();
             const sCat = normalizeCategory(s.confidence_tier || s.tier, sProb);
-
-            if (
-              sPred &&
-              sMkt &&
-              sPred.toUpperCase() !== 'SKIP' &&
-              sMkt.toUpperCase() !== 'NO_SAFE_BANKER'
-            ) {
-              allItems.push({
-                fixture: p.fixture,
-                prediction: sPred,
+            if (sPred && sMkt && sPred.toUpperCase() !== 'SKIP' && sMkt.toUpperCase() !== 'NO_SAFE_BANKER') {
+              secondaryLeans.push({
                 market: sMkt,
+                prediction: sPred,
                 probability: sProb,
                 confidenceCategory: sCat,
-                targetKickoffAt: p.target_kickoff_at || p.fixture?.target_kickoff_at,
-                isSecondary: true,
+                formattedMkt: formatMarket(sMkt),
+                formattedPick: formatOutcome(sPred, sMkt),
               });
             }
           }
         }
+        secondaryLeans.sort((a, b) => b.probability - a.probability);
+
+        let maxProb = isPass ? 0 : primProb;
+        for (const s of secondaryLeans) {
+          if (s.probability > maxProb) maxProb = s.probability;
+        }
+
+        const isGoalMatch = (m: string, pr: string) => {
+          const ml = m.toLowerCase();
+          const pl = pr.toLowerCase();
+          return (
+            ml.includes('over') ||
+            ml.includes('under') ||
+            ml.includes('goal') ||
+            ml.includes('btts') ||
+            pl.includes('over') ||
+            pl.includes('under') ||
+            pl.includes('goal')
+          );
+        };
+
+        const hasBanger = (!isPass && (primCat === 'BANGER' || primProb >= 85)) || secondaryLeans.some(s => s.confidenceCategory === 'BANGER' || s.probability >= 85);
+        const hasTopPick = (!isPass && (primCat === 'TOP PICK' || (primProb >= 90 && primProb < 96))) || secondaryLeans.some(s => s.confidenceCategory === 'TOP PICK' || (s.probability >= 90 && s.probability < 96));
+        const hasHigh = (!isPass && (primCat === 'HIGH CONFIDENCE' || (primProb >= 80 && primProb < 90))) || secondaryLeans.some(s => s.confidenceCategory === 'HIGH CONFIDENCE' || (s.probability >= 80 && s.probability < 90));
+        const hasMid = (!isPass && (primCat === 'MID CONFIDENCE' || (primProb >= 70 && primProb < 80))) || secondaryLeans.some(s => s.confidenceCategory === 'MID CONFIDENCE' || (s.probability >= 70 && s.probability < 80));
+        const hasLow = (!isPass && (primCat === 'LOW CONFIDENCE' || (primProb > 0 && primProb < 70))) || secondaryLeans.some(s => s.confidenceCategory === 'LOW CONFIDENCE' || (s.probability > 0 && s.probability < 70));
+        const hasGoalLean = (!isPass && isGoalMatch(rawMkt, rawPred)) || secondaryLeans.some(s => isGoalMatch(s.market, s.prediction));
+
+        fixtureCards.push({
+          fixtureId: p.fixture_id || f?.id,
+          homeTeam: home,
+          awayTeam: away,
+          leagueCode: league,
+          kickoffTimeWat: kickoffWat,
+          targetKickoffAt: kickoffIso,
+          isBankerPass: isPass,
+          primaryMarket: rawMkt,
+          primaryPick: rawPred,
+          primaryProbability: primProb,
+          primaryCategory: primCat,
+          secondaryLeans,
+          maxProbability: maxProb,
+          hasBanger,
+          hasTopPick,
+          hasHigh,
+          hasMid,
+          hasLow,
+          hasGoalLean,
+        });
       }
 
-      let categoryTitle = 'ALL ACTIONABLE PREDICTIONS';
-      let filtered: PredictionFeedItem[] = [];
+      let categoryTitle = 'ALL MATCHES';
+      let filtered: TelegramFixtureCard[] = [];
 
       if (commandToken === '/today') {
-        categoryTitle = 'ALL ACTIVE PREDICTIONS';
-        filtered = allItems.filter(i => !i.isSecondary || i.probability >= 80);
+        categoryTitle = `TODAY'S FIXTURES (${dateRange.displayDate})`;
+        filtered = fixtureCards;
+      } else if (commandToken === '/tomorrow') {
+        categoryTitle = `TOMORROW'S FIXTURES (${dateRange.displayDate})`;
+        filtered = fixtureCards;
       } else if (commandToken === '/bangers') {
-        categoryTitle = '🔥 SUPER BANGERS (P ≥ 85%)';
-        filtered = allItems.filter(i => i.confidenceCategory === 'BANGER' || i.probability >= 85);
+        categoryTitle = `🔥 SUPER BANGERS (P ≥ 85%-96%+) • ${dateRange.displayDate}`;
+        filtered = fixtureCards.filter(c => c.hasBanger);
       } else if (commandToken === '/toppicks' || commandToken === '/top') {
-        categoryTitle = '⭐ TOP PICKS (90% - 95%)';
-        filtered = allItems.filter(i => i.confidenceCategory === 'TOP PICK' || (i.probability >= 90 && i.probability < 96));
+        categoryTitle = `⭐ TOP PICKS (90% - 95%) • ${dateRange.displayDate}`;
+        filtered = fixtureCards.filter(c => c.hasTopPick);
       } else if (commandToken === '/high') {
-        categoryTitle = '🟢 HIGH CONFIDENCE (80% - 89%)';
-        filtered = allItems.filter(i => i.confidenceCategory === 'HIGH CONFIDENCE' || (i.probability >= 80 && i.probability < 90));
+        categoryTitle = `🟢 HIGH CONFIDENCE (80% - 89%) • ${dateRange.displayDate}`;
+        filtered = fixtureCards.filter(c => c.hasHigh);
       } else if (commandToken === '/mid') {
-        categoryTitle = '🔵 MID CONFIDENCE (70% - 79%)';
-        filtered = allItems.filter(i => i.confidenceCategory === 'MID CONFIDENCE' || (i.probability >= 70 && i.probability < 80));
+        categoryTitle = `🔵 MID CONFIDENCE (70% - 79%) • ${dateRange.displayDate}`;
+        filtered = fixtureCards.filter(c => c.hasMid);
       } else if (commandToken === '/low') {
-        categoryTitle = '🟡 LOW CONFIDENCE VALUE LEANS (< 70%)';
-        filtered = allItems.filter(i => i.confidenceCategory === 'LOW CONFIDENCE' || (i.probability > 0 && i.probability < 70));
+        categoryTitle = `🟡 LOW CONFIDENCE VALUE LEANS (< 70%) • ${dateRange.displayDate}`;
+        filtered = fixtureCards.filter(c => c.hasLow);
       } else if (commandToken === '/goals') {
-        categoryTitle = '⚡ OVER 2.5 &amp; GOALS HUB';
-        filtered = allItems.filter(i => {
-          const m = i.market.toLowerCase();
-          const pr = i.prediction.toLowerCase();
-          return (
-            m.includes('over') ||
-            m.includes('under') ||
-            m.includes('goal') ||
-            m.includes('btts') ||
-            pr.includes('over') ||
-            pr.includes('under') ||
-            pr.includes('goal')
-          );
-        });
+        categoryTitle = `⚡ OVER 2.5 &amp; GOALS HUB • ${dateRange.displayDate}`;
+        filtered = fixtureCards.filter(c => c.hasGoalLean);
       }
 
       if (filtered.length === 0) {
         await sendTelegramMessage(
           chatId,
-          `⚽ No matching actionable predictions found for <b>${escapeHtml(commandToken)}</b> right now.\n\nUse /today to see all active predictions, or check back after the next automated simulation run!`
+          `⚽ No matching predictions found for <b>${escapeHtml(commandToken)}</b> on ${dateRange.displayDate}.\n\nUse /today or /tomorrow to see all matches, or check back after the next simulation run!`
         );
         return new Response(JSON.stringify({ ok: true }), { status: 200 });
       }
@@ -665,35 +774,38 @@ interface PredictionFeedItem {
       // Build Telegram message
       let reply = `⚽ <b>Oddsbanta VIP Predictions</b>\n`;
       reply += `🏷️ <b>Filter:</b> ${categoryTitle}\n`;
-      reply += `📅 Generated with 250,000 Poisson-Monte Carlo draws\n\n`;
+      reply += `📅 250,000 Poisson-Monte Carlo draws • Total: <b>${filtered.length} matches</b>\n\n`;
 
       filtered.slice(0, 10).forEach((item, idx) => {
-        const f = item.fixture;
-        const home = escapeHtml(f?.home_team?.name?.replace(/-/g, ' ') || 'Home');
-        const away = escapeHtml(f?.away_team?.name?.replace(/-/g, ' ') || 'Away');
-        const league = escapeHtml(f?.league?.code || f?.league?.name || 'League');
-        const prob = item.probability;
-        const formattedMkt = escapeHtml(formatMarket(item.market));
-        const formattedPick = escapeHtml(formatOutcome(item.prediction, item.market));
-        const cat = escapeHtml(item.confidenceCategory);
-        const tag = item.isSecondary ? ' <i>[Value Lean]</i>' : '';
-        const time = new Date(item.targetKickoffAt).toLocaleTimeString('en-GB', {
-          hour: '2-digit',
-          minute: '2-digit',
-          timeZone: 'Africa/Lagos',
-        });
+        reply += `<b>${idx + 1}. ${escapeHtml(item.homeTeam)} vs ${escapeHtml(item.awayTeam)}</b>\n`;
+        reply += `🏆 ${escapeHtml(item.leagueCode)} • ⏰ ${item.kickoffTimeWat} WAT\n`;
 
-        reply += `<b>${idx + 1}. ${home} vs ${away}</b>${tag}\n`;
-        reply += `🏆 ${league} • ⏰ ${time} WAT\n`;
-        reply += `🎯 Pick: <b>${formattedPick}</b> (${formattedMkt})\n`;
-        reply += `📊 Certainty: <b>${prob}%</b> • Tier: <code>${cat}</code>\n\n`;
+        if (item.isBankerPass) {
+          reply += `🎯 <b>Banker:</b> 🛡️ <i>Risk Guard: Pass (No Safe Banker)</i>\n`;
+          if (item.secondaryLeans.length > 0) {
+            const topLean = item.secondaryLeans[0];
+            reply += `  • <i>Top Value Lean: ${escapeHtml(topLean.formattedPick)} (${escapeHtml(topLean.formattedMkt)}) — <b>${topLean.probability}%</b> [${escapeHtml(topLean.confidenceCategory)}]</i>\n`;
+          }
+        } else {
+          const mktFmt = escapeHtml(formatMarket(item.primaryMarket));
+          const pickFmt = escapeHtml(formatOutcome(item.primaryPick, item.primaryMarket));
+          reply += `🎯 <b>Banker:</b> <b>${pickFmt}</b> (${mktFmt})\n`;
+          reply += `📊 Certainty: <b>${item.primaryProbability}%</b> • Tier: <code>${escapeHtml(item.primaryCategory)}</code>\n`;
+          if (item.secondaryLeans.length > 0) {
+            const topLeans = item.secondaryLeans.slice(0, 2);
+            for (const s of topLeans) {
+              reply += `  • <i>Value Lean: ${escapeHtml(s.formattedPick)} (${escapeHtml(s.formattedMkt)}) — ${s.probability}%</i>\n`;
+            }
+          }
+        }
+        reply += `\n`;
       });
 
       if (filtered.length > 10) {
         reply += `<i>...and ${filtered.length - 10} more fixtures on <a href="https://oddsbanta.com/dashboard">Oddsbanta Dashboard</a></i>\n\n`;
       }
 
-      reply += `Quick Filters: /bangers | /toppicks | /high | /mid | /low | /goals`;
+      reply += `Quick Commands: /today | /tomorrow | /bangers | /toppicks | /goals`;
 
       await sendTelegramMessage(chatId, reply);
       return new Response(JSON.stringify({ ok: true }), { status: 200 });

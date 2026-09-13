@@ -321,3 +321,33 @@ Non-logged-in visitors were still seeing `🔥 Over 2.5 Hub` on `/predictions` b
     - **Deterministic Seed Test:** Independent runs of 250,000 Monte Carlo draws for the same fixture produced identical seed `1984511406`, 100% identical simulated hits, and 100% identical market probabilities across all markets.
     - **Publication Lock Test:** Tested against existing published fixture `42d78b15-426a-4c6c-b9f0-582789d669ce`. Verified `[PUBLICATION LOCKED]` triggered, returning status `PUBLISHED` with `persisted_predictions_count == 0` (zero database writes).
   - Production build in `web/` tested and clean.
+
+---
+
+### Phase 4: Telegram Bot Lagos WAT Date Scoping & Primary Banker Alignment — COMPLETED
+- **Root Cause Addressed:**
+  - The Telegram bot previously queried `football_predictions` with `limit=100` and zero date filtering, causing matches from yesterday/tomorrow to be returned in arbitrary order, diverging completely from the Web UI's Today tab.
+  - Secondary prediction leans were flattened into separate fixture cards, causing 1 match to consume multiple spots in Telegram messages while misrepresenting value leans as primary picks.
+  - Matches with `NO_SAFE_BANKER` were skipped entirely, desynchronizing the match roster between the bot and the web app.
+  - The bot lacked a `/tomorrow` command.
+- **Files Modified:**
+  - [`api/telegram-webhook.ts`](file:///c:/Users/HP/Documents/JamBets/api/telegram-webhook.ts) & [`web/api/telegram-webhook.ts`](file:///c:/Users/HP/Documents/JamBets/web/api/telegram-webhook.ts):
+    - Added `getLagosDateBoundaries(offsetDays)` dynamically deriving exact start and end UTC timestamps for Africa/Lagos (WAT, UTC+1).
+    - Query uses PostgREST `and=(target_kickoff_at.gte.${startUtc},target_kickoff_at.lte.${endUtc})` with deterministic tie-breaker `order=target_kickoff_at.asc,id.asc&limit=200`.
+    - Added full support for `/tomorrow` command.
+    - Aggregated predictions so **1 fixture = 1 card**: displays the Authoritative Primary Banker (matching the Web UI card) with secondary value leans nested underneath as indented bullet points.
+    - Explicitly displays `🎯 Banker: 🛡️ Risk Guard: Pass (No Safe Banker)` when a fixture has no safe banker edge, with its top value lean underneath.
+    - Synced `web/api/telegram-webhook.ts` with `api/telegram-webhook.ts` in 100% parity.
+- **Verification Results:**
+  - Ran [`scratch/test_phase4_telegram_alignment.js`](file:///c:/Users/HP/Documents/JamBets/scratch/test_phase4_telegram_alignment.js):
+    - Verified Today matches count matches Web UI: **112 matches (100% match)**.
+    - Verified Tomorrow matches count matches Web UI: **31 matches (100% match)**.
+    - Verified 100% identical match sequence across all 112 fixtures for Today and 31 fixtures for Tomorrow.
+  - Ran end-to-end webhook handler test [`scratch/test_webhook_end_to_end.ts`](file:///c:/Users/HP/Documents/JamBets/scratch/test_webhook_end_to_end.ts):
+    - Tested `/today`: 112 matches, dispatched with clean HTML formatting and primary bankers.
+    - Tested `/tomorrow`: 31 matches, dispatched with clean HTML formatting and primary bankers.
+    - Tested `/bangers`: 57 matches with Super Banker conviction (P ≥ 85%-96%+).
+    - Tested `/toppicks`: 37 matches with Top Pick conviction (90%-95%).
+    - Tested `/goals`: 112 matches with Goals / Over / BTTS alignment.
+  - Frontend production build (`npm run build`) succeeded with zero errors.
+
