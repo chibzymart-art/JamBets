@@ -6,6 +6,7 @@ export interface MarketSwitchboardNavProps {
   onSelectMarket: (market: MarketType) => void;
   counts?: Record<MarketType, number>;
   loading?: boolean;
+  embedded?: boolean;
 }
 
 interface MarketTabConfig {
@@ -81,9 +82,10 @@ export const MarketSwitchboardNav: React.FC<MarketSwitchboardNavProps> = ({
   onSelectMarket,
   counts,
   loading = false,
+  embedded = false,
 }) => {
   return (
-    <div className="market-switchboard-container">
+    <div className={`market-switchboard-container ${embedded ? 'embedded' : ''}`}>
       {/* Top Section Header - PREDICTED MARKETS */}
       <div className="switchboard-header">
         <div className="switchboard-title-group">

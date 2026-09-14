@@ -1227,14 +1227,7 @@ export default function App() {
               </Link>
             )}
 
-            {isAdmin && (
-              <Link
-                to="/admin"
-                className={`admin-header-pill ${location.pathname === '/admin' ? 'active-admin' : ''}`}
-              >
-                🛡 Admin Deck
-              </Link>
-            )}
+
 
             {!currentUser && (
               <button
@@ -1629,18 +1622,7 @@ export default function App() {
           ))}
         </div>
 
-        {/* 2.1 FOOTBALL MARKET TERMINAL (MOVED DIRECTLY UNDER SPORT TYPES) */}
-        {selectedSport === 'football' && (
-          <MarketSwitchboardNav
-            activeMarket={activeMarket}
-            onSelectMarket={handleSelectMarket}
-            counts={{
-              ...marketCounts,
-              general: filteredFixtures.length || fixtures.length,
-            }}
-            loading={marketLoading}
-          />
-        )}
+
 
         {/* Dynamic Sport Availability: High-Engaging Retaining AI Simulation Loading Experience */}
         {loading && selectedSport === 'football' && fixtures.length === 0 ? (
@@ -1758,7 +1740,7 @@ export default function App() {
                   onChange={(e) => setSelectedLeague(e.target.value)}
                   aria-label="Filter by League"
                 >
-                  <option value="all">All {currentSportObj.name} Leagues ({fixtures.length})</option>
+                  <option value="all">All Leagues ({fixtures.length})</option>
                   {availableLeagues.map((lg) => (
                     <option key={lg.code} value={lg.code}>
                       {lg.name} ({lg.count})
@@ -1767,16 +1749,22 @@ export default function App() {
                 </select>
                 <span className="scorecard-league-arrow">▾</span>
               </div>
-              <button
-                type="button"
-                className="btn-scorecard-browse-leagues"
-                onClick={() => setIsAllLeaguesModalOpen(true)}
-                title="Browse all 30 leagues in directory"
-              >
-                🏛 Browse All (30)
-              </button>
             </div>
           </div>
+
+          {/* PREDICTED MARKETS (CENTERED ON DESKTOP, SWIPABLE ON MOBILE) */}
+          {selectedSport === 'football' && (
+            <MarketSwitchboardNav
+              embedded={true}
+              activeMarket={activeMarket}
+              onSelectMarket={handleSelectMarket}
+              counts={{
+                ...marketCounts,
+                general: filteredFixtures.length || fixtures.length,
+              }}
+              loading={marketLoading}
+            />
+          )}
 
           {/* Date Navigation Pills Bar: Strictly Ordered: All Dates | Yesterday | Today | Tomorrow | Day +2 | Day +3 | Day +4 */}
           <div className="date-nav-pills-bar">

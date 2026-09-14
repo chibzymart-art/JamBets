@@ -1273,8 +1273,8 @@ body {
   background: #ffffff;
   border: 1px solid var(--border-subtle);
   border-radius: 14px;
-  padding: 10px 18px 12px;
-  margin-bottom: 14px;
+  padding: 8px 14px 10px;
+  margin-bottom: 12px;
   box-shadow: var(--shadow-xs);
 }
 
@@ -1282,26 +1282,32 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 8px;
-  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 6px;
+  flex-wrap: nowrap;
+  width: 100%;
 }
 
 .scorecard-league-filter-inline {
   display: inline-flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 6px;
+  flex-shrink: 1;
+  min-width: 0;
 }
 
 .scorecard-league-select-wrapper {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
   background: #f8fafc;
   border: 1px solid var(--border-subtle, #e2e8f0);
   border-radius: 8px;
   padding: 3px 8px;
   transition: all 0.2s ease;
+  max-width: 190px;
+  min-width: 0;
 }
 
 .scorecard-league-select-wrapper:hover,
@@ -1314,6 +1320,7 @@ body {
 .scorecard-league-icon {
   font-size: 12px;
   color: #f59e0b;
+  flex-shrink: 0;
 }
 
 .scorecard-league-select {
@@ -1327,53 +1334,51 @@ body {
   color: var(--text-primary, #0f172a);
   cursor: pointer;
   padding-right: 4px;
-  max-width: 220px;
+  max-width: 155px;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
 }
 
 .scorecard-league-arrow {
   font-size: 9px;
   color: #64748b;
   pointer-events: none;
-}
-
-.btn-scorecard-browse-leagues {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  background: #f1f5f9;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  padding: 3px 8px;
-  font-family: var(--font-heading, 'Outfit', sans-serif);
-  font-size: 11px;
-  font-weight: 700;
-  color: #0f172a;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: all 0.15s ease;
-}
-
-.btn-scorecard-browse-leagues:hover {
-  background: #e2e8f0;
-  border-color: #cbd5e1;
+  flex-shrink: 0;
 }
 
 @media (max-width: 640px) {
   .scorecard-date-header {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 6px;
+    flex-direction: row !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 6px !important;
+    margin-bottom: 6px !important;
+    flex-wrap: nowrap !important;
+    width: 100% !important;
   }
   .scorecard-league-filter-inline {
-    width: 100%;
-    justify-content: space-between;
+    width: auto !important;
+    justify-content: flex-end !important;
+    flex-shrink: 1 !important;
+    min-width: 0 !important;
   }
   .scorecard-league-select-wrapper {
-    flex: 1;
+    flex: initial !important;
+    max-width: 145px !important;
+    padding: 2px 6px !important;
   }
   .scorecard-league-select {
-    max-width: 100%;
-    width: 100%;
+    max-width: 115px !important;
+    font-size: 10.5px !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+  }
+  .current-date-badge {
+    flex-shrink: 0 !important;
+    padding: 2px 8px !important;
+    font-size: 11px !important;
   }
 }
 
@@ -11190,7 +11195,14 @@ body {
   }
 
   .scorecard-date-header {
-    margin-bottom: 10px !important;
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 6px !important;
+    margin-bottom: 6px !important;
+    flex-wrap: nowrap !important;
+    width: 100% !important;
   }
 
   /* Date Navigation Pills Bar (Horizontal Scrollable) */
@@ -12539,18 +12551,34 @@ body {
   box-shadow: 0 2px 8px rgba(15, 23, 42, 0.03);
 }
 
+.market-switchboard-container.embedded {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 2px 0 6px;
+  margin: 2px 0 8px;
+  box-shadow: none;
+}
+
 .switchboard-header {
   display: flex;
-  justify-content: space-between;
+  justify-content: center;
   align-items: center;
-  margin-bottom: 8px;
-  gap: 10px;
+  margin-bottom: 6px;
+  gap: 8px;
+  text-align: center;
+}
+
+.switchboard-title-group {
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .switchboard-pill-title {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 6px;
 }
 
 .switchboard-pulse-dot {
@@ -12571,15 +12599,30 @@ body {
   text-transform: uppercase;
 }
 
-/* 2. Switchboard Pills Row - Compact with reduced length */
+/* 2. Switchboard Pills Row - Centered on desktop, left-to-right swipeable on mobile */
 .market-switchboard-pills-bar {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
   overflow-x: auto;
   padding-bottom: 2px;
   scrollbar-width: thin;
   -webkit-overflow-scrolling: touch;
+  width: 100%;
+}
+
+@media (max-width: 768px) {
+  .market-switchboard-pills-bar {
+    justify-content: flex-start;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding-bottom: 4px;
+  }
+  .market-switchboard-pills-bar::-webkit-scrollbar {
+    display: none;
+  }
 }
 
 .market-switchboard-pill {
