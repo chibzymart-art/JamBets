@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
-import { GoalCard, GoalPredictionItem, GroupedGoalMatch, formatClubName } from '../components/GoalCard';
+import { StandaloneGoalCard, GoalPredictionItem, formatClubName } from '../components/GoalCard';
+import { FavoritePredictionItem } from '../components/FavoritesDrawer';
 import '../goals.css';
 
 interface GoalsPageProps {
@@ -9,6 +10,10 @@ interface GoalsPageProps {
   isAdmin: boolean;
   onOpenAuth: (mode: 'signin' | 'register') => void;
   onOpenSubscription: () => void;
+  favoriteItems?: FavoritePredictionItem[];
+  onToggleFavoriteItem?: (item: FavoritePredictionItem) => void;
+  isFavoriteItem?: (fixtureId: string, market: string, pick: string) => boolean;
+  onOpenFavoritesDrawer?: () => void;
 }
 
 export const getTodayIsoDate = (): string => {
@@ -20,18 +25,46 @@ export const getTodayIsoDate = (): string => {
   }).format(new Date());
 };
 
+export const getYesterdayIsoDate = (): string => {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Africa/Lagos',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).format(new Date(Date.now() - 86400000));
+};
+
+export const getTomorrowIsoDate = (): string => {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Africa/Lagos',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).format(new Date(Date.now() + 86400000));
+};
+
 export const GoalsPage: React.FC<GoalsPageProps> = ({
   currentUser,
   userRole,
   isAdmin,
   onOpenAuth,
   onOpenSubscription,
+  favoriteItems = [],
+  onToggleFavoriteItem,
+  isFavoriteItem,
+  onOpenFavoritesDrawer,
 }) => {
   const [rawPredictions, setRawPredictions] = useState<GoalPredictionItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Market filter: 'all' (split view), 'over_2.5_goals' (left only), 'ht_over_0.5_goals' (right only), 'settled'
   const [marketFilter, setMarketFilter] = useState<'all' | 'over_2.5_goals' | 'ht_over_0.5_goals' | 'settled'>('all');
-  // The default view MUST always be in the current day ("Today")
+
+  // Status filter: all, won only, lost only, pending only
+  const [statusFilter, setStatusFilter] = useState<'all' | 'won' | 'lost' | 'pending'>('all');
+
+  // Default view is always Current Day ("Today")
   const [dateFilter, setDateFilter] = useState<string>(getTodayIsoDate);
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -41,43 +74,6 @@ export const GoalsPage: React.FC<GoalsPageProps> = ({
     if (userRole === 'admin' || userRole === 'standard' || userRole === 'bigbang') return true;
     return false;
   }, [isAdmin, userRole]);
-
-  // Dynamic 4-day Date Options in Africa/Lagos (WAT / UTC+1) starting with Today as the primary active option
-  const dateOptions = useMemo(() => {
-    const list: { key: string; label: string }[] = [];
-
-    const now = new Date();
-    for (let i = 0; i < 4; i++) {
-      const d = new Date(now.getTime() + i * 86400000);
-      const isoDate = new Intl.DateTimeFormat('en-CA', {
-        timeZone: 'Africa/Lagos',
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit'
-      }).format(d);
-
-      let label = '';
-      if (i === 0) {
-        label = 'Today';
-      } else if (i === 1) {
-        label = 'Tomorrow';
-      } else {
-        const formatted = new Intl.DateTimeFormat('en-US', {
-          timeZone: 'Africa/Lagos',
-          weekday: 'short',
-          month: 'short',
-          day: 'numeric'
-        }).format(d);
-        label = formatted;
-      }
-
-      list.push({ key: isoDate, label });
-    }
-
-    list.push({ key: 'all', label: 'All (4 Days)' });
-
-    return list;
-  }, []);
 
   // Fetch Goals Specialist Data
   const fetchGoalsData = async () => {
@@ -144,149 +140,267 @@ export const GoalsPage: React.FC<GoalsPageProps> = ({
     fetchGoalsData();
   }, [isPaidUser]);
 
-  // Group raw predictions by fixture_id into unified Match Rows (Eliminating duplicate fixtures!)
-  const groupedMatches = useMemo(() => {
-    const fixtureMap = new Map<string, GroupedGoalMatch>();
+  // Distinct date list extracted dynamically from actual predictions
+  const dynamicDateOptions = useMemo(() => {
+    const todayStr = getTodayIsoDate();
+    const yesterdayStr = getYesterdayIsoDate();
+    const tomorrowStr = getTomorrowIsoDate();
 
-    for (const pred of rawPredictions) {
-      const fid = pred.fixture_id;
-      const f = pred.fixture;
-
-      if (!fixtureMap.has(fid)) {
-        const rawHome = f?.home_team?.short_name || f?.home_team?.name || f?.home_team_name || (pred.metadata as any)?.home_team || 'Home Club';
-        const rawAway = f?.away_team?.short_name || f?.away_team?.name || f?.away_team_name || (pred.metadata as any)?.away_team || 'Away Club';
-        const rawLeague = f?.league?.name || f?.league_name || (pred.metadata as any)?.league || 'Football League';
-
-        fixtureMap.set(fid, {
-          fixture_id: fid,
-          target_kickoff_at: pred.target_kickoff_at || f?.target_kickoff_at || '',
-          status: f?.status || 'scheduled',
-          period: f?.period,
-          match_minute: f?.match_minute,
-          home_score: f?.home_score,
-          away_score: f?.away_score,
-          half_time_home_score: f?.half_time_home_score,
-          half_time_away_score: f?.half_time_away_score,
-          league_name: rawLeague,
-          home_team_name: rawHome,
-          away_team_name: rawAway,
-          actual_score: pred.actual_score || null,
-          ht_score: pred.ht_score || null,
-          settlement_status: pred.settlement_status || 'pending',
-          over25: null,
-          ht05: null,
-          maxProbability: 0,
-        });
-      }
-
-      const match = fixtureMap.get(fid)!;
-      if (pred.market === 'over_2.5_goals') {
-        match.over25 = pred;
-      } else if (pred.market === 'ht_over_0.5_goals') {
-        match.ht05 = pred;
-      }
-
-      if (pred.actual_score) match.actual_score = pred.actual_score;
-      if (pred.ht_score) match.ht_score = pred.ht_score;
-      if (pred.settlement_status !== 'pending') match.settlement_status = pred.settlement_status;
-
-      // Calculate max probability for ranking (supports robust fallback for preview ranking)
-      const pOver = match.over25?.probability ?? (
-        match.over25?.xg_combined ? Math.min(0.88, Math.max(0.62, (match.over25.xg_combined / 4.0) * 0.85)) : 0.6
-      );
-      const pHt = match.ht05?.probability ?? (
-        match.ht05?.ht_goal_frequency ? match.ht05.ht_goal_frequency / 100.0 : 0.7
-      );
-      match.maxProbability = Math.max(pOver, pHt);
+    const dateCounts: Record<string, number> = {};
+    for (const p of rawPredictions) {
+      const kAt = p.target_kickoff_at || p.fixture?.target_kickoff_at;
+      if (!kAt) continue;
+      try {
+        const dStr = new Intl.DateTimeFormat('en-CA', {
+          timeZone: 'Africa/Lagos',
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit'
+        }).format(new Date(kAt));
+        dateCounts[dStr] = (dateCounts[dStr] || 0) + 1;
+      } catch {}
     }
 
-    return Array.from(fixtureMap.values());
-  }, [rawPredictions]);
+    if (!(todayStr in dateCounts)) dateCounts[todayStr] = 0;
+    if (!(tomorrowStr in dateCounts)) dateCounts[tomorrowStr] = 0;
 
-  // Filtered and sorted matches (Highest ratings first, descending)
-  const filteredMatches = useMemo(() => {
-    const list = groupedMatches.filter((m) => {
-      // 1. Market Filter
-      if (marketFilter === 'over_2.5_goals' && !m.over25) return false;
-      if (marketFilter === 'ht_over_0.5_goals' && !m.ht05) return false;
-      if (marketFilter === 'settled' && m.settlement_status === 'pending') return false;
-
-      // 2. Date Filter
-      if (dateFilter !== 'all') {
+    const allDates = Object.keys(dateCounts).sort();
+    return allDates.map((isoDate) => {
+      let label = isoDate;
+      if (isoDate === todayStr) label = 'Today';
+      else if (isoDate === tomorrowStr) label = 'Tomorrow';
+      else if (isoDate === yesterdayStr) label = 'Yesterday';
+      else {
         try {
-          const mLagosDate = new Intl.DateTimeFormat('en-CA', {
+          const d = new Date(isoDate + 'T12:00:00Z');
+          label = new Intl.DateTimeFormat('en-US', {
             timeZone: 'Africa/Lagos',
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit'
-          }).format(new Date(m.target_kickoff_at));
-
-          if (mLagosDate !== dateFilter) return false;
+            weekday: 'short',
+            month: 'short',
+            day: 'numeric'
+          }).format(d);
         } catch {}
       }
+      return {
+        key: isoDate,
+        label,
+        count: dateCounts[isoDate] || 0,
+        isPast: isoDate < todayStr,
+        isToday: isoDate === todayStr,
+        isFuture: isoDate > todayStr,
+      };
+    });
+  }, [rawPredictions]);
 
-      // 3. Search Query
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase().trim();
-        const hName = formatClubName(m.home_team_name).toLowerCase();
-        const aName = formatClubName(m.away_team_name).toLowerCase();
-        const lName = m.league_name.toLowerCase();
-        if (!hName.includes(q) && !aName.includes(q) && !lName.includes(q)) {
-          return false;
-        }
+  // Status statistics for the currently selected date (or all dates)
+  const statusStats = useMemo(() => {
+    const activePredictions = rawPredictions.filter((p) => {
+      if (dateFilter === 'all') return true;
+      try {
+        const dStr = new Intl.DateTimeFormat('en-CA', {
+          timeZone: 'Africa/Lagos',
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit'
+        }).format(new Date(p.target_kickoff_at || p.fixture?.target_kickoff_at || ''));
+        return dStr === dateFilter;
+      } catch {
+        return false;
       }
-
-      return true;
     });
 
-    // 4. Strictly sort by highest ratings / confidence first!
-    return list.sort((a, b) => (b.maxProbability ?? 0) - (a.maxProbability ?? 0));
-  }, [groupedMatches, marketFilter, dateFilter, searchQuery]);
+    let won = 0;
+    let lost = 0;
+    let pending = 0;
+
+    for (const p of activePredictions) {
+      if (p.settlement_status === 'won') won++;
+      else if (p.settlement_status === 'lost') lost++;
+      else pending++;
+    }
+
+    return {
+      total: activePredictions.length,
+      won,
+      lost,
+      pending
+    };
+  }, [rawPredictions, dateFilter]);
+
+  // Helper filter function
+  const filterPredictionItem = (p: GoalPredictionItem): boolean => {
+    // 1. Date Filter
+    if (dateFilter !== 'all') {
+      try {
+        const mLagosDate = new Intl.DateTimeFormat('en-CA', {
+          timeZone: 'Africa/Lagos',
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit'
+        }).format(new Date(p.target_kickoff_at || p.fixture?.target_kickoff_at || ''));
+        if (mLagosDate !== dateFilter) return false;
+      } catch {
+        return false;
+      }
+    }
+
+    // 2. Status Filter
+    if (statusFilter === 'won' && p.settlement_status !== 'won') return false;
+    if (statusFilter === 'lost' && p.settlement_status !== 'lost') return false;
+    if (statusFilter === 'pending' && p.settlement_status !== 'pending') return false;
+    if (marketFilter === 'settled' && p.settlement_status === 'pending') return false;
+
+    // 3. Search Query
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      const f = p.fixture;
+      const h = formatClubName(f?.home_team?.short_name || f?.home_team?.name || p.metadata?.home_team || '').toLowerCase();
+      const a = formatClubName(f?.away_team?.short_name || f?.away_team?.name || p.metadata?.away_team || '').toLowerCase();
+      const l = (f?.league?.name || p.metadata?.league || '').toLowerCase();
+      if (!h.includes(q) && !a.includes(q) && !l.includes(q)) return false;
+    }
+
+    return true;
+  };
+
+  // INDEPENDENT STREAM 1: Over 2.5 Goals (Left Side Column)
+  const filteredOver25 = useMemo(() => {
+    return rawPredictions
+      .filter((p) => p.market === 'over_2.5_goals')
+      .filter(filterPredictionItem)
+      .sort((a, b) => (b.probability ?? 0) - (a.probability ?? 0));
+  }, [rawPredictions, dateFilter, statusFilter, marketFilter, searchQuery]);
+
+  // INDEPENDENT STREAM 2: 1st Half Over 0.5 Goals (Right Side Column)
+  const filteredHt05 = useMemo(() => {
+    return rawPredictions
+      .filter((p) => p.market === 'ht_over_0.5_goals')
+      .filter(filterPredictionItem)
+      .sort((a, b) => (b.probability ?? 0) - (a.probability ?? 0));
+  }, [rawPredictions, dateFilter, statusFilter, marketFilter, searchQuery]);
+
+  const totalFilteredCount = filteredOver25.length + filteredHt05.length;
 
   return (
     <div className="goals-page-container">
       {/* Control Filters Bar */}
       <div className="goals-controls-bar">
-        {/* Market Filter Tabs */}
-        <div className="goals-market-tabs" role="tablist">
-          <button
-            className={`goals-tab-btn ${marketFilter === 'all' ? 'active' : ''}`}
-            onClick={() => setMarketFilter('all')}
-          >
-            🔥 All Matches ({filteredMatches.length})
-          </button>
-          <button
-            className={`goals-tab-btn ${marketFilter === 'over_2.5_goals' ? 'active' : ''}`}
-            onClick={() => setMarketFilter('over_2.5_goals')}
-          >
-            🎯 Over 2.5 Bombs
-          </button>
-          <button
-            className={`goals-tab-btn ${marketFilter === 'ht_over_0.5_goals' ? 'active' : ''}`}
-            onClick={() => setMarketFilter('ht_over_0.5_goals')}
-          >
-            ⏱️ 1st Half Blitz
-          </button>
-          <button
-            className={`goals-tab-btn ${marketFilter === 'settled' ? 'active' : ''}`}
-            onClick={() => setMarketFilter('settled')}
-          >
-            ✓ Settled Scores
-          </button>
+        {/* ROW 1: Market Filter Tabs + Favorites Drawer Trigger */}
+        <div className="goals-market-tabs-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+          <div className="goals-market-tabs" role="tablist">
+            <button
+              className={`goals-tab-btn ${marketFilter === 'all' ? 'active' : ''}`}
+              onClick={() => setMarketFilter('all')}
+            >
+              🔥 Split View (Both: {totalFilteredCount})
+            </button>
+            <button
+              className={`goals-tab-btn ${marketFilter === 'over_2.5_goals' ? 'active' : ''}`}
+              onClick={() => setMarketFilter('over_2.5_goals')}
+            >
+              🎯 Over 2.5 Only ({filteredOver25.length})
+            </button>
+            <button
+              className={`goals-tab-btn ${marketFilter === 'ht_over_0.5_goals' ? 'active' : ''}`}
+              onClick={() => setMarketFilter('ht_over_0.5_goals')}
+            >
+              ⏱️ 1H Over 0.5 Only ({filteredHt05.length})
+            </button>
+            <button
+              className={`goals-tab-btn ${marketFilter === 'settled' ? 'active' : ''}`}
+              onClick={() => setMarketFilter('settled')}
+            >
+              ✓ Settled Results
+            </button>
+          </div>
+
+          {onOpenFavoritesDrawer && (
+            <button
+              type="button"
+              className="goals-fav-drawer-btn"
+              onClick={onOpenFavoritesDrawer}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                background: '#0284c7',
+                color: '#ffffff',
+                border: 'none',
+                borderRadius: '12px',
+                padding: '8px 16px',
+                fontSize: '0.84rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+                boxShadow: '0 2px 8px rgba(2, 132, 199, 0.25)',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              <span>★</span> FAVORITES ({favoriteItems.length})
+            </button>
+          )}
         </div>
 
-        {/* Date Filter (Next 4 Days) & Search Row */}
+        {/* ROW 2: Date Navigation (Quick Pills + History Dropdown + Search) */}
         <div className="goals-subfilters-row">
           <div className="goals-date-pills">
-            {dateOptions.map((opt) => (
-              <button
-                key={opt.key}
-                className={`date-pill ${dateFilter === opt.key ? 'active' : ''}`}
-                onClick={() => setDateFilter(opt.key)}
+            <button
+              className={`date-pill ${dateFilter === getTodayIsoDate() ? 'active' : ''}`}
+              onClick={() => setDateFilter(getTodayIsoDate())}
+            >
+              📍 Today
+            </button>
+            <button
+              className={`date-pill ${dateFilter === getTomorrowIsoDate() ? 'active' : ''}`}
+              onClick={() => setDateFilter(getTomorrowIsoDate())}
+            >
+              ⏩ Tomorrow
+            </button>
+            <button
+              className={`date-pill ${dateFilter === getYesterdayIsoDate() ? 'active' : ''}`}
+              onClick={() => setDateFilter(getYesterdayIsoDate())}
+            >
+              ⏪ Yesterday
+            </button>
+            <button
+              className={`date-pill ${dateFilter === 'all' ? 'active' : ''}`}
+              onClick={() => setDateFilter('all')}
+            >
+              🌐 All Dates
+            </button>
+
+            {/* Comprehensive Date Dropdown including past history and future days */}
+            <div className="goals-date-dropdown-box" style={{ display: 'inline-flex', alignItems: 'center' }}>
+              <select
+                className="goals-date-select"
+                value={dateFilter}
+                onChange={(e) => setDateFilter(e.target.value)}
+                style={{
+                  background: '#ffffff',
+                  border: '1px solid #cbd5e1',
+                  borderRadius: '9999px',
+                  padding: '5px 12px',
+                  fontSize: '0.78rem',
+                  fontWeight: 600,
+                  color: '#0f172a',
+                  cursor: 'pointer',
+                  outline: 'none'
+                }}
               >
-                {opt.label}
-              </button>
-            ))}
+                <option value="all">📅 Select Date... (All Matches)</option>
+                <optgroup label="Core Days">
+                  <option value={getTodayIsoDate()}>📍 Today</option>
+                  <option value={getTomorrowIsoDate()}>⏩ Tomorrow</option>
+                  <option value={getYesterdayIsoDate()}>⏪ Yesterday</option>
+                </optgroup>
+                <optgroup label="Available Matchdays">
+                  {dynamicDateOptions.map((opt) => (
+                    <option key={opt.key} value={opt.key}>
+                      {opt.label} ({opt.count} signals)
+                    </option>
+                  ))}
+                </optgroup>
+              </select>
+            </div>
           </div>
 
           <div className="goals-search-box">
@@ -303,42 +417,177 @@ export const GoalsPage: React.FC<GoalsPageProps> = ({
             )}
           </div>
         </div>
+
+        {/* ROW 3: Current Day Win / Loss Scorecard Filter Bar */}
+        <div className="goals-status-filter-row" style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginTop: '2px' }}>
+          <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+            Result Filter:
+          </span>
+          <button
+            className={`status-pill ${statusFilter === 'all' ? 'active' : ''}`}
+            onClick={() => setStatusFilter('all')}
+            style={{
+              padding: '4px 12px',
+              borderRadius: '8px',
+              fontSize: '0.76rem',
+              fontWeight: 700,
+              cursor: 'pointer',
+              border: statusFilter === 'all' ? '1px solid #0f172a' : '1px solid #e2e8f0',
+              background: statusFilter === 'all' ? '#0f172a' : '#ffffff',
+              color: statusFilter === 'all' ? '#ffffff' : '#334155'
+            }}
+          >
+            All Signals ({statusStats.total})
+          </button>
+          <button
+            className={`status-pill ${statusFilter === 'won' ? 'active' : ''}`}
+            onClick={() => setStatusFilter('won')}
+            style={{
+              padding: '4px 12px',
+              borderRadius: '8px',
+              fontSize: '0.76rem',
+              fontWeight: 700,
+              cursor: 'pointer',
+              border: statusFilter === 'won' ? '1px solid #059669' : '1px solid #a7f3d0',
+              background: statusFilter === 'won' ? '#059669' : '#ecfdf5',
+              color: statusFilter === 'won' ? '#ffffff' : '#047857'
+            }}
+          >
+            Won ✅ ({statusStats.won})
+          </button>
+          <button
+            className={`status-pill ${statusFilter === 'lost' ? 'active' : ''}`}
+            onClick={() => setStatusFilter('lost')}
+            style={{
+              padding: '4px 12px',
+              borderRadius: '8px',
+              fontSize: '0.76rem',
+              fontWeight: 700,
+              cursor: 'pointer',
+              border: statusFilter === 'lost' ? '1px solid #dc2626' : '1px solid #fecaca',
+              background: statusFilter === 'lost' ? '#dc2626' : '#fef2f2',
+              color: statusFilter === 'lost' ? '#ffffff' : '#b91c1c'
+            }}
+          >
+            Lost ❌ ({statusStats.lost})
+          </button>
+          <button
+            className={`status-pill ${statusFilter === 'pending' ? 'active' : ''}`}
+            onClick={() => setStatusFilter('pending')}
+            style={{
+              padding: '4px 12px',
+              borderRadius: '8px',
+              fontSize: '0.76rem',
+              fontWeight: 700,
+              cursor: 'pointer',
+              border: statusFilter === 'pending' ? '1px solid #0284c7' : '1px solid #bae6fd',
+              background: statusFilter === 'pending' ? '#0284c7' : '#f0f9ff',
+              color: statusFilter === 'pending' ? '#ffffff' : '#0369a1'
+            }}
+          >
+            Pending ⏳ ({statusStats.pending})
+          </button>
+        </div>
       </div>
 
-      {/* Grouped Match Rows Container with Thick Border Separators */}
+      {/* Split Columns Section: Left = Over 2.5, Right = 1H Over 0.5 */}
       <section className="goals-cards-section">
         {loading ? (
           <div className="goals-loading-state">
             <div className="goals-spinner" />
-            <p>Loading AI Goal Predictions...</p>
+            <p>Loading Calibrated Goals Predictions...</p>
           </div>
         ) : error ? (
           <div className="goals-error-state">
             <p>⚠️ {error}</p>
             <button className="goals-retry-btn" onClick={fetchGoalsData}>Retry</button>
           </div>
-        ) : filteredMatches.length === 0 ? (
+        ) : (filteredOver25.length === 0 && filteredHt05.length === 0) ? (
           <div className="goals-empty-state">
             <span className="empty-icon">⚽</span>
             <h3>No Matches Found</h3>
-            <p>No games matched your current market or date filter. Try selecting "All (4 Days)".</p>
+            <p>No games matched your current filters. Try selecting "All Dates" or resetting filters.</p>
             <button
               className="reset-filter-btn"
-              onClick={() => { setMarketFilter('all'); setDateFilter(getTodayIsoDate()); setSearchQuery(''); }}
+              onClick={() => {
+                setMarketFilter('all');
+                setStatusFilter('all');
+                setDateFilter('all');
+                setSearchQuery('');
+              }}
             >
-              Reset to Today
+              Reset Filters (View All)
             </button>
           </div>
         ) : (
-          <div className="goals-cards-grid">
-            {filteredMatches.map((match, idx) => (
-              <GoalCard
-                key={match.fixture_id}
-                match={match}
-                isPaidUser={isPaidUser || idx < 2} // Let visitors see 2 free sample teasers
-                onOpenUpgrade={currentUser ? onOpenSubscription : () => onOpenAuth('signin')}
-              />
-            ))}
+          <div className={`goals-split-layout ${marketFilter !== 'all' && marketFilter !== 'settled' ? 'single-column-mode' : ''}`}>
+            {/* LEFT COLUMN: OVER 2.5 GOALS SPECIALIST FEED */}
+            {(marketFilter === 'all' || marketFilter === 'settled' || marketFilter === 'over_2.5_goals') && (
+              <div className="goals-column-pane over25-column">
+                <div className="goals-column-header over25-header">
+                  <div className="col-header-left">
+                    <span className="col-header-icon">🎯</span>
+                    <h3 className="col-header-title">Over 2.5 Goals Specialist</h3>
+                  </div>
+                  <span className="col-header-badge over25-pill">
+                    {filteredOver25.length} Signals
+                  </span>
+                </div>
+
+                <div className="goals-column-cards">
+                  {filteredOver25.length === 0 ? (
+                    <div className="column-empty-notice">
+                      <p>No Over 2.5 signals found for selected filters.</p>
+                    </div>
+                  ) : (
+                    filteredOver25.map((pred, idx) => (
+                      <StandaloneGoalCard
+                        key={pred.id || `${pred.fixture_id}_o25`}
+                        prediction={pred}
+                        isPaidUser={isPaidUser || idx < 2}
+                        onOpenUpgrade={currentUser ? onOpenSubscription : () => onOpenAuth('signin')}
+                        onToggleFavoriteItem={onToggleFavoriteItem}
+                        isFavoriteItem={isFavoriteItem}
+                      />
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* RIGHT COLUMN: 1ST HALF OVER 0.5 SPECIALIST FEED */}
+            {(marketFilter === 'all' || marketFilter === 'settled' || marketFilter === 'ht_over_0.5_goals') && (
+              <div className="goals-column-pane ht05-column">
+                <div className="goals-column-header ht05-header">
+                  <div className="col-header-left">
+                    <span className="col-header-icon">⏱️</span>
+                    <h3 className="col-header-title">1st Half Over 0.5 Specialist</h3>
+                  </div>
+                  <span className="col-header-badge ht05-pill">
+                    {filteredHt05.length} Signals
+                  </span>
+                </div>
+
+                <div className="goals-column-cards">
+                  {filteredHt05.length === 0 ? (
+                    <div className="column-empty-notice">
+                      <p>No 1st Half Over 0.5 signals found for selected filters.</p>
+                    </div>
+                  ) : (
+                    filteredHt05.map((pred, idx) => (
+                      <StandaloneGoalCard
+                        key={pred.id || `${pred.fixture_id}_ht05`}
+                        prediction={pred}
+                        isPaidUser={isPaidUser || idx < 2}
+                        onOpenUpgrade={currentUser ? onOpenSubscription : () => onOpenAuth('signin')}
+                        onToggleFavoriteItem={onToggleFavoriteItem}
+                        isFavoriteItem={isFavoriteItem}
+                      />
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </section>

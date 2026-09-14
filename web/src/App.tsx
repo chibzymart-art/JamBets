@@ -1418,6 +1418,10 @@ export default function App() {
                     setIsAuthModalOpen(true);
                   }}
                   onOpenSubscription={() => setIsPricingModalOpen(true)}
+                  favoriteItems={favoriteItems}
+                  onToggleFavoriteItem={toggleFavoriteItem}
+                  isFavoriteItem={isFavoriteItem}
+                  onOpenFavoritesDrawer={() => setIsFavoritesDrawerOpen(true)}
                 />
               )
             }

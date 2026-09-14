@@ -1,5 +1,5 @@
 """
-JamBets — Goals Specialist Settlement Engine
+Addsbanta — Goals Specialist Settlement Engine
 Evaluates and settles Over 2.5 Goals and First Half Over 0.5 Goals.
 Features Early Half-Time settlement for 1H Over 0.5 markets.
 Completely isolated from core football_settlements.
@@ -57,6 +57,9 @@ class GoalsSettlementEngine:
         void_count = 0
 
         for pred in pending_preds:
+            if pred.get("settlement_status") in ("won", "lost", "void"):
+                continue
+
             pid = pred["id"]
             fid = pred["fixture_id"]
             market = pred["market"]

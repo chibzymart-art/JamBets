@@ -1,5 +1,5 @@
 """
-JamBets — Goals Specialist Cycle Runner
+Addsbanta — Goals Specialist Cycle Runner
 CLI and worker orchestrator to generate and settle goals predictions.
 """
 
@@ -17,7 +17,7 @@ from python.src.goals.goals_settlement import GoalsSettlementEngine
 
 def run_cycle(predict: bool = True, settle: bool = True):
     print(f"\n⚡ ========================================================")
-    print(f"⚡ JamBets Goals Specialist Engine Cycle — {datetime.now(timezone.utc).isoformat()}")
+    print(f"⚡ Addsbanta Goals Specialist Engine Cycle — {datetime.now(timezone.utc).isoformat()}")
     print(f"⚡ ========================================================\n")
 
     results = {}
@@ -36,7 +36,7 @@ def run_cycle(predict: bool = True, settle: bool = True):
     return results
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="JamBets Goals Specialist Engine")
+    parser = argparse.ArgumentParser(description="Addsbanta Goals Specialist Engine")
     parser.add_argument("--predict-only", action="store_true", help="Run only predictions pass")
     parser.add_argument("--settle-only", action="store_true", help="Run only settlement pass")
     args = parser.parse_args()
