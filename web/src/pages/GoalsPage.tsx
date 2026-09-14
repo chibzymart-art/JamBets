@@ -2,6 +2,10 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 import { StandaloneGoalCard, GoalPredictionItem, formatClubName } from '../components/GoalCard';
 import { FavoritePredictionItem } from '../components/FavoritesDrawer';
+import { updatePageSeo } from '../lib/seo';
+import { AdBannerSlot } from '../components/AdBannerSlot';
+import { recordSportsSearch } from '../lib/sportsIntentTracker';
+import { trackSportsSearchEvent } from '../lib/pixelTracker';
 import '../goals.css';
 
 interface GoalsPageProps {
@@ -16,32 +20,7 @@ interface GoalsPageProps {
   onOpenFavoritesDrawer?: () => void;
 }
 
-export const getTodayIsoDate = (): string => {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Africa/Lagos',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit'
-  }).format(new Date());
-};
-
-export const getYesterdayIsoDate = (): string => {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Africa/Lagos',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit'
-  }).format(new Date(Date.now() - 86400000));
-};
-
-export const getTomorrowIsoDate = (): string => {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Africa/Lagos',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit'
-  }).format(new Date(Date.now() + 86400000));
-};
+import { getTodayIsoDate, getYesterdayIsoDate, getTomorrowIsoDate } from '../lib/dateUtils';
 
 export const GoalsPage: React.FC<GoalsPageProps> = ({
   currentUser,
@@ -60,6 +39,9 @@ export const GoalsPage: React.FC<GoalsPageProps> = ({
 
   // Market filter: 'all' (split view), 'over_2.5_goals' (left only), 'ht_over_0.5_goals' (right only), 'settled'
   const [marketFilter, setMarketFilter] = useState<'all' | 'over_2.5_goals' | 'ht_over_0.5_goals' | 'settled'>('all');
+
+  // Mobile-specific tab switcher when in split/all view
+  const [mobileActiveMarket, setMobileActiveMarket] = useState<'over_2.5_goals' | 'ht_over_0.5_goals'>('over_2.5_goals');
 
   // Status filter: all, won only, lost only, pending only
   const [statusFilter, setStatusFilter] = useState<'all' | 'won' | 'lost' | 'pending'>('all');
@@ -139,6 +121,30 @@ export const GoalsPage: React.FC<GoalsPageProps> = ({
   useEffect(() => {
     fetchGoalsData();
   }, [isPaidUser]);
+
+  // Dynamic SEO & Structured Data updates based on live predictions
+  useEffect(() => {
+    if (rawPredictions.length > 0) {
+      const o25Count = rawPredictions.filter((p) => p.market === 'over_2.5_goals').length;
+      const ht05Count = rawPredictions.filter((p) => p.market === 'ht_over_0.5_goals').length;
+
+      const sampleEvents = rawPredictions.slice(0, 10).map((p) => ({
+        homeTeam: formatClubName(p.fixture?.home_team?.short_name || p.fixture?.home_team?.name || p.metadata?.home_team || 'Home'),
+        awayTeam: formatClubName(p.fixture?.away_team?.short_name || p.fixture?.away_team?.name || p.metadata?.away_team || 'Away'),
+        league: p.fixture?.league?.name || p.metadata?.league || 'Football League',
+        kickoff: p.target_kickoff_at || p.fixture?.target_kickoff_at || new Date().toISOString(),
+        predictionMarket: p.market === 'over_2.5_goals' ? 'Over 2.5 Goals' : '1st Half Over 0.5 Goals',
+        probability: Math.round((p.probability || 0.75) * 100)
+      }));
+
+      updatePageSeo({
+        title: `🔥 Today's Goals Predictions (${o25Count} Over 2.5 • ${ht05Count} 1H Blitz) — Oddsbanta`,
+        description: `Calibrated Over 2.5 Goals & First Half Over 0.5 Blitz predictions for ${rawPredictions.length} matches. Backed by Bayesian Poisson modeling and AI tactical scouting.`,
+        canonicalPath: '/goals',
+        sportsEvents: sampleEvents
+      });
+    }
+  }, [rawPredictions]);
 
   // Distinct date list extracted dynamically from actual predictions
   const dynamicDateOptions = useMemo(() => {
@@ -283,110 +289,116 @@ export const GoalsPage: React.FC<GoalsPageProps> = ({
 
   return (
     <div className="goals-page-container">
-      {/* Control Filters Bar */}
-      <div className="goals-controls-bar">
-        {/* ROW 1: Market Filter Tabs + Favorites Drawer Trigger */}
-        <div className="goals-market-tabs-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
-          <div className="goals-market-tabs" role="tablist">
+      {/* UNIFIED 2-TIER COMMAND ISLAND */}
+      <div className="goals-command-island">
+        {/* TIER 1: Market Selector + Search + Acca Slip Launcher */}
+        <div className="command-tier-primary">
+          <div className="goals-market-segmented-pill" role="tablist">
             <button
-              className={`goals-tab-btn ${marketFilter === 'all' ? 'active' : ''}`}
+              type="button"
+              className={`segmented-market-btn ${marketFilter === 'all' ? 'active' : ''}`}
               onClick={() => setMarketFilter('all')}
             >
-              🔥 Split View (Both: {totalFilteredCount})
+              🔥 Split View <span className="market-count-tag">{totalFilteredCount}</span>
             </button>
             <button
-              className={`goals-tab-btn ${marketFilter === 'over_2.5_goals' ? 'active' : ''}`}
+              type="button"
+              className={`segmented-market-btn o25 ${marketFilter === 'over_2.5_goals' ? 'active' : ''}`}
               onClick={() => setMarketFilter('over_2.5_goals')}
             >
-              🎯 Over 2.5 Only ({filteredOver25.length})
+              🎯 Over 2.5 <span className="market-count-tag">{filteredOver25.length}</span>
             </button>
             <button
-              className={`goals-tab-btn ${marketFilter === 'ht_over_0.5_goals' ? 'active' : ''}`}
+              type="button"
+              className={`segmented-market-btn ht05 ${marketFilter === 'ht_over_0.5_goals' ? 'active' : ''}`}
               onClick={() => setMarketFilter('ht_over_0.5_goals')}
             >
-              ⏱️ 1H Over 0.5 Only ({filteredHt05.length})
+              ⏱️ 1H Blitz <span className="market-count-tag">{filteredHt05.length}</span>
             </button>
             <button
-              className={`goals-tab-btn ${marketFilter === 'settled' ? 'active' : ''}`}
+              type="button"
+              className={`segmented-market-btn ${marketFilter === 'settled' ? 'active' : ''}`}
               onClick={() => setMarketFilter('settled')}
             >
-              ✓ Settled Results
+              ✓ Settled
             </button>
           </div>
 
-          {onOpenFavoritesDrawer && (
-            <button
-              type="button"
-              className="goals-fav-drawer-btn"
-              onClick={onOpenFavoritesDrawer}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                background: '#0284c7',
-                color: '#ffffff',
-                border: 'none',
-                borderRadius: '12px',
-                padding: '8px 16px',
-                fontSize: '0.84rem',
-                fontWeight: 700,
-                cursor: 'pointer',
-                boxShadow: '0 2px 8px rgba(2, 132, 199, 0.25)',
-                transition: 'all 0.15s ease'
-              }}
-            >
-              <span>★</span> FAVORITES ({favoriteItems.length})
-            </button>
-          )}
+          <div className="command-tier-primary-right">
+            <div className="goals-compact-search">
+              <span className="search-icon">🔍</span>
+              <input
+                type="text"
+                placeholder="Search club or league..."
+                value={searchQuery}
+                onChange={(e) => {
+                  const q = e.target.value;
+                  setSearchQuery(q);
+                  if (q.trim().length >= 3) {
+                    recordSportsSearch(q);
+                    trackSportsSearchEvent(q, filteredOver25.length + filteredHt05.length);
+                  }
+                }}
+                className="compact-search-input"
+              />
+              {searchQuery && (
+                <button className="clear-search-btn" onClick={() => setSearchQuery('')}>×</button>
+              )}
+            </div>
+
+            {onOpenFavoritesDrawer && (
+              <button
+                type="button"
+                className={`goals-acca-slip-launcher-btn ${favoriteItems.length > 0 ? 'has-items' : ''}`}
+                onClick={onOpenFavoritesDrawer}
+              >
+                <span className="slip-icon">📋</span>
+                <span className="slip-title">ACCA SLIP</span>
+                <span className="slip-badge">{favoriteItems.length}</span>
+              </button>
+            )}
+          </div>
         </div>
 
-        {/* ROW 2: Date Navigation (Quick Pills + History Dropdown + Search) */}
-        <div className="goals-subfilters-row">
-          <div className="goals-date-pills">
+        {/* TIER 2: Calendar Ribbon + Inline Status Scorecard Pills */}
+        <div className="command-tier-secondary">
+          <div className="calendar-ribbon">
             <button
-              className={`date-pill ${dateFilter === getTodayIsoDate() ? 'active' : ''}`}
+              type="button"
+              className={`cal-pill ${dateFilter === getTodayIsoDate() ? 'active' : ''}`}
               onClick={() => setDateFilter(getTodayIsoDate())}
             >
               📍 Today
             </button>
             <button
-              className={`date-pill ${dateFilter === getTomorrowIsoDate() ? 'active' : ''}`}
+              type="button"
+              className={`cal-pill ${dateFilter === getTomorrowIsoDate() ? 'active' : ''}`}
               onClick={() => setDateFilter(getTomorrowIsoDate())}
             >
               ⏩ Tomorrow
             </button>
             <button
-              className={`date-pill ${dateFilter === getYesterdayIsoDate() ? 'active' : ''}`}
+              type="button"
+              className={`cal-pill ${dateFilter === getYesterdayIsoDate() ? 'active' : ''}`}
               onClick={() => setDateFilter(getYesterdayIsoDate())}
             >
               ⏪ Yesterday
             </button>
             <button
-              className={`date-pill ${dateFilter === 'all' ? 'active' : ''}`}
+              type="button"
+              className={`cal-pill ${dateFilter === 'all' ? 'active' : ''}`}
               onClick={() => setDateFilter('all')}
             >
               🌐 All Dates
             </button>
 
-            {/* Comprehensive Date Dropdown including past history and future days */}
-            <div className="goals-date-dropdown-box" style={{ display: 'inline-flex', alignItems: 'center' }}>
+            <div className="cal-dropdown-wrap">
               <select
-                className="goals-date-select"
+                className="cal-date-select"
                 value={dateFilter}
                 onChange={(e) => setDateFilter(e.target.value)}
-                style={{
-                  background: '#ffffff',
-                  border: '1px solid #cbd5e1',
-                  borderRadius: '9999px',
-                  padding: '5px 12px',
-                  fontSize: '0.78rem',
-                  fontWeight: 600,
-                  color: '#0f172a',
-                  cursor: 'pointer',
-                  outline: 'none'
-                }}
               >
-                <option value="all">📅 Select Date... (All Matches)</option>
+                <option value="all">📅 Date Filter... ({totalFilteredCount} signals)</option>
                 <optgroup label="Core Days">
                   <option value={getTodayIsoDate()}>📍 Today</option>
                   <option value={getTomorrowIsoDate()}>⏩ Tomorrow</option>
@@ -403,92 +415,58 @@ export const GoalsPage: React.FC<GoalsPageProps> = ({
             </div>
           </div>
 
-          <div className="goals-search-box">
-            <span className="search-icon">🔍</span>
-            <input
-              type="text"
-              placeholder="Search club or league..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="goals-search-input"
-            />
-            {searchQuery && (
-              <button className="clear-search-btn" onClick={() => setSearchQuery('')}>×</button>
-            )}
+          <div className="status-scorecard-ribbon">
+            <button
+              type="button"
+              className={`scorecard-pill ${statusFilter === 'all' ? 'active' : ''}`}
+              onClick={() => setStatusFilter('all')}
+            >
+              All ({statusStats.total})
+            </button>
+            <button
+              type="button"
+              className={`scorecard-pill won ${statusFilter === 'won' ? 'active' : ''}`}
+              onClick={() => setStatusFilter('won')}
+            >
+              Won ✅ ({statusStats.won})
+            </button>
+            <button
+              type="button"
+              className={`scorecard-pill lost ${statusFilter === 'lost' ? 'active' : ''}`}
+              onClick={() => setStatusFilter('lost')}
+            >
+              Lost ❌ ({statusStats.lost})
+            </button>
+            <button
+              type="button"
+              className={`scorecard-pill pending ${statusFilter === 'pending' ? 'active' : ''}`}
+              onClick={() => setStatusFilter('pending')}
+            >
+              Pending ⏳ ({statusStats.pending})
+            </button>
           </div>
         </div>
+      </div>
 
-        {/* ROW 3: Current Day Win / Loss Scorecard Filter Bar */}
-        <div className="goals-status-filter-row" style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginTop: '2px' }}>
-          <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-            Result Filter:
-          </span>
+      {/* Mobile-Only Segmented Market Switcher */}
+      {marketFilter === 'all' && (
+        <div className="mobile-market-tab-bar">
           <button
-            className={`status-pill ${statusFilter === 'all' ? 'active' : ''}`}
-            onClick={() => setStatusFilter('all')}
-            style={{
-              padding: '4px 12px',
-              borderRadius: '8px',
-              fontSize: '0.76rem',
-              fontWeight: 700,
-              cursor: 'pointer',
-              border: statusFilter === 'all' ? '1px solid #0f172a' : '1px solid #e2e8f0',
-              background: statusFilter === 'all' ? '#0f172a' : '#ffffff',
-              color: statusFilter === 'all' ? '#ffffff' : '#334155'
-            }}
+            type="button"
+            className={`mobile-tab-btn ${mobileActiveMarket === 'over_2.5_goals' ? 'active o25' : ''}`}
+            onClick={() => setMobileActiveMarket('over_2.5_goals')}
           >
-            All Signals ({statusStats.total})
+            🎯 Over 2.5 Specialist ({filteredOver25.length})
           </button>
           <button
-            className={`status-pill ${statusFilter === 'won' ? 'active' : ''}`}
-            onClick={() => setStatusFilter('won')}
-            style={{
-              padding: '4px 12px',
-              borderRadius: '8px',
-              fontSize: '0.76rem',
-              fontWeight: 700,
-              cursor: 'pointer',
-              border: statusFilter === 'won' ? '1px solid #059669' : '1px solid #a7f3d0',
-              background: statusFilter === 'won' ? '#059669' : '#ecfdf5',
-              color: statusFilter === 'won' ? '#ffffff' : '#047857'
-            }}
+            type="button"
+            className={`mobile-tab-btn ${mobileActiveMarket === 'ht_over_0.5_goals' ? 'active ht05' : ''}`}
+            onClick={() => setMobileActiveMarket('ht_over_0.5_goals')}
           >
-            Won ✅ ({statusStats.won})
-          </button>
-          <button
-            className={`status-pill ${statusFilter === 'lost' ? 'active' : ''}`}
-            onClick={() => setStatusFilter('lost')}
-            style={{
-              padding: '4px 12px',
-              borderRadius: '8px',
-              fontSize: '0.76rem',
-              fontWeight: 700,
-              cursor: 'pointer',
-              border: statusFilter === 'lost' ? '1px solid #dc2626' : '1px solid #fecaca',
-              background: statusFilter === 'lost' ? '#dc2626' : '#fef2f2',
-              color: statusFilter === 'lost' ? '#ffffff' : '#b91c1c'
-            }}
-          >
-            Lost ❌ ({statusStats.lost})
-          </button>
-          <button
-            className={`status-pill ${statusFilter === 'pending' ? 'active' : ''}`}
-            onClick={() => setStatusFilter('pending')}
-            style={{
-              padding: '4px 12px',
-              borderRadius: '8px',
-              fontSize: '0.76rem',
-              fontWeight: 700,
-              cursor: 'pointer',
-              border: statusFilter === 'pending' ? '1px solid #0284c7' : '1px solid #bae6fd',
-              background: statusFilter === 'pending' ? '#0284c7' : '#f0f9ff',
-              color: statusFilter === 'pending' ? '#ffffff' : '#0369a1'
-            }}
-          >
-            Pending ⏳ ({statusStats.pending})
+            ⏱️ 1H Blitz Specialist ({filteredHt05.length})
           </button>
         </div>
-      </div>
+      )}
 
       {/* Split Columns Section: Left = Over 2.5, Right = 1H Over 0.5 */}
       <section className="goals-cards-section">
@@ -523,7 +501,7 @@ export const GoalsPage: React.FC<GoalsPageProps> = ({
           <div className={`goals-split-layout ${marketFilter !== 'all' && marketFilter !== 'settled' ? 'single-column-mode' : ''}`}>
             {/* LEFT COLUMN: OVER 2.5 GOALS SPECIALIST FEED */}
             {(marketFilter === 'all' || marketFilter === 'settled' || marketFilter === 'over_2.5_goals') && (
-              <div className="goals-column-pane over25-column">
+              <div className={`goals-column-pane over25-column ${marketFilter === 'all' && mobileActiveMarket !== 'over_2.5_goals' ? 'mobile-hidden' : ''}`}>
                 <div className="goals-column-header over25-header">
                   <div className="col-header-left">
                     <span className="col-header-icon">🎯</span>
@@ -541,14 +519,18 @@ export const GoalsPage: React.FC<GoalsPageProps> = ({
                     </div>
                   ) : (
                     filteredOver25.map((pred, idx) => (
-                      <StandaloneGoalCard
-                        key={pred.id || `${pred.fixture_id}_o25`}
-                        prediction={pred}
-                        isPaidUser={isPaidUser || idx < 2}
-                        onOpenUpgrade={currentUser ? onOpenSubscription : () => onOpenAuth('signin')}
-                        onToggleFavoriteItem={onToggleFavoriteItem}
-                        isFavoriteItem={isFavoriteItem}
-                      />
+                      <React.Fragment key={pred.id || `${pred.fixture_id}_o25`}>
+                        <StandaloneGoalCard
+                          prediction={pred}
+                          isPaidUser={isPaidUser || idx < 2}
+                          onOpenUpgrade={currentUser ? onOpenSubscription : () => onOpenAuth('signin')}
+                          onToggleFavoriteItem={onToggleFavoriteItem}
+                          isFavoriteItem={isFavoriteItem}
+                        />
+                        {idx === 1 && (
+                          <AdBannerSlot slotType="native-card" />
+                        )}
+                      </React.Fragment>
                     ))
                   )}
                 </div>
@@ -557,7 +539,7 @@ export const GoalsPage: React.FC<GoalsPageProps> = ({
 
             {/* RIGHT COLUMN: 1ST HALF OVER 0.5 SPECIALIST FEED */}
             {(marketFilter === 'all' || marketFilter === 'settled' || marketFilter === 'ht_over_0.5_goals') && (
-              <div className="goals-column-pane ht05-column">
+              <div className={`goals-column-pane ht05-column ${marketFilter === 'all' && mobileActiveMarket !== 'ht_over_0.5_goals' ? 'mobile-hidden' : ''}`}>
                 <div className="goals-column-header ht05-header">
                   <div className="col-header-left">
                     <span className="col-header-icon">⏱️</span>
@@ -575,14 +557,18 @@ export const GoalsPage: React.FC<GoalsPageProps> = ({
                     </div>
                   ) : (
                     filteredHt05.map((pred, idx) => (
-                      <StandaloneGoalCard
-                        key={pred.id || `${pred.fixture_id}_ht05`}
-                        prediction={pred}
-                        isPaidUser={isPaidUser || idx < 2}
-                        onOpenUpgrade={currentUser ? onOpenSubscription : () => onOpenAuth('signin')}
-                        onToggleFavoriteItem={onToggleFavoriteItem}
-                        isFavoriteItem={isFavoriteItem}
-                      />
+                      <React.Fragment key={pred.id || `${pred.fixture_id}_ht05`}>
+                        <StandaloneGoalCard
+                          prediction={pred}
+                          isPaidUser={isPaidUser || idx < 2}
+                          onOpenUpgrade={currentUser ? onOpenSubscription : () => onOpenAuth('signin')}
+                          onToggleFavoriteItem={onToggleFavoriteItem}
+                          isFavoriteItem={isFavoriteItem}
+                        />
+                        {idx === 2 && (
+                          <AdBannerSlot slotType="native-card" />
+                        )}
+                      </React.Fragment>
                     ))
                   )}
                 </div>

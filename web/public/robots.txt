@@ -1,0 +1,30 @@
+# ==============================================================================
+# Oddsbanta Robots Configuration (SEO & Web Crawlers)
+# Allows Googlebot, Bingbot, and Social Preview Scrapers (WhatsApp, Twitter, Telegram)
+# ==============================================================================
+
+User-agent: *
+Allow: /
+Allow: /goals
+Allow: /predictions
+Allow: /dashboard
+Allow: /pricing
+
+# Protect private admin deck and internal edge endpoints
+Disallow: /admin
+Disallow: /api/
+
+# Explicit social crawler access for rich unfurls
+User-agent: WhatsApp
+Allow: /
+
+User-agent: Twitterbot
+Allow: /
+
+User-agent: facebookexternalhit
+Allow: /
+
+User-agent: TelegramBot
+Allow: /
+
+Sitemap: https://oddsbanta.com/sitemap.xml

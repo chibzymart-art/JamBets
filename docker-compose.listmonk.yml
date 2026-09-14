@@ -1,0 +1,53 @@
+version: '3.8'
+
+# ==============================================================================
+# Addsbanta / Addsbanta — Self-Hosted Email Stack (Listmonk + PostgreSQL)
+# Free, open-source mailing list and transactional campaign engine.
+# Can run on localhost or any $0 Free Tier VM (e.g. Google Cloud e2-micro).
+# ==============================================================================
+
+services:
+  listmonk-db:
+    image: postgres:15-alpine
+    container_name: addsbanta-listmonk-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: listmonk
+      POSTGRES_PASSWORD: listmonk_secure_password_change_me
+      POSTGRES_DB: listmonk
+    volumes:
+      - listmonk-data:/var/lib/postgresql/data
+    networks:
+      - listmonk-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U listmonk"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  listmonk-app:
+    image: listmonk/listmonk:latest
+    container_name: addsbanta-listmonk-app
+    restart: unless-stopped
+    ports:
+      - "9000:9000"
+    environment:
+      - LISTMONK_app__address=0.0.0.0:9000
+      - LISTMONK_db__user=listmonk
+      - LISTMONK_db__password=listmonk_secure_password_change_me
+      - LISTMONK_db__database=listmonk
+      - LISTMONK_db__host=listmonk-db
+      - LISTMONK_db__port=5432
+      - LISTMONK_db__ssl_mode=disable
+    networks:
+      - listmonk-net
+    depends_on:
+      listmonk-db:
+        condition: service_healthy
+
+networks:
+  listmonk-net:
+    driver: bridge
+
+volumes:
+  listmonk-data:

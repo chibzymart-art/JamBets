@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { AdBannerSlot } from './AdBannerSlot';
 
 export interface FavoritePredictionItem {
   id: string; // unique `${fixtureId}::${market}::${prediction}`
@@ -89,26 +90,72 @@ export const FavoritesDrawer: React.FC<FavoritesDrawerProps> = ({
           </button>
         </div>
 
-        {/* Action Header Bar */}
+        {/* Acca Summary Card */}
         {favorites.length > 0 && (
-          <div className="favorites-drawer-actions-bar">
-            <button
-              type="button"
-              className={`favorites-copy-slip-btn ${copied ? 'copied' : ''}`}
-              onClick={handleCopySlip}
-            >
-              {copied ? '✓ Slip Copied to Clipboard!' : '📋 Copy Slip for WhatsApp'}
-            </button>
-            <button
-              type="button"
-              className="favorites-clear-btn"
-              onClick={onClearAll}
-              title="Remove all saved selections"
-            >
-              Clear All
-            </button>
+          <div className="favorites-acca-card">
+            <div className="favorites-acca-header">
+              <span className="acca-title-badge">🎯 ACCUMULATOR MULTIPLIER</span>
+              <span className="acca-picks-count">{favorites.length} Selection{favorites.length > 1 ? 's' : ''}</span>
+            </div>
+            <div className="favorites-acca-metrics">
+              <div className="acca-metric-item">
+                <span className="acca-metric-label">Combined Confidence</span>
+                <strong className="acca-metric-val acca-prob">
+                  {favorites.reduce((acc, f) => acc * ((f.probability || 75) / 100), 1) * 100 < 1
+                    ? '< 1%'
+                    : `${(favorites.reduce((acc, f) => acc * ((f.probability || 75) / 100), 1) * 100).toFixed(1)}%`}
+                </strong>
+              </div>
+              <div className="acca-metric-divider" />
+              <div className="acca-metric-item">
+                <span className="acca-metric-label">Est. Combined Odds</span>
+                <strong className="acca-metric-val acca-odds">
+                  {`~${Math.min(999, Math.max(1.10, favorites.reduce((acc, f) => {
+                    const fairOdd = 1 / Math.max(0.1, (f.probability || 75) / 100);
+                    return acc * fairOdd;
+                  }, 1))).toFixed(2)}x`}
+                </strong>
+              </div>
+            </div>
+
+            {/* Acca Action Buttons */}
+            <div className="favorites-acca-actions">
+              <a
+                href={`https://api.whatsapp.com/send?text=${encodeURIComponent(
+                  `🔥 *ODDSBANTA ACCA SLIP* (${favorites.length} Picks)\n` +
+                  `📊 Est. Combined Odds: ~${Math.min(999, Math.max(1.10, favorites.reduce((acc, f) => acc * (1 / Math.max(0.1, (f.probability || 75) / 100)), 1))).toFixed(2)}x\n\n` +
+                  favorites.map((f, i) => `${i + 1}. *${f.homeTeam} vs ${f.awayTeam}*\n   🎯 Pick: *${f.prediction}* (${f.market}) • ${Math.round(f.probability || 0)}%\n`).join('\n') +
+                  `\n🔒 Verified by Oddsbanta AI Engine\n👉 https://oddsbanta.com/goals`
+                )}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="favorites-whatsapp-btn"
+              >
+                <span>📲</span> Share Acca to WhatsApp
+              </a>
+
+              <button
+                type="button"
+                className={`favorites-copy-slip-btn ${copied ? 'copied' : ''}`}
+                onClick={handleCopySlip}
+              >
+                {copied ? '✓ Copied!' : '📋 Copy Slip'}
+              </button>
+
+              <button
+                type="button"
+                className="favorites-clear-btn"
+                onClick={onClearAll}
+                title="Remove all saved selections"
+              >
+                Clear
+              </button>
+            </div>
           </div>
         )}
+
+        {/* SPONSORED PARTNER BANNER (mybrainpadi.com test) */}
+        <AdBannerSlot slotType="drawer-banner" />
 
         {/* Drawer Body Items */}
         <div className="favorites-drawer-body">

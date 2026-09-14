@@ -19,6 +19,11 @@ import { FixtureCard, formatPredictionOutcome } from './components/FixtureCard';
 import { FavoritesDrawer, FavoritePredictionItem } from './components/FavoritesDrawer';
 import { FloatingFavoritesWidget } from './components/FloatingFavoritesWidget';
 import { BotHubModal } from './components/BotHubModal';
+import { CookieConsentBanner } from './components/CookieConsentBanner';
+import { AdBannerSlot } from './components/AdBannerSlot';
+import { SportsPushAlert } from './components/SportsPushAlert';
+import { initAttributionTracker } from './lib/attribution';
+import { updatePageSeo } from './lib/seo';
 import { LandingPage } from './pages/Landing';
 import { SubscriptionPage } from './pages/Subscription';
 import { PasswordRecoveryPage } from './pages/PasswordRecovery';
@@ -59,8 +64,9 @@ export default function App() {
   }
 
 
-  // Remove any legacy theme attributes to guarantee permanent light mode
+  // Remove any legacy theme attributes to guarantee permanent light mode & init attribution tracking
   useEffect(() => {
+    initAttributionTracker();
     document.documentElement.removeAttribute('data-theme');
     document.body.removeAttribute('data-theme');
     try {
@@ -101,6 +107,27 @@ export default function App() {
 
   useEffect(() => {
     setIsHamburgerOpen(false);
+    if (location.pathname === '/goals') {
+      updatePageSeo({
+        title: 'Over 2.5 Goals & 1st Half Specialist | Oddsbanta AI',
+        description: 'Calibrated mathematical predictions for Over 2.5 and First Half Over 0.5 goals.',
+      });
+    } else if (location.pathname === '/subscription') {
+      updatePageSeo({
+        title: 'Subscription Plans & VIP Access | Oddsbanta',
+        description: 'Unlock full mathematical predictions, VIP accumulator slips, and daily high-edge football signals.',
+      });
+    } else if (location.pathname === '/admin') {
+      updatePageSeo({
+        title: 'Admin Command Deck | Oddsbanta',
+        description: 'Internal operations, prediction queue management, and model telemetry.',
+      });
+    } else {
+      updatePageSeo({
+        title: 'Oddsbanta — Smart Sport Analysis & Football Predictions | AI Powered',
+        description: 'Authoritative football predictions, verified mathematical simulations, and AI tactical analysis.',
+      });
+    }
   }, [location.pathname]);
 
   // Multi-Filters
@@ -602,6 +629,30 @@ export default function App() {
     });
     return map;
   }, [predictions]);
+
+  // Unified Global Predictions List for Targeted Sports Intent Push Alert (All Pages)
+  const globalTargetedPredictions = useMemo(() => {
+    if (fixtures.length === 0) return [];
+    return fixtures.map((f) => {
+      const pred = predsByFixture.get(f.id)?.[0];
+      return {
+        fixture_id: f.id,
+        market: pred?.market || 'match_winner',
+        predicted_outcome: pred?.prediction || 'Banker',
+        probability: pred?.probability ? (pred.probability <= 1 ? pred.probability : pred.probability / 100) : 0.85,
+        target_kickoff_at: f.target_kickoff_at,
+        fixture: {
+          id: f.id,
+          home_team_name: f.home_team_name,
+          away_team_name: f.away_team_name,
+          league_name: f.league_name,
+          home_team: { name: f.home_team_name, short_name: f.home_team_name },
+          away_team: { name: f.away_team_name, short_name: f.away_team_name },
+          league: { name: f.league_name || f.league_code },
+        },
+      };
+    });
+  }, [fixtures, predsByFixture]);
 
   // Date extraction strictly in Africa/Lagos (WAT / UTC+1)
   const getFixtureWatDate = (targetKickoffIso: string) => {
@@ -1354,6 +1405,21 @@ export default function App() {
       </header>
 
       <main className="app-container">
+        {/* GLOBAL SPONSORED LEADERBOARD BANNER (ALL CURRENT & FUTURE PAGES) */}
+        <div className="global-top-ad-banner-wrapper">
+          <AdBannerSlot slotType="leaderboard" />
+        </div>
+
+        {/* GLOBAL TARGETED SPORTS INTENT PUSH ALERT (ALL CURRENT & FUTURE PAGES) */}
+        <div className="global-top-push-alert-wrapper" style={{ maxWidth: 1200, margin: '0 auto', padding: '0 16px' }}>
+          <SportsPushAlert
+            predictions={globalTargetedPredictions}
+            onAddFavorite={toggleFavoriteItem}
+            isFavorite={isFavoriteItem}
+            triggerKey={location.pathname + searchQuery}
+          />
+        </div>
+
         <Routes>
           {/* ROUTE 1: DEDICATED HERO LANDING PAGE */}
           <Route
@@ -1979,6 +2045,11 @@ export default function App() {
                         isExpanded={expandedFixtures.has(fixture.id)}
                         onToggleExpand={() => toggleFixtureExpand(fixture.id)}
                       />
+                      {idx === 2 && (
+                        <div style={{ margin: '14px 0' }}>
+                          <AdBannerSlot slotType="native-card" />
+                        </div>
+                      )}
                     </Fragment>
                   );
                 })}
@@ -2268,6 +2339,12 @@ export default function App() {
         onRemoveItem={toggleFavoriteItem}
         onClearAll={clearAllFavorites}
       />
+
+      {/* Global NDPR / GDPR Cookie Consent & Attribution Banner */}
+      <CookieConsentBanner />
+
+      {/* GLOBAL MOBILE STICKY BOTTOM ANCHOR (ALL CURRENT & FUTURE PAGES) */}
+      <AdBannerSlot slotType="mobile-anchor" />
     </div>
   );
 }

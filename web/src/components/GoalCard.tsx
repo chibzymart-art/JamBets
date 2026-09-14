@@ -742,6 +742,7 @@ export const StandaloneGoalCard: React.FC<StandaloneGoalCardProps> = ({
 
   const isWon = p.settlement_status === 'won';
   const isLost = p.settlement_status === 'lost';
+  const [isAiExpanded, setIsAiExpanded] = React.useState(false);
 
   return (
     <div className={`standalone-goal-card ${isOver25 ? 'over25-theme' : 'ht05-theme'} ${isWon ? 'card-won' : isLost ? 'card-lost' : ''}`}>
@@ -770,7 +771,7 @@ export const StandaloneGoalCard: React.FC<StandaloneGoalCardProps> = ({
           <button
             type="button"
             className={`subcard-fav-btn ${isFav ? 'starred' : ''}`}
-            title={isFav ? 'Remove from Favorites' : 'Add to Favorites'}
+            title={isFav ? 'Remove from Slip' : 'Add to Acca Slip'}
             onClick={handleToggleFav}
           >
             {isFav ? '★' : '☆'}
@@ -799,16 +800,31 @@ export const StandaloneGoalCard: React.FC<StandaloneGoalCardProps> = ({
         )}
       </div>
 
-      {/* LINE 3: AI Tactical Scout Banner */}
+      {/* LINE 3: Collapsible AI Tactical Scout Accordion */}
       {p.metadata?.tactical_rationale && (
-        <div className="standalone-ai-banner">
-          <span className="ai-icon">🤖</span>
-          <div className="ai-text-block">
-            <span className="ai-tag">
-              AI Tactical Scout {p.metadata.goal_tempo ? `[${p.metadata.goal_tempo}]` : ''}:
+        <div className="standalone-ai-accordion-wrap">
+          <button
+            type="button"
+            className={`standalone-ai-toggle-btn ${isAiExpanded ? 'expanded' : ''}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsAiExpanded(!isAiExpanded);
+            }}
+            aria-expanded={isAiExpanded}
+          >
+            <span className="ai-btn-left">
+              <span className="ai-icon">🤖</span>
+              <span className="ai-tag">
+                AI Tactical Scout {p.metadata.goal_tempo ? `[${p.metadata.goal_tempo}]` : ''}
+              </span>
             </span>
-            <span className="ai-rationale">{p.metadata.tactical_rationale}</span>
-          </div>
+            <span className="ai-chevron">{isAiExpanded ? '▲ Hide' : '▼ View Tactical Rationale'}</span>
+          </button>
+          {isAiExpanded && (
+            <div className="standalone-ai-drawer-content">
+              <p className="ai-rationale">{p.metadata.tactical_rationale}</p>
+            </div>
+          )}
         </div>
       )}
 
@@ -834,11 +850,20 @@ export const StandaloneGoalCard: React.FC<StandaloneGoalCardProps> = ({
 
         <div className="standalone-metrics-body">
           {isLocked ? (
-            <button className="subcard-lock-btn" onClick={onOpenUpgrade} type="button">
-              <span className="lock-icon">🔒</span>
-              <span className="lock-text">{isOver25 ? 'Over 2.5 Signal Locked' : '1H Blitz Signal Locked'}</span>
-              <span className="lock-action">Unlock VIP Access →</span>
-            </button>
+            <div className="standalone-paywall-glass" onClick={onOpenUpgrade}>
+              <div className="paywall-glass-blur-preview">
+                <span className="blurred-metric">{isOver25 ? '78.5%' : '84.2%'}</span>
+                <span className="blurred-label">Confidence</span>
+              </div>
+              <div className="paywall-glass-content">
+                <span className="lock-icon">🔒</span>
+                <span className="lock-heading">{isOver25 ? 'Over 2.5 VIP Edge' : '1H Blitz VIP Edge'}</span>
+                <span className="lock-subtext">Verified 81%+ Historical Win Rate</span>
+                <button className="subcard-lock-btn" type="button">
+                  Unlock VIP Signal →
+                </button>
+              </div>
+            </div>
           ) : (
             <>
               <div className="metric-headline-row">
