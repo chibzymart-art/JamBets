@@ -27,7 +27,11 @@ import { updatePageSeo } from './lib/seo';
 import { LandingPage } from './pages/Landing';
 import { SubscriptionPage } from './pages/Subscription';
 import { PasswordRecoveryPage } from './pages/PasswordRecovery';
-import { GoalsPage } from './pages/GoalsPage';
+import { MarketSwitchboardNav } from './components/MarketSwitchboardNav';
+import { SmartPaginationBar } from './components/SmartPaginationBar';
+import { SpecialistMarketCard } from './components/SpecialistMarketCard';
+import { QuickAccaBuilderButton } from './components/QuickAccaBuilderButton';
+import { fetchMarketFeed, MarketType, UnifiedMarketPrediction } from './lib/marketFeedService';
 
 export default function App() {
   const navigate = useNavigate();
@@ -101,7 +105,6 @@ export default function App() {
       return new Date().toISOString().split('T')[0];
     }
   });
-  const [expandedFixtures, setExpandedFixtures] = useState<Set<string>>(new Set());
   const [isAllLeaguesModalOpen, setIsAllLeaguesModalOpen] = useState(false);
   const [isHamburgerOpen, setIsHamburgerOpen] = useState(false);
 
@@ -133,21 +136,9 @@ export default function App() {
   // Multi-Filters
   const [selectedLeague, setSelectedLeague] = useState<string>('all');
   const [selectedTier, setSelectedTier] = useState<string>('all');
-  const [selectedMarket, setSelectedMarket] = useState<string>('all');
   const [settlementFilter, setSettlementFilter] = useState<'all' | 'pending' | 'won' | 'lost' | 'void'>('all');
   const [scoreStatusFilter, setScoreStatusFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const toggleFixtureExpand = (fixtureId: string) => {
-    setExpandedFixtures((prev) => {
-      const next = new Set(prev);
-      if (next.has(fixtureId)) {
-        next.delete(fixtureId);
-      } else {
-        next.add(fixtureId);
-      }
-      return next;
-    });
-  };
 
   // Favorites & Custom Slip Drawer State
   const [isFavoritesDrawerOpen, setIsFavoritesDrawerOpen] = useState(false);
@@ -163,10 +154,41 @@ export default function App() {
     }
   });
 
-  // Keep fixture string IDs in sync for any UI checking fixture ID
-  const favorites = useMemo(() => {
-    return Array.from(new Set(favoriteItems.map((f) => f.fixtureId)));
-  }, [favoriteItems]);
+  // Fixture ID Favorites State (Core Feed)
+  const [favorites, setFavorites] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('jambets_favorites');
+      if (saved) return JSON.parse(saved);
+      return [];
+    } catch {
+      return [];
+    }
+  });
+
+  const toggleFavorite = (id: string) => {
+    setFavorites((prev) => {
+      const next = prev.includes(id) ? prev.filter((f) => f !== id) : [...prev, id];
+      try {
+        localStorage.setItem('jambets_favorites', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  };
+
+  // Expanded Fixtures Set (Accordion state)
+  const [expandedFixtures, setExpandedFixtures] = useState<Set<string>>(new Set());
+
+  const toggleFixtureExpand = (fixtureId: string) => {
+    setExpandedFixtures((prev) => {
+      const next = new Set(prev);
+      if (next.has(fixtureId)) {
+        next.delete(fixtureId);
+      } else {
+        next.add(fixtureId);
+      }
+      return next;
+    });
+  };
 
   const toggleFavoriteItem = (item: FavoritePredictionItem) => {
     setFavoriteItems((prev) => {
@@ -174,6 +196,18 @@ export default function App() {
       const next = exists
         ? prev.filter((f) => f.id !== item.id)
         : [...prev, item];
+      try {
+        localStorage.setItem('oddsbanta_favorites_v2', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  };
+
+  const handleAddBatchToAcca = (items: FavoritePredictionItem[]) => {
+    setFavoriteItems((prev) => {
+      const existingIds = new Set(prev.map((f) => f.id));
+      const newItems = items.filter((f) => !existingIds.has(f.id));
+      const next = [...prev, ...newItems];
       try {
         localStorage.setItem('oddsbanta_favorites_v2', JSON.stringify(next));
       } catch {}
@@ -192,35 +226,6 @@ export default function App() {
       localStorage.removeItem('oddsbanta_favorites_v2');
       localStorage.removeItem('jambets_favorites');
     } catch {}
-  };
-
-  // Fallback toggleFavorite for fixture-level toggles
-  const toggleFavorite = (fixtureId: string) => {
-    const fixture = fixtures.find((f) => f.id === fixtureId);
-    const pred = predsByFixture.get(fixtureId)?.[0];
-    if (fixture && pred && pred.prediction !== 'SKIP' && pred.market !== 'NO_SAFE_BANKER') {
-      toggleFavoriteItem({
-        id: `${fixtureId}::${pred.market}::${pred.prediction}`,
-        fixtureId,
-        homeTeam: fixture.home_team_name,
-        awayTeam: fixture.away_team_name,
-        league: fixture.league_name || fixture.league_code,
-        targetKickoffAt: fixture.target_kickoff_at,
-        market: pred.market || '',
-        prediction: pred.prediction || '',
-        probability: pred.probability ? (pred.probability <= 1 ? pred.probability * 100 : pred.probability) : 0,
-        confidenceCategory: pred.confidence_category || undefined,
-      });
-    } else {
-      setFavoriteItems((prev) => {
-        const hasAny = prev.some((f) => f.fixtureId === fixtureId);
-        const next = hasAny ? prev.filter((f) => f.fixtureId !== fixtureId) : prev;
-        try {
-          localStorage.setItem('oddsbanta_favorites_v2', JSON.stringify(next));
-        } catch {}
-        return next;
-      });
-    }
   };
 
   const [, setLatencyMs] = useState<number | null>(null);
@@ -402,6 +407,128 @@ export default function App() {
     navigate('/dashboard');
   };
 
+  // Dynamic Market Switchboard & Anti-Scroll Pagination Terminal State
+  const [activeMarket, setActiveMarket] = useState<MarketType>(() => {
+    try {
+      const searchParams = new URLSearchParams(window.location.search);
+      const m = searchParams.get('market');
+      if (
+        m &&
+        [
+          'general',
+          'curated',
+          'home_win',
+          'away_win',
+          'draw',
+          'over_2.5_goals',
+          'ht_over_0.5_goals',
+          'corners',
+        ].includes(m)
+      ) {
+        return m as MarketType;
+      }
+    } catch {}
+    return 'general';
+  });
+  const [marketPage, setMarketPage] = useState<number>(1);
+  const [marketPredictions, setMarketPredictions] = useState<UnifiedMarketPrediction[]>([]);
+  const [marketCounts, setMarketCounts] = useState<Record<MarketType, number>>({
+    general: 0,
+    curated: 0,
+    home_win: 0,
+    away_win: 0,
+    draw: 0,
+    'over_2.5_goals': 0,
+    'ht_over_0.5_goals': 0,
+    corners: 0,
+  });
+  const [marketTotal, setMarketTotal] = useState<number>(0);
+  const [marketTotalPages, setMarketTotalPages] = useState<number>(1);
+  const [marketLoading, setMarketLoading] = useState<boolean>(false);
+
+  // Sync activeMarket with URL query params when navigating
+  useEffect(() => {
+    try {
+      const searchParams = new URLSearchParams(location.search);
+      const m = searchParams.get('market');
+      if (
+        m &&
+        [
+          'general',
+          'curated',
+          'home_win',
+          'away_win',
+          'draw',
+          'over_2.5_goals',
+          'ht_over_0.5_goals',
+          'corners',
+        ].includes(m) &&
+        m !== activeMarket
+      ) {
+        setActiveMarket(m as MarketType);
+        setMarketPage(1);
+      } else if (!m && activeMarket !== 'general') {
+        setActiveMarket('general');
+      }
+    } catch {}
+  }, [location.search, activeMarket]);
+
+  const handleSelectMarket = (m: MarketType) => {
+    setActiveMarket(m);
+    setMarketPage(1);
+    const searchParams = new URLSearchParams(location.search);
+    if (m === 'general') {
+      searchParams.delete('market');
+    } else {
+      searchParams.set('market', m);
+    }
+    navigate({ search: searchParams.toString() }, { replace: true });
+  };
+
+  const loadMarketFeed = async () => {
+    setMarketLoading(true);
+    try {
+      const token = (await supabase.auth.getSession()).data.session?.access_token;
+      const res = await fetchMarketFeed({
+        market: activeMarket,
+        date: selectedDate,
+        page: marketPage,
+        limit: 10,
+        token,
+        isAdmin,
+        canViewPredictions,
+      });
+
+      if (res.success) {
+        setMarketPredictions(res.predictions || []);
+        if (res.counts) {
+          setMarketCounts(res.counts);
+        }
+        setMarketTotal(res.total || 0);
+        setMarketTotalPages(res.total_pages || 1);
+      }
+    } catch (err) {
+      console.error('Failed to load market feed:', err);
+    } finally {
+      setMarketLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (selectedSport === 'football') {
+      loadMarketFeed();
+    }
+  }, [activeMarket, selectedDate, marketPage, selectedSport, isAdmin, canViewPredictions]);
+
+  const displayedMarketPredictions = useMemo(() => {
+    if (selectedLeague === 'all') return marketPredictions;
+    return marketPredictions.filter(
+      (p) =>
+        p.fixture?.league?.code?.toLowerCase() === selectedLeague.toLowerCase() ||
+        p.fixture?.league?.id === selectedLeague
+    );
+  }, [marketPredictions, selectedLeague]);
+
   // Cache ref to prevent hammering Supabase within 30 seconds
   const lastFetchTimeRef = useRef<number>(0);
 
@@ -444,7 +571,7 @@ export default function App() {
       if (!usedEdgeCache) {
         // Direct Supabase Query (Used for Admins, Paid Subscribers, or when Edge is local/unavailable)
         const predictionsQuery = supabase
-          .from('football_predictions_paywall')
+          .from('football_predictions')
           .select(`
             id,
             fixture_id,
@@ -462,7 +589,6 @@ export default function App() {
             simulations_count,
             target_kickoff_at,
             tier_required,
-            is_locked,
             fixture:football_fixtures!inner(
               id,
               canonical_key,
@@ -971,7 +1097,16 @@ export default function App() {
     };
   }, [fixtures, predsByFixture, canViewPredictions, selectedDate]);
 
-  // Filter and sort fixtures for display
+  // List of fixtures that feature BANGER signals for the left sidebar (strictly today in WAT)
+  const bangerFixturesList = useMemo(() => {
+    return fixtures.filter((f) => {
+      if (getFixtureWatDate(f.target_kickoff_at) !== dynamicDateTabs.today.id) return false;
+      const pList = predsByFixture.get(f.id) || [];
+      return pList.some((s) => s.confidence_category === 'BANGER');
+    });
+  }, [fixtures, predsByFixture, dynamicDateTabs.today.id]);
+
+  // Filtered fixtures for General Market view
   const filteredFixtures = useMemo(() => {
     return fixtures.filter((f) => {
       const fixturePreds = predsByFixture.get(f.id) || [];
@@ -1008,12 +1143,6 @@ export default function App() {
         if (!hasTier) return false;
       }
 
-      // Market filter
-      if (selectedMarket !== 'all') {
-        const hasMarket = signals.some((s) => s.market === selectedMarket);
-        if (!hasMarket) return false;
-      }
-
       // Settlement Status filter
       if (settlementFilter !== 'all') {
         if (canViewPredictions) {
@@ -1036,33 +1165,18 @@ export default function App() {
       }
 
       return true;
-    }).sort((a, b) => {
-      const timeDiff = new Date(a.target_kickoff_at).getTime() - new Date(b.target_kickoff_at).getTime();
-      if (timeDiff !== 0) return timeDiff;
-      return a.id.localeCompare(b.id);
     });
   }, [
     fixtures,
     predsByFixture,
-    canViewPredictions,
     selectedLeague,
     selectedDate,
     scoreStatusFilter,
     selectedTier,
-    selectedMarket,
     settlementFilter,
-    searchQuery
+    canViewPredictions,
+    searchQuery,
   ]);
-
-
-  // List of fixtures that feature BANGER signals for the left sidebar (strictly today in WAT)
-  const bangerFixturesList = useMemo(() => {
-    return fixtures.filter((f) => {
-      if (getFixtureWatDate(f.target_kickoff_at) !== dynamicDateTabs.today.id) return false;
-      const pList = predsByFixture.get(f.id) || [];
-      return pList.some((s) => s.confidence_category === 'BANGER');
-    });
-  }, [fixtures, predsByFixture, dynamicDateTabs.today.id]);
 
   // Helpers
   const formatKickoff = (isoString: string) => {
@@ -1076,7 +1190,7 @@ export default function App() {
   const resetAllFilters = () => {
     setSelectedLeague('all');
     setSelectedTier('all');
-    setSelectedMarket('all');
+    handleSelectMarket('general');
     setSettlementFilter('all');
     setScoreStatusFilter('all');
     setSelectedDate(dynamicDateTabs.today.id);
@@ -1468,31 +1582,14 @@ export default function App() {
             element={<Navigate to={targetPredictionsPath} replace />}
           />
 
-          {/* ROUTE: GOALS SPECIALIST HUB (OVER 2.5 & 1H OVER 0.5 - LOGGED IN ONLY) */}
+          {/* ROUTE: GOALS SPECIALIST REDIRECT (NATIVELY INTEGRATED IN FOOTBALL TERMINAL) */}
           <Route
             path="/goals"
             element={
-              !currentUser && !isAuthChecking ? (
-                <Navigate to="/predictions" replace />
-              ) : (
-                <GoalsPage
-                  currentUser={currentUser}
-                  userRole={profile?.role}
-                  isAdmin={isAdmin}
-                  onOpenAuth={(mode) => {
-                    setAuthModalMode(mode);
-                    setIsAuthModalOpen(true);
-                  }}
-                  onOpenSubscription={() => setIsPricingModalOpen(true)}
-                  favoriteItems={favoriteItems}
-                  onToggleFavoriteItem={toggleFavoriteItem}
-                  isFavoriteItem={isFavoriteItem}
-                  onOpenFavoritesDrawer={() => setIsFavoritesDrawerOpen(true)}
-                />
-              )
+              <Navigate to={`${targetPredictionsPath}?market=over_2.5_goals`} replace />
             }
           />
-          <Route path="/over-2-5" element={<Navigate to={currentUser ? "/goals" : "/predictions"} replace />} />
+          <Route path="/over-2-5" element={<Navigate to={`${targetPredictionsPath}?market=over_2.5_goals`} replace />} />
 
           {/* ROUTE 4: ADMIN COMMAND DECK (STRICTLY GATED) */}
           <Route
@@ -1567,6 +1664,19 @@ export default function App() {
             </div>
           ))}
         </div>
+
+        {/* 2.1 FOOTBALL MARKET TERMINAL (MOVED DIRECTLY UNDER SPORT TYPES) */}
+        {selectedSport === 'football' && (
+          <MarketSwitchboardNav
+            activeMarket={activeMarket}
+            onSelectMarket={handleSelectMarket}
+            counts={{
+              ...marketCounts,
+              general: filteredFixtures.length || fixtures.length,
+            }}
+            loading={marketLoading}
+          />
+        )}
 
         {/* Dynamic Sport Availability: High-Engaging Retaining AI Simulation Loading Experience */}
         {loading && selectedSport === 'football' && fixtures.length === 0 ? (
@@ -1939,15 +2049,9 @@ export default function App() {
                         setSettlementFilter('all');
                         setScoreStatusFilter('all');
                         setSearchQuery('');
-                        setExpandedFixtures((prev) => new Set(prev).add(bf.id));
-                        setTimeout(() => {
-                          const el = document.getElementById(`fixture-${bf.id}`);
-                          if (el) {
-                            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                            el.classList.add('highlight-pulse');
-                            setTimeout(() => el.classList.remove('highlight-pulse'), 2500);
-                          }
-                        }, 120);
+                        handleSelectMarket('curated');
+                        const el = document.getElementById('market-terminal-stream-top');
+                        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
                       }}
                       title="Click to jump to match and view 250k simulation signals"
                     >
@@ -1973,87 +2077,327 @@ export default function App() {
             </div>
           </aside>
 
-          {/* CENTER MAIN STREAM: FIXTURES & PREDICTIONS */}
+          {/* CENTER MAIN STREAM: DECOUPLED FOOTBALL MARKET TERMINAL */}
           <div className="fixtures-stream-column">
-            {/* Loading / Error States */}
-            {error && (
-              <div style={{ padding: 16, background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 12, color: '#b91c1c', fontSize: 13 }}>
-                <strong>Cloud Telemetry Notice:</strong> {error}
-              </div>
-            )}
+            {/* Scroll Target Anchor for Smooth Pagination Scrolling */}
+            <div id="market-terminal-stream-top" />
 
-            {loading ? (
-              <div style={{ padding: 40, background: '#ffffff', borderRadius: 16, border: '1px solid var(--border-subtle)', textAlign: 'center' }}>
-                <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-emerald-600 mb-3" />
-                <div style={{ fontWeight: 800, color: 'var(--text-primary)' }}>Synchronizing Global Prediction Queue...</div>
-                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
-                  Fetching verified mathematical simulations and authoritative match results.
-                </div>
-              </div>
-            ) : filteredFixtures.length === 0 ? (
-              <div style={{ padding: 48, background: '#ffffff', borderRadius: 16, border: '1px solid var(--border-subtle)', textAlign: 'center' }}>
-                <div style={{ fontSize: 32, marginBottom: 8 }}>⚽</div>
-                <div style={{ fontWeight: 800, fontSize: 16, color: 'var(--text-primary)' }}>
-                  {selectedDate !== 'all'
-                    ? 'No predictions available for this date.'
-                    : 'No predictions available for this selection.'}
-                </div>
-                <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4, maxWidth: 460, margin: '6px auto 16px' }}>
-                  No published predictions are available for your current selection. Oddsbanta only displays matches that have completed full mathematical simulations and met our publication confidence thresholds.
-                </div>
-                <button
-                  type="button"
-                  className="btn-toggle-expand"
-                  onClick={resetAllFilters}
+            {/* GENERAL MARKET OR SPECIALIST ENGINE VIEW */}
+            {activeMarket === 'general' ? (
+              /* GENERAL MARKET: ORIGINAL COMPLETE DASHBOARD STREAM */
+              <>
+                <div
+                  className="market-terminal-action-bar"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    flexWrap: 'wrap',
+                    gap: 12,
+                    margin: '0 0 16px',
+                    padding: '10px 16px',
+                    background: '#ffffff',
+                    borderRadius: 12,
+                    border: '1px solid var(--border-subtle, #e2e8f0)',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
+                  }}
                 >
-                  Reset All Filters
-                </button>
-              </div>
-            ) : (
-              <div className="chronological-fixtures-stream">
-                {filteredFixtures.map((fixture, idx) => {
-                  const kickoff = formatKickoff(fixture.target_kickoff_at);
-                  const prevFixture = idx > 0 ? filteredFixtures[idx - 1] : null;
-                  const prevKickoff = prevFixture ? formatKickoff(prevFixture.target_kickoff_at) : null;
-                  const isTimeSlotStart =
-                    !prevKickoff ||
-                    prevKickoff.timeStr !== kickoff.timeStr ||
-                    prevKickoff.dateStr !== kickoff.dateStr;
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary, #0f172a)' }}>
+                      🌐 General Market • Showing {filteredFixtures.length} verified fixtures
+                    </span>
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 700,
+                      color: '#059669',
+                      background: 'rgba(5,150,105,0.1)',
+                      padding: '2px 8px',
+                      borderRadius: 6,
+                    }}
+                  >
+                    CORE 1X2 PREDICTIONS ACTIVE
+                  </div>
+                </div>
 
-                  return (
-                    <Fragment key={fixture.id}>
-                      {isTimeSlotStart && (
-                        <div className="kickoff-slot-divider">
-                          <div className="kickoff-slot-badge">
-                            <span className="kickoff-slot-clock">⏰</span>
-                            <span className="kickoff-slot-time">{kickoff.timeStr} WAT</span>
-                            <span className="kickoff-slot-dot">•</span>
-                            <span className="kickoff-slot-date">{kickoff.dateStr}</span>
+                {/* Cloud Telemetry / Error State */}
+                {error && (
+                  <div
+                    style={{
+                      padding: 16,
+                      background: '#fef2f2',
+                      border: '1px solid #fecaca',
+                      borderRadius: 12,
+                      color: '#b91c1c',
+                      fontSize: 13,
+                      marginBottom: 16,
+                    }}
+                  >
+                    <strong>Cloud Telemetry Notice:</strong> {error}
+                  </div>
+                )}
+
+                {loading ? (
+                  <div
+                    style={{
+                      padding: 40,
+                      background: '#ffffff',
+                      borderRadius: 16,
+                      border: '1px solid var(--border-subtle)',
+                      textAlign: 'center',
+                    }}
+                  >
+                    <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-emerald-600 mb-3" />
+                    <div style={{ fontWeight: 800, color: 'var(--text-primary)' }}>
+                      Synchronizing Global Prediction Queue...
+                    </div>
+                    <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
+                      Fetching verified mathematical simulations and authoritative match results.
+                    </div>
+                  </div>
+                ) : filteredFixtures.length === 0 ? (
+                  <div
+                    style={{
+                      padding: 48,
+                      background: '#ffffff',
+                      borderRadius: 16,
+                      border: '1px solid var(--border-subtle)',
+                      textAlign: 'center',
+                    }}
+                  >
+                    <div style={{ fontSize: 32, marginBottom: 8 }}>⚽</div>
+                    <div style={{ fontWeight: 800, fontSize: 16, color: 'var(--text-primary)' }}>
+                      {selectedDate !== 'all'
+                        ? 'No predictions available for this date.'
+                        : 'No predictions available for this selection.'}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: 13,
+                        color: 'var(--text-muted)',
+                        marginTop: 4,
+                        maxWidth: 460,
+                        margin: '6px auto 16px',
+                      }}
+                    >
+                      No published predictions are available for your current selection. Oddsbanta only displays
+                      matches that have completed full mathematical simulations and met our publication confidence
+                      thresholds.
+                    </div>
+                    <button
+                      type="button"
+                      className="btn-toggle-expand"
+                      onClick={resetAllFilters}
+                    >
+                      Reset All Filters
+                    </button>
+                  </div>
+                ) : (
+                  <div className="chronological-fixtures-stream">
+                    {filteredFixtures.map((fixture, idx) => {
+                      const kickoff = formatKickoff(fixture.target_kickoff_at);
+                      const prevFixture = idx > 0 ? filteredFixtures[idx - 1] : null;
+                      const prevKickoff = prevFixture ? formatKickoff(prevFixture.target_kickoff_at) : null;
+                      const isTimeSlotStart =
+                        !prevKickoff ||
+                        prevKickoff.timeStr !== kickoff.timeStr ||
+                        prevKickoff.dateStr !== kickoff.dateStr;
+
+                      return (
+                        <Fragment key={fixture.id}>
+                          {isTimeSlotStart && (
+                            <div className="kickoff-slot-divider">
+                              <div className="kickoff-slot-badge">
+                                <span className="kickoff-slot-clock">⏰</span>
+                                <span className="kickoff-slot-time">{kickoff.timeStr} WAT</span>
+                                <span className="kickoff-slot-dot">•</span>
+                                <span className="kickoff-slot-date">{kickoff.dateStr}</span>
+                              </div>
+                              <div className="kickoff-slot-line" />
+                            </div>
+                          )}
+                          <FixtureCard
+                            fixture={fixture}
+                            prediction={predsByFixture.get(fixture.id)?.[0] || null}
+                            isAdmin={isAdmin}
+                            canViewPredictions={canViewPredictions}
+                            isStarred={favorites.includes(fixture.id)}
+                            onToggleFavorite={toggleFavorite}
+                            isFavoriteItem={isFavoriteItem}
+                            onToggleFavoriteItem={toggleFavoriteItem}
+                            isExpanded={expandedFixtures.has(fixture.id)}
+                            onToggleExpand={() => toggleFixtureExpand(fixture.id)}
+                          />
+                          {idx === 2 && (
+                            <div style={{ margin: '14px 0' }}>
+                              <AdBannerSlot slotType="native-card" />
+                            </div>
+                          )}
+                        </Fragment>
+                      );
+                    })}
+                  </div>
+                )}
+              </>
+            ) : (
+              /* SPECIALIST DECOUPLED MARKET TERMINAL VIEW */
+              <>
+                {/* QUICK ACCA BUILDER & STREAM STATUS BAR */}
+                <div
+                  className="market-terminal-action-bar"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    flexWrap: 'wrap',
+                    gap: 12,
+                    margin: '0 0 16px',
+                    padding: '10px 16px',
+                    background: '#ffffff',
+                    borderRadius: 12,
+                    border: '1px solid var(--border-subtle, #e2e8f0)',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary, #0f172a)' }}>
+                      Showing {displayedMarketPredictions.length > 0 ? (marketPage - 1) * 10 + 1 : 0}–
+                      {Math.min(marketPage * 10, marketTotal)} of {marketTotal} calibrated signals
+                    </span>
+                    <span
+                      style={{
+                        fontSize: 11,
+                        fontWeight: 700,
+                        color: '#0284c7',
+                        background: 'rgba(2,132,199,0.1)',
+                        padding: '2px 8px',
+                        borderRadius: 6,
+                      }}
+                    >
+                      MAX 10 / VIEWPORT
+                    </span>
+                  </div>
+
+                  <QuickAccaBuilderButton
+                    predictions={displayedMarketPredictions}
+                    onAddBatch={handleAddBatchToAcca}
+                    onOpenSlip={() => setIsFavoritesDrawerOpen(true)}
+                    activeMarketLabel={activeMarket.replace(/_/g, ' ').toUpperCase()}
+                  />
+                </div>
+
+                {/* Cloud Telemetry / Error State */}
+                {error && (
+                  <div
+                    style={{
+                      padding: 16,
+                      background: '#fef2f2',
+                      border: '1px solid #fecaca',
+                      borderRadius: 12,
+                      color: '#b91c1c',
+                      fontSize: 13,
+                      marginBottom: 16,
+                    }}
+                  >
+                    <strong>Cloud Telemetry Notice:</strong> {error}
+                  </div>
+                )}
+
+                {/* Loading Skeleton */}
+                {marketLoading ? (
+                  <div
+                    style={{
+                      padding: 40,
+                      background: '#ffffff',
+                      borderRadius: 16,
+                      border: '1px solid var(--border-subtle)',
+                      textAlign: 'center',
+                    }}
+                  >
+                    <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-emerald-600 mb-3" />
+                    <div style={{ fontWeight: 800, color: 'var(--text-primary)' }}>
+                      Calibrating {activeMarket.replace(/_/g, ' ').toUpperCase()} Engine Signals...
+                    </div>
+                    <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
+                      Querying decoupled mathematical engine and running Monte Carlo distribution analysis.
+                    </div>
+                  </div>
+                ) : displayedMarketPredictions.length === 0 ? (
+                  <div
+                    style={{
+                      padding: 48,
+                      background: '#ffffff',
+                      borderRadius: 16,
+                      border: '1px solid var(--border-subtle)',
+                      textAlign: 'center',
+                    }}
+                  >
+                    <div style={{ fontSize: 32, marginBottom: 8 }}>⚽</div>
+                    <div style={{ fontWeight: 800, fontSize: 16, color: 'var(--text-primary)' }}>
+                      {selectedDate !== 'all'
+                        ? 'No predictions available for this market on this date.'
+                        : 'No predictions available for this market.'}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: 13,
+                        color: 'var(--text-muted)',
+                        marginTop: 4,
+                        maxWidth: 460,
+                        margin: '6px auto 16px',
+                      }}
+                    >
+                      Oddsbanta only displays matches that have completed isolated mathematical model simulations and
+                      passed strict publication confidence thresholds.
+                    </div>
+                    <button
+                      type="button"
+                      className="btn-toggle-expand"
+                      onClick={() => {
+                        handleSelectMarket('general');
+                        setSelectedDate('all');
+                        setSelectedLeague('all');
+                      }}
+                    >
+                      Switch to General Market (All Dates)
+                    </button>
+                  </div>
+                ) : (
+                  <div className="chronological-fixtures-stream">
+                    {displayedMarketPredictions.map((prediction, idx) => (
+                      <Fragment key={prediction.id}>
+                        <SpecialistMarketCard
+                          prediction={prediction}
+                          isFavorite={isFavoriteItem(
+                            prediction.fixture_id,
+                            prediction.market_label,
+                            prediction.prediction
+                          )}
+                          onToggleFavorite={toggleFavoriteItem}
+                          onOpenUpgrade={() => setIsPricingModalOpen(true)}
+                          isAdmin={isAdmin}
+                        />
+                        {idx === 2 && (
+                          <div style={{ margin: '14px 0' }}>
+                            <AdBannerSlot slotType="native-card" />
                           </div>
-                          <div className="kickoff-slot-line" />
-                        </div>
-                      )}
-                      <FixtureCard
-                        fixture={fixture}
-                        prediction={predsByFixture.get(fixture.id)?.[0] || null}
-                        isAdmin={isAdmin}
-                        canViewPredictions={canViewPredictions}
-                        isStarred={favorites.includes(fixture.id)}
-                        onToggleFavorite={toggleFavorite}
-                        isFavoriteItem={isFavoriteItem}
-                        onToggleFavoriteItem={toggleFavoriteItem}
-                        isExpanded={expandedFixtures.has(fixture.id)}
-                        onToggleExpand={() => toggleFixtureExpand(fixture.id)}
-                      />
-                      {idx === 2 && (
-                        <div style={{ margin: '14px 0' }}>
-                          <AdBannerSlot slotType="native-card" />
-                        </div>
-                      )}
-                    </Fragment>
-                  );
-                })}
-              </div>
+                        )}
+                      </Fragment>
+                    ))}
+
+                    {/* ANTI-SCROLL SMART PAGINATION BAR (STRICT MAX 10 VIEWPORT) */}
+                    <SmartPaginationBar
+                      page={marketPage}
+                      totalPages={marketTotalPages}
+                      totalItems={marketTotal}
+                      limit={10}
+                      onPageChange={setMarketPage}
+                      loading={marketLoading}
+                    />
+                  </div>
+                )}
+              </>
             )}
           </div>
 
@@ -2179,7 +2523,7 @@ export default function App() {
           <span className="mobile-tab-label">{currentUser ? 'Dashboard' : 'Predictions'}</span>
         </Link>
         {Boolean(currentUser) && (
-          <Link to="/goals" className={`mobile-tab-item ${location.pathname === '/goals' ? 'active' : ''}`}>
+          <Link to="/dashboard?market=over_2.5_goals" className={`mobile-tab-item ${location.search.includes('market=over_2.5_goals') ? 'active' : ''}`}>
             <span className="mobile-tab-icon">⚽</span>
             <span className="mobile-tab-label">Over 2.5</span>
           </Link>
