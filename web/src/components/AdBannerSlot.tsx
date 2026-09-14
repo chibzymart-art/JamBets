@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { getAdConfig, subscribeToAdConfig, AdBannerConfig } from '../lib/adConfig';
 
 export type AdSlotType = 'leaderboard' | 'native-card' | 'mobile-anchor' | 'drawer-banner';
 
@@ -8,15 +9,26 @@ interface AdBannerSlotProps {
 }
 
 export const AdBannerSlot: React.FC<AdBannerSlotProps> = ({ slotType, customClass = '' }) => {
-  const [isDismissed, setIsDismissed] = useState(false);
+  const [config, setConfig] = useState<AdBannerConfig>(getAdConfig());
 
-  if (isDismissed) return null;
+  useEffect(() => {
+    const unsubscribe = subscribeToAdConfig((newConfig) => {
+      setConfig(newConfig);
+    });
+    return unsubscribe;
+  }, []);
 
-  // Master Test Partner: mybrainpadi.com
-  const sponsorUrl = 'https://mybrainpadi.com/?utm_source=oddsbanta&utm_medium=ad_banner&utm_campaign=student_sports_crossover';
+  // 4. MOBILE STICKY BOTTOM ANCHOR — Permanently disabled per UX requirement
+  if (slotType === 'mobile-anchor') {
+    return null;
+  }
+
+  const sponsorUrl = config.sponsorUrl || 'https://mybrainpadi.com/?utm_source=oddsbanta&utm_medium=ad_banner&utm_campaign=student_sports_crossover';
 
   // 1. COMPACT & BRIGHT TOP LEADERBOARD BANNER (Slim horizontal strip)
   if (slotType === 'leaderboard') {
+    if (!config.isLeaderboardEnabled) return null;
+
     return (
       <div className={`ad-slot-leaderboard-container ${customClass}`}>
         <a
@@ -24,28 +36,28 @@ export const AdBannerSlot: React.FC<AdBannerSlotProps> = ({ slotType, customClas
           target="_blank"
           rel="noopener noreferrer sponsored"
           className="ad-leaderboard-link"
-          title="Visit MyBrainPadi.com — AI Study & Thesis Assistant"
+          title={`Visit ${config.brandTitle} — ${config.brandSubtitle}`}
         >
           <div className="ad-leaderboard-content">
             <div className="ad-brand-col">
               <span className="ad-brand-icon">🎓</span>
               <div className="ad-brand-names">
                 <div className="ad-brand-header-inline">
-                  <strong className="ad-brand-title">MyBrainPadi.com</strong>
-                  <span className="ad-inline-sponsor-pill">SPONSORED</span>
+                  <strong className="ad-brand-title">{config.brandTitle}</strong>
+                  <span className="ad-inline-sponsor-pill">{config.brandBadge || 'SPONSORED'}</span>
                 </div>
-                <span className="ad-brand-subtitle">AI Academic & Research Assistant</span>
+                <span className="ad-brand-subtitle">{config.brandSubtitle}</span>
               </div>
             </div>
 
             <div className="ad-copy-col">
               <span className="ad-tagline">
-                Writing a Project, Thesis, or Exam Prep? Let AI Structure Literature & Verified Citations.
+                {config.brandTagline}
               </span>
             </div>
 
             <div className="ad-cta-col">
-              <span className="ad-cta-btn">Try Free ➔</span>
+              <span className="ad-cta-btn">{config.brandCtaText || 'Try Free ➔'}</span>
             </div>
           </div>
         </a>
@@ -55,30 +67,32 @@ export const AdBannerSlot: React.FC<AdBannerSlotProps> = ({ slotType, customClas
 
   // 2. IN-FEED NATIVE SPONSORED MATCH CARD (Blends with StandaloneGoalCard)
   if (slotType === 'native-card') {
+    if (!config.isNativeCardEnabled) return null;
+
     return (
       <div className={`ad-native-match-card ${customClass}`}>
         <div className="ad-native-header">
           <div className="ad-native-meta">
-            <span className="ad-verified-tag">🎓 VERIFIED PARTNER • MYBRAINPADI</span>
+            <span className="ad-verified-tag">🎓 VERIFIED PARTNER • {config.brandTitle.toUpperCase()}</span>
             <span className="ad-badge-gold">AI EDUCATION EDGE</span>
           </div>
-          <span className="ad-sponsor-pill">Sponsored</span>
+          <span className="ad-sponsor-pill">{config.brandBadge || 'Sponsored'}</span>
         </div>
 
         <div className="ad-native-body">
           <h4 className="ad-native-heading">
-            Tired of Manual Referencing? Get Instant Verified Academic Citations.
+            {config.nativeHeading}
           </h4>
           <p className="ad-native-text">
-            From thesis proposals to assignment structuring, <strong>MyBrainPadi</strong> equips university students with verified, accurate citations and AI research structuring in seconds.
+            {config.nativeBody}
           </p>
         </div>
 
         <div className="ad-native-footer">
           <div className="ad-native-perks">
-            <span className="perk-tag">✓ Thesis Outlines</span>
-            <span className="perk-tag">✓ Verified Sources</span>
-            <span className="perk-tag">✓ Free Access</span>
+            {config.nativePerk1 && <span className="perk-tag">{config.nativePerk1}</span>}
+            {config.nativePerk2 && <span className="perk-tag">{config.nativePerk2}</span>}
+            {config.nativePerk3 && <span className="perk-tag">{config.nativePerk3}</span>}
           </div>
           <a
             href={sponsorUrl}
@@ -86,7 +100,7 @@ export const AdBannerSlot: React.FC<AdBannerSlotProps> = ({ slotType, customClas
             rel="noopener noreferrer sponsored"
             className="ad-native-cta-btn"
           >
-            Launch Free AI Tool →
+            {config.nativeCtaText || 'Launch Free AI Tool →'}
           </a>
         </div>
       </div>
@@ -95,6 +109,8 @@ export const AdBannerSlot: React.FC<AdBannerSlotProps> = ({ slotType, customClas
 
   // 3. ACCA DRAWER BANNER (Inside Favorites Drawer)
   if (slotType === 'drawer-banner') {
+    if (!config.isDrawerBannerEnabled) return null;
+
     return (
       <div className={`ad-drawer-banner-wrap ${customClass}`}>
         <a
@@ -106,47 +122,16 @@ export const AdBannerSlot: React.FC<AdBannerSlotProps> = ({ slotType, customClas
           <div className="ad-drawer-left">
             <span className="ad-mini-icon">🎓</span>
             <div>
-              <span className="ad-drawer-headline">MyBrainPadi.com</span>
-              <span className="ad-drawer-sub">Ace coursework while waiting for kickoff</span>
+              <span className="ad-drawer-headline">{config.drawerHeadline || config.brandTitle}</span>
+              <span className="ad-drawer-sub">{config.drawerSub || config.brandSubtitle}</span>
             </div>
           </div>
-          <span className="ad-drawer-cta">Explore →</span>
+          <span className="ad-drawer-cta">{config.drawerCta || 'Explore →'}</span>
         </a>
-      </div>
-    );
-  }
-
-  // 4. MOBILE STICKY BOTTOM ANCHOR (320x50 Mobile Floating)
-  if (slotType === 'mobile-anchor') {
-    return (
-      <div className={`ad-mobile-sticky-anchor ${customClass}`}>
-        <a
-          href={sponsorUrl}
-          target="_blank"
-          rel="noopener noreferrer sponsored"
-          className="ad-mobile-anchor-link"
-        >
-          <span className="ad-anchor-icon">🎓</span>
-          <div className="ad-anchor-text">
-            <span className="ad-anchor-title">Ace Your Exams & Thesis with AI</span>
-            <span className="ad-anchor-brand">MyBrainPadi.com • Free Assistant</span>
-          </div>
-          <span className="ad-anchor-cta">Try ➔</span>
-        </a>
-        <button
-          type="button"
-          className="ad-anchor-close-btn"
-          onClick={(e) => {
-            e.stopPropagation();
-            setIsDismissed(true);
-          }}
-          aria-label="Close ad"
-        >
-          ✕
-        </button>
       </div>
     );
   }
 
   return null;
 };
+

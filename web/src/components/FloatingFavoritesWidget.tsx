@@ -213,7 +213,7 @@ export const FloatingFavoritesWidget: React.FC<FloatingFavoritesWidgetProps> = (
           </span>
         )}
       </div>
-      <div className="floating-widget-hint">{isOpen ? 'CLOSE' : 'SLIP'}</div>
+      <div className="floating-widget-hint">{isOpen ? 'CLOSE' : 'ACCA SLIP'}</div>
     </div>
   );
 };

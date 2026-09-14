@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 import { SystemHealthStatus, AuditRecord, UserProfile, LeagueRecord, PaymentRecord } from '../types';
+import { getAdConfig, saveAdConfig, resetAdConfig, AdBannerConfig } from '../lib/adConfig';
 
 interface AdminViewProps {
   currentUserProfile: UserProfile | null;
@@ -77,6 +78,55 @@ export const AdminView: React.FC<AdminViewProps> = ({
   const [broadcastLoading, setBroadcastLoading] = useState<boolean>(false);
   const [broadcastText, setBroadcastText] = useState<string>('');
   const [copiedBroadcast, setCopiedBroadcast] = useState<boolean>(false);
+
+  // Ad Banner Campaign Settings State
+  const [adConfig, setAdConfigState] = useState<AdBannerConfig>(getAdConfig());
+  const [adSaveLoading, setAdSaveLoading] = useState<boolean>(false);
+
+  const handleSaveAdConfig = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    playSfx('click');
+    setAdSaveLoading(true);
+    setActionError(null);
+    try {
+      saveAdConfig(adConfig);
+
+      // Audit log entry
+      try {
+        await supabase.from('audit_logs').insert({
+          actor_id: currentUserProfile?.id,
+          actor_email: currentUserProfile?.email,
+          actor_role: 'admin',
+          action: 'admin_ad_banners_updated',
+          affected_table: 'ad_banners_config',
+          new_state: adConfig,
+          reason: `Admin updated ad banner campaign for: ${adConfig.brandTitle}`
+        });
+      } catch (logErr) {
+        console.warn('Audit log write error:', logErr);
+      }
+
+      playSfx('success');
+      setActionSuccess(`📢 Ad Banner Campaign for "${adConfig.brandTitle}" published live across all pages!`);
+      setTimeout(() => setActionSuccess(null), 4000);
+      fetchAuditLogs();
+    } catch (err: any) {
+      playSfx('error');
+      console.error('Error saving ad config:', err);
+      setActionError(err.message || 'Failed to update ad banners.');
+    } finally {
+      setAdSaveLoading(false);
+    }
+  };
+
+  const handleResetAdConfig = () => {
+    playSfx('click');
+    const def = resetAdConfig();
+    setAdConfigState(def);
+    playSfx('success');
+    setActionSuccess('📢 Ad banners reset to factory defaults (MyBrainPadi)!');
+    setTimeout(() => setActionSuccess(null), 3500);
+  };
 
   const generateBroadcastPicks = async () => {
     setBroadcastLoading(true);
@@ -1035,6 +1085,18 @@ export const AdminView: React.FC<AdminViewProps> = ({
 
           <button
             type="button"
+            className="btn-deck-return"
+            style={{ borderColor: '#38bdf8', color: '#38bdf8' }}
+            onClick={() => {
+              playSfx('click');
+              document.getElementById('section-ad-banners')?.scrollIntoView({ behavior: 'smooth' });
+            }}
+          >
+            📢 Ad Banners
+          </button>
+
+          <button
+            type="button"
             className="btn-deck-refresh"
             onClick={() => {
               playSfx('click');
@@ -1298,6 +1360,416 @@ export const AdminView: React.FC<AdminViewProps> = ({
           <div className="telemetry-value">{auditLogs.length}</div>
           <div className="telemetry-sub">Cryptographically verified actions</div>
         </div>
+      </section>
+
+      {/* =====================================================================
+          PANEL: AD BANNER & SPONSOR CAMPAIGN MANAGER
+          ===================================================================== */}
+      <section
+        id="section-ad-banners"
+        className="genz-card"
+        style={{
+          border: '1px solid rgba(56, 189, 248, 0.35)',
+          boxShadow: '0 4px 24px rgba(2, 132, 199, 0.15)',
+          background: 'linear-gradient(180deg, rgba(15, 23, 42, 0.85) 0%, rgba(3, 7, 18, 0.95) 100%)'
+        }}
+      >
+        <div className="genz-card-header" style={{ borderBottom: '1px solid rgba(56, 189, 248, 0.2)' }}>
+          <div className="card-title-group">
+            <span className="card-emoji">📢</span>
+            <div>
+              <h2 className="card-title" style={{ color: '#38bdf8' }}>Ad Banners & Sponsor Campaign Hub</h2>
+              <p className="card-subtitle">
+                Configure sponsor branding, campaign copy, target UTM link, and slot display across all pages in real-time.
+              </p>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <button
+              type="button"
+              className="genz-pill"
+              onClick={handleResetAdConfig}
+              title="Reset all ad banner copy to default partner (MyBrainPadi)"
+            >
+              🔄 Reset to Defaults
+            </button>
+            <button
+              type="button"
+              className="compact-trigger-btn"
+              style={{
+                background: 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)',
+                borderColor: '#38bdf8',
+                color: '#ffffff',
+                padding: '8px 18px',
+                fontWeight: 800,
+                cursor: 'pointer'
+              }}
+              onClick={() => handleSaveAdConfig()}
+              disabled={adSaveLoading}
+            >
+              {adSaveLoading ? 'Saving...' : '💾 Publish Campaign Live'}
+            </button>
+          </div>
+        </div>
+
+        {/* Slot Activation Switches */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+          gap: '12px',
+          marginBottom: '20px',
+          padding: '14px',
+          background: 'rgba(3, 7, 18, 0.5)',
+          borderRadius: '12px',
+          border: '1px solid rgba(255, 255, 255, 0.08)'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#f8fafc' }}>Top Leaderboard Banner</div>
+              <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Slim strip below navigation</div>
+            </div>
+            <button
+              type="button"
+              className={`btn-toggle-switch ${adConfig.isLeaderboardEnabled ? 'active' : ''}`}
+              onClick={() => {
+                playSfx('click');
+                setAdConfigState(prev => ({ ...prev, isLeaderboardEnabled: !prev.isLeaderboardEnabled }));
+              }}
+              title="Toggle Leaderboard Banner"
+            >
+              <span className="toggle-thumb" />
+            </button>
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#f8fafc' }}>In-Feed Match Native Card</div>
+              <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Placed among prediction cards</div>
+            </div>
+            <button
+              type="button"
+              className={`btn-toggle-switch ${adConfig.isNativeCardEnabled ? 'active' : ''}`}
+              onClick={() => {
+                playSfx('click');
+                setAdConfigState(prev => ({ ...prev, isNativeCardEnabled: !prev.isNativeCardEnabled }));
+              }}
+              title="Toggle In-Feed Native Card"
+            >
+              <span className="toggle-thumb" />
+            </button>
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#f8fafc' }}>Acca Slip Drawer Banner</div>
+              <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Embedded in slide-out slip</div>
+            </div>
+            <button
+              type="button"
+              className={`btn-toggle-switch ${adConfig.isDrawerBannerEnabled ? 'active' : ''}`}
+              onClick={() => {
+                playSfx('click');
+                setAdConfigState(prev => ({ ...prev, isDrawerBannerEnabled: !prev.isDrawerBannerEnabled }));
+              }}
+              title="Toggle Drawer Banner"
+            >
+              <span className="toggle-thumb" />
+            </button>
+          </div>
+        </div>
+
+        {/* Ad Campaign Editor Form */}
+        <form onSubmit={handleSaveAdConfig} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '14px' }}>
+            {/* Brand Title */}
+            <div>
+              <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#cbd5e1', marginBottom: '4px' }}>
+                Sponsor Brand Name
+              </label>
+              <input
+                type="text"
+                className="genz-search-input"
+                style={{ width: '100%' }}
+                value={adConfig.brandTitle}
+                onChange={(e) => setAdConfigState({ ...adConfig, brandTitle: e.target.value })}
+                placeholder="e.g. MyBrainPadi.com"
+                required
+              />
+            </div>
+
+            {/* Brand Subtitle */}
+            <div>
+              <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#cbd5e1', marginBottom: '4px' }}>
+                Brand Subtitle / Tagline
+              </label>
+              <input
+                type="text"
+                className="genz-search-input"
+                style={{ width: '100%' }}
+                value={adConfig.brandSubtitle}
+                onChange={(e) => setAdConfigState({ ...adConfig, brandSubtitle: e.target.value })}
+                placeholder="e.g. AI Academic & Research Assistant"
+                required
+              />
+            </div>
+
+            {/* Brand Badge */}
+            <div>
+              <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#cbd5e1', marginBottom: '4px' }}>
+                Badge Pill Text
+              </label>
+              <input
+                type="text"
+                className="genz-search-input"
+                style={{ width: '100%' }}
+                value={adConfig.brandBadge}
+                onChange={(e) => setAdConfigState({ ...adConfig, brandBadge: e.target.value })}
+                placeholder="e.g. SPONSORED"
+              />
+            </div>
+
+            {/* CTA Button Text */}
+            <div>
+              <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#cbd5e1', marginBottom: '4px' }}>
+                Leaderboard CTA Button Text
+              </label>
+              <input
+                type="text"
+                className="genz-search-input"
+                style={{ width: '100%' }}
+                value={adConfig.brandCtaText}
+                onChange={(e) => setAdConfigState({ ...adConfig, brandCtaText: e.target.value })}
+                placeholder="e.g. Try Free ➔"
+                required
+              />
+            </div>
+          </div>
+
+          {/* Sponsor Destination URL */}
+          <div>
+            <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#cbd5e1', marginBottom: '4px' }}>
+              Target Destination URL (With UTM Campaign Parameters)
+            </label>
+            <input
+              type="url"
+              className="genz-search-input"
+              style={{ width: '100%', fontFamily: 'monospace' }}
+              value={adConfig.sponsorUrl}
+              onChange={(e) => setAdConfigState({ ...adConfig, sponsorUrl: e.target.value })}
+              placeholder="https://example.com/?utm_source=oddsbanta&utm_medium=ad_banner"
+              required
+            />
+          </div>
+
+          {/* Top Leaderboard Pitch */}
+          <div>
+            <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#cbd5e1', marginBottom: '4px' }}>
+              Top Leaderboard Pitch Copy
+            </label>
+            <input
+              type="text"
+              className="genz-search-input"
+              style={{ width: '100%' }}
+              value={adConfig.brandTagline}
+              onChange={(e) => setAdConfigState({ ...adConfig, brandTagline: e.target.value })}
+              placeholder="e.g. Writing a Project, Thesis, or Exam Prep? Let AI Structure Literature & Verified Citations."
+              required
+            />
+          </div>
+
+          {/* In-Feed Native Card Section */}
+          <div style={{
+            padding: '14px',
+            background: 'rgba(3, 7, 18, 0.4)',
+            borderRadius: '12px',
+            border: '1px solid rgba(255, 255, 255, 0.06)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '12px'
+          }}>
+            <h4 style={{ margin: 0, fontSize: '0.9rem', color: '#f8fafc', fontWeight: 750 }}>
+              🃏 In-Feed Native Card Customization
+            </h4>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '0.78rem', color: '#94a3b8', marginBottom: '4px' }}>
+                Native Card Heading
+              </label>
+              <input
+                type="text"
+                className="genz-search-input"
+                style={{ width: '100%' }}
+                value={adConfig.nativeHeading}
+                onChange={(e) => setAdConfigState({ ...adConfig, nativeHeading: e.target.value })}
+                required
+              />
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '0.78rem', color: '#94a3b8', marginBottom: '4px' }}>
+                Native Card Body Text
+              </label>
+              <textarea
+                className="genz-search-input"
+                rows={2}
+                style={{ width: '100%', resize: 'vertical' }}
+                value={adConfig.nativeBody}
+                onChange={(e) => setAdConfigState({ ...adConfig, nativeBody: e.target.value })}
+                required
+              />
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '2px' }}>Perk 1</label>
+                <input
+                  type="text"
+                  className="genz-search-input"
+                  style={{ width: '100%' }}
+                  value={adConfig.nativePerk1}
+                  onChange={(e) => setAdConfigState({ ...adConfig, nativePerk1: e.target.value })}
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '2px' }}>Perk 2</label>
+                <input
+                  type="text"
+                  className="genz-search-input"
+                  style={{ width: '100%' }}
+                  value={adConfig.nativePerk2}
+                  onChange={(e) => setAdConfigState({ ...adConfig, nativePerk2: e.target.value })}
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '2px' }}>Perk 3</label>
+                <input
+                  type="text"
+                  className="genz-search-input"
+                  style={{ width: '100%' }}
+                  value={adConfig.nativePerk3}
+                  onChange={(e) => setAdConfigState({ ...adConfig, nativePerk3: e.target.value })}
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '2px' }}>Native CTA Text</label>
+                <input
+                  type="text"
+                  className="genz-search-input"
+                  style={{ width: '100%' }}
+                  value={adConfig.nativeCtaText}
+                  onChange={(e) => setAdConfigState({ ...adConfig, nativeCtaText: e.target.value })}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Drawer Banner Customization */}
+          <div style={{
+            padding: '14px',
+            background: 'rgba(3, 7, 18, 0.4)',
+            borderRadius: '12px',
+            border: '1px solid rgba(255, 255, 255, 0.06)',
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+            gap: '10px'
+          }}>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.78rem', color: '#94a3b8', marginBottom: '2px' }}>Drawer Headline</label>
+              <input
+                type="text"
+                className="genz-search-input"
+                style={{ width: '100%' }}
+                value={adConfig.drawerHeadline}
+                onChange={(e) => setAdConfigState({ ...adConfig, drawerHeadline: e.target.value })}
+              />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.78rem', color: '#94a3b8', marginBottom: '2px' }}>Drawer Subtitle</label>
+              <input
+                type="text"
+                className="genz-search-input"
+                style={{ width: '100%' }}
+                value={adConfig.drawerSub}
+                onChange={(e) => setAdConfigState({ ...adConfig, drawerSub: e.target.value })}
+              />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.78rem', color: '#94a3b8', marginBottom: '2px' }}>Drawer CTA</label>
+              <input
+                type="text"
+                className="genz-search-input"
+                style={{ width: '100%' }}
+                value={adConfig.drawerCta}
+                onChange={(e) => setAdConfigState({ ...adConfig, drawerCta: e.target.value })}
+              />
+            </div>
+          </div>
+
+          {/* Live Preview Box */}
+          <div style={{
+            marginTop: '8px',
+            padding: '16px',
+            background: '#090d16',
+            borderRadius: '12px',
+            border: '1px dashed rgba(56, 189, 248, 0.35)'
+          }}>
+            <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#38bdf8', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              👁️ Real-Time Live Preview (Top Leaderboard Strip)
+            </div>
+            <div className="ad-slot-leaderboard-container" style={{ margin: 0 }}>
+              <div className="ad-leaderboard-link" style={{ pointerEvents: 'none' }}>
+                <div className="ad-leaderboard-content">
+                  <div className="ad-brand-col">
+                    <span className="ad-brand-icon">🎓</span>
+                    <div className="ad-brand-names">
+                      <div className="ad-brand-header-inline">
+                        <strong className="ad-brand-title">{adConfig.brandTitle || 'Brand Title'}</strong>
+                        <span className="ad-inline-sponsor-pill">{adConfig.brandBadge || 'SPONSORED'}</span>
+                      </div>
+                      <span className="ad-brand-subtitle">{adConfig.brandSubtitle || 'Subtitle'}</span>
+                    </div>
+                  </div>
+
+                  <div className="ad-copy-col">
+                    <span className="ad-tagline">{adConfig.brandTagline || 'Tagline'}</span>
+                  </div>
+
+                  <div className="ad-cta-col">
+                    <span className="ad-cta-btn">{adConfig.brandCtaText || 'Try Free ➔'}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Bottom Action Submit Button */}
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '6px' }}>
+            <button
+              type="button"
+              className="genz-pill"
+              onClick={handleResetAdConfig}
+            >
+              Reset to Defaults
+            </button>
+            <button
+              type="submit"
+              className="compact-trigger-btn"
+              style={{
+                background: 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)',
+                borderColor: '#38bdf8',
+                color: '#ffffff',
+                padding: '10px 24px',
+                fontWeight: 800,
+                fontSize: '0.9rem',
+                cursor: 'pointer'
+              }}
+              disabled={adSaveLoading}
+            >
+              {adSaveLoading ? 'Saving...' : '✓ Publish Ad Changes Across All Pages'}
+            </button>
+          </div>
+        </form>
       </section>
 
       {/* =====================================================================

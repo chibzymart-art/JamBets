@@ -1168,7 +1168,7 @@ export default function App() {
               aria-label="Favorites & Custom Slip"
             >
               <span className="favorites-cart-icon">⭐</span>
-              <span>Slip</span>
+              <span>Acca Slip</span>
               <span className={`favorites-cart-badge ${favoriteItems.length === 0 ? 'empty' : ''}`}>
                 {favoriteItems.length}
               </span>
@@ -2342,9 +2342,6 @@ export default function App() {
 
       {/* Global NDPR / GDPR Cookie Consent & Attribution Banner */}
       <CookieConsentBanner />
-
-      {/* GLOBAL MOBILE STICKY BOTTOM ANCHOR (ALL CURRENT & FUTURE PAGES) */}
-      <AdBannerSlot slotType="mobile-anchor" />
     </div>
   );
 }

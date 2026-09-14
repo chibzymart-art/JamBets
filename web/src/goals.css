@@ -1045,6 +1045,15 @@
   gap: 12px;
 }
 
+.command-tier-primary.search-only {
+  width: 100%;
+}
+
+.goals-compact-search.full-width {
+  width: 100%;
+}
+
+
 .goals-market-segmented-pill {
   display: inline-flex;
   align-items: center;
@@ -1871,13 +1880,7 @@
 
 @media (max-width: 768px) {
   .sports-targeted-push-alert {
-    flex-direction: column;
-    align-items: stretch;
-    padding: 12px;
-    gap: 10px;
-  }
-  .push-alert-right {
-    justify-content: flex-end;
+    display: none !important;
   }
 }
 

@@ -28,10 +28,10 @@ export const GoalsPage: React.FC<GoalsPageProps> = ({
   isAdmin,
   onOpenAuth,
   onOpenSubscription,
-  favoriteItems = [],
+  favoriteItems: _favoriteItems = [],
   onToggleFavoriteItem,
   isFavoriteItem,
-  onOpenFavoritesDrawer,
+  onOpenFavoritesDrawer: _onOpenFavoritesDrawer,
 }) => {
   const [rawPredictions, setRawPredictions] = useState<GoalPredictionItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -291,71 +291,26 @@ export const GoalsPage: React.FC<GoalsPageProps> = ({
     <div className="goals-page-container">
       {/* UNIFIED 2-TIER COMMAND ISLAND */}
       <div className="goals-command-island">
-        {/* TIER 1: Market Selector + Search + Acca Slip Launcher */}
-        <div className="command-tier-primary">
-          <div className="goals-market-segmented-pill" role="tablist">
-            <button
-              type="button"
-              className={`segmented-market-btn ${marketFilter === 'all' ? 'active' : ''}`}
-              onClick={() => setMarketFilter('all')}
-            >
-              🔥 Split View <span className="market-count-tag">{totalFilteredCount}</span>
-            </button>
-            <button
-              type="button"
-              className={`segmented-market-btn o25 ${marketFilter === 'over_2.5_goals' ? 'active' : ''}`}
-              onClick={() => setMarketFilter('over_2.5_goals')}
-            >
-              🎯 Over 2.5 <span className="market-count-tag">{filteredOver25.length}</span>
-            </button>
-            <button
-              type="button"
-              className={`segmented-market-btn ht05 ${marketFilter === 'ht_over_0.5_goals' ? 'active' : ''}`}
-              onClick={() => setMarketFilter('ht_over_0.5_goals')}
-            >
-              ⏱️ 1H Blitz <span className="market-count-tag">{filteredHt05.length}</span>
-            </button>
-            <button
-              type="button"
-              className={`segmented-market-btn ${marketFilter === 'settled' ? 'active' : ''}`}
-              onClick={() => setMarketFilter('settled')}
-            >
-              ✓ Settled
-            </button>
-          </div>
-
-          <div className="command-tier-primary-right">
-            <div className="goals-compact-search">
-              <span className="search-icon">🔍</span>
-              <input
-                type="text"
-                placeholder="Search club or league..."
-                value={searchQuery}
-                onChange={(e) => {
-                  const q = e.target.value;
-                  setSearchQuery(q);
-                  if (q.trim().length >= 3) {
-                    recordSportsSearch(q);
-                    trackSportsSearchEvent(q, filteredOver25.length + filteredHt05.length);
-                  }
-                }}
-                className="compact-search-input"
-              />
-              {searchQuery && (
-                <button className="clear-search-btn" onClick={() => setSearchQuery('')}>×</button>
-              )}
-            </div>
-
-            {onOpenFavoritesDrawer && (
-              <button
-                type="button"
-                className={`goals-acca-slip-launcher-btn ${favoriteItems.length > 0 ? 'has-items' : ''}`}
-                onClick={onOpenFavoritesDrawer}
-              >
-                <span className="slip-icon">📋</span>
-                <span className="slip-title">ACCA SLIP</span>
-                <span className="slip-badge">{favoriteItems.length}</span>
-              </button>
+        {/* TIER 1: Search */}
+        <div className="command-tier-primary search-only">
+          <div className="goals-compact-search full-width">
+            <span className="search-icon">🔍</span>
+            <input
+              type="text"
+              placeholder="Search club, league, or competition..."
+              value={searchQuery}
+              onChange={(e) => {
+                const q = e.target.value;
+                setSearchQuery(q);
+                if (q.trim().length >= 3) {
+                  recordSportsSearch(q);
+                  trackSportsSearchEvent(q, filteredOver25.length + filteredHt05.length);
+                }
+              }}
+              className="compact-search-input"
+            />
+            {searchQuery && (
+              <button className="clear-search-btn" onClick={() => setSearchQuery('')}>×</button>
             )}
           </div>
         </div>
