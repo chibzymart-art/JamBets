@@ -21,7 +21,6 @@ import { FloatingFavoritesWidget } from './components/FloatingFavoritesWidget';
 import { BotHubModal } from './components/BotHubModal';
 import { CookieConsentBanner } from './components/CookieConsentBanner';
 import { AdBannerSlot } from './components/AdBannerSlot';
-import { SportsPushAlert } from './components/SportsPushAlert';
 import { initAttributionTracker } from './lib/attribution';
 import { updatePageSeo } from './lib/seo';
 import { LandingPage } from './pages/Landing';
@@ -416,7 +415,6 @@ export default function App() {
         m &&
         [
           'general',
-          'curated',
           'home_win',
           'away_win',
           'draw',
@@ -455,7 +453,6 @@ export default function App() {
         m &&
         [
           'general',
-          'curated',
           'home_win',
           'away_win',
           'draw',
@@ -467,7 +464,7 @@ export default function App() {
       ) {
         setActiveMarket(m as MarketType);
         setMarketPage(1);
-      } else if (!m && activeMarket !== 'general') {
+      } else if ((!m || m === 'curated') && activeMarket !== 'general') {
         setActiveMarket('general');
       }
     } catch {}
@@ -756,29 +753,6 @@ export default function App() {
     return map;
   }, [predictions]);
 
-  // Unified Global Predictions List for Targeted Sports Intent Push Alert (All Pages)
-  const globalTargetedPredictions = useMemo(() => {
-    if (fixtures.length === 0) return [];
-    return fixtures.map((f) => {
-      const pred = predsByFixture.get(f.id)?.[0];
-      return {
-        fixture_id: f.id,
-        market: pred?.market || 'match_winner',
-        predicted_outcome: pred?.prediction || 'Banker',
-        probability: pred?.probability ? (pred.probability <= 1 ? pred.probability : pred.probability / 100) : 0.85,
-        target_kickoff_at: f.target_kickoff_at,
-        fixture: {
-          id: f.id,
-          home_team_name: f.home_team_name,
-          away_team_name: f.away_team_name,
-          league_name: f.league_name,
-          home_team: { name: f.home_team_name, short_name: f.home_team_name },
-          away_team: { name: f.away_team_name, short_name: f.away_team_name },
-          league: { name: f.league_name || f.league_code },
-        },
-      };
-    });
-  }, [fixtures, predsByFixture]);
 
   // Date extraction strictly in Africa/Lagos (WAT / UTC+1)
   const getFixtureWatDate = (targetKickoffIso: string) => {
@@ -1524,16 +1498,6 @@ export default function App() {
           <AdBannerSlot slotType="leaderboard" />
         </div>
 
-        {/* GLOBAL TARGETED SPORTS INTENT PUSH ALERT (ALL CURRENT & FUTURE PAGES) */}
-        <div className="global-top-push-alert-wrapper" style={{ maxWidth: 1200, margin: '0 auto', padding: '0 16px' }}>
-          <SportsPushAlert
-            predictions={globalTargetedPredictions}
-            onAddFavorite={toggleFavoriteItem}
-            isFavorite={isFavoriteItem}
-            triggerKey={location.pathname + searchQuery}
-          />
-        </div>
-
         <Routes>
           {/* ROUTE 1: DEDICATED HERO LANDING PAGE */}
           <Route
@@ -1777,11 +1741,40 @@ export default function App() {
           <>
             {/* 3. DAILY VERIFIED SCORECARD SECTION */}
         <section className="daily-scorecard-section">
-          {/* Top Date Header: Only Current Date Displayed */}
+          {/* Top Date Header: Current Date Display on left, League Selector Dropdown on far right */}
           <div className="scorecard-date-header">
             <div className="current-date-badge">
               <span className="current-date-live-dot" />
               <span className="current-date-val">{watDateStr || 'Today'}</span>
+            </div>
+
+            <div className="scorecard-league-filter-inline">
+              <div className="scorecard-league-select-wrapper">
+                <span className="scorecard-league-icon">🏆</span>
+                <select
+                  id="scorecard-league-select"
+                  className="scorecard-league-select"
+                  value={selectedLeague}
+                  onChange={(e) => setSelectedLeague(e.target.value)}
+                  aria-label="Filter by League"
+                >
+                  <option value="all">All {currentSportObj.name} Leagues ({fixtures.length})</option>
+                  {availableLeagues.map((lg) => (
+                    <option key={lg.code} value={lg.code}>
+                      {lg.name} ({lg.count})
+                    </option>
+                  ))}
+                </select>
+                <span className="scorecard-league-arrow">▾</span>
+              </div>
+              <button
+                type="button"
+                className="btn-scorecard-browse-leagues"
+                onClick={() => setIsAllLeaguesModalOpen(true)}
+                title="Browse all 30 leagues in directory"
+              >
+                🏛 Browse All (30)
+              </button>
             </div>
           </div>
 
@@ -1982,35 +1975,6 @@ export default function App() {
           </div>
         </section>
 
-        {/* 5. HORIZONTAL LEAGUES FILTER BAR (ALL 30 LEAGUES ACCESSIBLE) */}
-        <div className="leagues-filter-row">
-          <span className="leagues-label">Leagues:</span>
-          <button
-            type="button"
-            className={`league-pill-btn ${selectedLeague === 'all' ? 'active' : ''}`}
-            onClick={() => setSelectedLeague('all')}
-          >
-            All {currentSportObj.name} Leagues ({fixtures.length})
-          </button>
-          <button
-            type="button"
-            className="btn-browse-all-leagues"
-            onClick={() => setIsAllLeaguesModalOpen(true)}
-            title="Browse all 30 leagues in directory"
-          >
-            🏛 Browse All 30 Leagues (30)
-          </button>
-          {availableLeagues.slice(0, 10).map((lg) => (
-            <button
-              key={lg.code}
-              type="button"
-              className={`league-pill-btn ${selectedLeague === lg.code ? 'active' : ''}`}
-              onClick={() => setSelectedLeague(lg.code)}
-            >
-              {lg.name} ({lg.count})
-            </button>
-          ))}
-        </div>
 
         {/* 7. MAIN DASHBOARD 3-COLUMN GRID */}
         <div className="main-dashboard-grid">
@@ -2049,7 +2013,7 @@ export default function App() {
                         setSettlementFilter('all');
                         setScoreStatusFilter('all');
                         setSearchQuery('');
-                        handleSelectMarket('curated');
+                        handleSelectMarket('general');
                         const el = document.getElementById('market-terminal-stream-top');
                         if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
                       }}
@@ -2086,40 +2050,6 @@ export default function App() {
             {activeMarket === 'general' ? (
               /* GENERAL MARKET: ORIGINAL COMPLETE DASHBOARD STREAM */
               <>
-                <div
-                  className="market-terminal-action-bar"
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    flexWrap: 'wrap',
-                    gap: 12,
-                    margin: '0 0 16px',
-                    padding: '10px 16px',
-                    background: '#ffffff',
-                    borderRadius: 12,
-                    border: '1px solid var(--border-subtle, #e2e8f0)',
-                    boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary, #0f172a)' }}>
-                      🌐 General Market • Showing {filteredFixtures.length} verified fixtures
-                    </span>
-                  </div>
-                  <div
-                    style={{
-                      fontSize: 11,
-                      fontWeight: 700,
-                      color: '#059669',
-                      background: 'rgba(5,150,105,0.1)',
-                      padding: '2px 8px',
-                      borderRadius: 6,
-                    }}
-                  >
-                    CORE 1X2 PREDICTIONS ACTIVE
-                  </div>
-                </div>
 
                 {/* Cloud Telemetry / Error State */}
                 {error && (

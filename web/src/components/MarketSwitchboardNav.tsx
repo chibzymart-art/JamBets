@@ -27,14 +27,6 @@ const MARKET_TABS: MarketTabConfig[] = [
     accentColor: '#10b981',
   },
   {
-    id: 'curated',
-    label: 'Curated Top Edge',
-    icon: '🔥',
-    badgeTag: 'HIGH VALUE',
-    description: 'Autonomous consensus across all 6 isolated mathematical engines',
-    accentColor: '#f97316',
-  },
-  {
     id: 'home_win',
     label: 'Home Win',
     icon: '🏠',
@@ -90,31 +82,15 @@ export const MarketSwitchboardNav: React.FC<MarketSwitchboardNavProps> = ({
   counts,
   loading = false,
 }) => {
-  const currentTab = MARKET_TABS.find((t) => t.id === activeMarket) || MARKET_TABS[0];
-
   return (
     <div className="market-switchboard-container">
-      {/* Top Section Header */}
+      {/* Top Section Header - PREDICTED MARKETS */}
       <div className="switchboard-header">
         <div className="switchboard-title-group">
           <div className="switchboard-pill-title">
             <span className="switchboard-pulse-dot" />
-            <span className="switchboard-main-title">FOOTBALL MARKET TERMINAL</span>
-            <span className="switchboard-engine-badge">6 DECOUPLED ENGINES</span>
+            <span className="switchboard-main-title">PREDICTED MARKETS</span>
           </div>
-          <p className="switchboard-subtitle">
-            {currentTab.description}
-          </p>
-        </div>
-
-        <div className="switchboard-right-meta">
-          <span className="switchboard-mode-pill">
-            {activeMarket === 'general'
-              ? '⚽ Full Fixture Schedule & 1X2 Predictions'
-              : activeMarket === 'curated'
-              ? '⚡ All Markets Cross-Cut'
-              : `Isolated Engine: ${currentTab.badgeTag}`}
-          </span>
         </div>
       </div>
 

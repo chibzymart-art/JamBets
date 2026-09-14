@@ -1281,8 +1281,100 @@ body {
 .scorecard-date-header {
   display: flex;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: space-between;
+  gap: 10px;
   margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.scorecard-league-filter-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.scorecard-league-select-wrapper {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: #f8fafc;
+  border: 1px solid var(--border-subtle, #e2e8f0);
+  border-radius: 8px;
+  padding: 3px 8px;
+  transition: all 0.2s ease;
+}
+
+.scorecard-league-select-wrapper:hover,
+.scorecard-league-select-wrapper:focus-within {
+  border-color: #0284c7;
+  background: #ffffff;
+  box-shadow: 0 0 0 2px rgba(2, 132, 199, 0.12);
+}
+
+.scorecard-league-icon {
+  font-size: 12px;
+  color: #f59e0b;
+}
+
+.scorecard-league-select {
+  appearance: none;
+  background: transparent;
+  border: none;
+  outline: none;
+  font-family: var(--font-heading, 'Outfit', sans-serif);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-primary, #0f172a);
+  cursor: pointer;
+  padding-right: 4px;
+  max-width: 220px;
+}
+
+.scorecard-league-arrow {
+  font-size: 9px;
+  color: #64748b;
+  pointer-events: none;
+}
+
+.btn-scorecard-browse-leagues {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 3px 8px;
+  font-family: var(--font-heading, 'Outfit', sans-serif);
+  font-size: 11px;
+  font-weight: 700;
+  color: #0f172a;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.btn-scorecard-browse-leagues:hover {
+  background: #e2e8f0;
+  border-color: #cbd5e1;
+}
+
+@media (max-width: 640px) {
+  .scorecard-date-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+  }
+  .scorecard-league-filter-inline {
+    width: 100%;
+    justify-content: space-between;
+  }
+  .scorecard-league-select-wrapper {
+    flex: 1;
+  }
+  .scorecard-league-select {
+    max-width: 100%;
+    width: 100%;
+  }
 }
 
 .current-date-badge {
@@ -12097,33 +12189,373 @@ body {
    ===================================================================== */
 
 /* 1. Switchboard Container & Header */
-.market-switchboard-container {
-  background: #ffffff;
-  border: 1px solid var(--border-subtle, #e2e8f0);
-  border-radius: 16px;
-  padding: 16px 20px;
-  margin-bottom: 20px;
-  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.04);
+/* ==========================================================================
+   GLOBAL AD BANNER STYLING (Leaderboard, Native Match Card, Drawer)
+   ========================================================================== */
+.global-top-ad-banner-wrapper {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 16px;
 }
 
-.switchboard-header {
+.ad-slot-leaderboard-container {
+  margin: 6px auto 12px auto;
+  background: linear-gradient(90deg, #1e40af 0%, #2563eb 35%, #0284c7 70%, #0ea5e9 100%);
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  border-radius: 12px;
+  padding: 8px 18px;
+  box-shadow: 0 4px 18px rgba(37, 99, 235, 0.28);
+  position: relative;
+  overflow: hidden;
+  transition: all 0.2s ease;
+}
+
+.ad-slot-leaderboard-container:hover {
+  border-color: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 6px 24px rgba(14, 165, 233, 0.4);
+  transform: translateY(-1px);
+}
+
+.ad-slot-leaderboard-container::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 5px;
+  height: 100%;
+  background: #fde047;
+}
+
+.ad-leaderboard-link {
+  text-decoration: none;
+  color: inherit;
+  display: block;
+}
+
+.ad-leaderboard-content {
   display: flex;
+  align-items: center;
   justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 14px;
-  gap: 12px;
+  gap: 14px;
 }
 
-.switchboard-pill-title {
+.ad-brand-col {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.ad-brand-icon {
+  font-size: 1.25rem;
+  background: rgba(255, 255, 255, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  padding: 3px 7px;
+  border-radius: 7px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ad-brand-names {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.ad-brand-header-inline {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.ad-brand-title {
+  font-family: var(--font-heading, 'Outfit', sans-serif);
+  font-size: 0.92rem;
+  color: #ffffff;
+  font-weight: 900;
+  letter-spacing: -0.01em;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+}
+
+.ad-inline-sponsor-pill {
+  font-size: 0.56rem;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  color: #78350f;
+  background: #fef08a;
+  border: 1px solid #fde047;
+  padding: 2px 6px;
+  border-radius: 4px;
+  text-transform: uppercase;
+}
+
+.ad-brand-subtitle {
+  font-size: 0.7rem;
+  color: #e0f2fe;
+  font-weight: 700;
+}
+
+.ad-copy-col {
+  flex: 1;
+  max-width: 600px;
+  overflow: hidden;
+}
+
+.ad-tagline {
+  font-size: 0.78rem;
+  color: #ffffff;
+  line-height: 1.35;
+  font-weight: 600;
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+
+.ad-cta-col {
+  flex-shrink: 0;
+}
+
+.ad-cta-btn {
+  background: #ffffff;
+  color: #1e3a8a;
+  font-family: var(--font-heading, 'Outfit', sans-serif);
+  font-size: 0.76rem;
+  font-weight: 900;
+  padding: 6px 15px;
+  border-radius: 8px;
+  display: inline-block;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.2);
+  transition: transform 0.15s ease, background 0.15s ease, color 0.15s ease;
+  white-space: nowrap;
+}
+
+.ad-leaderboard-link:hover .ad-cta-btn {
+  transform: translateY(-1px);
+  background: #fde047;
+  color: #78350f;
+  box-shadow: 0 4px 14px rgba(253, 224, 71, 0.5);
+}
+
+@media (max-width: 840px) {
+  .ad-leaderboard-content {
+    flex-wrap: nowrap;
+    gap: 10px;
+  }
+  .ad-copy-col {
+    display: none;
+  }
+  .ad-brand-subtitle {
+    display: none;
+  }
+  .ad-brand-title {
+    font-size: 0.82rem;
+  }
+  .ad-cta-btn {
+    padding: 5px 11px;
+    font-size: 0.7rem;
+  }
+}
+
+/* Native Match Card & Drawer Banner styles */
+.ad-native-match-card {
+  background: linear-gradient(135deg, #1e40af 0%, #2563eb 50%, #0284c7 100%);
+  border: 1.5px solid rgba(255, 255, 255, 0.4);
+  border-radius: 16px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  position: relative;
+  box-shadow: 0 6px 20px rgba(37, 99, 235, 0.25);
+  transition: border-color 0.2s ease, transform 0.2s ease;
+  margin-bottom: 14px;
+  color: #ffffff;
+}
+
+.ad-native-match-card:hover {
+  border-color: rgba(255, 255, 255, 0.85);
+  transform: translateY(-2px);
+}
+
+.ad-native-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ad-native-meta {
   display: flex;
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
 }
 
+.ad-verified-tag {
+  font-size: 0.65rem;
+  font-weight: 900;
+  color: #fde047;
+  letter-spacing: 0.04em;
+}
+
+.ad-badge-gold {
+  font-size: 0.6rem;
+  font-weight: 800;
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.2);
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+.ad-sponsor-pill {
+  font-size: 0.6rem;
+  font-weight: 800;
+  color: #fef08a;
+  background: rgba(0, 0, 0, 0.25);
+  padding: 2px 6px;
+  border-radius: 4px;
+  text-transform: uppercase;
+}
+
+.ad-native-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ad-native-heading {
+  margin: 0;
+  font-size: 0.88rem;
+  font-weight: 800;
+  color: #ffffff;
+  line-height: 1.35;
+}
+
+.ad-native-text {
+  margin: 0;
+  font-size: 0.74rem;
+  color: #e0f2fe;
+  line-height: 1.45;
+}
+
+.ad-native-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.15);
+  flex-wrap: wrap;
+}
+
+.ad-native-perks {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.ad-native-cta-btn {
+  background: #ffffff;
+  color: #1e3a8a;
+  text-decoration: none;
+  font-size: 0.74rem;
+  font-weight: 900;
+  padding: 7px 14px;
+  border-radius: 8px;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.ad-native-cta-btn:hover {
+  background: #fde047;
+  color: #78350f;
+}
+
+.ad-drawer-banner-wrap {
+  margin: 12px 0 16px;
+  background: linear-gradient(135deg, #1e40af 0%, #0284c7 100%);
+  border: 1.5px solid rgba(255, 255, 255, 0.4);
+  border-radius: 12px;
+  padding: 12px 14px;
+  box-shadow: 0 4px 14px rgba(2, 132, 199, 0.28);
+}
+
+.ad-drawer-link {
+  text-decoration: none;
+  color: inherit;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.ad-drawer-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ad-mini-icon {
+  font-size: 1.3rem;
+}
+
+.ad-drawer-headline {
+  display: block;
+  font-size: 0.82rem;
+  font-weight: 850;
+  color: #ffffff;
+}
+
+.ad-drawer-sub {
+  display: block;
+  font-size: 0.7rem;
+  color: #38bdf8;
+  font-weight: 600;
+}
+
+.ad-drawer-cta {
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: #0284c7;
+  background: #ffffff;
+  padding: 5px 10px;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+
+/* ==========================================================================
+   PREDICTED MARKETS SWITCHBOARD (Compact & Streamlined)
+   ========================================================================== */
+.market-switchboard-container {
+  background: #ffffff;
+  border: 1px solid var(--border-subtle, #e2e8f0);
+  border-radius: 14px;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.03);
+}
+
+.switchboard-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  gap: 10px;
+}
+
+.switchboard-pill-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
 .switchboard-pulse-dot {
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   background: #10b981;
   box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2);
@@ -12132,47 +12564,20 @@ body {
 
 .switchboard-main-title {
   font-family: var(--font-heading, 'Outfit', sans-serif);
-  font-size: 15px;
-  font-weight: 800;
-  letter-spacing: 0.5px;
-  color: var(--text-primary, #0f172a);
-}
-
-.switchboard-engine-badge {
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.5px;
-  color: #0284c7;
-  background: rgba(2, 132, 199, 0.08);
-  border: 1px solid rgba(2, 132, 199, 0.2);
-  padding: 2px 8px;
-  border-radius: 9999px;
-}
-
-.switchboard-subtitle {
   font-size: 12px;
-  color: var(--text-muted, #64748b);
-  margin-top: 3px;
-  line-height: 1.4;
+  font-weight: 800;
+  letter-spacing: 0.8px;
+  color: var(--text-primary, #0f172a);
+  text-transform: uppercase;
 }
 
-.switchboard-mode-pill {
-  font-size: 11px;
-  font-weight: 700;
-  color: #475569;
-  background: #f1f5f9;
-  padding: 4px 10px;
-  border-radius: 8px;
-  white-space: nowrap;
-}
-
-/* 2. Switchboard Pills Row */
+/* 2. Switchboard Pills Row - Compact with reduced length */
 .market-switchboard-pills-bar {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   overflow-x: auto;
-  padding-bottom: 4px;
+  padding-bottom: 2px;
   scrollbar-width: thin;
   -webkit-overflow-scrolling: touch;
 }
@@ -12180,13 +12585,13 @@ body {
 .market-switchboard-pill {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
+  gap: 6px;
+  padding: 5px 11px;
   background: #f8fafc;
   border: 1px solid #e2e8f0;
-  border-radius: 12px;
+  border-radius: 9px;
   font-family: var(--font-heading, 'Outfit', sans-serif);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
   color: #475569;
   cursor: pointer;
@@ -12205,17 +12610,17 @@ body {
   background: #0f172a;
   border-color: #0f172a;
   color: #ffffff;
-  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.15);
+  box-shadow: 0 3px 10px rgba(15, 23, 42, 0.15);
 }
 
 .market-switchboard-pill.active .pill-icon {
-  transform: scale(1.15);
+  transform: scale(1.1);
 }
 
 .pill-count-badge {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 800;
-  padding: 2px 7px;
+  padding: 1px 6px;
   border-radius: 9999px;
   background: #e2e8f0;
   color: #475569;
