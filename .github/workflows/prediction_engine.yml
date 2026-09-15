@@ -56,6 +56,18 @@ jobs:
           echo "=== RUNNING GOALS SPECIALIST PREDICTION ENGINE ==="
           python -m python.src.goals.run_goals_cycle --predict-only
 
+      - name: Execute Decoupled Specialist Prediction Engines
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          ALERT_EMAIL_SENDER: ${{ secrets.ALERT_EMAIL_SENDER }}
+          ALERT_EMAIL_PASSWORD: ${{ secrets.ALERT_EMAIL_PASSWORD }}
+          ALERT_EMAIL_RECIPIENTS: ${{ secrets.ALERT_EMAIL_RECIPIENTS }}
+        run: |
+          echo "=== RUNNING DECOUPLED SPECIALIST PREDICTION ENGINES (Home, Away, Draw, Corners) ==="
+          python -m python.src.engines.run_all_specialists --predict-only
+
       - name: Dispatch Prediction Failure Email Alert
         if: failure()
         env:

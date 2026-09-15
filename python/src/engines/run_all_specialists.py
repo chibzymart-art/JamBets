@@ -24,7 +24,7 @@ from python.src.engines.corners_engine import CornersEngine
 from python.src.engines.specialist_settlements import SpecialistSettlementPipeline
 
 
-def run_all():
+def run_all(predict: bool = True, settle: bool = True):
     print("=================================================================")
     print(" 🚀 Oddsbanta — Master Decoupled Specialist Engines Runner")
     print(f" Timestamp: {datetime.now(timezone.utc).isoformat()}")
@@ -32,30 +32,32 @@ def run_all():
 
     results = {}
 
-    # 1. Home Win Engine
-    print("--- Running Home Win Engine ---")
-    hw_engine = HomeWinEngine()
-    results["home_win"] = hw_engine.run()
+    if predict:
+        # 1. Home Win Engine
+        print("--- Running Home Win Engine ---")
+        hw_engine = HomeWinEngine()
+        results["home_win"] = hw_engine.run()
 
-    # 2. Away Win Engine
-    print("\n--- Running Away Win Engine ---")
-    aw_engine = AwayWinEngine()
-    results["away_win"] = aw_engine.run()
+        # 2. Away Win Engine
+        print("\n--- Running Away Win Engine ---")
+        aw_engine = AwayWinEngine()
+        results["away_win"] = aw_engine.run()
 
-    # 3. Draw Engine
-    print("\n--- Running Draw Hunter Engine ---")
-    draw_engine = DrawEngine()
-    results["draw"] = draw_engine.run()
+        # 3. Draw Engine
+        print("\n--- Running Draw Hunter Engine ---")
+        draw_engine = DrawEngine()
+        results["draw"] = draw_engine.run()
 
-    # 4. Corners Engine
-    print("\n--- Running Corners Specialist Engine ---")
-    corners_engine = CornersEngine()
-    results["corners"] = corners_engine.run()
+        # 4. Corners Engine
+        print("\n--- Running Corners Specialist Engine ---")
+        corners_engine = CornersEngine()
+        results["corners"] = corners_engine.run()
 
-    # 5. Settlement Pipeline
-    print("\n--- Running Specialist Settlements Pipeline ---")
-    settlement_pipe = SpecialistSettlementPipeline()
-    results["settlements"] = settlement_pipe.settle_all()
+    if settle:
+        # 5. Settlement Pipeline
+        print("\n--- Running Specialist Settlements Pipeline ---")
+        settlement_pipe = SpecialistSettlementPipeline()
+        results["settlements"] = settlement_pipe.settle_all()
 
     print("\n=================================================================")
     print(" ✅ All Specialist Prediction & Settlement Cycles Completed!")
@@ -65,4 +67,14 @@ def run_all():
 
 
 if __name__ == "__main__":
-    run_all()
+    import argparse
+    parser = argparse.ArgumentParser(description="Oddsbanta Decoupled Specialist Engines Runner")
+    parser.add_argument("--predict-only", action="store_true", help="Run only prediction engines (Home, Away, Draw, Corners)")
+    parser.add_argument("--settle-only", action="store_true", help="Run only specialist settlement pipeline")
+    args = parser.parse_args()
+
+    do_predict = not args.settle_only
+    do_settle = not args.predict_only
+
+    run_all(predict=do_predict, settle=do_settle)
+
