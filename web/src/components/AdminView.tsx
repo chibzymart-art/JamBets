@@ -330,6 +330,12 @@ export const AdminView: React.FC<AdminViewProps> = ({
   const fetchAuditLogs = async () => {
     setAuditLoading(true);
     try {
+      const { data: rpcLogs, error: rpcErr } = await supabase.rpc('admin_get_audit_logs', { p_limit: 100 });
+      if (!rpcErr && Array.isArray(rpcLogs)) {
+        setAuditLogs(rpcLogs);
+        return;
+      }
+
       const { data, error } = await supabase
         .from('audit_logs')
         .select('*')
@@ -348,6 +354,14 @@ export const AdminView: React.FC<AdminViewProps> = ({
   const fetchUsers = async () => {
     setUsersLoading(true);
     try {
+      // Primary: Authoritative atomic RPC aggregator (bypasses RLS recursion & performs atomic join)
+      const { data: rpcUsers, error: rpcErr } = await supabase.rpc('admin_get_users');
+      if (!rpcErr && Array.isArray(rpcUsers) && rpcUsers.length > 0) {
+        setUsersList(rpcUsers as UserProfile[]);
+        return;
+      }
+
+      // Fallback: Direct table selects if RPC is unreachable
       const [usersRes, subsRes, entsRes] = await Promise.all([
         supabase
           .from('users')
@@ -384,6 +398,12 @@ export const AdminView: React.FC<AdminViewProps> = ({
   const fetchPayments = async () => {
     setPaymentsLoading(true);
     try {
+      const { data: rpcPayments, error: rpcErr } = await supabase.rpc('admin_get_payments', { p_limit: 100 });
+      if (!rpcErr && Array.isArray(rpcPayments)) {
+        setPaymentsList(rpcPayments as PaymentRecord[]);
+        return;
+      }
+
       const { data, error } = await supabase
         .from('payments')
         .select('*')
@@ -901,10 +921,15 @@ export const AdminView: React.FC<AdminViewProps> = ({
   // Filtered Users
   const filteredUsers = useMemo(() => {
     return usersList.filter((u) => {
-      const matchesSearch = !userSearch ||
-        u.email.toLowerCase().includes(userSearch.toLowerCase()) ||
-        (u.display_name && u.display_name.toLowerCase().includes(userSearch.toLowerCase())) ||
-        u.id.toLowerCase().includes(userSearch.toLowerCase());
+      const uEmail = (u.email || '').toLowerCase();
+      const uName = (u.display_name || '').toLowerCase();
+      const uId = (u.id || '').toLowerCase();
+      const query = userSearch.toLowerCase().trim();
+
+      const matchesSearch = !query ||
+        uEmail.includes(query) ||
+        uName.includes(query) ||
+        uId.includes(query);
 
       const matchesRole = 
         userRoleFilter === 'all' ? true :
