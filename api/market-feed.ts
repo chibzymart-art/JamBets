@@ -402,28 +402,56 @@ async function fetchMarketDataFromUpstream(
 }
 
 // Computes signal counts across all 6 markets for dynamic badges
-async function computeAllMarketCounts(headers: Record<string, string>): Promise<Record<MarketType, number>> {
+async function computeAllMarketCounts(
+  headers: Record<string, string>,
+  dateParam: string = 'all'
+): Promise<Record<MarketType, number>> {
   try {
     const [hw, aw, dr, cr, gl] = await Promise.all([
-      fetch(`${SUPABASE_URL}/rest/v1/home_win_predictions?select=id&limit=1000`, { headers }).then((r) => r.json()),
-      fetch(`${SUPABASE_URL}/rest/v1/away_win_predictions?select=id&limit=1000`, { headers }).then((r) => r.json()),
-      fetch(`${SUPABASE_URL}/rest/v1/draw_predictions?select=id&limit=1000`, { headers }).then((r) => r.json()),
-      fetch(`${SUPABASE_URL}/rest/v1/corner_predictions?select=id&limit=1000`, { headers }).then((r) => r.json()),
-      fetch(`${SUPABASE_URL}/rest/v1/goals_predictions?select=id,market&limit=1000`, { headers }).then((r) => r.json()),
+      fetch(`${SUPABASE_URL}/rest/v1/home_win_predictions_paywall?select=id,target_kickoff_at&limit=1000`, { headers }).then((r) => r.json()),
+      fetch(`${SUPABASE_URL}/rest/v1/away_win_predictions_paywall?select=id,target_kickoff_at&limit=1000`, { headers }).then((r) => r.json()),
+      fetch(`${SUPABASE_URL}/rest/v1/draw_predictions_paywall?select=id,target_kickoff_at&limit=1000`, { headers }).then((r) => r.json()),
+      fetch(`${SUPABASE_URL}/rest/v1/corner_predictions_paywall?select=id,target_kickoff_at&limit=1000`, { headers }).then((r) => r.json()),
+      fetch(`${SUPABASE_URL}/rest/v1/goals_predictions_paywall?select=id,market,target_kickoff_at&limit=1000`, { headers }).then((r) => r.json()),
     ]);
 
-    const hwCount = Array.isArray(hw) ? hw.length : 0;
-    const awCount = Array.isArray(aw) ? aw.length : 0;
-    const drCount = Array.isArray(dr) ? dr.length : 0;
-    const crCount = Array.isArray(cr) ? cr.length : 0;
+    let targetDateStr = dateParam;
+    const todayStr = getLagosDate();
+    if (dateParam === 'today') {
+      targetDateStr = todayStr;
+    } else if (dateParam === 'tomorrow') {
+      targetDateStr = getLagosDate(new Date(Date.now() + 86400000));
+    } else if (dateParam === 'yesterday') {
+      targetDateStr = getLagosDate(new Date(Date.now() - 86400000));
+    }
+
+    const filterByDate = (list: any[]) => {
+      if (!Array.isArray(list)) return [];
+      if (dateParam !== 'all') {
+        return list.filter((item) => getLagosDateFromIso(item.target_kickoff_at) === targetDateStr);
+      }
+      return list.filter((item) => {
+        const d = getLagosDateFromIso(item.target_kickoff_at);
+        return !d || d >= todayStr;
+      });
+    };
+
+    const filteredHw = filterByDate(hw);
+    const filteredAw = filterByDate(aw);
+    const filteredDr = filterByDate(dr);
+    const filteredCr = filterByDate(cr);
+    const filteredGl = filterByDate(gl);
+
+    const hwCount = filteredHw.length;
+    const awCount = filteredAw.length;
+    const drCount = filteredDr.length;
+    const crCount = filteredCr.length;
 
     let o25Count = 0;
     let ht05Count = 0;
-    if (Array.isArray(gl)) {
-      for (const item of gl) {
-        if (item.market === 'ht_over_0.5_goals') ht05Count++;
-        else o25Count++;
-      }
+    for (const item of filteredGl) {
+      if (item.market === 'ht_over_0.5_goals') ht05Count++;
+      else o25Count++;
     }
 
     return {
@@ -480,7 +508,7 @@ export default async function handler(req: Request) {
   const dateParam = url.searchParams.get('date') || 'all';
   const leagueParam = url.searchParams.get('league') || '';
   const pageParam = Math.max(1, parseInt(url.searchParams.get('page') || '1', 10));
-  const limitParam = Math.min(50, Math.max(1, parseInt(url.searchParams.get('limit') || '10', 10)));
+  const limitParam = Math.min(250, Math.max(1, parseInt(url.searchParams.get('limit') || '200', 10)));
 
   const validMarkets: MarketType[] = [
     'general',
@@ -530,7 +558,7 @@ export default async function handler(req: Request) {
       fetchPromise = (async () => {
         const [allPredictions, counts] = await Promise.all([
           fetchMarketDataFromUpstream(activeMarket, headers),
-          computeAllMarketCounts(headers),
+          computeAllMarketCounts(headers, dateParam),
         ]);
 
         // 4. In-Memory Date & League Filtering
@@ -584,7 +612,7 @@ export default async function handler(req: Request) {
         const paginatedRaw = filtered.slice(offset, offset + limitParam);
 
         // 5. Apply Freemium 3/7 Redaction Rule for non-VIP visitors
-        // On Page 1: picks 0..2 are free & unlocked. Picks 3..9 are locked teaser cards.
+        // In continuous scrolling: picks 0..2 are free & unlocked. Picks 3+ are locked teaser cards.
         const isVipOrAdmin = Boolean(userAuthToken); // Database view also enforces RLS
         const predictions = paginatedRaw.map((item, idx) => {
           const globalIdx = offset + idx;
@@ -595,8 +623,8 @@ export default async function handler(req: Request) {
             return item;
           }
 
-          // Freemium 3/7 Rule: First 3 picks free on page 1
-          if (pageParam === 1 && globalIdx < 3) {
+          // Freemium 3/7 Rule: First 3 picks free in continuous stream
+          if (globalIdx < 3) {
             return {
               ...item,
               is_locked: false,

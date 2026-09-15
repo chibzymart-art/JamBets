@@ -298,7 +298,7 @@ export async function fetchMarketFeed(
     market,
     date = 'all',
     page = 1,
-    limit = 10,
+    limit = 200,
     token,
     isAdmin = false,
     canViewPredictions = false,
@@ -423,11 +423,11 @@ export async function fetchMarketFeed(
     const start = (safePage - 1) * limit;
     const paged = targetList.slice(start, start + limit);
 
-    // Apply Freemium 3/7 rule if not admin and not entitled
+    // Apply Freemium 3/7 rule in continuous stream if not admin and not entitled
     const isSubscriber = isAdmin || canViewPredictions;
     const finalData = paged.map((pred, idx) => {
       const globalIdx = start + idx;
-      const isLocked = !isSubscriber && (safePage > 1 || globalIdx >= 3);
+      const isLocked = !isSubscriber && globalIdx >= 3;
       if (isLocked) {
         return {
           ...pred,

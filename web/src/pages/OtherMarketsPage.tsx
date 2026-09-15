@@ -2,7 +2,6 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 import { MarketSwitchboardNav } from '../components/MarketSwitchboardNav';
 import { SpecialistMarketCard } from '../components/SpecialistMarketCard';
-import { SmartPaginationBar } from '../components/SmartPaginationBar';
 import { AdBannerSlot } from '../components/AdBannerSlot';
 import { FavoritePredictionItem } from '../components/FavoritesDrawer';
 import { fetchMarketFeed, MarketType, UnifiedMarketPrediction } from '../lib/marketFeedService';
@@ -47,7 +46,6 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
   const [dateFilter, setDateFilter] = useState<string>(getTodayIsoDate());
   const [statusFilter, setStatusFilter] = useState<'all' | 'won' | 'lost' | 'pending'>('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [page, setPage] = useState(1);
 
   // Dynamic deterministic relative dates: Yesterday, Today, Day+1, Day+2, Day+3, Past Dates
   const dateTabs = useMemo(() => {
@@ -82,8 +80,6 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
     'ht_over_0.5_goals': 0,
     corners: 0,
   });
-  const [totalItems, setTotalItems] = useState(0);
-  const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -94,7 +90,7 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
     return false;
   }, [isAdmin, userRole]);
 
-  // Load predictions for current market and filters
+  // Load predictions for current market and filters (Continuous scroll: limit 200)
   const loadMarketData = async () => {
     try {
       setLoading(true);
@@ -104,8 +100,8 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
       const res = await fetchMarketFeed({
         market: activeMarket,
         date: dateFilter,
-        page,
-        limit: 12,
+        page: 1,
+        limit: 200,
         token,
         isAdmin,
         canViewPredictions: isPaidUser,
@@ -114,8 +110,6 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
       if (res.success) {
         setPredictions(res.predictions || []);
         if (res.counts) setMarketCounts(res.counts);
-        setTotalItems(res.total || 0);
-        setTotalPages(res.total_pages || 1);
       } else {
         setError(res.error || 'Failed to fetch market predictions');
       }
@@ -129,7 +123,7 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
 
   useEffect(() => {
     loadMarketData();
-  }, [activeMarket, dateFilter, page, isPaidUser]);
+  }, [activeMarket, dateFilter, isPaidUser]);
 
   // SEO Update
   useEffect(() => {
@@ -184,6 +178,14 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
     return { total: predictions.length, won, lost, pending };
   }, [predictions]);
 
+  // Synchronize active market count with actual predictions loaded for 100% badge-to-card harmony
+  const displayCounts = useMemo(() => {
+    return {
+      ...marketCounts,
+      [activeMarket]: predictions.length,
+    };
+  }, [marketCounts, activeMarket, predictions.length]);
+
   return (
     <div className="goals-page-container" id="other-markets-top">
       {/* 1. SPECIALIST MARKET SWITCHBOARD (Positioned First directly below Header/Ad Banner) */}
@@ -191,9 +193,8 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
         activeMarket={activeMarket}
         onSelectMarket={(m) => {
           setActiveMarket(m);
-          setPage(1);
         }}
-        counts={marketCounts}
+        counts={displayCounts}
         loading={loading}
         hideGeneral={true}
         title="MARKETS"
@@ -238,7 +239,6 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
                 onChange={(e) => {
                   if (e.target.value) {
                     setDateFilter(e.target.value);
-                    setPage(1);
                   }
                 }}
                 aria-label="Select Past Date"
@@ -256,7 +256,7 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
             <button
               type="button"
               className={`cal-pill ${dateFilter === dateTabs.yesterday.iso ? 'active' : ''}`}
-              onClick={() => { setDateFilter(dateTabs.yesterday.iso); setPage(1); }}
+              onClick={() => { setDateFilter(dateTabs.yesterday.iso); }}
             >
               <span className="cal-pill-text-desktop">⏪ Yesterday</span>
               <span className="cal-pill-text-mobile">Yesterday</span>
@@ -266,7 +266,7 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
             <button
               type="button"
               className={`cal-pill ${dateFilter === dateTabs.today.iso ? 'active' : ''}`}
-              onClick={() => { setDateFilter(dateTabs.today.iso); setPage(1); }}
+              onClick={() => { setDateFilter(dateTabs.today.iso); }}
             >
               <span className="cal-pill-text-desktop">📍 Today</span>
               <span className="cal-pill-text-mobile">Today</span>
@@ -276,7 +276,7 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
             <button
               type="button"
               className={`cal-pill ${dateFilter === dateTabs.day1.iso ? 'active' : ''}`}
-              onClick={() => { setDateFilter(dateTabs.day1.iso); setPage(1); }}
+              onClick={() => { setDateFilter(dateTabs.day1.iso); }}
             >
               <span className="cal-pill-text-desktop">{dateTabs.day1.fullLabel}</span>
               <span className="cal-pill-text-mobile">{dateTabs.day1.shortDay} {dateTabs.day1.iso.slice(8)}</span>
@@ -286,7 +286,7 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
             <button
               type="button"
               className={`cal-pill ${dateFilter === dateTabs.day2.iso ? 'active' : ''}`}
-              onClick={() => { setDateFilter(dateTabs.day2.iso); setPage(1); }}
+              onClick={() => { setDateFilter(dateTabs.day2.iso); }}
             >
               <span className="cal-pill-text-desktop">{dateTabs.day2.fullLabel}</span>
               <span className="cal-pill-text-mobile">{dateTabs.day2.shortDay} {dateTabs.day2.iso.slice(8)}</span>
@@ -296,7 +296,7 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
             <button
               type="button"
               className={`cal-pill ${dateFilter === dateTabs.day3.iso ? 'active' : ''}`}
-              onClick={() => { setDateFilter(dateTabs.day3.iso); setPage(1); }}
+              onClick={() => { setDateFilter(dateTabs.day3.iso); }}
             >
               <span className="cal-pill-text-desktop">{dateTabs.day3.fullLabel}</span>
               <span className="cal-pill-text-mobile">{dateTabs.day3.shortDay} {dateTabs.day3.iso.slice(8)}</span>
@@ -306,7 +306,7 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
             <button
               type="button"
               className={`cal-pill ${dateFilter === 'all' ? 'active' : ''}`}
-              onClick={() => { setDateFilter('all'); setPage(1); }}
+              onClick={() => { setDateFilter('all'); }}
             >
               <span className="cal-pill-text-desktop">🌐 All Dates</span>
               <span className="cal-pill-text-mobile">All</span>
@@ -349,7 +349,7 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
         </div>
       </div>
 
-      {/* Active Market Cards Stream */}
+      {/* Active Market Cards Stream (Continuous Vertical Scroll) */}
       <section className="other-markets-cards-section" style={{ marginTop: 14 }}>
         {loading ? (
           <div className="goals-loading-state" style={{ textAlign: 'center', padding: '40px 20px' }}>
@@ -387,7 +387,6 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
                 setDateFilter('all');
                 setStatusFilter('all');
                 setSearchQuery('');
-                setPage(1);
               }}
             >
               Reset Filters (View All Dates)
@@ -415,20 +414,6 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
                 )}
               </React.Fragment>
             ))}
-
-            {/* Pagination */}
-            <SmartPaginationBar
-              page={page}
-              totalPages={totalPages}
-              totalItems={totalItems}
-              limit={12}
-              onPageChange={(newPage) => {
-                setPage(newPage);
-                const el = document.getElementById('other-markets-top');
-                if (el) el.scrollIntoView({ behavior: 'smooth' });
-              }}
-              loading={loading}
-            />
           </div>
         )}
       </section>
