@@ -463,6 +463,13 @@ export default async function handler(req: Request) {
             const pDate = getLagosDateFromIso(p.target_kickoff_at);
             return pDate === targetDateStr;
           });
+        } else {
+          // All dates: current date and future dates, no past dates
+          const todayStr = getLagosDate();
+          filtered = filtered.filter((p) => {
+            const pDate = getLagosDateFromIso(p.target_kickoff_at);
+            return !pDate || pDate >= todayStr;
+          });
         }
 
         if (leagueParam) {

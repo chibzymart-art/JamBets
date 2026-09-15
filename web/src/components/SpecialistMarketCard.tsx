@@ -132,6 +132,19 @@ export const SpecialistMarketCard: React.FC<SpecialistMarketCardProps> = ({
         )}
       </div>
 
+      {/* AI Tactical Scout Written Analysis (Just like in early Over 2.5 & 1H 0.5 versions) */}
+      {prediction.tactical_rationale && (
+        <div className="specialist-ai-scout-banner">
+          <span className="scout-icon">🤖</span>
+          <div className="scout-content">
+            <span className="scout-tag">
+              AI Tactical Scout {prediction.tactical_tag ? `[${prediction.tactical_tag.replace(/_/g, ' ')}]` : ''}:
+            </span>
+            <span className="scout-rationale">{prediction.tactical_rationale}</span>
+          </div>
+        </div>
+      )}
+
       {/* Main Prediction & Probability Section */}
       <div className="card-prediction-container">
         {is_locked ? (

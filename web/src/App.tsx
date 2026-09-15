@@ -26,11 +26,9 @@ import { updatePageSeo } from './lib/seo';
 import { LandingPage } from './pages/Landing';
 import { SubscriptionPage } from './pages/Subscription';
 import { PasswordRecoveryPage } from './pages/PasswordRecovery';
-import { MarketSwitchboardNav } from './components/MarketSwitchboardNav';
-import { SmartPaginationBar } from './components/SmartPaginationBar';
-import { SpecialistMarketCard } from './components/SpecialistMarketCard';
-import { QuickAccaBuilderButton } from './components/QuickAccaBuilderButton';
-import { fetchMarketFeed, MarketType, UnifiedMarketPrediction } from './lib/marketFeedService';
+import { OtherMarketsPage } from './pages/OtherMarketsPage';
+import { getDateDetailsByOffset, getPastDatesList } from './lib/dateUtils';
+
 
 export default function App() {
   const navigate = useNavigate();
@@ -202,17 +200,6 @@ export default function App() {
     });
   };
 
-  const handleAddBatchToAcca = (items: FavoritePredictionItem[]) => {
-    setFavoriteItems((prev) => {
-      const existingIds = new Set(prev.map((f) => f.id));
-      const newItems = items.filter((f) => !existingIds.has(f.id));
-      const next = [...prev, ...newItems];
-      try {
-        localStorage.setItem('oddsbanta_favorites_v2', JSON.stringify(next));
-      } catch {}
-      return next;
-    });
-  };
 
   const isFavoriteItem = (fixtureId: string, market: string, pick: string) => {
     const targetId = `${fixtureId}::${market}::${pick}`;
@@ -406,125 +393,16 @@ export default function App() {
     navigate('/dashboard');
   };
 
-  // Dynamic Market Switchboard & Anti-Scroll Pagination Terminal State
-  const [activeMarket, setActiveMarket] = useState<MarketType>(() => {
-    try {
-      const searchParams = new URLSearchParams(window.location.search);
-      const m = searchParams.get('market');
-      if (
-        m &&
-        [
-          'general',
-          'home_win',
-          'away_win',
-          'draw',
-          'over_2.5_goals',
-          'ht_over_0.5_goals',
-          'corners',
-        ].includes(m)
-      ) {
-        return m as MarketType;
-      }
-    } catch {}
-    return 'general';
-  });
-  const [marketPage, setMarketPage] = useState<number>(1);
-  const [marketPredictions, setMarketPredictions] = useState<UnifiedMarketPrediction[]>([]);
-  const [marketCounts, setMarketCounts] = useState<Record<MarketType, number>>({
-    general: 0,
-    curated: 0,
-    home_win: 0,
-    away_win: 0,
-    draw: 0,
-    'over_2.5_goals': 0,
-    'ht_over_0.5_goals': 0,
-    corners: 0,
-  });
-  const [marketTotal, setMarketTotal] = useState<number>(0);
-  const [marketTotalPages, setMarketTotalPages] = useState<number>(1);
-  const [marketLoading, setMarketLoading] = useState<boolean>(false);
-
-  // Sync activeMarket with URL query params when navigating
+  // Redirect /dashboard?market=... to /other-markets?market=... for specialist markets
   useEffect(() => {
     try {
       const searchParams = new URLSearchParams(location.search);
       const m = searchParams.get('market');
-      if (
-        m &&
-        [
-          'general',
-          'home_win',
-          'away_win',
-          'draw',
-          'over_2.5_goals',
-          'ht_over_0.5_goals',
-          'corners',
-        ].includes(m) &&
-        m !== activeMarket
-      ) {
-        setActiveMarket(m as MarketType);
-        setMarketPage(1);
-      } else if ((!m || m === 'curated') && activeMarket !== 'general') {
-        setActiveMarket('general');
+      if (m && m !== 'general' && location.pathname.startsWith('/dashboard')) {
+        navigate(`/other-markets?market=${m}`, { replace: true });
       }
     } catch {}
-  }, [location.search, activeMarket]);
-
-  const handleSelectMarket = (m: MarketType) => {
-    setActiveMarket(m);
-    setMarketPage(1);
-    const searchParams = new URLSearchParams(location.search);
-    if (m === 'general') {
-      searchParams.delete('market');
-    } else {
-      searchParams.set('market', m);
-    }
-    navigate({ search: searchParams.toString() }, { replace: true });
-  };
-
-  const loadMarketFeed = async () => {
-    setMarketLoading(true);
-    try {
-      const token = (await supabase.auth.getSession()).data.session?.access_token;
-      const res = await fetchMarketFeed({
-        market: activeMarket,
-        date: selectedDate,
-        page: marketPage,
-        limit: 10,
-        token,
-        isAdmin,
-        canViewPredictions,
-      });
-
-      if (res.success) {
-        setMarketPredictions(res.predictions || []);
-        if (res.counts) {
-          setMarketCounts(res.counts);
-        }
-        setMarketTotal(res.total || 0);
-        setMarketTotalPages(res.total_pages || 1);
-      }
-    } catch (err) {
-      console.error('Failed to load market feed:', err);
-    } finally {
-      setMarketLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (selectedSport === 'football') {
-      loadMarketFeed();
-    }
-  }, [activeMarket, selectedDate, marketPage, selectedSport, isAdmin, canViewPredictions]);
-
-  const displayedMarketPredictions = useMemo(() => {
-    if (selectedLeague === 'all') return marketPredictions;
-    return marketPredictions.filter(
-      (p) =>
-        p.fixture?.league?.code?.toLowerCase() === selectedLeague.toLowerCase() ||
-        p.fixture?.league?.id === selectedLeague
-    );
-  }, [marketPredictions, selectedLeague]);
+  }, [location.search, location.pathname, navigate]);
 
   // Cache ref to prevent hammering Supabase within 30 seconds
   const lastFetchTimeRef = useRef<number>(0);
@@ -770,7 +648,6 @@ export default function App() {
   };
 
   // Dynamic Lagos (WAT / UTC+1) relative calendar dates
-  // Strictly dynamic: Yesterday, Today, Tomorrow, date, date
   const dynamicDateTabs = useMemo(() => {
     // Map fixture counts by WAT kickoff date
     const fixtureCountByDate = new Map<string, number>();
@@ -781,87 +658,73 @@ export default function App() {
       }
     });
 
-    // Current date in Africa/Lagos (WAT / UTC+1)
-    const now = new Date();
-    const lagosParts = new Intl.DateTimeFormat('en-CA', {
-      timeZone: 'Africa/Lagos',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit'
-    }).format(now);
-    const [curYear, curMonth, curDay] = lagosParts.split('-').map(Number);
+    const yesterday = getDateDetailsByOffset(-1);
+    const today = getDateDetailsByOffset(0);
+    const day1 = getDateDetailsByOffset(1);
+    const day2 = getDateDetailsByOffset(2);
+    const day3 = getDateDetailsByOffset(3);
 
-    const getDateDetails = (offsetDays: number) => {
-      const d = new Date(Date.UTC(curYear, curMonth - 1, curDay + offsetDays, 12, 0, 0));
-      const iso = d.toISOString().split('T')[0];
-      const formatted = d.toLocaleDateString('en-GB', {
-        timeZone: 'UTC',
-        weekday: 'short',
-        day: 'numeric',
-        month: 'short'
-      }).replace(',', '');
-      return { iso, formatted, count: fixtureCountByDate.get(iso) || 0 };
-    };
+    // Past dates list (last 30 days plus any fixture dates before today)
+    const rawPastDates = getPastDatesList(30, Array.from(fixtureCountByDate.keys()));
+    const pastDates = rawPastDates.map((pd) => ({
+      ...pd,
+      count: fixtureCountByDate.get(pd.iso) || 0
+    }));
 
-    const yesterday = getDateDetails(-1);
-    const today = getDateDetails(0);
-    const tomorrow = getDateDetails(1);
-
-    // Ensure full 4-day forward horizon: Tomorrow (Day +1), Day +2, Day +3, Day +4
-    const futureDateIsos = [
-      getDateDetails(2).iso,
-      getDateDetails(3).iso,
-      getDateDetails(4).iso
-    ];
-
-    const futureDates = futureDateIsos.map((iso, idx) => {
-      const [y, m, d] = iso.split('-').map(Number);
-      const dt = new Date(Date.UTC(y, m - 1, d, 12, 0, 0));
-      const formatted = dt.toLocaleDateString('en-GB', {
-        timeZone: 'UTC',
-        weekday: 'short',
-        day: 'numeric',
-        month: 'short'
-      }).replace(',', '');
-      return {
-        id: iso,
-        label: formatted,
-        subLabel: `Day +${idx + 2}`,
-        count: fixtureCountByDate.get(iso) || 0
-      };
+    // Count fixtures for current date and future dates (strictly no past dates)
+    let currentAndFutureCount = 0;
+    fixtures.forEach((f) => {
+      const d = getFixtureWatDate(f.target_kickoff_at);
+      if (!d || d >= today.iso) currentAndFutureCount++;
     });
 
     return {
       all: {
         id: 'all',
-        label: 'Show All Dates',
-        subLabel: `${fixtures.length} matches`,
-        count: fixtures.length
+        label: 'All Dates',
+        subLabel: 'Current & Future',
+        count: currentAndFutureCount
       },
       yesterday: {
+        ...yesterday,
         id: yesterday.iso,
-        label: 'Yesterday',
-        subLabel: yesterday.formatted,
-        count: yesterday.count
+        count: fixtureCountByDate.get(yesterday.iso) || 0
       },
       today: {
+        ...today,
         id: today.iso,
-        label: 'Today',
-        subLabel: today.formatted,
-        count: today.count
+        count: fixtureCountByDate.get(today.iso) || 0
       },
-      tomorrow: {
-        id: tomorrow.iso,
-        label: 'Tomorrow',
-        subLabel: tomorrow.formatted,
-        count: tomorrow.count
+      day1: {
+        ...day1,
+        id: day1.iso,
+        count: fixtureCountByDate.get(day1.iso) || 0
       },
-      futureDates,
+      day2: {
+        ...day2,
+        id: day2.iso,
+        count: fixtureCountByDate.get(day2.iso) || 0
+      },
+      day3: {
+        ...day3,
+        id: day3.iso,
+        count: fixtureCountByDate.get(day3.iso) || 0
+      },
+      pastDates,
       todayIso: today.iso,
-      yesterdayIso: yesterday.iso,
-      tomorrowIso: tomorrow.iso
+      yesterdayIso: yesterday.iso
     };
   }, [fixtures]);
+
+  const isPastDateSelected =
+    selectedDate !== 'all' &&
+    selectedDate < dynamicDateTabs.todayIso &&
+    selectedDate !== dynamicDateTabs.yesterdayIso;
+
+  const selectedPastOption = isPastDateSelected
+    ? dynamicDateTabs.pastDates.find((p) => p.iso === selectedDate)
+    : null;
+  const selectedPastFormatted = selectedPastOption?.shortFormatted || selectedDate;
 
   // All 30 Leagues with fixture counts in the current dataset (Alphabetical)
   const allLeaguesWithCounts = useMemo(() => {
@@ -985,12 +848,36 @@ export default function App() {
     let topPickLost = 0;
     let topPickPending = 0;
 
+    let highTotal = 0;
+    let highWon = 0;
+    let highLost = 0;
+    let highPending = 0;
+
+    let midTotal = 0;
+    let midWon = 0;
+    let midLost = 0;
+    let midPending = 0;
+
+    let lowTotal = 0;
+    let lowWon = 0;
+    let lowLost = 0;
+    let lowPending = 0;
+
+    let antiLossTotal = 0;
+    let antiLossWon = 0;
+    let antiLossLost = 0;
+    let antiLossPending = 0;
+
     const sourceList = predictions;
 
     // Filter predictions to only those matching current date filter if not 'all'
+    // "All Dates (this will be all predictions of current date and future dates, no past dates)"
     const activeFixtureIds = new Set(
       (selectedDate === 'all'
-        ? fixtures
+        ? fixtures.filter((f) => {
+            const fDate = getFixtureWatDate(f.target_kickoff_at);
+            return !fDate || fDate >= dynamicDateTabs.todayIso;
+          })
         : fixtures.filter((f) => getFixtureWatDate(f.target_kickoff_at) === selectedDate)
       ).map((f) => f.id)
     );
@@ -998,23 +885,48 @@ export default function App() {
     sourceList.forEach((item: any) => {
       if (!activeFixtureIds.has(item.fixture_id)) return;
       let st = item.settlement_status || 'pending';
-      const cat = item.confidence_category;
+      const rawCat = (item.confidence_category || '').toUpperCase().replace(/ /g, '_');
+      const isAntiLoss =
+        rawCat === 'NO_SAFE_BANKER' ||
+        rawCat === 'NOSAFEBANKER' ||
+        item.market === 'NO_SAFE_BANKER' ||
+        item.prediction === 'SKIP';
 
       if (st === 'won') allWon++;
       else if (st === 'lost') allLost++;
       else if (st === 'void' || st === 'voided') allVoid++;
       else allPending++;
 
-      if (cat === 'BANGER') {
+      if (rawCat === 'BANGER') {
         bangerTotal++;
         if (st === 'won') bangerWon++;
         else if (st === 'lost') bangerLost++;
         else bangerPending++;
-      } else if (cat === 'TOP PICK') {
+      } else if (rawCat === 'TOP_PICK' || rawCat === 'TOPPICK') {
         topPickTotal++;
         if (st === 'won') topPickWon++;
         else if (st === 'lost') topPickLost++;
         else topPickPending++;
+      } else if (rawCat === 'HIGH_CONFIDENCE' || rawCat === 'HIGHCONFIDENCE' || rawCat === 'HIGH') {
+        highTotal++;
+        if (st === 'won') highWon++;
+        else if (st === 'lost') highLost++;
+        else highPending++;
+      } else if (rawCat === 'MID_CONFIDENCE' || rawCat === 'MIDCONFIDENCE' || rawCat === 'MID') {
+        midTotal++;
+        if (st === 'won') midWon++;
+        else if (st === 'lost') midLost++;
+        else midPending++;
+      } else if (rawCat === 'LOW_CONFIDENCE' || rawCat === 'LOWCONFIDENCE' || rawCat === 'LOW' || rawCat === 'RISKY') {
+        lowTotal++;
+        if (st === 'won') lowWon++;
+        else if (st === 'lost') lowLost++;
+        else lowPending++;
+      } else if (isAntiLoss) {
+        antiLossTotal++;
+        if (st === 'won') antiLossWon++;
+        else if (st === 'lost') antiLossLost++;
+        else antiLossPending++;
       }
     });
 
@@ -1027,8 +939,23 @@ export default function App() {
     const topPickDecided = topPickWon + topPickLost;
     const topPickWinRate = topPickDecided > 0 ? Math.round((topPickWon / topPickDecided) * 100) : 0;
 
+    const highDecided = highWon + highLost;
+    const highWinRate = highDecided > 0 ? Math.round((highWon / highDecided) * 100) : 0;
+
+    const midDecided = midWon + midLost;
+    const midWinRate = midDecided > 0 ? Math.round((midWon / midDecided) * 100) : 0;
+
+    const lowDecided = lowWon + lowLost;
+    const lowWinRate = lowDecided > 0 ? Math.round((lowWon / lowDecided) * 100) : 0;
+
+    const antiLossDecided = antiLossWon + antiLossLost;
+    const antiLossWinRate = antiLossDecided > 0 ? Math.round((antiLossWon / antiLossDecided) * 100) : 0;
+
     const scopedFixtures = selectedDate === 'all'
-      ? fixtures
+      ? fixtures.filter((f) => {
+          const fDate = getFixtureWatDate(f.target_kickoff_at);
+          return !fDate || fDate >= dynamicDateTabs.todayIso;
+        })
       : fixtures.filter((f) => getFixtureWatDate(f.target_kickoff_at) === selectedDate);
 
     const liveCount = scopedFixtures.filter((f) => {
@@ -1054,6 +981,7 @@ export default function App() {
       allPending,
       allDecided,
       allWinRate,
+      allTotal: allWon + allLost + allPending,
       bangerTotal,
       bangerWon,
       bangerLost,
@@ -1066,10 +994,110 @@ export default function App() {
       topPickPending,
       topPickDecided,
       topPickWinRate,
+      highTotal,
+      highWon,
+      highLost,
+      highPending,
+      highDecided,
+      highWinRate,
+      midTotal,
+      midWon,
+      midLost,
+      midPending,
+      midDecided,
+      midWinRate,
+      lowTotal,
+      lowWon,
+      lowLost,
+      lowPending,
+      lowDecided,
+      lowWinRate,
+      antiLossTotal,
+      antiLossWon,
+      antiLossLost,
+      antiLossPending,
+      antiLossDecided,
+      antiLossWinRate,
       liveCount,
       settledMatchesCount
     };
   }, [fixtures, predsByFixture, canViewPredictions, selectedDate]);
+
+  // Dynamic Tier-specific activity and settlement stats wired to Card 2
+  const activeTierStats = useMemo(() => {
+    switch (selectedTier) {
+      case 'BANGER':
+        return {
+          won: scorecardStats.bangerWon,
+          lost: scorecardStats.bangerLost,
+          pending: scorecardStats.bangerPending,
+          decided: scorecardStats.bangerDecided,
+          winRate: scorecardStats.bangerWinRate,
+          total: scorecardStats.bangerTotal,
+          settled: scorecardStats.bangerDecided,
+        };
+      case 'TOP PICK':
+        return {
+          won: scorecardStats.topPickWon,
+          lost: scorecardStats.topPickLost,
+          pending: scorecardStats.topPickPending,
+          decided: scorecardStats.topPickDecided,
+          winRate: scorecardStats.topPickWinRate,
+          total: scorecardStats.topPickTotal,
+          settled: scorecardStats.topPickDecided,
+        };
+      case 'HIGH':
+        return {
+          won: scorecardStats.highWon,
+          lost: scorecardStats.highLost,
+          pending: scorecardStats.highPending,
+          decided: scorecardStats.highDecided,
+          winRate: scorecardStats.highWinRate,
+          total: scorecardStats.highTotal,
+          settled: scorecardStats.highDecided,
+        };
+      case 'MID':
+        return {
+          won: scorecardStats.midWon,
+          lost: scorecardStats.midLost,
+          pending: scorecardStats.midPending,
+          decided: scorecardStats.midDecided,
+          winRate: scorecardStats.midWinRate,
+          total: scorecardStats.midTotal,
+          settled: scorecardStats.midDecided,
+        };
+      case 'LOW':
+        return {
+          won: scorecardStats.lowWon,
+          lost: scorecardStats.lowLost,
+          pending: scorecardStats.lowPending,
+          decided: scorecardStats.lowDecided,
+          winRate: scorecardStats.lowWinRate,
+          total: scorecardStats.lowTotal,
+          settled: scorecardStats.lowDecided,
+        };
+      case 'NO_SAFE_BANKER':
+        return {
+          won: scorecardStats.antiLossWon,
+          lost: scorecardStats.antiLossLost,
+          pending: scorecardStats.antiLossPending,
+          decided: scorecardStats.antiLossDecided,
+          winRate: scorecardStats.antiLossWinRate,
+          total: scorecardStats.antiLossTotal,
+          settled: scorecardStats.antiLossDecided,
+        };
+      default:
+        return {
+          won: scorecardStats.allWon,
+          lost: scorecardStats.allLost,
+          pending: scorecardStats.allPending,
+          decided: scorecardStats.allDecided,
+          winRate: scorecardStats.allWinRate,
+          total: scorecardStats.allTotal,
+          settled: scorecardStats.settledMatchesCount,
+        };
+    }
+  }, [selectedTier, scorecardStats]);
 
   // List of fixtures that feature BANGER signals for the left sidebar (strictly today in WAT)
   const bangerFixturesList = useMemo(() => {
@@ -1090,18 +1118,23 @@ export default function App() {
         f.status === 'live' ||
         f.status === 'in_progress' ||
         f.status === 'halftime' ||
-        (f.period && ['1H', 'HT', '2H', 'ET', 'PK'].includes(f.period.toUpperCase()))
+        (Boolean(f.period) && ['1H', 'HT', '2H', 'ET', 'PK'].includes((f.period || '').toUpperCase()))
       );
 
       // League filter
-      if (selectedLeague !== 'all' && f.league_code !== selectedLeague) {
-        return false;
+      if (selectedLeague !== 'all') {
+        const codeMatch = f.league_code?.toLowerCase() === selectedLeague.toLowerCase();
+        const idMatch = f.league_id === selectedLeague;
+        if (!codeMatch && !idMatch) return false;
       }
 
       // Date Navigation Filter (Ground truth: Africa/Lagos kickoff date)
+      // "All Dates (this will be all predictions of current date and future dates, no past dates)"
+      const fDate = getFixtureWatDate(f.target_kickoff_at);
       if (selectedDate !== 'all') {
-        const fDate = getFixtureWatDate(f.target_kickoff_at);
         if (fDate !== selectedDate) return false;
+      } else {
+        if (fDate && fDate < dynamicDateTabs.todayIso) return false;
       }
 
       // Score status filter (Live, Finished, Scheduled)
@@ -1113,7 +1146,16 @@ export default function App() {
 
       // Tier filter
       if (selectedTier !== 'all') {
-        const hasTier = signals.some((s) => s.confidence_category === selectedTier);
+        const hasTier = signals.some((s) => {
+          const sCat = (s.confidence_category || '').toUpperCase().replace(/ /g, '_');
+          if (selectedTier === 'BANGER') return sCat === 'BANGER';
+          if (selectedTier === 'TOP PICK') return sCat === 'TOP_PICK' || sCat === 'TOPPICK';
+          if (selectedTier === 'HIGH') return sCat === 'HIGH_CONFIDENCE' || sCat === 'HIGHCONFIDENCE' || sCat === 'HIGH';
+          if (selectedTier === 'MID') return sCat === 'MID_CONFIDENCE' || sCat === 'MIDCONFIDENCE' || sCat === 'MID';
+          if (selectedTier === 'LOW') return sCat === 'LOW_CONFIDENCE' || sCat === 'LOWCONFIDENCE' || sCat === 'LOW' || sCat === 'RISKY';
+          if (selectedTier === 'NO_SAFE_BANKER') return sCat === 'NO_SAFE_BANKER' || sCat === 'NOSAFEBANKER' || s.market === 'NO_SAFE_BANKER' || s.prediction === 'SKIP';
+          return s.confidence_category === selectedTier;
+        });
         if (!hasTier) return false;
       }
 
@@ -1164,7 +1206,6 @@ export default function App() {
   const resetAllFilters = () => {
     setSelectedLeague('all');
     setSelectedTier('all');
-    handleSelectMarket('general');
     setSettlementFilter('all');
     setScoreStatusFilter('all');
     setSelectedDate(dynamicDateTabs.today.id);
@@ -1203,14 +1244,12 @@ export default function App() {
             >
               {currentUser ? 'Dashboard' : 'Predictions'}
             </Link>
-            {Boolean(currentUser) && (
-              <Link
-                to="/goals"
-                className={`nav-link-btn ${location.pathname === '/goals' ? 'active' : ''}`}
-              >
-                🔥 Over 2.5 Hub
-              </Link>
-            )}
+            <Link
+              to="/other-markets"
+              className={`nav-link-btn ${location.pathname === '/other-markets' || location.pathname === '/goals' ? 'active' : ''}`}
+            >
+              Other Markets
+            </Link>
             <button
               type="button"
               className={`nav-link-btn ${location.pathname === '/subscription' ? 'active' : ''}`}
@@ -1415,16 +1454,14 @@ export default function App() {
                       <span className="pricing-flat-badge" style={{ marginLeft: 'auto' }}>₦5k Flat</span>
                     </button>
 
-                    {Boolean(currentUser) && (
-                      <Link
-                        to="/goals"
-                        className="hamburger-menu-item"
-                        onClick={() => setIsHamburgerOpen(false)}
-                      >
-                        <span className="hamburger-item-icon">🔥</span>
-                        <span className="hamburger-item-label">Over 2.5 & 1H Blitz Hub</span>
-                      </Link>
-                    )}
+                    <Link
+                      to="/other-markets"
+                      className="hamburger-menu-item"
+                      onClick={() => setIsHamburgerOpen(false)}
+                    >
+                      <span className="hamburger-item-icon">🎯</span>
+                      <span className="hamburger-item-label">Other Markets</span>
+                    </Link>
 
                     <Link
                       to={targetPredictionsPath}
@@ -1539,14 +1576,46 @@ export default function App() {
             element={<Navigate to={targetPredictionsPath} replace />}
           />
 
-          {/* ROUTE: GOALS SPECIALIST REDIRECT (NATIVELY INTEGRATED IN FOOTBALL TERMINAL) */}
+          {/* ROUTE: OTHER MARKETS (SPECIALIST PREDICTION TERMINAL) */}
+          <Route
+            path="/other-markets"
+            element={
+              <OtherMarketsPage
+                currentUser={currentUser}
+                userRole={profile?.role}
+                isAdmin={isAdmin}
+                onOpenAuth={(mode) => {
+                  setAuthModalMode(mode);
+                  setIsAuthModalOpen(true);
+                }}
+                onOpenSubscription={() => setIsPricingModalOpen(true)}
+                favoriteItems={favoriteItems}
+                onToggleFavoriteItem={toggleFavoriteItem}
+                isFavoriteItem={isFavoriteItem}
+                onOpenFavoritesDrawer={() => setIsFavoritesDrawerOpen(true)}
+              />
+            }
+          />
           <Route
             path="/goals"
             element={
-              <Navigate to={`${targetPredictionsPath}?market=over_2.5_goals`} replace />
+              <OtherMarketsPage
+                currentUser={currentUser}
+                userRole={profile?.role}
+                isAdmin={isAdmin}
+                onOpenAuth={(mode) => {
+                  setAuthModalMode(mode);
+                  setIsAuthModalOpen(true);
+                }}
+                onOpenSubscription={() => setIsPricingModalOpen(true)}
+                favoriteItems={favoriteItems}
+                onToggleFavoriteItem={toggleFavoriteItem}
+                isFavoriteItem={isFavoriteItem}
+                onOpenFavoritesDrawer={() => setIsFavoritesDrawerOpen(true)}
+              />
             }
           />
-          <Route path="/over-2-5" element={<Navigate to={`${targetPredictionsPath}?market=over_2.5_goals`} replace />} />
+          <Route path="/over-2-5" element={<Navigate to="/other-markets" replace />} />
 
           {/* ROUTE 4: ADMIN COMMAND DECK (STRICTLY GATED) */}
           <Route
@@ -1752,23 +1821,103 @@ export default function App() {
             </div>
           </div>
 
-          {/* PREDICTED MARKETS (CENTERED ON DESKTOP, SWIPABLE ON MOBILE) */}
-          {selectedSport === 'football' && (
-            <MarketSwitchboardNav
-              embedded={true}
-              activeMarket={activeMarket}
-              onSelectMarket={handleSelectMarket}
-              counts={{
-                ...marketCounts,
-                general: filteredFixtures.length || fixtures.length,
-              }}
-              loading={marketLoading}
-            />
-          )}
 
-          {/* Date Navigation Pills Bar: Strictly Ordered: All Dates | Yesterday | Today | Tomorrow | Day +2 | Day +3 | Day +4 */}
+
+          {/* Date Navigation Pills Bar: Strictly Ordered: Select Date (Drop down) | Yesterday | Today | Day (with date) | Day (with date) | Day (with date) | All Dates */}
           <div className="date-nav-pills-bar">
-            {/* Pill 1: All Dates */}
+            {/* Pill 1: Select Date (Drop down of all past dates) */}
+            <div
+              className={`date-pill-btn date-pill-dropdown-wrap ${isPastDateSelected ? 'active' : ''}`}
+            >
+              <span className="date-pill-main-row">
+                📅 {isPastDateSelected ? selectedPastFormatted : 'Select Date'} ▾
+              </span>
+              <span className="date-pill-sub-label">
+                {isPastDateSelected ? 'Past Archive' : 'All Past Dates'}
+              </span>
+              <select
+                className="date-pill-native-select"
+                value={isPastDateSelected ? selectedDate : ''}
+                onChange={(e) => {
+                  if (e.target.value) setSelectedDate(e.target.value);
+                }}
+                aria-label="Select Past Date"
+              >
+                <option value="" disabled>Select Past Date...</option>
+                {dynamicDateTabs.pastDates.map((pd) => (
+                  <option key={pd.iso} value={pd.iso}>
+                    {pd.formatted}{pd.count ? ` (${pd.count} M)` : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Pill 2: Yesterday */}
+            <button
+              type="button"
+              className={`date-pill-btn yesterday-pill ${selectedDate === dynamicDateTabs.yesterday.iso ? 'active' : ''}`}
+              onClick={() => setSelectedDate(dynamicDateTabs.yesterday.iso)}
+            >
+              <span className="date-pill-main-row">
+                Yesterday
+                <span className="date-pill-winloss">{dynamicDateTabs.yesterday.count} M</span>
+              </span>
+              <span className="date-pill-sub-label">{dynamicDateTabs.yesterday.dateFormatted}</span>
+            </button>
+
+            {/* Pill 3: Today */}
+            <button
+              type="button"
+              className={`date-pill-btn ${selectedDate === dynamicDateTabs.today.iso ? 'active' : ''}`}
+              onClick={() => setSelectedDate(dynamicDateTabs.today.iso)}
+            >
+              <span className="date-pill-main-row">
+                Today
+                <span className="date-pill-winloss">{dynamicDateTabs.today.count} M</span>
+              </span>
+              <span className="date-pill-sub-label">{dynamicDateTabs.today.dateFormatted}</span>
+            </button>
+
+            {/* Pill 4: Day (with date) - Day + 1 */}
+            <button
+              type="button"
+              className={`date-pill-btn ${selectedDate === dynamicDateTabs.day1.iso ? 'active' : ''}`}
+              onClick={() => setSelectedDate(dynamicDateTabs.day1.iso)}
+            >
+              <span className="date-pill-main-row">
+                {dynamicDateTabs.day1.shortDay}
+                <span className="date-pill-winloss">{dynamicDateTabs.day1.count} M</span>
+              </span>
+              <span className="date-pill-sub-label">{dynamicDateTabs.day1.dateFormatted}</span>
+            </button>
+
+            {/* Pill 5: Day (with date) - Day + 2 */}
+            <button
+              type="button"
+              className={`date-pill-btn ${selectedDate === dynamicDateTabs.day2.iso ? 'active' : ''}`}
+              onClick={() => setSelectedDate(dynamicDateTabs.day2.iso)}
+            >
+              <span className="date-pill-main-row">
+                {dynamicDateTabs.day2.shortDay}
+                <span className="date-pill-winloss">{dynamicDateTabs.day2.count} M</span>
+              </span>
+              <span className="date-pill-sub-label">{dynamicDateTabs.day2.dateFormatted}</span>
+            </button>
+
+            {/* Pill 6: Day (with date) - Day + 3 */}
+            <button
+              type="button"
+              className={`date-pill-btn ${selectedDate === dynamicDateTabs.day3.iso ? 'active' : ''}`}
+              onClick={() => setSelectedDate(dynamicDateTabs.day3.iso)}
+            >
+              <span className="date-pill-main-row">
+                {dynamicDateTabs.day3.shortDay}
+                <span className="date-pill-winloss">{dynamicDateTabs.day3.count} M</span>
+              </span>
+              <span className="date-pill-sub-label">{dynamicDateTabs.day3.dateFormatted}</span>
+            </button>
+
+            {/* Pill 7: All Dates (current date and future dates, no past dates) */}
             <button
               type="button"
               className={`date-pill-btn ${selectedDate === 'all' ? 'active' : ''}`}
@@ -1778,85 +1927,27 @@ export default function App() {
                 All Dates
                 <span className="date-pill-winloss">{dynamicDateTabs.all.count} M</span>
               </span>
-              <span className="date-pill-sub-label">Full Horizon</span>
+              <span className="date-pill-sub-label">{dynamicDateTabs.all.subLabel}</span>
             </button>
-
-            {/* Pill 2: Yesterday */}
-            <button
-              type="button"
-              className={`date-pill-btn yesterday-pill ${selectedDate === dynamicDateTabs.yesterday.id ? 'active' : ''}`}
-              onClick={() => setSelectedDate(dynamicDateTabs.yesterday.id)}
-            >
-              <span className="date-pill-main-row">
-                Yesterday
-                <span className="date-pill-winloss">{dynamicDateTabs.yesterday.count} M</span>
-              </span>
-              <span className="date-pill-sub-label">{dynamicDateTabs.yesterday.subLabel}</span>
-            </button>
-
-            {/* Pill 3: Today */}
-            <button
-              type="button"
-              className={`date-pill-btn ${selectedDate === dynamicDateTabs.today.id ? 'active' : ''}`}
-              onClick={() => setSelectedDate(dynamicDateTabs.today.id)}
-            >
-              <span className="date-pill-main-row">
-                Today
-                <span className="date-pill-winloss">{dynamicDateTabs.today.count} M</span>
-              </span>
-              <span className="date-pill-sub-label">{dynamicDateTabs.today.subLabel}</span>
-            </button>
-
-            {/* Pill 4: Tomorrow */}
-            <button
-              type="button"
-              className={`date-pill-btn ${selectedDate === dynamicDateTabs.tomorrow.id ? 'active' : ''}`}
-              onClick={() => setSelectedDate(dynamicDateTabs.tomorrow.id)}
-            >
-              <span className="date-pill-main-row">
-                Tomorrow
-                <span className="date-pill-winloss">{dynamicDateTabs.tomorrow.count} M</span>
-              </span>
-              <span className="date-pill-sub-label">{dynamicDateTabs.tomorrow.subLabel}</span>
-            </button>
-
-            {/* Pills 5, 6, 7: Day +2, Day +3, Day +4 */}
-            {dynamicDateTabs.futureDates.map((fd) => {
-              const isSelected = selectedDate === fd.id;
-              return (
-                <button
-                  key={fd.id}
-                  type="button"
-                  className={`date-pill-btn ${isSelected ? 'active' : ''}`}
-                  onClick={() => setSelectedDate(fd.id)}
-                >
-                  <span className="date-pill-main-row">
-                    {fd.subLabel}
-                    <span className="date-pill-winloss">{fd.count} M</span>
-                  </span>
-                  <span className="date-pill-sub-label">{fd.label}</span>
-                </button>
-              );
-            })}
           </div>
 
           {/* 4. DECONGESTED SCORECARD KPI SECTION (TWO COMPACT CARDS WITH INNER DIVIDER LINES) */}
           <div className="scorecard-two-cards-row">
-            {/* Card 1: 3 Win Rate Metrics inside one single-card footprint, separated by lines */}
+            {/* Card 1: 4 Unified Confidence Tabs inside one single-card footprint */}
             <div className="compact-kpi-card winrates-kpi-card">
-              {/* Option 1: All Predictions */}
+              {/* Tab 1: All Predictions */}
               <div
-                className={`compact-kpi-segment ${selectedTier === 'all' && settlementFilter === 'all' && scoreStatusFilter === 'all' ? 'active-seg' : ''}`}
+                className={`compact-kpi-segment all-preds-seg ${selectedTier === 'all' && settlementFilter === 'all' && scoreStatusFilter === 'all' ? 'active-seg' : ''}`}
                 onClick={() => {
                   setSelectedTier('all');
                   setSettlementFilter('all');
                   setScoreStatusFilter('all');
                 }}
-                title="Click to reset filters and view all predictions"
+                title="Click to reset tier filters and view all predictions"
               >
                 <div className="compact-kpi-header">
                   <span className="compact-kpi-title">All Preds</span>
-                  <span className="compact-kpi-pill">{scorecardStats.allDecided}M</span>
+                  <span className="compact-kpi-pill">{scorecardStats.allTotal}M</span>
                 </div>
                 <div className="compact-kpi-val-row">
                   <span className="compact-kpi-pct">{scorecardStats.allWinRate}%</span>
@@ -1864,35 +1955,108 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Option 2: Daily Bangers */}
-              <div
-                className={`compact-kpi-segment banger-seg ${selectedTier === 'BANGER' ? 'active-seg' : ''}`}
-                onClick={() => setSelectedTier(selectedTier === 'BANGER' ? 'all' : 'BANGER')}
-                title="Click to filter by 90%+ Banger Locks"
-              >
-                <div className="compact-kpi-header">
-                  <span className="compact-kpi-title">⭐ Bangers</span>
-                  <span className="compact-kpi-pill banger-pill">{scorecardStats.bangerTotal}M</span>
+              {/* Tab 2: Bangers & Top Picks Grouped Tab */}
+              <div className="compact-kpi-grouped-tab">
+                <div
+                  className={`compact-kpi-subsegment banger-subseg ${selectedTier === 'BANGER' ? 'active-seg' : ''}`}
+                  onClick={() => setSelectedTier(selectedTier === 'BANGER' ? 'all' : 'BANGER')}
+                  title="Click to filter by 96%+ Bangers"
+                >
+                  <div className="compact-kpi-header">
+                    <span className="compact-kpi-title">⭐ Banger</span>
+                    <span className="compact-kpi-pill banger-pill">{scorecardStats.bangerTotal}M</span>
+                  </div>
+                  <div className="compact-kpi-val-row">
+                    <span className="compact-kpi-pct banger-text">{scorecardStats.bangerWinRate}%</span>
+                    <span className="compact-kpi-ratio">{scorecardStats.bangerWon}W • {scorecardStats.bangerLost}L</span>
+                  </div>
                 </div>
-                <div className="compact-kpi-val-row">
-                  <span className="compact-kpi-pct banger-text">{scorecardStats.bangerWinRate}%</span>
-                  <span className="compact-kpi-ratio">{scorecardStats.bangerWon}W • {scorecardStats.bangerLost}L</span>
+
+                <div className="compact-kpi-inner-divider" />
+
+                <div
+                  className={`compact-kpi-subsegment toppick-subseg ${selectedTier === 'TOP PICK' ? 'active-seg' : ''}`}
+                  onClick={() => setSelectedTier(selectedTier === 'TOP PICK' ? 'all' : 'TOP PICK')}
+                  title="Click to filter by 90%-95% Top Picks"
+                >
+                  <div className="compact-kpi-header">
+                    <span className="compact-kpi-title">👑 Top Pick</span>
+                    <span className="compact-kpi-pill toppick-pill">{scorecardStats.topPickTotal}M</span>
+                  </div>
+                  <div className="compact-kpi-val-row">
+                    <span className="compact-kpi-pct toppick-text">{scorecardStats.topPickWinRate}%</span>
+                    <span className="compact-kpi-ratio">{scorecardStats.topPickWon}W • {scorecardStats.topPickLost}L</span>
+                  </div>
                 </div>
               </div>
 
-              {/* Option 3: Daily Top Picks */}
-              <div
-                className={`compact-kpi-segment toppick-seg ${selectedTier === 'TOP PICK' ? 'active-seg' : ''}`}
-                onClick={() => setSelectedTier(selectedTier === 'TOP PICK' ? 'all' : 'TOP PICK')}
-                title="Click to filter by Daily Top Predictions"
-              >
-                <div className="compact-kpi-header">
-                  <span className="compact-kpi-title">👑 Top Picks</span>
-                  <span className="compact-kpi-pill toppick-pill">{scorecardStats.topPickTotal}M</span>
+              {/* Tab 3: High & Mid Confidence Grouped Tab */}
+              <div className="compact-kpi-grouped-tab">
+                <div
+                  className={`compact-kpi-subsegment high-subseg ${selectedTier === 'HIGH' ? 'active-seg' : ''}`}
+                  onClick={() => setSelectedTier(selectedTier === 'HIGH' ? 'all' : 'HIGH')}
+                  title="Click to filter by 83%-89% High Confidence"
+                >
+                  <div className="compact-kpi-header">
+                    <span className="compact-kpi-title">🟢 High</span>
+                    <span className="compact-kpi-pill high-pill">{scorecardStats.highTotal}M</span>
+                  </div>
+                  <div className="compact-kpi-val-row">
+                    <span className="compact-kpi-pct high-text">{scorecardStats.highWinRate}%</span>
+                    <span className="compact-kpi-ratio">{scorecardStats.highWon}W • {scorecardStats.highLost}L</span>
+                  </div>
                 </div>
-                <div className="compact-kpi-val-row">
-                  <span className="compact-kpi-pct toppick-text">{scorecardStats.topPickWinRate}%</span>
-                  <span className="compact-kpi-ratio">{scorecardStats.topPickWon}W • {scorecardStats.topPickLost}L</span>
+
+                <div className="compact-kpi-inner-divider" />
+
+                <div
+                  className={`compact-kpi-subsegment mid-subseg ${selectedTier === 'MID' ? 'active-seg' : ''}`}
+                  onClick={() => setSelectedTier(selectedTier === 'MID' ? 'all' : 'MID')}
+                  title="Click to filter by 75%-82% Mid Confidence"
+                >
+                  <div className="compact-kpi-header">
+                    <span className="compact-kpi-title">🔵 Mid</span>
+                    <span className="compact-kpi-pill mid-pill">{scorecardStats.midTotal}M</span>
+                  </div>
+                  <div className="compact-kpi-val-row">
+                    <span className="compact-kpi-pct mid-text">{scorecardStats.midWinRate}%</span>
+                    <span className="compact-kpi-ratio">{scorecardStats.midWon}W • {scorecardStats.midLost}L</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Tab 4: Low & Anti Loss Grouped Tab */}
+              <div className="compact-kpi-grouped-tab">
+                <div
+                  className={`compact-kpi-subsegment low-subseg ${selectedTier === 'LOW' ? 'active-seg' : ''}`}
+                  onClick={() => setSelectedTier(selectedTier === 'LOW' ? 'all' : 'LOW')}
+                  title="Click to filter by 65%-74% Low Confidence"
+                >
+                  <div className="compact-kpi-header">
+                    <span className="compact-kpi-title">🟡 Low</span>
+                    <span className="compact-kpi-pill low-pill">{scorecardStats.lowTotal}M</span>
+                  </div>
+                  <div className="compact-kpi-val-row">
+                    <span className="compact-kpi-pct low-text">{scorecardStats.lowWinRate}%</span>
+                    <span className="compact-kpi-ratio">{scorecardStats.lowWon}W • {scorecardStats.lowLost}L</span>
+                  </div>
+                </div>
+
+                <div className="compact-kpi-inner-divider" />
+
+                <div
+                  className={`compact-kpi-subsegment antiloss-subseg ${selectedTier === 'NO_SAFE_BANKER' ? 'active-seg' : ''}`}
+                  onClick={() => setSelectedTier(selectedTier === 'NO_SAFE_BANKER' ? 'all' : 'NO_SAFE_BANKER')}
+                  title="Click to filter by Anti-Loss (No Safe Banker)"
+                >
+                  <div className="compact-kpi-header">
+                    <span className="compact-kpi-title">🛡️ Anti Loss</span>
+                    <span className="compact-kpi-pill antiloss-pill">{scorecardStats.antiLossTotal}M</span>
+                  </div>
+                  <div className="compact-kpi-val-row">
+                    <span className="compact-kpi-pct antiloss-text">{scorecardStats.antiLossWinRate}%</span>
+                    <span className="compact-kpi-ratio">{scorecardStats.antiLossWon}W • {scorecardStats.antiLossLost}L</span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1906,7 +2070,7 @@ export default function App() {
                 title="Click to filter by settled finished matches"
               >
                 <span className="act-seg-label">Settled</span>
-                <span className="act-seg-val">{scorecardStats.settledMatchesCount}</span>
+                <span className="act-seg-val">{activeTierStats.settled}</span>
                 <span className="act-seg-sub">FT</span>
               </div>
 
@@ -1917,7 +2081,7 @@ export default function App() {
                 title="Click to filter by won predictions"
               >
                 <span className="act-seg-label">Won</span>
-                <span className="act-seg-val won-text">{scorecardStats.allWon}</span>
+                <span className="act-seg-val won-text">{activeTierStats.won}</span>
                 <span className="act-seg-sub">Wins</span>
               </div>
 
@@ -1928,7 +2092,7 @@ export default function App() {
                 title="Click to filter by lost predictions"
               >
                 <span className="act-seg-label">Lost</span>
-                <span className="act-seg-val lost-text">{scorecardStats.allLost}</span>
+                <span className="act-seg-val lost-text">{activeTierStats.lost}</span>
                 <span className="act-seg-sub">Audit</span>
               </div>
 
@@ -1942,8 +2106,8 @@ export default function App() {
                 title="Click to reset win/loss filters"
               >
                 <span className="act-seg-label">Win Rate</span>
-                <span className="act-seg-val won-text">{scorecardStats.allWinRate}%</span>
-                <span className="act-seg-sub">{scorecardStats.allWon}/{scorecardStats.allDecided}</span>
+                <span className="act-seg-val won-text">{activeTierStats.winRate}%</span>
+                <span className="act-seg-sub">{activeTierStats.won}/{activeTierStats.decided}</span>
               </div>
 
               {/* Option 5: In-Play */}
@@ -1954,8 +2118,8 @@ export default function App() {
               >
                 <span className="act-seg-label">In-Play</span>
                 <span className="act-seg-val pending-text">
-                  {scorecardStats.allPending}
-                  {scorecardStats.liveCount > 0 && <span className="act-live-sub"> ({scorecardStats.liveCount})</span>}
+                  {activeTierStats.pending}
+                  {selectedTier === 'all' && scorecardStats.liveCount > 0 && <span className="act-live-sub"> ({scorecardStats.liveCount})</span>}
                 </span>
                 <span className="act-seg-sub">Active</span>
               </div>
@@ -2001,7 +2165,6 @@ export default function App() {
                         setSettlementFilter('all');
                         setScoreStatusFilter('all');
                         setSearchQuery('');
-                        handleSelectMarket('general');
                         const el = document.getElementById('market-terminal-stream-top');
                         if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
                       }}
@@ -2034,10 +2197,7 @@ export default function App() {
             {/* Scroll Target Anchor for Smooth Pagination Scrolling */}
             <div id="market-terminal-stream-top" />
 
-            {/* GENERAL MARKET OR SPECIALIST ENGINE VIEW */}
-            {activeMarket === 'general' ? (
-              /* GENERAL MARKET: ORIGINAL COMPLETE DASHBOARD STREAM */
-              <>
+            {/* DASHBOARD GENERAL FIXTURES STREAM */}
 
                 {/* Cloud Telemetry / Error State */}
                 {error && (
@@ -2157,166 +2317,6 @@ export default function App() {
                     })}
                   </div>
                 )}
-              </>
-            ) : (
-              /* SPECIALIST DECOUPLED MARKET TERMINAL VIEW */
-              <>
-                {/* QUICK ACCA BUILDER & STREAM STATUS BAR */}
-                <div
-                  className="market-terminal-action-bar"
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    flexWrap: 'wrap',
-                    gap: 12,
-                    margin: '0 0 16px',
-                    padding: '10px 16px',
-                    background: '#ffffff',
-                    borderRadius: 12,
-                    border: '1px solid var(--border-subtle, #e2e8f0)',
-                    boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary, #0f172a)' }}>
-                      Showing {displayedMarketPredictions.length > 0 ? (marketPage - 1) * 10 + 1 : 0}–
-                      {Math.min(marketPage * 10, marketTotal)} of {marketTotal} calibrated signals
-                    </span>
-                    <span
-                      style={{
-                        fontSize: 11,
-                        fontWeight: 700,
-                        color: '#0284c7',
-                        background: 'rgba(2,132,199,0.1)',
-                        padding: '2px 8px',
-                        borderRadius: 6,
-                      }}
-                    >
-                      MAX 10 / VIEWPORT
-                    </span>
-                  </div>
-
-                  <QuickAccaBuilderButton
-                    predictions={displayedMarketPredictions}
-                    onAddBatch={handleAddBatchToAcca}
-                    onOpenSlip={() => setIsFavoritesDrawerOpen(true)}
-                    activeMarketLabel={activeMarket.replace(/_/g, ' ').toUpperCase()}
-                  />
-                </div>
-
-                {/* Cloud Telemetry / Error State */}
-                {error && (
-                  <div
-                    style={{
-                      padding: 16,
-                      background: '#fef2f2',
-                      border: '1px solid #fecaca',
-                      borderRadius: 12,
-                      color: '#b91c1c',
-                      fontSize: 13,
-                      marginBottom: 16,
-                    }}
-                  >
-                    <strong>Cloud Telemetry Notice:</strong> {error}
-                  </div>
-                )}
-
-                {/* Loading Skeleton */}
-                {marketLoading ? (
-                  <div
-                    style={{
-                      padding: 40,
-                      background: '#ffffff',
-                      borderRadius: 16,
-                      border: '1px solid var(--border-subtle)',
-                      textAlign: 'center',
-                    }}
-                  >
-                    <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-emerald-600 mb-3" />
-                    <div style={{ fontWeight: 800, color: 'var(--text-primary)' }}>
-                      Calibrating {activeMarket.replace(/_/g, ' ').toUpperCase()} Engine Signals...
-                    </div>
-                    <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
-                      Querying decoupled mathematical engine and running Monte Carlo distribution analysis.
-                    </div>
-                  </div>
-                ) : displayedMarketPredictions.length === 0 ? (
-                  <div
-                    style={{
-                      padding: 48,
-                      background: '#ffffff',
-                      borderRadius: 16,
-                      border: '1px solid var(--border-subtle)',
-                      textAlign: 'center',
-                    }}
-                  >
-                    <div style={{ fontSize: 32, marginBottom: 8 }}>⚽</div>
-                    <div style={{ fontWeight: 800, fontSize: 16, color: 'var(--text-primary)' }}>
-                      {selectedDate !== 'all'
-                        ? 'No predictions available for this market on this date.'
-                        : 'No predictions available for this market.'}
-                    </div>
-                    <div
-                      style={{
-                        fontSize: 13,
-                        color: 'var(--text-muted)',
-                        marginTop: 4,
-                        maxWidth: 460,
-                        margin: '6px auto 16px',
-                      }}
-                    >
-                      Oddsbanta only displays matches that have completed isolated mathematical model simulations and
-                      passed strict publication confidence thresholds.
-                    </div>
-                    <button
-                      type="button"
-                      className="btn-toggle-expand"
-                      onClick={() => {
-                        handleSelectMarket('general');
-                        setSelectedDate('all');
-                        setSelectedLeague('all');
-                      }}
-                    >
-                      Switch to General Market (All Dates)
-                    </button>
-                  </div>
-                ) : (
-                  <div className="chronological-fixtures-stream">
-                    {displayedMarketPredictions.map((prediction, idx) => (
-                      <Fragment key={prediction.id}>
-                        <SpecialistMarketCard
-                          prediction={prediction}
-                          isFavorite={isFavoriteItem(
-                            prediction.fixture_id,
-                            prediction.market_label,
-                            prediction.prediction
-                          )}
-                          onToggleFavorite={toggleFavoriteItem}
-                          onOpenUpgrade={() => setIsPricingModalOpen(true)}
-                          isAdmin={isAdmin}
-                        />
-                        {idx === 2 && (
-                          <div style={{ margin: '14px 0' }}>
-                            <AdBannerSlot slotType="native-card" />
-                          </div>
-                        )}
-                      </Fragment>
-                    ))}
-
-                    {/* ANTI-SCROLL SMART PAGINATION BAR (STRICT MAX 10 VIEWPORT) */}
-                    <SmartPaginationBar
-                      page={marketPage}
-                      totalPages={marketTotalPages}
-                      totalItems={marketTotal}
-                      limit={10}
-                      onPageChange={setMarketPage}
-                      loading={marketLoading}
-                    />
-                  </div>
-                )}
-              </>
-            )}
           </div>
 
           {/* RIGHT SIDEBAR: FAVORITES / WATCHLIST */}
@@ -2440,12 +2440,13 @@ export default function App() {
           <span className="mobile-tab-icon">📊</span>
           <span className="mobile-tab-label">{currentUser ? 'Dashboard' : 'Predictions'}</span>
         </Link>
-        {Boolean(currentUser) && (
-          <Link to="/dashboard?market=over_2.5_goals" className={`mobile-tab-item ${location.search.includes('market=over_2.5_goals') ? 'active' : ''}`}>
-            <span className="mobile-tab-icon">⚽</span>
-            <span className="mobile-tab-label">Over 2.5</span>
-          </Link>
-        )}
+        <Link
+          to="/other-markets"
+          className={`mobile-tab-item ${location.pathname === '/other-markets' || location.pathname === '/goals' ? 'active' : ''}`}
+        >
+          <span className="mobile-tab-icon">🎯</span>
+          <span className="mobile-tab-label">Other Markets</span>
+        </Link>
         <button
           type="button"
           className={`mobile-tab-item ${location.pathname === '/subscription' ? 'active' : ''}`}

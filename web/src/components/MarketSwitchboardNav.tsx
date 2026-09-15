@@ -7,6 +7,8 @@ export interface MarketSwitchboardNavProps {
   counts?: Record<MarketType, number>;
   loading?: boolean;
   embedded?: boolean;
+  hideGeneral?: boolean;
+  title?: string;
 }
 
 interface MarketTabConfig {
@@ -28,30 +30,6 @@ const MARKET_TABS: MarketTabConfig[] = [
     accentColor: '#10b981',
   },
   {
-    id: 'home_win',
-    label: 'Home Win',
-    icon: '🏠',
-    badgeTag: 'HVDI MODEL',
-    description: 'Home Venue Dominance Index evaluating pitch familiarity & defensive fortress',
-    accentColor: '#059669',
-  },
-  {
-    id: 'away_win',
-    label: 'Away Win',
-    icon: '✈️',
-    badgeTag: 'CARE MODEL',
-    description: 'Counter-Attacking Road Efficiency tracking transition speed against high lines',
-    accentColor: '#0284c7',
-  },
-  {
-    id: 'draw',
-    label: 'Draw Hunter',
-    icon: '⚖️',
-    badgeTag: 'SKELLAM TES',
-    description: 'Zero-Inflated Skellam Equilibrium measuring low-scoring tactical symmetry',
-    accentColor: '#7c3aed',
-  },
-  {
     id: 'over_2.5_goals',
     label: 'Over 2.5 Goals',
     icon: '🎯',
@@ -68,12 +46,36 @@ const MARKET_TABS: MarketTabConfig[] = [
     accentColor: '#e11d48',
   },
   {
+    id: 'home_win',
+    label: 'Home Win',
+    icon: '🏠',
+    badgeTag: 'HVDI MODEL',
+    description: 'Home Venue Dominance Index evaluating pitch familiarity & defensive fortress',
+    accentColor: '#059669',
+  },
+  {
     id: 'corners',
     label: 'Corners Specialist',
     icon: '🚩',
     badgeTag: 'NB GLM',
     description: 'Negative Binomial Set-Piece GLM analyzing wing width & cross deflection volume',
     accentColor: '#d97706',
+  },
+  {
+    id: 'draw',
+    label: 'Draw Hunter',
+    icon: '⚖️',
+    badgeTag: 'SKELLAM TES',
+    description: 'Zero-Inflated Skellam Equilibrium measuring low-scoring tactical symmetry',
+    accentColor: '#7c3aed',
+  },
+  {
+    id: 'away_win',
+    label: 'Away Win',
+    icon: '✈️',
+    badgeTag: 'CARE MODEL',
+    description: 'Counter-Attacking Road Efficiency tracking transition speed against high lines',
+    accentColor: '#0284c7',
   },
 ];
 
@@ -83,22 +85,28 @@ export const MarketSwitchboardNav: React.FC<MarketSwitchboardNavProps> = ({
   counts,
   loading = false,
   embedded = false,
+  hideGeneral = false,
+  title = 'MARKETS',
 }) => {
+  const visibleTabs = hideGeneral
+    ? MARKET_TABS.filter((t) => t.id !== 'general')
+    : MARKET_TABS;
+
   return (
     <div className={`market-switchboard-container ${embedded ? 'embedded' : ''}`}>
-      {/* Top Section Header - PREDICTED MARKETS */}
+      {/* Top Section Header */}
       <div className="switchboard-header">
         <div className="switchboard-title-group">
           <div className="switchboard-pill-title">
             <span className="switchboard-pulse-dot" />
-            <span className="switchboard-main-title">PREDICTED MARKETS</span>
+            <span className="switchboard-main-title">{title}</span>
           </div>
         </div>
       </div>
 
       {/* Tactile Pill Navigation Bar */}
       <div className="market-switchboard-pills-bar" role="tablist" aria-label="Football Markets Switchboard">
-        {MARKET_TABS.map((tab) => {
+        {visibleTabs.map((tab) => {
           const isActive = activeMarket === tab.id;
           const count = counts ? counts[tab.id] : undefined;
 

@@ -1199,19 +1199,36 @@
 .calendar-ribbon {
   display: flex;
   align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
+  gap: 5px;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  width: 100%;
+}
+
+.calendar-ribbon::-webkit-scrollbar {
+  display: none;
+}
+
+.cal-pill-text-desktop {
+  display: inline;
+}
+
+.cal-pill-text-mobile {
+  display: none;
 }
 
 .cal-pill {
   background: #ffffff;
   border: 1px solid #e2e8f0;
   border-radius: 8px;
-  padding: 4px 12px;
-  font-size: 0.78rem;
+  padding: 4px 10px;
+  font-size: 0.76rem;
   font-weight: 700;
   color: #475569;
   cursor: pointer;
+  white-space: nowrap;
   transition: all 0.15s ease;
 }
 
@@ -2289,6 +2306,59 @@
 
   .ad-anchor-close-btn:hover {
     color: #ffffff;
+  }
+
+  /* 3. Remove search bar entirely from mobile view */
+  .command-tier-primary.search-only,
+  .goals-compact-search,
+  .compact-search-input {
+    display: none !important;
+  }
+
+  /* 1. Ensure all date pills enter 1 single line in mobile view */
+  .command-tier-secondary {
+    padding-top: 4px !important;
+    gap: 6px !important;
+  }
+
+  .calendar-ribbon {
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    align-items: center !important;
+    gap: 3px !important;
+    overflow-x: auto !important;
+    scrollbar-width: none !important;
+    -webkit-overflow-scrolling: touch !important;
+    width: 100% !important;
+    padding: 2px 0 !important;
+  }
+
+  .calendar-ribbon::-webkit-scrollbar {
+    display: none !important;
+  }
+
+  .cal-pill {
+    padding: 4px 5px !important;
+    font-size: 0.69rem !important;
+    letter-spacing: -0.2px !important;
+    border-radius: 6px !important;
+    white-space: nowrap !important;
+    flex: 1 1 auto !important;
+    min-width: 0 !important;
+    text-align: center !important;
+    justify-content: center !important;
+  }
+
+  .cal-pill-dropdown-wrap {
+    padding: 4px 6px !important;
+  }
+
+  .cal-pill-text-desktop {
+    display: none !important;
+  }
+
+  .cal-pill-text-mobile {
+    display: inline !important;
   }
 }
 
