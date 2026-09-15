@@ -71,20 +71,20 @@ class SettlementScheduler:
     @classmethod
     def calculate_slot(cls, dt_wat: Optional[datetime] = None) -> Tuple[int, datetime, datetime, str]:
         """
-        Calculates the 15-minute slot in Lagos Timezone (WAT).
-        96 slots per day:
-        Slot 0: 00:00 WAT, Slot 1: 00:15 WAT, ..., Slot 95: 23:45 WAT.
+        Calculates the 5-minute slot in Lagos Timezone (WAT).
+        288 slots per day:
+        Slot 0: 00:00 WAT, Slot 1: 00:05 WAT, ..., Slot 287: 23:55 WAT.
         Returns: (slot_index, nominal_slot_time_wat, next_slot_time_wat, idempotency_key)
         """
         now = dt_wat or cls.get_wat_now()
-        slot_index = now.hour * 4 + (now.minute // 15)
+        slot_index = now.hour * 12 + (now.minute // 5)
 
-        nominal_min = (now.minute // 15) * 15
+        nominal_min = (now.minute // 5) * 5
         nominal_slot_wat = now.replace(minute=nominal_min, second=0, microsecond=0)
-        next_slot_wat = nominal_slot_wat + timedelta(minutes=15)
+        next_slot_wat = nominal_slot_wat + timedelta(minutes=5)
 
         date_str = nominal_slot_wat.strftime("%Y-%m-%d")
-        idempotency_key = f"settlement-cycle-{date_str}-slot{slot_index:02d}-wat"
+        idempotency_key = f"settlement-cycle-{date_str}-slot{slot_index:03d}-wat"
 
         return slot_index, nominal_slot_wat, next_slot_wat, idempotency_key
 
@@ -138,14 +138,14 @@ class SettlementScheduler:
             "slot_time_wat": nominal_wat.isoformat(),
             "next_scheduled_wat": next_wat.isoformat(),
             "timezone": "Africa/Lagos (WAT)",
-            "scheduler_type": "interval_15m",
+            "scheduler_type": "interval_5m",
             "forced": force
         }
 
         acquired, job_id, lock_reason = self.lock.acquire(
             idempotency_key=idempotency_key,
             extra_metadata=extra_meta,
-            timeout_minutes=10,
+            timeout_minutes=4,
             job_type=self.JOB_TYPE
         )
 
@@ -520,6 +520,23 @@ class SettlementScheduler:
                 # Refresh heartbeat periodically
                 if idx % 10 == 0:
                     self.lock.heartbeat(job_id)
+
+            # Step 5.1: Settle Decoupled Specialist Markets (Goals & Other Markets)
+            try:
+                from python.src.goals.goals_settlement import GoalsSettlementEngine
+                goals_settler = GoalsSettlementEngine(db=self.supabase)
+                goals_res = goals_settler.settle()
+                stats["goals_settled"] = goals_res.get("settled_count", 0)
+            except Exception as ge:
+                print(f"  [WARN] Goals specialist settlement pass error: {ge}")
+
+            try:
+                from python.src.engines.specialist_settlements import SpecialistSettlementPipeline
+                spec_pipeline = SpecialistSettlementPipeline(db=self.supabase)
+                spec_res = spec_pipeline.settle_all()
+                stats["specialist_settled"] = spec_res
+            except Exception as se:
+                print(f"  [WARN] Decoupled specialist settlement pass error: {se}")
 
             duration_ms = round((time.perf_counter() - start_perf) * 1000.0, 2)
             stats["duration_ms"] = duration_ms

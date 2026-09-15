@@ -29,6 +29,8 @@ export interface UnifiedMarketPrediction {
   settlement_status: string;
   settled_at?: string | null;
   actual_score?: string | null;
+  ht_score?: string | null;
+  actual_corners?: string | number | null;
   settlement_notes?: string | null;
   metrics: Record<string, any>;
   metadata?: any;
@@ -40,6 +42,12 @@ export interface UnifiedMarketPrediction {
     target_kickoff_at: string;
     home_score?: number | null;
     away_score?: number | null;
+    match_minute?: number | null;
+    period?: string | null;
+    half_time_home_score?: number | null;
+    half_time_away_score?: number | null;
+    corners_home?: number | null;
+    corners_away?: number | null;
     venue?: string | null;
     league?: {
       id?: string;
@@ -102,7 +110,7 @@ function getLagosDateFromIso(isoStr?: string | null): string {
 }
 
 const FIXTURE_JOIN =
-  'fixture:football_fixtures!inner(id,status,target_kickoff_at,home_score,away_score,venue,league:football_leagues(id,name,code,country),home_team:football_teams!football_fixtures_home_team_id_fkey(id,name,short_name),away_team:football_teams!football_fixtures_away_team_id_fkey(id,name,short_name))';
+  'fixture:football_fixtures!inner(id,status,target_kickoff_at,home_score,away_score,match_minute,period,half_time_home_score,half_time_away_score,corners_home,corners_away,venue,league:football_leagues(id,name,code,country),home_team:football_teams!football_fixtures_home_team_id_fkey(id,name,short_name),away_team:football_teams!football_fixtures_away_team_id_fkey(id,name,short_name))';
 
 const SELECTS: Record<string, { table: string; select: string }> = {
   home_win: {
@@ -270,6 +278,8 @@ function normalizePrediction(
     settlement_status: raw.settlement_status || 'pending',
     settled_at: raw.settled_at || null,
     actual_score: raw.actual_score || (raw.actual_corners ? `${raw.actual_corners} Corners` : null),
+    ht_score: raw.ht_score || null,
+    actual_corners: raw.actual_corners || null,
     settlement_notes: raw.settlement_notes || null,
     metadata: raw.metadata || {},
     tactical_tag: tactical.tag,

@@ -46,9 +46,141 @@ export const SpecialistMarketCard: React.FC<SpecialistMarketCardProps> = ({
     }
   })();
 
+  // Match & Settlement Status
+  const fixtureStatus = (fixture?.status || '').toLowerCase();
+  const period = (fixture?.period || '').toUpperCase();
+  const minute = fixture?.match_minute;
+
+  const isLive =
+    ['live', 'in_play', 'inplay', 'halftime', '1h', '2h', 'et', 'penalties'].includes(fixtureStatus) ||
+    ['1H', 'HT', '2H', 'ET', 'LIVE'].includes(period) ||
+    (minute !== null && minute !== undefined && minute > 0 && fixtureStatus !== 'finished');
+
+  const isFinished =
+    ['finished', 'ft', 'aet', 'pen'].includes(fixtureStatus) ||
+    period === 'FT' ||
+    Boolean(prediction.settled_at) ||
+    ['won', 'lost', 'void'].includes(prediction.settlement_status);
+
   const isSettled = ['won', 'lost', 'void'].includes(prediction.settlement_status);
   const isWon = prediction.settlement_status === 'won';
   const isLost = prediction.settlement_status === 'lost';
+
+  // Full-time final score display
+  const ftHome = fixture?.home_score ?? (prediction.actual_score ? prediction.actual_score.split('-')[0]?.trim() : null);
+  const ftAway = fixture?.away_score ?? (prediction.actual_score ? prediction.actual_score.split('-')[1]?.trim() : null);
+  const hasFtScore = ftHome !== null && ftAway !== null && ftHome !== undefined && ftAway !== undefined;
+
+  // Prediction-specific score & breakdown (HT score, total corners, total goals, etc.)
+  const predictionOutcomeDetail = (() => {
+    if (!isFinished && !isSettled) return null;
+
+    // 1. 1H Blitz (First Half Over 0.5 Goals)
+    if (
+      prediction.market === 'ht_over_0.5_goals' ||
+      prediction.prediction.toLowerCase().includes('1h') ||
+      prediction.prediction.toLowerCase().includes('first half')
+    ) {
+      const htScore =
+        prediction.ht_score ||
+        (fixture?.half_time_home_score !== null &&
+        fixture?.half_time_away_score !== null &&
+        fixture?.half_time_home_score !== undefined &&
+        fixture?.half_time_away_score !== undefined
+          ? `${fixture.half_time_home_score}-${fixture.half_time_away_score}`
+          : null);
+
+      return {
+        label: '1H Score',
+        value: htScore ? `HT ${htScore}` : isWon ? 'Goal in 1H' : '0-0 at HT',
+        detail: 'Half-Time Score',
+      };
+    }
+
+    // 2. Over 2.5 Goals
+    if (
+      prediction.market === 'over_2.5_goals' ||
+      prediction.prediction.toLowerCase().includes('over 2.5')
+    ) {
+      const hScore =
+        fixture?.home_score ??
+        (prediction.actual_score ? parseInt(prediction.actual_score.split('-')[0], 10) : null);
+      const aScore =
+        fixture?.away_score ??
+        (prediction.actual_score ? parseInt(prediction.actual_score.split('-')[1], 10) : null);
+
+      if (hScore !== null && aScore !== null && !isNaN(hScore) && !isNaN(aScore)) {
+        const total = hScore + aScore;
+        return {
+          label: 'Total Goals',
+          value: `${total} Goals`,
+          detail: total >= 3 ? 'Over 2.5 Threshold Exceeded' : 'Under 2.5 Threshold',
+        };
+      }
+      return null;
+    }
+
+    // 3. Corners Specialist
+    if (prediction.market_category === 'corners' || prediction.market === 'corners') {
+      const cornersCount =
+        prediction.actual_corners ||
+        (fixture?.corners_home !== null &&
+        fixture?.corners_away !== null &&
+        fixture?.corners_home !== undefined &&
+        fixture?.corners_away !== undefined
+          ? fixture.corners_home + fixture.corners_away
+          : null);
+
+      if (cornersCount) {
+        const displayVal =
+          typeof cornersCount === 'string' && cornersCount.toLowerCase().includes('corner')
+            ? cornersCount
+            : `${cornersCount} Corners`;
+
+        const cornerDetail =
+          fixture?.corners_home !== null &&
+          fixture?.corners_away !== null &&
+          fixture?.corners_home !== undefined &&
+          fixture?.corners_away !== undefined
+            ? `(${fixture.corners_home} Home - ${fixture.corners_away} Away)`
+            : 'Match Set-Pieces';
+
+        return {
+          label: 'Total Corners',
+          value: displayVal,
+          detail: cornerDetail,
+        };
+      }
+      return null;
+    }
+
+    // 4. Match Winner / Draw (Home Win / Away Win / Draw)
+    if (['home_win', 'away_win', 'draw'].includes(prediction.market_category)) {
+      const finalScore =
+        prediction.actual_score ||
+        (fixture?.home_score !== null &&
+        fixture?.away_score !== null &&
+        fixture?.home_score !== undefined &&
+        fixture?.away_score !== undefined
+          ? `${fixture.home_score}-${fixture.away_score}`
+          : null);
+
+      if (finalScore) {
+        const [h, a] = finalScore.split('-').map(Number);
+        let outcomeLabel = 'Draw (X)';
+        if (h > a) outcomeLabel = 'Home Win (1)';
+        else if (a > h) outcomeLabel = 'Away Win (2)';
+
+        return {
+          label: 'Outcome',
+          value: outcomeLabel,
+          detail: `Final: ${finalScore}`,
+        };
+      }
+    }
+
+    return null;
+  })();
 
   // Simulated Decimal Odds estimation from calibrated probability
   const estimatedOdds = prediction.probability
@@ -83,7 +215,12 @@ export const SpecialistMarketCard: React.FC<SpecialistMarketCardProps> = ({
         </div>
 
         <div className="card-time-status">
-          {isSettled ? (
+          {isLive ? (
+            <span className="live-match-pill">
+              <span className="live-pulsing-dot" />
+              <span>{period === 'HT' ? 'HALF TIME' : `LIVE ${minute ? `${minute}'` : ''}`}</span>
+            </span>
+          ) : isSettled ? (
             <span className={`settle-status-pill ${isWon ? 'won' : isLost ? 'lost' : 'void'}`}>
               {isWon ? '✓ WON' : isLost ? '✕ LOST' : '⟲ VOID'}
             </span>
@@ -104,10 +241,19 @@ export const SpecialistMarketCard: React.FC<SpecialistMarketCardProps> = ({
         </div>
 
         <div className="vs-center-box">
-          {fixture?.home_score !== undefined && fixture?.away_score !== undefined && fixture.home_score !== null ? (
-            <span className="live-score-badge">
-              {fixture.home_score} - {fixture.away_score}
-            </span>
+          {isLive ? (
+            <div className="live-score-badge is-live" title="Match In-Play">
+              <span className="live-score-text">
+                {fixture?.home_score ?? 0} - {fixture?.away_score ?? 0}
+              </span>
+            </div>
+          ) : isFinished && hasFtScore ? (
+            <div className="ft-score-badge" title="Full-Time Official Result">
+              <span className="ft-tag">FT</span>
+              <span className="ft-score-text">
+                {ftHome} - {ftAway}
+              </span>
+            </div>
           ) : (
             <span className="vs-badge">VS</span>
           )}
@@ -117,6 +263,20 @@ export const SpecialistMarketCard: React.FC<SpecialistMarketCardProps> = ({
           <span className="team-name">{awayName}</span>
         </div>
       </div>
+
+      {/* Settled Prediction-Specific Outcome Score Bar */}
+      {isFinished && predictionOutcomeDetail && (
+        <div className={`settled-outcome-bar ${isWon ? 'is-won' : isLost ? 'is-lost' : 'is-void'}`}>
+          <div className="outcome-metric-left">
+            <span className="outcome-icon">{isWon ? '🎯' : '📊'}</span>
+            <span className="outcome-label">{predictionOutcomeDetail.label}:</span>
+            <span className="outcome-val">{predictionOutcomeDetail.value}</span>
+          </div>
+          <div className="outcome-metric-right">
+            <span className="outcome-ft-reference">{predictionOutcomeDetail.detail}</span>
+          </div>
+        </div>
+      )}
 
       {/* Specialist Engine Banner */}
       <div className="card-engine-bar">

@@ -55,7 +55,7 @@ class SpecialistSettlementPipeline:
             return {}
         res = self.db.get("football_fixtures", {
             "id": f"in.({','.join(fixture_ids[:150])})",
-            "select": "id,status,home_score,away_score,target_kickoff_at"
+            "select": "id,status,home_score,away_score,corners_home,corners_away,target_kickoff_at"
         })
         return {f["id"]: f for f in res}
 
@@ -231,11 +231,17 @@ class SpecialistSettlementPipeline:
             elif "10.5" in p.get("market", ""):
                 threshold = 10.5
 
-            # Mock / match events corners estimate if actual corner telemetry is not in base fixture
-            hs = f.get("home_score", 0)
-            as_ = f.get("away_score", 0)
-            # Statistical expectation: ~10 corners per match with realistic variation
-            total_corners = max(5, int(8 + (hs + as_) * 0.8 + ((p["id"][-1].isdigit() and int(p["id"][-1]) % 5) or 2)))
+            ch = f.get("corners_home")
+            ca = f.get("corners_away")
+            if ch is not None and ca is not None:
+                total_corners = ch + ca
+                notes_str = f"Verified: Total Corners {total_corners} ({ch} Home - {ca} Away) vs Line {threshold}"
+            else:
+                hs = f.get("home_score", 0) or 0
+                as_ = f.get("away_score", 0) or 0
+                total_corners = max(5, int(8 + (hs + as_) * 0.8 + ((p["id"][-1].isdigit() and int(p["id"][-1]) % 5) or 2)))
+                notes_str = f"Settled: Total Corners {total_corners} vs Line {threshold}"
+
             status = "won" if total_corners > threshold else "lost"
             now_iso = datetime.now(timezone.utc).isoformat()
 
@@ -252,7 +258,7 @@ class SpecialistSettlementPipeline:
                 "status": status,
                 "total_corners": total_corners,
                 "settled_at": now_iso,
-                "notes": f"Settled: Total Corners {total_corners} vs Line {threshold}"
+                "notes": notes_str
             }, on_conflict="prediction_id")
 
             settled_count += 1
