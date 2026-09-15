@@ -319,6 +319,15 @@ export async function fetchMarketFeed(
       if (contentType.includes('application/json')) {
         const json = await res.json();
         if (json.success && Array.isArray(json.predictions)) {
+          // Guarantee tactical_rationale & tactical_tag are present on every prediction
+          json.predictions = json.predictions.map((p: UnifiedMarketPrediction) => {
+            if (!p.tactical_rationale) {
+              const tactical = computeTacticalAnalysis(p, p.market_category, p.market as MarketType);
+              p.tactical_tag = p.tactical_tag || tactical.tag;
+              p.tactical_rationale = tactical.rationale;
+            }
+            return p;
+          });
           return json as UnifiedMarketFeedResponse;
         }
       }

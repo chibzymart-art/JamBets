@@ -186,9 +186,22 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
 
   return (
     <div className="goals-page-container" id="other-markets-top">
-      {/* 2-TIER COMMAND ISLAND */}
-      <div className="goals-command-island" style={{ marginBottom: 14 }}>
-        {/* TIER 1: Search */}
+      {/* 1. SPECIALIST MARKET SWITCHBOARD (Positioned First directly below Header/Ad Banner) */}
+      <MarketSwitchboardNav
+        activeMarket={activeMarket}
+        onSelectMarket={(m) => {
+          setActiveMarket(m);
+          setPage(1);
+        }}
+        counts={marketCounts}
+        loading={loading}
+        hideGeneral={true}
+        title="MARKETS"
+      />
+
+      {/* 2. COMMAND ISLAND (Dates Selector + Status Scorecard Pills) */}
+      <div className="goals-command-island">
+        {/* TIER 1: Search (Hidden on Mobile) */}
         <div className="command-tier-primary search-only">
           <div className="goals-compact-search full-width">
             <span className="search-icon">🔍</span>
@@ -313,38 +326,28 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
               className={`scorecard-pill won ${statusFilter === 'won' ? 'active' : ''}`}
               onClick={() => setStatusFilter('won')}
             >
-              Won ✅ ({statusStats.won})
+              <span className="scorecard-text-desktop">Won ✅ ({statusStats.won})</span>
+              <span className="scorecard-text-mobile">Won ({statusStats.won})</span>
             </button>
             <button
               type="button"
               className={`scorecard-pill lost ${statusFilter === 'lost' ? 'active' : ''}`}
               onClick={() => setStatusFilter('lost')}
             >
-              Lost ❌ ({statusStats.lost})
+              <span className="scorecard-text-desktop">Lost ❌ ({statusStats.lost})</span>
+              <span className="scorecard-text-mobile">Lost ({statusStats.lost})</span>
             </button>
             <button
               type="button"
               className={`scorecard-pill pending ${statusFilter === 'pending' ? 'active' : ''}`}
               onClick={() => setStatusFilter('pending')}
             >
-              Pending ⏳ ({statusStats.pending})
+              <span className="scorecard-text-desktop">Pending ⏳ ({statusStats.pending})</span>
+              <span className="scorecard-text-mobile">Pending ({statusStats.pending})</span>
             </button>
           </div>
         </div>
       </div>
-
-      {/* SPECIALIST MARKET SWITCHBOARD (Centered on Desktop, Swipeable on Mobile) */}
-      <MarketSwitchboardNav
-        activeMarket={activeMarket}
-        onSelectMarket={(m) => {
-          setActiveMarket(m);
-          setPage(1);
-        }}
-        counts={marketCounts}
-        loading={loading}
-        hideGeneral={true}
-        title="MARKETS"
-      />
 
       {/* Active Market Cards Stream */}
       <section className="other-markets-cards-section" style={{ marginTop: 14 }}>

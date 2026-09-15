@@ -1246,7 +1246,7 @@ export default function App() {
             </Link>
             <Link
               to="/other-markets"
-              className={`nav-link-btn ${location.pathname === '/other-markets' || location.pathname === '/goals' ? 'active' : ''}`}
+              className={`nav-link-btn nav-link-other-markets ${location.pathname === '/other-markets' || location.pathname === '/goals' ? 'active' : ''}`}
             >
               Other Markets
             </Link>
@@ -2442,7 +2442,7 @@ export default function App() {
         </Link>
         <Link
           to="/other-markets"
-          className={`mobile-tab-item ${location.pathname === '/other-markets' || location.pathname === '/goals' ? 'active' : ''}`}
+          className={`mobile-tab-item mobile-tab-other-markets ${location.pathname === '/other-markets' || location.pathname === '/goals' ? 'active' : ''}`}
         >
           <span className="mobile-tab-icon">🎯</span>
           <span className="mobile-tab-label">Other Markets</span>

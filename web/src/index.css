@@ -661,6 +661,11 @@ body {
   background: rgba(5, 150, 105, 0.06);
 }
 
+/* Move Other Markets slightly to the right so it doesn't cluster with Dashboard on desktop */
+.nav-link-btn.nav-link-other-markets {
+  margin-left: 14px;
+}
+
 .pricing-flat-badge {
   background: #dcfce7;
   color: #15803d;
@@ -10769,7 +10774,7 @@ body {
   .app-container {
     width: 100% !important;
     max-width: 100% !important;
-    padding: 10px 10px 76px !important;
+    padding: 2px 8px 76px !important;
     box-sizing: border-box !important;
     overflow-x: hidden !important;
   }
@@ -11826,6 +11831,17 @@ body {
   .mobile-tab-label {
     line-height: 1 !important;
   }
+
+  /* Move Other Markets slightly to the right to prevent clustering with Dashboard */
+  .mobile-tab-item.mobile-tab-other-markets {
+    margin-left: 8px !important;
+  }
+
+  .mobile-tab-item.mobile-tab-other-markets .mobile-tab-label {
+    white-space: nowrap !important;
+    font-size: 9px !important;
+    letter-spacing: -0.2px !important;
+  }
 }
 
 /* =========================================================================
@@ -12429,6 +12445,18 @@ body {
   position: relative;
   overflow: hidden;
   transition: all 0.2s ease;
+}
+
+@media (max-width: 768px) {
+  .global-top-ad-banner-wrapper {
+    padding: 0 2px !important;
+    margin-bottom: 2px !important;
+  }
+  .ad-slot-leaderboard-container {
+    margin: 2px auto 4px auto !important;
+    padding: 6px 10px !important;
+    border-radius: 10px !important;
+  }
 }
 
 .ad-slot-leaderboard-container:hover {
