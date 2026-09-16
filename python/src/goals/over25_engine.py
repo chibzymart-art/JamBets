@@ -66,6 +66,13 @@ class Over25GoalsEngine:
         loaded = self.data_provider.load_historical_dataset()
         print(f"📈 [Over25Engine] Active team profiles loaded: {len(self.data_provider.team_profiles)}")
 
+        if wipe_pending:
+            print("🧹 [Over25Engine] Wiping pending over_2.5_goals predictions...")
+            self.db.delete("goals_predictions", {
+                "market": "eq.over_2.5_goals",
+                "settlement_status": "eq.pending"
+            })
+
         # 2. Identify locked predictions (immutable within 48 hours or already settled)
         lock_window_iso = (now + timedelta(hours=48)).isoformat()
         locked_keys = set()
@@ -88,13 +95,6 @@ class Over25GoalsEngine:
                 print(f"🔒 [Over25Engine] Preserving {len(locked_keys)} locked/settled prediction records.")
         except Exception as e:
             print(f"⚠️ [Over25Engine] Lock check notice: {e}")
-
-        if wipe_pending:
-            print("🧹 [Over25Engine] Wiping pending over_2.5_goals predictions...")
-            self.db.delete("goals_predictions", {
-                "market": "eq.over_2.5_goals",
-                "settlement_status": "eq.pending"
-            })
 
         # 3. Query forward scheduled fixtures (up to 4 days)
         fixtures = self.db.get("football_fixtures", {

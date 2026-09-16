@@ -16,6 +16,10 @@ from pydantic import BaseModel, Field
 
 # Ensure project root is in sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../..')))
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8')
+if hasattr(sys.stderr, 'reconfigure'):
+    sys.stderr.reconfigure(encoding='utf-8')
 
 from python.src.db.supabase_client import CloudSupabaseClient
 from python.src.football.historical_dataset import HistoricalDatasetBuilder
@@ -233,46 +237,65 @@ class GoalsDataProvider:
               f"({sufficient_count} clubs have >= {self.MIN_MATCHES_THRESHOLD} verified matches).")
         return total_ingested
 
+    def _get_or_create_profile(self, tid: Optional[str], slug: Optional[str]) -> TeamPerformanceProfile:
+        """Retrieves or creates a shared profile instance for both ID and slug."""
+        profile = None
+        if tid and tid in self.team_profiles:
+            profile = self.team_profiles[tid]
+        elif slug and slug in self.team_profiles:
+            profile = self.team_profiles[slug]
+
+        if not profile:
+            profile = TeamPerformanceProfile(
+                team_id=tid or slug or "unknown",
+                team_name=slug or tid or "unknown"
+            )
+
+        if tid:
+            self.team_profiles[tid] = profile
+        if slug:
+            self.team_profiles[slug] = profile
+            # If we know the UUID mapping for this slug, link it too
+            mapped_id = self.slug_to_id.get(slug)
+            if mapped_id:
+                self.team_profiles[mapped_id] = profile
+
+        return profile
+
     def _record_match(self, hid: str, h_slug: str, aid: str, a_slug: str, hs: int, as_: int):
         """Records a verified match for both home and away profiles."""
         total_g = hs + as_
         is_o25 = total_g >= 3
 
-        # Update home profile (keyed by ID and slug)
-        for key in filter(None, [hid, h_slug]):
-            if key not in self.team_profiles:
-                self.team_profiles[key] = TeamPerformanceProfile(team_id=hid or key, team_name=h_slug or str(hid))
-            hp = self.team_profiles[key]
-            hp.matches_analyzed += 1
-            hp.home_matches += 1
-            hp.home_goals_scored += hs
-            hp.home_goals_conceded += as_
-            if as_ == 0:
-                hp.home_clean_sheets += 1
-            if hs == 0:
-                hp.home_failed_to_score += 1
-            if is_o25:
-                hp.home_over25_count += 1
-            if len(hp.last_5_goals_totals) < 5:
-                hp.last_5_goals_totals.append(total_g)
+        # Update unified home profile
+        hp = self._get_or_create_profile(hid, h_slug)
+        hp.matches_analyzed += 1
+        hp.home_matches += 1
+        hp.home_goals_scored += hs
+        hp.home_goals_conceded += as_
+        if as_ == 0:
+            hp.home_clean_sheets += 1
+        if hs == 0:
+            hp.home_failed_to_score += 1
+        if is_o25:
+            hp.home_over25_count += 1
+        if len(hp.last_5_goals_totals) < 5:
+            hp.last_5_goals_totals.append(total_g)
 
-        # Update away profile (keyed by ID and slug)
-        for key in filter(None, [aid, a_slug]):
-            if key not in self.team_profiles:
-                self.team_profiles[key] = TeamPerformanceProfile(team_id=aid or key, team_name=a_slug or str(aid))
-            ap = self.team_profiles[key]
-            ap.matches_analyzed += 1
-            ap.away_matches += 1
-            ap.away_goals_scored += as_
-            ap.away_goals_conceded += hs
-            if hs == 0:
-                ap.away_clean_sheets += 1
-            if as_ == 0:
-                ap.away_failed_to_score += 1
-            if is_o25:
-                ap.away_over25_count += 1
-            if len(ap.last_5_goals_totals) < 5:
-                ap.last_5_goals_totals.append(total_g)
+        # Update unified away profile
+        ap = self._get_or_create_profile(aid, a_slug)
+        ap.matches_analyzed += 1
+        ap.away_matches += 1
+        ap.away_goals_scored += as_
+        ap.away_goals_conceded += hs
+        if hs == 0:
+            ap.away_clean_sheets += 1
+        if as_ == 0:
+            ap.away_failed_to_score += 1
+        if is_o25:
+            ap.away_over25_count += 1
+        if len(ap.last_5_goals_totals) < 5:
+            ap.last_5_goals_totals.append(total_g)
 
     def _get_cached_external_matches(self) -> List[Dict[str, Any]]:
         """Retrieves or builds multi-week historical cache from LiveScore."""
