@@ -3,7 +3,19 @@
 // Allows real-time creation, editing, location targeting, and deletion of ads
 // ============================================================================
 
-export type AdSlotType = 'leaderboard' | 'native-card' | 'drawer-banner';
+export type AdSlotType =
+  | 'leaderboard'
+  | 'native-card'
+  | 'drawer-banner'
+  | 'favorites-sidebar'
+  | 'under-favorites'
+  | 'bangers-sidebar'
+  | 'under-bangers';
+
+export type MultiBannerDisplayMode = 'rotate' | 'stack';
+
+const STORAGE_KEY_MODE = 'oddsbanta_ad_display_mode';
+const UPDATE_EVENT_MODE = 'oddsbanta_ad_display_mode_updated';
 
 export interface AdBannerItem {
   id: string;
@@ -320,3 +332,39 @@ export function subscribeToAdConfig(callback: (config: AdBannerItem) => void): (
     window.removeEventListener(UPDATE_EVENT_V1, handler);
   };
 }
+
+// ----------------------------------------------------------------------------
+// Multi-Banner Display Mode Helpers (Rotate Carousel vs. Stacked Vertical)
+// ----------------------------------------------------------------------------
+
+export function getMultiBannerDisplayMode(): MultiBannerDisplayMode {
+  if (typeof window === 'undefined') return 'rotate';
+  try {
+    const mode = localStorage.getItem(STORAGE_KEY_MODE);
+    if (mode === 'stack' || mode === 'rotate') return mode;
+    return 'rotate';
+  } catch {
+    return 'rotate';
+  }
+}
+
+export function setMultiBannerDisplayMode(mode: MultiBannerDisplayMode): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(STORAGE_KEY_MODE, mode);
+    window.dispatchEvent(new CustomEvent(UPDATE_EVENT_MODE, { detail: mode }));
+  } catch (e) {
+    console.error('Error saving multi-banner display mode:', e);
+  }
+}
+
+export function subscribeToDisplayMode(callback: (mode: MultiBannerDisplayMode) => void): () => void {
+  if (typeof window === 'undefined') return () => {};
+  const handler = (e: Event) => {
+    const custom = e as CustomEvent<MultiBannerDisplayMode>;
+    callback(custom.detail || getMultiBannerDisplayMode());
+  };
+  window.addEventListener(UPDATE_EVENT_MODE, handler);
+  return () => window.removeEventListener(UPDATE_EVENT_MODE, handler);
+}
+

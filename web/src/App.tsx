@@ -2131,14 +2131,18 @@ export default function App() {
         {/* 7. MAIN DASHBOARD 3-COLUMN GRID */}
         <div className="main-dashboard-grid">
           {/* LEFT SIDEBAR: DAILY 90%+ BANGERS */}
-          <aside className="bangers-sidebar-card">
-            <div className="bangers-sidebar-header">
-              <div className="bangers-header-top">
-                <span className="bangers-header-title">DAILY 90%+ BANGERS</span>
-                <span className="bangers-count-badge">{bangerFixturesList.length} Active</span>
+          <div className="dashboard-left-sidebar-col">
+            <aside className="bangers-sidebar-card">
+              {/* ON BANGERS SIDEBAR AD SLOT (DESKTOP) */}
+              <AdBannerSlot slotType="bangers-sidebar" customClass="ad-sidebar-slot-top" />
+
+              <div className="bangers-sidebar-header">
+                <div className="bangers-header-top">
+                  <span className="bangers-header-title">DAILY 90%+ BANGERS</span>
+                  <span className="bangers-count-badge">{bangerFixturesList.length} Active</span>
+                </div>
+                <div className="bangers-header-sub">Top Algorithmic Locks</div>
               </div>
-              <div className="bangers-header-sub">Top Algorithmic Locks</div>
-            </div>
 
             <div className="bangers-list-box">
               {bangerFixturesList.length === 0 ? (
@@ -2192,8 +2196,14 @@ export default function App() {
             </div>
           </aside>
 
-          {/* CENTER MAIN STREAM: DECOUPLED FOOTBALL MARKET TERMINAL */}
-          <div className="fixtures-stream-column">
+          {/* UNDER BANGERS SIDEBAR AD SLOT (DESKTOP, SAME WIDTH AS BANGERS SIDEBAR) */}
+          <div className="under-sidebar-ad-wrap">
+            <AdBannerSlot slotType="under-bangers" />
+          </div>
+        </div>
+
+        {/* CENTER MAIN STREAM: DECOUPLED FOOTBALL MARKET TERMINAL */}
+        <div className="fixtures-stream-column">
             {/* Scroll Target Anchor for Smooth Pagination Scrolling */}
             <div id="market-terminal-stream-top" />
 
@@ -2320,85 +2330,94 @@ export default function App() {
           </div>
 
           {/* RIGHT SIDEBAR: FAVORITES / WATCHLIST */}
-          {/* RIGHT SIDEBAR: FAVORITES / WATCHLIST */}
-          <aside className="watchlist-sidebar-card">
-            <div className="watchlist-sidebar-header">
-              <span className="watchlist-header-title">
-                <span>★</span> FAVORITES / WATCHLIST
-              </span>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span className="watchlist-count-badge">
-                  {favoriteItems.length} Saved
+          <div className="dashboard-right-sidebar-col">
+            <aside className="watchlist-sidebar-card">
+              {/* ON FAVORITES SIDEBAR AD SLOT (DESKTOP) */}
+              <AdBannerSlot slotType="favorites-sidebar" customClass="ad-sidebar-slot-top" />
+
+              <div className="watchlist-sidebar-header">
+                <span className="watchlist-header-title">
+                  <span>★</span> FAVORITES / WATCHLIST
                 </span>
-                {favoriteItems.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => setIsFavoritesDrawerOpen(true)}
-                    style={{ background: '#0284c7', color: '#fff', border: 'none', borderRadius: 6, fontSize: 10, fontWeight: 700, padding: '3px 7px', cursor: 'pointer' }}
-                    title="Open Custom Slip Drawer"
-                  >
-                    Open Slip →
-                  </button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span className="watchlist-count-badge">
+                    {favoriteItems.length} Saved
+                  </span>
+                  {favoriteItems.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setIsFavoritesDrawerOpen(true)}
+                      style={{ background: '#0284c7', color: '#fff', border: 'none', borderRadius: 6, fontSize: 10, fontWeight: 700, padding: '3px 7px', cursor: 'pointer' }}
+                      title="Open Custom Slip Drawer"
+                    >
+                      Open Slip →
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="watchlist-content-box">
+                {favoriteItems.length === 0 ? (
+                  <>
+                    <div className="watchlist-empty-icon">★</div>
+                    <div className="watchlist-empty-title">Slip Empty</div>
+                    <p className="watchlist-empty-sub">
+                      Click the star icon (☆) or "+ Add" on any match card to pin predictions here or build your custom slip.
+                    </p>
+                  </>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, textAlign: 'left' }}>
+                    {favoriteItems.map((fav) => {
+                      const time = fav.targetKickoffAt ? formatKickoff(fav.targetKickoffAt) : null;
+                      return (
+                        <div
+                          key={fav.id}
+                          className="banger-item-tile"
+                          onClick={() => setIsFavoritesDrawerOpen(true)}
+                        >
+                          <div className="banger-item-meta">
+                            <span>{fav.league}</span>
+                            <span>{time ? `${time.timeStr} WAT` : 'Scheduled'}</span>
+                          </div>
+                          <div className="banger-item-teams">
+                            {fav.homeTeam} vs {fav.awayTeam}
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
+                            <span style={{ fontSize: 11, fontWeight: 800, color: '#0284c7' }}>
+                              🎯 {fav.prediction} <span style={{ fontSize: 10, color: '#64748b' }}>({fav.market})</span>
+                            </span>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleFavoriteItem(fav);
+                              }}
+                              style={{ background: 'none', border: 'none', color: '#dc2626', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                    <button
+                      type="button"
+                      onClick={() => setIsFavoritesDrawerOpen(true)}
+                      className="btn-paywall-unlock-prominent"
+                      style={{ marginTop: 8, padding: '8px 12px', fontSize: 12, textAlign: 'center' }}
+                    >
+                      📋 View Full Slip ({favoriteItems.length}) →
+                    </button>
+                  </div>
                 )}
               </div>
-            </div>
+            </aside>
 
-            <div className="watchlist-content-box">
-              {favoriteItems.length === 0 ? (
-                <>
-                  <div className="watchlist-empty-icon">★</div>
-                  <div className="watchlist-empty-title">Slip Empty</div>
-                  <p className="watchlist-empty-sub">
-                    Click the star icon (☆) or "+ Add" on any match card to pin predictions here or build your custom slip.
-                  </p>
-                </>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, textAlign: 'left' }}>
-                  {favoriteItems.map((fav) => {
-                    const time = fav.targetKickoffAt ? formatKickoff(fav.targetKickoffAt) : null;
-                    return (
-                      <div
-                        key={fav.id}
-                        className="banger-item-tile"
-                        onClick={() => setIsFavoritesDrawerOpen(true)}
-                      >
-                        <div className="banger-item-meta">
-                          <span>{fav.league}</span>
-                          <span>{time ? `${time.timeStr} WAT` : 'Scheduled'}</span>
-                        </div>
-                        <div className="banger-item-teams">
-                          {fav.homeTeam} vs {fav.awayTeam}
-                        </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
-                          <span style={{ fontSize: 11, fontWeight: 800, color: '#0284c7' }}>
-                            🎯 {fav.prediction} <span style={{ fontSize: 10, color: '#64748b' }}>({fav.market})</span>
-                          </span>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              toggleFavoriteItem(fav);
-                            }}
-                            style={{ background: 'none', border: 'none', color: '#dc2626', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
-                          >
-                            Remove
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                  <button
-                    type="button"
-                    onClick={() => setIsFavoritesDrawerOpen(true)}
-                    className="btn-paywall-unlock-prominent"
-                    style={{ marginTop: 8, padding: '8px 12px', fontSize: 12, textAlign: 'center' }}
-                  >
-                    📋 View Full Slip ({favoriteItems.length}) →
-                  </button>
-                </div>
-              )}
+            {/* UNDER FAVORITES SIDEBAR AD SLOT (DESKTOP, SAME WIDTH AS FAVORITES SIDEBAR) */}
+            <div className="under-sidebar-ad-wrap">
+              <AdBannerSlot slotType="under-favorites" />
             </div>
-          </aside>
+          </div>
         </div>
             </>
           )}

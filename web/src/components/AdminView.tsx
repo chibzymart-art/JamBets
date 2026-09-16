@@ -10,8 +10,12 @@ import {
   toggleBannerLocation,
   resetAdBanners,
   subscribeToAdBanners,
+  getMultiBannerDisplayMode,
+  setMultiBannerDisplayMode,
+  subscribeToDisplayMode,
   AdBannerItem,
-  AdSlotType
+  AdSlotType,
+  MultiBannerDisplayMode
 } from '../lib/adConfig';
 
 interface AdminViewProps {
@@ -116,7 +120,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
   const [isBannerModalOpen, setIsBannerModalOpen] = useState<boolean>(false);
   const [editingBannerId, setEditingBannerId] = useState<string | null>(null);
   const [bannerSearchQuery, setBannerSearchQuery] = useState<string>('');
-  const [bannerFilter, setBannerFilter] = useState<'all' | 'active' | 'paused' | 'leaderboard' | 'native-card' | 'drawer-banner'>('all');
+  const [bannerFilter, setBannerFilter] = useState<'all' | 'active' | 'paused' | 'leaderboard' | 'native-card' | 'drawer-banner' | 'sidebars'>('all');
   const [deleteConfirmBannerId, setDeleteConfirmBannerId] = useState<string | null>(null);
   const [bannerSaveLoading, setBannerSaveLoading] = useState<boolean>(false);
 
@@ -143,12 +147,26 @@ export const AdminView: React.FC<AdminViewProps> = ({
 
   const [bannerFormData, setBannerFormData] = useState<Omit<AdBannerItem, 'id' | 'createdAt' | 'updatedAt'>>(initialBannerForm);
 
+  const [multiBannerMode, setMultiBannerMode] = useState<MultiBannerDisplayMode>(() => getMultiBannerDisplayMode());
+
   useEffect(() => {
-    const unsub = subscribeToAdBanners((banners) => {
+    const unsubBanners = subscribeToAdBanners((banners) => {
       setAdBanners(banners);
     });
-    return unsub;
+    const unsubMode = subscribeToDisplayMode((mode) => {
+      setMultiBannerMode(mode);
+    });
+    return () => {
+      unsubBanners();
+      unsubMode();
+    };
   }, []);
+
+  const handleSetMultiBannerMode = (mode: MultiBannerDisplayMode) => {
+    playSfx('click');
+    setMultiBannerMode(mode);
+    setMultiBannerDisplayMode(mode);
+  };
 
   const handleOpenCreateBanner = () => {
     playSfx('click');
@@ -355,6 +373,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
       if (bannerFilter === 'leaderboard') return b.locations.includes('leaderboard');
       if (bannerFilter === 'native-card') return b.locations.includes('native-card');
       if (bannerFilter === 'drawer-banner') return b.locations.includes('drawer-banner');
+      if (bannerFilter === 'sidebars') return b.locations.some(l => ['favorites-sidebar', 'under-favorites', 'bangers-sidebar', 'under-bangers'].includes(l));
       return true;
     });
   }, [adBanners, bannerSearchQuery, bannerFilter]);
@@ -2282,6 +2301,37 @@ export const AdminView: React.FC<AdminViewProps> = ({
             </div>
           </div>
 
+          {/* Multi-Banner Arrangement Controls (Rotate Carousel vs. Stacked Vertical) */}
+          <div className="ad-arrangement-toggle-card">
+            <div className="ad-arrangement-label-group">
+              <span style={{ fontSize: '20px' }}>⚡</span>
+              <div>
+                <strong style={{ color: '#e2e8f0', fontSize: '13px' }}>Multi-Ad Arrangement Option</strong>
+                <p style={{ color: '#94a3b8', fontSize: '11px', margin: '2px 0 0 0' }}>
+                  Choose how 2 or more active ads in the same platform placement are displayed:
+                </p>
+              </div>
+            </div>
+            <div className="ad-arrangement-btn-group">
+              <button
+                type="button"
+                className={`ad-mode-btn ${multiBannerMode === 'rotate' ? 'active' : ''}`}
+                onClick={() => handleSetMultiBannerMode('rotate')}
+                title="Rotate ads one after the other every 12 seconds"
+              >
+                <span>🔄 One After The Other (Rotate)</span>
+              </button>
+              <button
+                type="button"
+                className={`ad-mode-btn ${multiBannerMode === 'stack' ? 'active' : ''}`}
+                onClick={() => handleSetMultiBannerMode('stack')}
+                title="Display ads stacked one under the other simultaneously"
+              >
+                <span>📑 One Under The Other (Stack)</span>
+              </button>
+            </div>
+          </div>
+
           {/* Placement & Serving Telemetry Stats */}
           <div className="ad-manager-stats-grid" style={{ marginTop: '16px' }}>
             <div className="ad-manager-stat-card">
@@ -2391,6 +2441,13 @@ export const AdminView: React.FC<AdminViewProps> = ({
               >
                 📁 Drawer
               </button>
+              <button
+                type="button"
+                className={`genz-pill ${bannerFilter === 'sidebars' ? 'active' : ''}`}
+                onClick={() => setBannerFilter('sidebars')}
+              >
+                🖥️ Sidebars ({adBanners.filter(b => b.locations.some(l => ['favorites-sidebar', 'under-favorites', 'bangers-sidebar', 'under-bangers'].includes(l))).length})
+              </button>
             </div>
           </div>
 
@@ -2433,6 +2490,10 @@ export const AdminView: React.FC<AdminViewProps> = ({
                 const isLeaderboard = banner.locations.includes('leaderboard');
                 const isNative = banner.locations.includes('native-card');
                 const isDrawer = banner.locations.includes('drawer-banner');
+                const isFavSidebar = banner.locations.includes('favorites-sidebar');
+                const isUnderFav = banner.locations.includes('under-favorites');
+                const isBangersSidebar = banner.locations.includes('bangers-sidebar');
+                const isUnderBangers = banner.locations.includes('under-bangers');
 
                 return (
                   <div
@@ -2528,6 +2589,50 @@ export const AdminView: React.FC<AdminViewProps> = ({
                         <span>📁</span>
                         <span>Acca Slip Drawer</span>
                         <span>{isDrawer ? '✓' : '✕'}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        className={`ad-location-toggle-chip ${isFavSidebar ? 'active' : 'inactive'}`}
+                        onClick={() => handleToggleBannerLocation(banner.id, 'favorites-sidebar')}
+                        title="Toggle On Favorites Sidebar placement (Desktop)"
+                      >
+                        <span>⭐</span>
+                        <span>Favorites Sidebar</span>
+                        <span>{isFavSidebar ? '✓' : '✕'}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        className={`ad-location-toggle-chip ${isUnderFav ? 'active' : 'inactive'}`}
+                        onClick={() => handleToggleBannerLocation(banner.id, 'under-favorites')}
+                        title="Toggle Under Favorites Sidebar placement (Desktop)"
+                      >
+                        <span>📋</span>
+                        <span>Under Favorites</span>
+                        <span>{isUnderFav ? '✓' : '✕'}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        className={`ad-location-toggle-chip ${isBangersSidebar ? 'active' : 'inactive'}`}
+                        onClick={() => handleToggleBannerLocation(banner.id, 'bangers-sidebar')}
+                        title="Toggle On 90%+ Bangers Sidebar placement (Desktop)"
+                      >
+                        <span>🔥</span>
+                        <span>Bangers Sidebar</span>
+                        <span>{isBangersSidebar ? '✓' : '✕'}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        className={`ad-location-toggle-chip ${isUnderBangers ? 'active' : 'inactive'}`}
+                        onClick={() => handleToggleBannerLocation(banner.id, 'under-bangers')}
+                        title="Toggle Under 90%+ Bangers Sidebar placement (Desktop)"
+                      >
+                        <span>🎯</span>
+                        <span>Under Bangers</span>
+                        <span>{isUnderBangers ? '✓' : '✕'}</span>
                       </button>
                     </div>
 
@@ -2808,6 +2913,110 @@ export const AdminView: React.FC<AdminViewProps> = ({
                             </span>
                           </div>
                           <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>Embedded at the bottom of Favorites Acca Slip</span>
+                        </div>
+
+                        <div
+                          style={{
+                            padding: '12px',
+                            borderRadius: '10px',
+                            background: bannerFormData.locations.includes('favorites-sidebar') ? 'rgba(245, 158, 11, 0.2)' : 'rgba(255, 255, 255, 0.03)',
+                            border: `1px solid ${bannerFormData.locations.includes('favorites-sidebar') ? 'rgba(245, 158, 11, 0.5)' : 'rgba(255, 255, 255, 0.08)'}`,
+                            cursor: 'pointer',
+                            transition: 'all 0.2s ease'
+                          }}
+                          onClick={() => {
+                            const has = bannerFormData.locations.includes('favorites-sidebar');
+                            const next: AdSlotType[] = has
+                              ? (bannerFormData.locations.filter(l => l !== 'favorites-sidebar') as AdSlotType[])
+                              : [...bannerFormData.locations, 'favorites-sidebar'];
+                            setBannerFormData({ ...bannerFormData, locations: next });
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                            <strong style={{ fontSize: '0.85rem', color: '#f8fafc' }}>⭐ Favorites Sidebar (Desktop)</strong>
+                            <span style={{ color: bannerFormData.locations.includes('favorites-sidebar') ? '#fbbf24' : '#64748b', fontWeight: 800 }}>
+                              {bannerFormData.locations.includes('favorites-sidebar') ? '✓ ENABLED' : 'OFF'}
+                            </span>
+                          </div>
+                          <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>Top inside right-hand Favorites & Watchlist card</span>
+                        </div>
+
+                        <div
+                          style={{
+                            padding: '12px',
+                            borderRadius: '10px',
+                            background: bannerFormData.locations.includes('under-favorites') ? 'rgba(14, 165, 233, 0.2)' : 'rgba(255, 255, 255, 0.03)',
+                            border: `1px solid ${bannerFormData.locations.includes('under-favorites') ? 'rgba(14, 165, 233, 0.5)' : 'rgba(255, 255, 255, 0.08)'}`,
+                            cursor: 'pointer',
+                            transition: 'all 0.2s ease'
+                          }}
+                          onClick={() => {
+                            const has = bannerFormData.locations.includes('under-favorites');
+                            const next: AdSlotType[] = has
+                              ? (bannerFormData.locations.filter(l => l !== 'under-favorites') as AdSlotType[])
+                              : [...bannerFormData.locations, 'under-favorites'];
+                            setBannerFormData({ ...bannerFormData, locations: next });
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                            <strong style={{ fontSize: '0.85rem', color: '#f8fafc' }}>📋 Under Favorites (Desktop)</strong>
+                            <span style={{ color: bannerFormData.locations.includes('under-favorites') ? '#38bdf8' : '#64748b', fontWeight: 800 }}>
+                              {bannerFormData.locations.includes('under-favorites') ? '✓ ENABLED' : 'OFF'}
+                            </span>
+                          </div>
+                          <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>Underneath Favorites card (same width by the right)</span>
+                        </div>
+
+                        <div
+                          style={{
+                            padding: '12px',
+                            borderRadius: '10px',
+                            background: bannerFormData.locations.includes('bangers-sidebar') ? 'rgba(16, 185, 129, 0.2)' : 'rgba(255, 255, 255, 0.03)',
+                            border: `1px solid ${bannerFormData.locations.includes('bangers-sidebar') ? 'rgba(16, 185, 129, 0.5)' : 'rgba(255, 255, 255, 0.08)'}`,
+                            cursor: 'pointer',
+                            transition: 'all 0.2s ease'
+                          }}
+                          onClick={() => {
+                            const has = bannerFormData.locations.includes('bangers-sidebar');
+                            const next: AdSlotType[] = has
+                              ? (bannerFormData.locations.filter(l => l !== 'bangers-sidebar') as AdSlotType[])
+                              : [...bannerFormData.locations, 'bangers-sidebar'];
+                            setBannerFormData({ ...bannerFormData, locations: next });
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                            <strong style={{ fontSize: '0.85rem', color: '#f8fafc' }}>🔥 Bangers Sidebar (Desktop)</strong>
+                            <span style={{ color: bannerFormData.locations.includes('bangers-sidebar') ? '#34d399' : '#64748b', fontWeight: 800 }}>
+                              {bannerFormData.locations.includes('bangers-sidebar') ? '✓ ENABLED' : 'OFF'}
+                            </span>
+                          </div>
+                          <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>Top inside left-hand 90%+ Algorithmic Locks card</span>
+                        </div>
+
+                        <div
+                          style={{
+                            padding: '12px',
+                            borderRadius: '10px',
+                            background: bannerFormData.locations.includes('under-bangers') ? 'rgba(239, 68, 68, 0.2)' : 'rgba(255, 255, 255, 0.03)',
+                            border: `1px solid ${bannerFormData.locations.includes('under-bangers') ? 'rgba(239, 68, 68, 0.5)' : 'rgba(255, 255, 255, 0.08)'}`,
+                            cursor: 'pointer',
+                            transition: 'all 0.2s ease'
+                          }}
+                          onClick={() => {
+                            const has = bannerFormData.locations.includes('under-bangers');
+                            const next: AdSlotType[] = has
+                              ? (bannerFormData.locations.filter(l => l !== 'under-bangers') as AdSlotType[])
+                              : [...bannerFormData.locations, 'under-bangers'];
+                            setBannerFormData({ ...bannerFormData, locations: next });
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                            <strong style={{ fontSize: '0.85rem', color: '#f8fafc' }}>🎯 Under Bangers (Desktop)</strong>
+                            <span style={{ color: bannerFormData.locations.includes('under-bangers') ? '#f87171' : '#64748b', fontWeight: 800 }}>
+                              {bannerFormData.locations.includes('under-bangers') ? '✓ ENABLED' : 'OFF'}
+                            </span>
+                          </div>
+                          <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>Underneath Bangers card (same width by the left)</span>
                         </div>
                       </div>
 
