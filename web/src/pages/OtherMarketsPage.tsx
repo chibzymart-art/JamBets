@@ -27,8 +27,6 @@ export interface OtherMarketsPageProps {
   isFavoriteItem?: (fixtureId: string, market: string, pick: string) => boolean;
   onOpenFavoritesDrawer?: () => void;
   initialMarket?: MarketType;
-  bangersList?: any[];
-  predsByFixture?: Map<string, any[]>;
 }
 
 export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
@@ -42,8 +40,6 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
   isFavoriteItem,
   onOpenFavoritesDrawer,
   initialMarket = 'over_2.5_goals',
-  bangersList,
-  predsByFixture,
 }) => {
   const [activeMarket, setActiveMarket] = useState<MarketType>(
     initialMarket === 'general' ? 'over_2.5_goals' : initialMarket
@@ -196,8 +192,6 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
       favoriteItems={favoriteItems}
       onToggleFavoriteItem={onToggleFavoriteItem}
       onOpenFavoritesDrawer={onOpenFavoritesDrawer}
-      bangersList={bangersList}
-      predsByFixture={predsByFixture}
     >
       <div className="goals-page-container" id="other-markets-top" style={{ maxWidth: '100%', padding: '0 0 80px 0' }}>
         {/* 1. SPECIALIST MARKET SWITCHBOARD (Positioned First directly below Header/Ad Banner) */}

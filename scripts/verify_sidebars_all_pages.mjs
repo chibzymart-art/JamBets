@@ -110,11 +110,9 @@ async function run() {
   await sleep(2500);
 
   const dashboardInfo = await evalJs(`(() => {
-    const bangersCol = document.querySelector('.dashboard-left-sidebar-col');
     const bangersCard = document.querySelector('.bangers-sidebar-card');
     const bangersHeader = document.querySelector('.bangers-sidebar-header');
-    const bangersAds = bangersCard ? bangersCard.querySelectorAll('.ad-banner-slot-container').length : -1;
-    const underBangersAds = bangersCol ? bangersCol.querySelectorAll('.under-sidebar-ad-wrap').length : -1;
+    const bangersText = document.body.innerText.includes('DAILY 90%+ BANGERS');
     
     const watchlistCol = document.querySelector('.dashboard-right-sidebar-col');
     const watchlistCard = document.querySelector('.watchlist-sidebar-card');
@@ -123,10 +121,9 @@ async function run() {
     const underWatchlistAds = watchlistCol ? watchlistCol.querySelectorAll('.under-sidebar-ad-wrap').length : -1;
 
     return {
-      hasBangersCol: !!bangersCol,
       hasBangersCard: !!bangersCard,
-      bangersAds,
-      underBangersAds,
+      hasBangersHeader: !!bangersHeader,
+      hasBangersText: bangersText,
       hasWatchlistCol: !!watchlistCol,
       hasWatchlistCard: !!watchlistCard,
       watchlistAds,
@@ -134,29 +131,12 @@ async function run() {
     };
   })()`);
   console.log('Dashboard Info:', JSON.stringify(dashboardInfo, null, 2));
+  await takeScreenshot('dashboard_no_bangers_desktop');
 
   // Scroll down 800px on Dashboard to verify scroll behavior
   await evalJs(`window.scrollTo({ top: 800, behavior: 'instant' })`);
   await sleep(1000);
-  await takeScreenshot('dashboard_scroll_fixed_800');
-
-  // Scroll down 1500px on Dashboard
-  await evalJs(`window.scrollTo({ top: 1500, behavior: 'instant' })`);
-  await sleep(1000);
-  await takeScreenshot('dashboard_scroll_fixed_1500');
-
-  // Check positions after scroll
-  const scrollHeaderPos = await evalJs(`(() => {
-    const bHeader = document.querySelector('.bangers-sidebar-header');
-    const wHeader = document.querySelector('.watchlist-sidebar-header');
-    const bRect = bHeader ? bHeader.getBoundingClientRect() : null;
-    const wRect = wHeader ? wHeader.getBoundingClientRect() : null;
-    return {
-      bangersTop: bRect ? bRect.top : null,
-      watchlistTop: wRect ? wRect.top : null,
-    };
-  })()`);
-  console.log('Scroll Header Positions (viewport relative):', scrollHeaderPos);
+  await takeScreenshot('dashboard_no_bangers_scroll_800');
 
   // 2. TEST OTHER MARKETS (DESKTOP)
   console.log('\n--- 2. Testing /other-markets ---');
@@ -166,25 +146,21 @@ async function run() {
 
   const otherMarketsInfo = await evalJs(`(() => {
     const grid = document.querySelector('.desktop-page-grid');
-    const leftCol = document.querySelector('.dashboard-left-sidebar-col');
     const bangersCard = document.querySelector('.bangers-sidebar-card');
+    const bangersText = document.body.innerText.includes('DAILY 90%+ BANGERS');
     const rightCol = document.querySelector('.dashboard-right-sidebar-col');
     const watchlistCard = document.querySelector('.watchlist-sidebar-card');
-    const switchboard = document.querySelector('.market-switchboard-nav');
-    const cards = document.querySelectorAll('.specialist-market-card').length;
 
     return {
       hasGrid: !!grid,
-      hasLeftCol: !!leftCol,
       hasBangersCard: !!bangersCard,
+      hasBangersText: bangersText,
       hasRightCol: !!rightCol,
-      hasWatchlistCard: !!watchlistCard,
-      hasSwitchboard: !!switchboard,
-      specialistCardsCount: cards
+      hasWatchlistCard: !!watchlistCard
     };
   })()`);
   console.log('Other Markets Info:', JSON.stringify(otherMarketsInfo, null, 2));
-  await takeScreenshot('other_markets_desktop_sidebars');
+  await takeScreenshot('other_markets_no_bangers_desktop');
 
   // 3. TEST SUBSCRIPTION (DESKTOP)
   console.log('\n--- 3. Testing /subscription ---');
@@ -193,83 +169,21 @@ async function run() {
 
   const subscriptionInfo = await evalJs(`(() => {
     const grid = document.querySelector('.desktop-page-grid');
-    const leftCol = document.querySelector('.dashboard-left-sidebar-col');
+    const bangersCard = document.querySelector('.bangers-sidebar-card');
+    const bangersText = document.body.innerText.includes('DAILY 90%+ BANGERS');
     const rightCol = document.querySelector('.dashboard-right-sidebar-col');
-    const pricingGrid = document.querySelector('.pricing-cards-grid');
-    const pricingCards = document.querySelectorAll('.pricing-card').length;
+    const watchlistCard = document.querySelector('.watchlist-sidebar-card');
 
     return {
       hasGrid: !!grid,
-      hasLeftCol: !!leftCol,
+      hasBangersCard: !!bangersCard,
+      hasBangersText: bangersText,
       hasRightCol: !!rightCol,
-      hasPricingGrid: !!pricingGrid,
-      pricingCardsCount: pricingCards
+      hasWatchlistCard: !!watchlistCard
     };
   })()`);
   console.log('Subscription Info:', JSON.stringify(subscriptionInfo, null, 2));
-  await takeScreenshot('subscription_desktop_sidebars');
-
-  // 4. TEST ADMIN PAGE (NO SIDEBARS CONFIRMATION)
-  console.log('\n--- 4. Testing /admin ---');
-  await cdp.send('Page.navigate', { url: 'http://localhost:5173/admin' });
-  await sleep(2500);
-
-  const adminInfo = await evalJs(`(() => {
-    const grid = document.querySelector('.desktop-page-grid');
-    const leftCol = document.querySelector('.dashboard-left-sidebar-col');
-    const rightCol = document.querySelector('.dashboard-right-sidebar-col');
-    const bangers = document.querySelector('.bangers-sidebar-card');
-    const watchlist = document.querySelector('.watchlist-sidebar-card');
-    const adminDeck = document.querySelector('.admin-deck-container, .admin-view-root, .admin-loading-container');
-
-    return {
-      hasDesktopGrid: !!grid,
-      hasLeftCol: !!leftCol,
-      hasRightCol: !!rightCol,
-      hasBangers: !!bangers,
-      hasWatchlist: !!watchlist,
-      hasAdminContainer: !!adminDeck
-    };
-  })()`);
-  console.log('Admin Page Info:', JSON.stringify(adminInfo, null, 2));
-  await takeScreenshot('admin_no_sidebars_confirmed');
-
-  // 5. TEST MOBILE RESPONSIVENESS (<= 1200px)
-  console.log('\n--- 5. Testing Mobile Viewport (390x844) ---');
-  await setViewport(390, 844);
-  await cdp.send('Page.navigate', { url: 'http://localhost:5173/dashboard' });
-  await sleep(2000);
-
-  const mobileDashboardInfo = await evalJs(`(() => {
-    const leftCol = document.querySelector('.dashboard-left-sidebar-col');
-    const rightCol = document.querySelector('.dashboard-right-sidebar-col');
-    const leftDisplay = leftCol ? window.getComputedStyle(leftCol).display : 'missing';
-    const rightDisplay = rightCol ? window.getComputedStyle(rightCol).display : 'missing';
-
-    return {
-      leftSidebarDisplay: leftDisplay,
-      rightSidebarDisplay: rightDisplay
-    };
-  })()`);
-  console.log('Mobile Dashboard Info:', JSON.stringify(mobileDashboardInfo, null, 2));
-  await takeScreenshot('mobile_dashboard_sidebars_hidden');
-
-  // Also check mobile on /other-markets
-  await cdp.send('Page.navigate', { url: 'http://localhost:5173/other-markets' });
-  await sleep(2000);
-  const mobileOtherMarketsInfo = await evalJs(`(() => {
-    const leftCol = document.querySelector('.dashboard-left-sidebar-col');
-    const rightCol = document.querySelector('.dashboard-right-sidebar-col');
-    const leftDisplay = leftCol ? window.getComputedStyle(leftCol).display : 'missing';
-    const rightDisplay = rightCol ? window.getComputedStyle(rightCol).display : 'missing';
-
-    return {
-      leftSidebarDisplay: leftDisplay,
-      rightSidebarDisplay: rightDisplay
-    };
-  })()`);
-  console.log('Mobile Other Markets Info:', JSON.stringify(mobileOtherMarketsInfo, null, 2));
-  await takeScreenshot('mobile_other_markets_sidebars_hidden');
+  await takeScreenshot('subscription_no_bangers_desktop');
 
   // Reset viewport to desktop
   await setViewport(1920, 957);

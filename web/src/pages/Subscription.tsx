@@ -11,8 +11,6 @@ interface SubscriptionPageProps {
   favoriteItems?: FavoritePredictionItem[];
   onToggleFavoriteItem?: (item: FavoritePredictionItem) => void;
   onOpenFavoritesDrawer?: () => void;
-  bangersList?: any[];
-  predsByFixture?: Map<string, any[]>;
 }
 
 export const SubscriptionPage: React.FC<SubscriptionPageProps> = ({
@@ -22,8 +20,6 @@ export const SubscriptionPage: React.FC<SubscriptionPageProps> = ({
   favoriteItems = [],
   onToggleFavoriteItem,
   onOpenFavoritesDrawer,
-  bangersList,
-  predsByFixture,
 }) => {
   const navigate = useNavigate();
   const [selectedBilling, setSelectedBilling] = useState<'monthly' | 'quarterly'>('monthly');
@@ -86,8 +82,6 @@ export const SubscriptionPage: React.FC<SubscriptionPageProps> = ({
       favoriteItems={favoriteItems}
       onToggleFavoriteItem={onToggleFavoriteItem}
       onOpenFavoritesDrawer={onOpenFavoritesDrawer}
-      bangersList={bangersList}
-      predsByFixture={predsByFixture}
     >
       <div className="subscription-page-root" style={{ maxWidth: '100%', padding: '20px 0 80px 0' }}>
         {/* Page Header */}

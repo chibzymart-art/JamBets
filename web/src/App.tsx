@@ -27,7 +27,6 @@ import { LandingPage } from './pages/Landing';
 import { SubscriptionPage } from './pages/Subscription';
 import { PasswordRecoveryPage } from './pages/PasswordRecovery';
 import { OtherMarketsPage } from './pages/OtherMarketsPage';
-import { BangersSidebar } from './components/BangersSidebar';
 import { WatchlistSidebar } from './components/WatchlistSidebar';
 import { getDateDetailsByOffset, getPastDatesList } from './lib/dateUtils';
 
@@ -1101,15 +1100,6 @@ export default function App() {
     }
   }, [selectedTier, scorecardStats]);
 
-  // List of fixtures that feature BANGER signals for the left sidebar (strictly today in WAT)
-  const bangerFixturesList = useMemo(() => {
-    return fixtures.filter((f) => {
-      if (getFixtureWatDate(f.target_kickoff_at) !== dynamicDateTabs.today.id) return false;
-      const pList = predsByFixture.get(f.id) || [];
-      return pList.some((s) => s.confidence_category === 'BANGER');
-    });
-  }, [fixtures, predsByFixture, dynamicDateTabs.today.id]);
-
   // Filtered fixtures for General Market view
   const filteredFixtures = useMemo(() => {
     return fixtures.filter((f) => {
@@ -1567,8 +1557,6 @@ export default function App() {
                 favoriteItems={favoriteItems}
                 onToggleFavoriteItem={toggleFavoriteItem}
                 onOpenFavoritesDrawer={() => setIsFavoritesDrawerOpen(true)}
-                bangersList={bangerFixturesList}
-                predsByFixture={predsByFixture}
               />
             }
           />
@@ -1600,8 +1588,6 @@ export default function App() {
                 onToggleFavoriteItem={toggleFavoriteItem}
                 isFavoriteItem={isFavoriteItem}
                 onOpenFavoritesDrawer={() => setIsFavoritesDrawerOpen(true)}
-                bangersList={bangerFixturesList}
-                predsByFixture={predsByFixture}
               />
             }
           />
@@ -1621,8 +1607,6 @@ export default function App() {
                 onToggleFavoriteItem={toggleFavoriteItem}
                 isFavoriteItem={isFavoriteItem}
                 onOpenFavoritesDrawer={() => setIsFavoritesDrawerOpen(true)}
-                bangersList={bangerFixturesList}
-                predsByFixture={predsByFixture}
               />
             }
           />
@@ -2139,25 +2123,8 @@ export default function App() {
         </section>
 
 
-        {/* 7. MAIN DASHBOARD 3-COLUMN GRID */}
+        {/* 7. MAIN DASHBOARD 2-COLUMN GRID (Fixtures Stream + Watchlist Sidebar) */}
         <div className="main-dashboard-grid">
-          {/* LEFT SIDEBAR: DAILY 90%+ BANGERS (NO AD BANNERS) */}
-          <BangersSidebar
-            bangersList={bangerFixturesList}
-            predsByFixture={predsByFixture}
-            onSelectFixture={(bf) => {
-              const fixDate = getFixtureWatDate(bf.target_kickoff_at);
-              if (fixDate) setSelectedDate(fixDate);
-              setSelectedLeague('all');
-              setSelectedTier('all');
-              setSettlementFilter('all');
-              setScoreStatusFilter('all');
-              setSearchQuery('');
-              const el = document.getElementById('market-terminal-stream-top');
-              if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            }}
-          />
-
         {/* CENTER MAIN STREAM: DECOUPLED FOOTBALL MARKET TERMINAL */}
         <div className="fixtures-stream-column">
             {/* Scroll Target Anchor for Smooth Pagination Scrolling */}

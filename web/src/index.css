@@ -2027,11 +2027,11 @@ body {
 }
 
 /* =====================================================================
-   MAIN DASHBOARD 3-COLUMN GRID
+   MAIN DASHBOARD 2-COLUMN GRID (Fixtures Stream + Right Sidebar)
    ===================================================================== */
 .main-dashboard-grid {
   display: grid;
-  grid-template-columns: 280px 1fr 260px;
+  grid-template-columns: 1fr 280px;
   gap: 20px;
   align-items: start;
 }
@@ -14343,10 +14343,10 @@ body {
   display: none;
 }
 
-/* Universal 3-Column Desktop Grid for all pages */
+/* Universal 2-Column Desktop Grid for all pages (Main Stream + Right Sidebar) */
 .desktop-page-grid {
   display: grid;
-  grid-template-columns: 280px 1fr 260px;
+  grid-template-columns: 1fr 280px;
   gap: 20px;
   align-items: start;
   width: 100%;

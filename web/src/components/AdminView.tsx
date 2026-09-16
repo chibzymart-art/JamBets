@@ -373,7 +373,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
       if (bannerFilter === 'leaderboard') return b.locations.includes('leaderboard');
       if (bannerFilter === 'native-card') return b.locations.includes('native-card');
       if (bannerFilter === 'drawer-banner') return b.locations.includes('drawer-banner');
-      if (bannerFilter === 'sidebars') return b.locations.some(l => ['favorites-sidebar', 'under-favorites', 'bangers-sidebar', 'under-bangers'].includes(l));
+      if (bannerFilter === 'sidebars') return b.locations.some(l => ['favorites-sidebar', 'under-favorites'].includes(l));
       return true;
     });
   }, [adBanners, bannerSearchQuery, bannerFilter]);
@@ -2492,8 +2492,6 @@ export const AdminView: React.FC<AdminViewProps> = ({
                 const isDrawer = banner.locations.includes('drawer-banner');
                 const isFavSidebar = banner.locations.includes('favorites-sidebar');
                 const isUnderFav = banner.locations.includes('under-favorites');
-                const isBangersSidebar = banner.locations.includes('bangers-sidebar');
-                const isUnderBangers = banner.locations.includes('under-bangers');
 
                 return (
                   <div
@@ -2611,28 +2609,6 @@ export const AdminView: React.FC<AdminViewProps> = ({
                         <span>📋</span>
                         <span>Under Favorites</span>
                         <span>{isUnderFav ? '✓' : '✕'}</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        className={`ad-location-toggle-chip ${isBangersSidebar ? 'active' : 'inactive'}`}
-                        onClick={() => handleToggleBannerLocation(banner.id, 'bangers-sidebar')}
-                        title="Toggle On 90%+ Bangers Sidebar placement (Desktop)"
-                      >
-                        <span>🔥</span>
-                        <span>Bangers Sidebar</span>
-                        <span>{isBangersSidebar ? '✓' : '✕'}</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        className={`ad-location-toggle-chip ${isUnderBangers ? 'active' : 'inactive'}`}
-                        onClick={() => handleToggleBannerLocation(banner.id, 'under-bangers')}
-                        title="Toggle Under 90%+ Bangers Sidebar placement (Desktop)"
-                      >
-                        <span>🎯</span>
-                        <span>Under Bangers</span>
-                        <span>{isUnderBangers ? '✓' : '✕'}</span>
                       </button>
                     </div>
 
@@ -2965,58 +2941,6 @@ export const AdminView: React.FC<AdminViewProps> = ({
                             </span>
                           </div>
                           <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>Underneath Favorites card (same width by the right)</span>
-                        </div>
-
-                        <div
-                          style={{
-                            padding: '12px',
-                            borderRadius: '10px',
-                            background: bannerFormData.locations.includes('bangers-sidebar') ? 'rgba(16, 185, 129, 0.2)' : 'rgba(255, 255, 255, 0.03)',
-                            border: `1px solid ${bannerFormData.locations.includes('bangers-sidebar') ? 'rgba(16, 185, 129, 0.5)' : 'rgba(255, 255, 255, 0.08)'}`,
-                            cursor: 'pointer',
-                            transition: 'all 0.2s ease'
-                          }}
-                          onClick={() => {
-                            const has = bannerFormData.locations.includes('bangers-sidebar');
-                            const next: AdSlotType[] = has
-                              ? (bannerFormData.locations.filter(l => l !== 'bangers-sidebar') as AdSlotType[])
-                              : [...bannerFormData.locations, 'bangers-sidebar'];
-                            setBannerFormData({ ...bannerFormData, locations: next });
-                          }}
-                        >
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
-                            <strong style={{ fontSize: '0.85rem', color: '#f8fafc' }}>🔥 Bangers Sidebar (Desktop)</strong>
-                            <span style={{ color: bannerFormData.locations.includes('bangers-sidebar') ? '#34d399' : '#64748b', fontWeight: 800 }}>
-                              {bannerFormData.locations.includes('bangers-sidebar') ? '✓ ENABLED' : 'OFF'}
-                            </span>
-                          </div>
-                          <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>Top inside left-hand 90%+ Algorithmic Locks card</span>
-                        </div>
-
-                        <div
-                          style={{
-                            padding: '12px',
-                            borderRadius: '10px',
-                            background: bannerFormData.locations.includes('under-bangers') ? 'rgba(239, 68, 68, 0.2)' : 'rgba(255, 255, 255, 0.03)',
-                            border: `1px solid ${bannerFormData.locations.includes('under-bangers') ? 'rgba(239, 68, 68, 0.5)' : 'rgba(255, 255, 255, 0.08)'}`,
-                            cursor: 'pointer',
-                            transition: 'all 0.2s ease'
-                          }}
-                          onClick={() => {
-                            const has = bannerFormData.locations.includes('under-bangers');
-                            const next: AdSlotType[] = has
-                              ? (bannerFormData.locations.filter(l => l !== 'under-bangers') as AdSlotType[])
-                              : [...bannerFormData.locations, 'under-bangers'];
-                            setBannerFormData({ ...bannerFormData, locations: next });
-                          }}
-                        >
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
-                            <strong style={{ fontSize: '0.85rem', color: '#f8fafc' }}>🎯 Under Bangers (Desktop)</strong>
-                            <span style={{ color: bannerFormData.locations.includes('under-bangers') ? '#f87171' : '#64748b', fontWeight: 800 }}>
-                              {bannerFormData.locations.includes('under-bangers') ? '✓ ENABLED' : 'OFF'}
-                            </span>
-                          </div>
-                          <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>Underneath Bangers card (same width by the left)</span>
                         </div>
                       </div>
 
