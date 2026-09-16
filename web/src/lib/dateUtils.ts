@@ -114,3 +114,11 @@ export const getPastDatesList = (
 
   return Array.from(pastMap.values()).sort((a, b) => b.iso.localeCompare(a.iso));
 };
+
+export const formatKickoff = (isoString: string) => {
+  const d = new Date(isoString);
+  return {
+    timeStr: d.toLocaleTimeString('en-GB', { timeZone: 'Africa/Lagos', hour: '2-digit', minute: '2-digit', hour12: false }),
+    dateStr: d.toLocaleDateString('en-GB', { timeZone: 'Africa/Lagos', month: 'short', day: 'numeric' })
+  };
+};

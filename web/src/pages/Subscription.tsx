@@ -1,17 +1,29 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
+import { DesktopSidebarLayout } from '../components/DesktopSidebarLayout';
+import { FavoritePredictionItem } from '../components/FavoritesDrawer';
 
 interface SubscriptionPageProps {
   currentUser: any;
   userRole?: string;
   onOpenAuth: (mode: 'signin' | 'register') => void;
+  favoriteItems?: FavoritePredictionItem[];
+  onToggleFavoriteItem?: (item: FavoritePredictionItem) => void;
+  onOpenFavoritesDrawer?: () => void;
+  bangersList?: any[];
+  predsByFixture?: Map<string, any[]>;
 }
 
 export const SubscriptionPage: React.FC<SubscriptionPageProps> = ({
   currentUser,
   userRole,
-  onOpenAuth
+  onOpenAuth,
+  favoriteItems = [],
+  onToggleFavoriteItem,
+  onOpenFavoritesDrawer,
+  bangersList,
+  predsByFixture,
 }) => {
   const navigate = useNavigate();
   const [selectedBilling, setSelectedBilling] = useState<'monthly' | 'quarterly'>('monthly');
@@ -70,8 +82,15 @@ export const SubscriptionPage: React.FC<SubscriptionPageProps> = ({
   };
 
   return (
-    <div className="subscription-page-root">
-      {/* Page Header */}
+    <DesktopSidebarLayout
+      favoriteItems={favoriteItems}
+      onToggleFavoriteItem={onToggleFavoriteItem}
+      onOpenFavoritesDrawer={onOpenFavoritesDrawer}
+      bangersList={bangersList}
+      predsByFixture={predsByFixture}
+    >
+      <div className="subscription-page-root" style={{ maxWidth: '100%', padding: '20px 0 80px 0' }}>
+        {/* Page Header */}
       <div className="sub-header-container">
         <div className="sub-pill-tag">TRANSPARENT PRICING • NO HIDDEN COMMISSIONS</div>
         <h1 className="sub-header-title">Invest in Mathematical Edge</h1>
@@ -304,5 +323,6 @@ export const SubscriptionPage: React.FC<SubscriptionPageProps> = ({
         </div>
       </div>
     </div>
-  );
+  </DesktopSidebarLayout>
+);
 };

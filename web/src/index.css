@@ -2049,8 +2049,6 @@ body {
   border-radius: 16px;
   overflow: hidden;
   box-shadow: var(--shadow-xs);
-  position: sticky;
-  top: 76px;
 }
 
 .bangers-sidebar-header {
@@ -2152,8 +2150,6 @@ body {
   border-radius: 16px;
   overflow: hidden;
   box-shadow: var(--shadow-xs);
-  position: sticky;
-  top: 76px;
 }
 
 .watchlist-sidebar-header {
@@ -14328,15 +14324,7 @@ body {
    ============================================================================ */
 
 /* Sidebar Columns in Dashboard Grid */
-.dashboard-left-sidebar-col {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  position: sticky;
-  top: 76px;
-  width: 100%;
-}
-
+.dashboard-left-sidebar-col,
 .dashboard-right-sidebar-col {
   display: flex;
   flex-direction: column;
@@ -14344,6 +14332,32 @@ body {
   position: sticky;
   top: 76px;
   width: 100%;
+  max-height: calc(100vh - 92px);
+  overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.dashboard-left-sidebar-col::-webkit-scrollbar,
+.dashboard-right-sidebar-col::-webkit-scrollbar {
+  display: none;
+}
+
+/* Universal 3-Column Desktop Grid for all pages */
+.desktop-page-grid {
+  display: grid;
+  grid-template-columns: 280px 1fr 260px;
+  gap: 20px;
+  align-items: start;
+  width: 100%;
+  max-width: 1480px;
+  margin: 0 auto;
+}
+
+@media (max-width: 1200px) {
+  .desktop-page-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* Under Sidebar Ad Wrapper (Same width as the respective sidebar) */

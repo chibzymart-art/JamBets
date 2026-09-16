@@ -8,6 +8,7 @@ import { fetchMarketFeed, MarketType, UnifiedMarketPrediction } from '../lib/mar
 import { updatePageSeo } from '../lib/seo';
 import { recordSportsSearch } from '../lib/sportsIntentTracker';
 import { trackSportsSearchEvent } from '../lib/pixelTracker';
+import { DesktopSidebarLayout } from '../components/DesktopSidebarLayout';
 import {
   getTodayIsoDate,
   getDateDetailsByOffset,
@@ -26,6 +27,8 @@ export interface OtherMarketsPageProps {
   isFavoriteItem?: (fixtureId: string, market: string, pick: string) => boolean;
   onOpenFavoritesDrawer?: () => void;
   initialMarket?: MarketType;
+  bangersList?: any[];
+  predsByFixture?: Map<string, any[]>;
 }
 
 export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
@@ -34,11 +37,13 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
   isAdmin,
   onOpenAuth: _onOpenAuth,
   onOpenSubscription,
-  favoriteItems: _favoriteItems = [],
+  favoriteItems = [],
   onToggleFavoriteItem,
   isFavoriteItem,
-  onOpenFavoritesDrawer: _onOpenFavoritesDrawer,
+  onOpenFavoritesDrawer,
   initialMarket = 'over_2.5_goals',
+  bangersList,
+  predsByFixture,
 }) => {
   const [activeMarket, setActiveMarket] = useState<MarketType>(
     initialMarket === 'general' ? 'over_2.5_goals' : initialMarket
@@ -187,8 +192,15 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
   }, [marketCounts, activeMarket, predictions.length]);
 
   return (
-    <div className="goals-page-container" id="other-markets-top">
-      {/* 1. SPECIALIST MARKET SWITCHBOARD (Positioned First directly below Header/Ad Banner) */}
+    <DesktopSidebarLayout
+      favoriteItems={favoriteItems}
+      onToggleFavoriteItem={onToggleFavoriteItem}
+      onOpenFavoritesDrawer={onOpenFavoritesDrawer}
+      bangersList={bangersList}
+      predsByFixture={predsByFixture}
+    >
+      <div className="goals-page-container" id="other-markets-top" style={{ maxWidth: '100%', padding: '0 0 80px 0' }}>
+        {/* 1. SPECIALIST MARKET SWITCHBOARD (Positioned First directly below Header/Ad Banner) */}
       <MarketSwitchboardNav
         activeMarket={activeMarket}
         onSelectMarket={(m) => {
@@ -418,7 +430,8 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
         )}
       </section>
     </div>
-  );
+  </DesktopSidebarLayout>
+);
 };
 
 export default OtherMarketsPage;
