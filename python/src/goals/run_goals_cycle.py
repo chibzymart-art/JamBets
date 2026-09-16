@@ -12,19 +12,19 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../.
 if hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(encoding='utf-8')
 
-from python.src.goals.goals_engine import GoalsEngine
+from python.src.goals.over25_engine import Over25GoalsEngine
 from python.src.goals.goals_settlement import GoalsSettlementEngine
 
 def run_cycle(predict: bool = True, settle: bool = True):
     print(f"\n⚡ ========================================================")
-    print(f"⚡ Addsbanta Goals Specialist Engine Cycle — {datetime.now(timezone.utc).isoformat()}")
+    print(f"⚡ JamBets Goals Specialist Engine Cycle — {datetime.now(timezone.utc).isoformat()}")
     print(f"⚡ ========================================================\n")
 
     results = {}
 
     if predict:
-        print("--- 1. RUNNING GOALS PREDICTION PASS ---")
-        p_res = GoalsEngine().run()
+        print("--- 1. RUNNING REBUILT OVER 2.5 GOALS PREDICTION PASS ---")
+        p_res = Over25GoalsEngine().run()
         results["prediction"] = p_res
 
     if settle:
