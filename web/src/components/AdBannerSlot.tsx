@@ -35,9 +35,23 @@ export const AdBannerSlot: React.FC<AdBannerSlotProps> = ({ slotType, customClas
   }, []);
 
   // Filter banners assigned to this slot that are active
-  const eligibleBanners = allBanners.filter(
+  let eligibleBanners = allBanners.filter(
     (b) => b.isActive && Array.isArray(b.locations) && b.locations.includes(slotType)
   );
+
+  // Fallback: If left-sidebar is not explicitly set in saved localStorage banners,
+  // pick active banners configured for sidebars or general placements so it renders immediately
+  if (eligibleBanners.length === 0 && slotType === 'left-sidebar') {
+    eligibleBanners = allBanners.filter(
+      (b) =>
+        b.isActive &&
+        Array.isArray(b.locations) &&
+        (b.locations.includes('under-favorites') ||
+          b.locations.includes('favorites-sidebar') ||
+          b.locations.includes('bangers-sidebar') ||
+          b.locations.includes('leaderboard'))
+    );
+  }
 
   const activeMode: MultiBannerDisplayMode = forceMode || displayMode;
 
@@ -247,14 +261,15 @@ export const AdBannerSlot: React.FC<AdBannerSlotProps> = ({ slotType, customClas
     );
   }
 
-  // 4. DESKTOP SIDEBAR SLOTS (Favorites & Bangers, on & under)
+  // 4. DESKTOP SIDEBAR SLOTS (Left Sidebar, Favorites & Bangers, on & under)
   if (
+    slotType === 'left-sidebar' ||
     slotType === 'favorites-sidebar' ||
     slotType === 'under-favorites' ||
     slotType === 'bangers-sidebar' ||
     slotType === 'under-bangers'
   ) {
-    const isUnder = slotType === 'under-favorites' || slotType === 'under-bangers';
+    const isUnder = slotType === 'left-sidebar' || slotType === 'under-favorites' || slotType === 'under-bangers';
     return (
       <div className={`ad-sidebar-desktop-only ${bannersToRender.length > 1 ? 'ad-multi-stack-container' : ''}`}>
         {bannersToRender.map((b, i) => renderSidebarCard(b, i, eligibleBanners.length, isUnder))}

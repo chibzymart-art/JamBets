@@ -373,7 +373,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
       if (bannerFilter === 'leaderboard') return b.locations.includes('leaderboard');
       if (bannerFilter === 'native-card') return b.locations.includes('native-card');
       if (bannerFilter === 'drawer-banner') return b.locations.includes('drawer-banner');
-      if (bannerFilter === 'sidebars') return b.locations.some(l => ['favorites-sidebar', 'under-favorites'].includes(l));
+      if (bannerFilter === 'sidebars') return b.locations.some(l => ['favorites-sidebar', 'under-favorites', 'left-sidebar'].includes(l));
       return true;
     });
   }, [adBanners, bannerSearchQuery, bannerFilter]);
@@ -2446,7 +2446,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
                 className={`genz-pill ${bannerFilter === 'sidebars' ? 'active' : ''}`}
                 onClick={() => setBannerFilter('sidebars')}
               >
-                🖥️ Sidebars ({adBanners.filter(b => b.locations.some(l => ['favorites-sidebar', 'under-favorites', 'bangers-sidebar', 'under-bangers'].includes(l))).length})
+                🖥️ Sidebars ({adBanners.filter(b => b.locations.some(l => ['favorites-sidebar', 'under-favorites', 'left-sidebar', 'bangers-sidebar', 'under-bangers'].includes(l))).length})
               </button>
             </div>
           </div>
@@ -2490,6 +2490,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
                 const isLeaderboard = banner.locations.includes('leaderboard');
                 const isNative = banner.locations.includes('native-card');
                 const isDrawer = banner.locations.includes('drawer-banner');
+                const isLeftSidebar = banner.locations.includes('left-sidebar');
                 const isFavSidebar = banner.locations.includes('favorites-sidebar');
                 const isUnderFav = banner.locations.includes('under-favorites');
 
@@ -2587,6 +2588,17 @@ export const AdminView: React.FC<AdminViewProps> = ({
                         <span>📁</span>
                         <span>Acca Slip Drawer</span>
                         <span>{isDrawer ? '✓' : '✕'}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        className={`ad-location-toggle-chip ${isLeftSidebar ? 'active' : 'inactive'}`}
+                        onClick={() => handleToggleBannerLocation(banner.id, 'left-sidebar')}
+                        title="Toggle Left Sidebar Ad placement (Desktop)"
+                      >
+                        <span>🖥️</span>
+                        <span>Left Sidebar</span>
+                        <span>{isLeftSidebar ? '✓' : '✕'}</span>
                       </button>
 
                       <button
@@ -2941,6 +2953,32 @@ export const AdminView: React.FC<AdminViewProps> = ({
                             </span>
                           </div>
                           <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>Underneath Favorites card (same width by the right)</span>
+                        </div>
+
+                        <div
+                          style={{
+                            padding: '12px',
+                            borderRadius: '10px',
+                            background: bannerFormData.locations.includes('left-sidebar') ? 'rgba(14, 165, 233, 0.2)' : 'rgba(255, 255, 255, 0.03)',
+                            border: `1px solid ${bannerFormData.locations.includes('left-sidebar') ? 'rgba(14, 165, 233, 0.5)' : 'rgba(255, 255, 255, 0.08)'}`,
+                            cursor: 'pointer',
+                            transition: 'all 0.2s ease'
+                          }}
+                          onClick={() => {
+                            const has = bannerFormData.locations.includes('left-sidebar');
+                            const next: AdSlotType[] = has
+                              ? (bannerFormData.locations.filter(l => l !== 'left-sidebar') as AdSlotType[])
+                              : [...bannerFormData.locations, 'left-sidebar'];
+                            setBannerFormData({ ...bannerFormData, locations: next });
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                            <strong style={{ fontSize: '0.85rem', color: '#f8fafc' }}>🖥️ Left Sidebar (Desktop)</strong>
+                            <span style={{ color: bannerFormData.locations.includes('left-sidebar') ? '#38bdf8' : '#64748b', fontWeight: 800 }}>
+                              {bannerFormData.locations.includes('left-sidebar') ? '✓ ENABLED' : 'OFF'}
+                            </span>
+                          </div>
+                          <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>Dedicated left sidebar ad banner across all desktop pages</span>
                         </div>
                       </div>
 

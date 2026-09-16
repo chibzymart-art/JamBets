@@ -9,6 +9,7 @@ export type AdSlotType =
   | 'drawer-banner'
   | 'favorites-sidebar'
   | 'under-favorites'
+  | 'left-sidebar'
   | 'bangers-sidebar'
   | 'under-bangers';
 
@@ -74,7 +75,7 @@ export const DEFAULT_AD_BANNERS: AdBannerItem[] = [
     drawerSub: 'Ace coursework while waiting for kickoff',
     drawerCta: 'Explore →',
 
-    locations: ['leaderboard', 'native-card', 'drawer-banner'],
+    locations: ['leaderboard', 'native-card', 'drawer-banner', 'left-sidebar', 'under-favorites'],
     isActive: true,
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z'

@@ -103,87 +103,143 @@ async function run() {
     return res.result?.value;
   };
 
-  // 1. TEST DASHBOARD (DESKTOP)
+  const waitForSelector = async (selector, timeoutMs = 15000) => {
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+      const found = await evalJs(`!!document.querySelector('${selector}')`);
+      if (found) return true;
+      await sleep(500);
+    }
+    return false;
+  };
+
+  // 1. TEST DASHBOARD / PREDICTIONS (DESKTOP)
   console.log('\n--- 1. Testing /dashboard ---');
   await setViewport(1920, 957);
   await cdp.send('Page.navigate', { url: 'http://localhost:5173/dashboard' });
-  await sleep(2500);
+  
+  // Wait for main dashboard grid to appear
+  const hasGrid = await waitForSelector('.main-dashboard-grid', 15000);
+  console.log('Dashboard grid rendered:', hasGrid);
+  await sleep(1500);
 
   const dashboardInfo = await evalJs(`(() => {
+    const leftCol = document.querySelector('.dashboard-left-sidebar-col');
+    const leftAds = leftCol ? leftCol.querySelectorAll('.ad-sidebar-card').length : 0;
     const bangersCard = document.querySelector('.bangers-sidebar-card');
-    const bangersHeader = document.querySelector('.bangers-sidebar-header');
     const bangersText = document.body.innerText.includes('DAILY 90%+ BANGERS');
     
-    const watchlistCol = document.querySelector('.dashboard-right-sidebar-col');
+    const rightCol = document.querySelector('.dashboard-right-sidebar-col');
     const watchlistCard = document.querySelector('.watchlist-sidebar-card');
-    const watchlistHeader = document.querySelector('.watchlist-sidebar-header');
-    const watchlistAds = watchlistCard ? watchlistCard.querySelectorAll('.ad-banner-slot-container').length : -1;
-    const underWatchlistAds = watchlistCol ? watchlistCol.querySelectorAll('.under-sidebar-ad-wrap').length : -1;
+    const underWatchlistAds = rightCol ? rightCol.querySelectorAll('.under-sidebar-ad-wrap .ad-sidebar-card').length : 0;
 
     return {
+      hasLeftCol: !!leftCol,
+      leftAdsCount: leftAds,
       hasBangersCard: !!bangersCard,
-      hasBangersHeader: !!bangersHeader,
       hasBangersText: bangersText,
-      hasWatchlistCol: !!watchlistCol,
+      hasRightCol: !!rightCol,
       hasWatchlistCard: !!watchlistCard,
-      watchlistAds,
       underWatchlistAds
     };
   })()`);
   console.log('Dashboard Info:', JSON.stringify(dashboardInfo, null, 2));
-  await takeScreenshot('dashboard_no_bangers_desktop');
+  await takeScreenshot('dashboard_loaded_left_ad_desktop');
 
-  // Scroll down 800px on Dashboard to verify scroll behavior
+  // Scroll down 800px on Dashboard to verify sticky scroll behavior
   await evalJs(`window.scrollTo({ top: 800, behavior: 'instant' })`);
   await sleep(1000);
-  await takeScreenshot('dashboard_no_bangers_scroll_800');
+  await takeScreenshot('dashboard_loaded_left_ad_scroll_800');
 
   // 2. TEST OTHER MARKETS (DESKTOP)
   console.log('\n--- 2. Testing /other-markets ---');
   await evalJs(`window.scrollTo({ top: 0, behavior: 'instant' })`);
   await cdp.send('Page.navigate', { url: 'http://localhost:5173/other-markets' });
-  await sleep(2500);
+  await waitForSelector('.desktop-page-grid', 10000);
+  await sleep(1500);
 
   const otherMarketsInfo = await evalJs(`(() => {
     const grid = document.querySelector('.desktop-page-grid');
-    const bangersCard = document.querySelector('.bangers-sidebar-card');
-    const bangersText = document.body.innerText.includes('DAILY 90%+ BANGERS');
+    const leftCol = document.querySelector('.dashboard-left-sidebar-col');
+    const leftAds = leftCol ? leftCol.querySelectorAll('.ad-sidebar-card').length : 0;
     const rightCol = document.querySelector('.dashboard-right-sidebar-col');
     const watchlistCard = document.querySelector('.watchlist-sidebar-card');
 
     return {
       hasGrid: !!grid,
-      hasBangersCard: !!bangersCard,
-      hasBangersText: bangersText,
+      hasLeftCol: !!leftCol,
+      leftAdsCount: leftAds,
       hasRightCol: !!rightCol,
       hasWatchlistCard: !!watchlistCard
     };
   })()`);
   console.log('Other Markets Info:', JSON.stringify(otherMarketsInfo, null, 2));
-  await takeScreenshot('other_markets_no_bangers_desktop');
+  await takeScreenshot('other_markets_left_ad_desktop');
 
   // 3. TEST SUBSCRIPTION (DESKTOP)
   console.log('\n--- 3. Testing /subscription ---');
   await cdp.send('Page.navigate', { url: 'http://localhost:5173/subscription' });
-  await sleep(2500);
+  await waitForSelector('.desktop-page-grid', 10000);
+  await sleep(1500);
 
   const subscriptionInfo = await evalJs(`(() => {
     const grid = document.querySelector('.desktop-page-grid');
-    const bangersCard = document.querySelector('.bangers-sidebar-card');
-    const bangersText = document.body.innerText.includes('DAILY 90%+ BANGERS');
+    const leftCol = document.querySelector('.dashboard-left-sidebar-col');
+    const leftAds = leftCol ? leftCol.querySelectorAll('.ad-sidebar-card').length : 0;
     const rightCol = document.querySelector('.dashboard-right-sidebar-col');
     const watchlistCard = document.querySelector('.watchlist-sidebar-card');
 
     return {
       hasGrid: !!grid,
-      hasBangersCard: !!bangersCard,
-      hasBangersText: bangersText,
+      hasLeftCol: !!leftCol,
+      leftAdsCount: leftAds,
       hasRightCol: !!rightCol,
       hasWatchlistCard: !!watchlistCard
     };
   })()`);
   console.log('Subscription Info:', JSON.stringify(subscriptionInfo, null, 2));
-  await takeScreenshot('subscription_no_bangers_desktop');
+  await takeScreenshot('subscription_left_ad_desktop');
+
+  // 4. TEST ADMIN PAGE (MUST HAVE ZERO SIDEBARS)
+  console.log('\n--- 4. Testing /admin ---');
+  await cdp.send('Page.navigate', { url: 'http://localhost:5173/admin' });
+  await sleep(2500);
+
+  const adminInfo = await evalJs(`(() => {
+    const leftCol = document.querySelector('.dashboard-left-sidebar-col');
+    const rightCol = document.querySelector('.dashboard-right-sidebar-col');
+    const adDeck = document.querySelector('.ad-hub-container');
+
+    return {
+      hasLeftCol: !!leftCol,
+      hasRightCol: !!rightCol,
+      hasAdDeck: !!adDeck
+    };
+  })()`);
+  console.log('Admin Page Info:', JSON.stringify(adminInfo, null, 2));
+  await takeScreenshot('admin_no_sidebars_verified');
+
+  // 5. TEST MOBILE VIEWPORT (<= 1200px) - ON OTHER MARKETS & DASHBOARD
+  console.log('\n--- 5. Testing Mobile Viewport (390px) on /other-markets ---');
+  await setViewport(390, 844);
+  await cdp.send('Page.navigate', { url: 'http://localhost:5173/other-markets' });
+  await sleep(2000);
+
+  const mobileInfo = await evalJs(`(() => {
+    const leftCol = document.querySelector('.dashboard-left-sidebar-col');
+    const rightCol = document.querySelector('.dashboard-right-sidebar-col');
+    const leftDisplay = leftCol ? window.getComputedStyle(leftCol).display : 'null';
+    const rightDisplay = rightCol ? window.getComputedStyle(rightCol).display : 'null';
+
+    return {
+      leftDisplay,
+      rightDisplay,
+      isLeftHidden: leftDisplay === 'none',
+      isRightHidden: rightDisplay === 'none'
+    };
+  })()`);
+  console.log('Mobile Info:', JSON.stringify(mobileInfo, null, 2));
+  await takeScreenshot('mobile_other_markets_sidebars_hidden');
 
   // Reset viewport to desktop
   await setViewport(1920, 957);

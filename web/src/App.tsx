@@ -28,6 +28,7 @@ import { SubscriptionPage } from './pages/Subscription';
 import { PasswordRecoveryPage } from './pages/PasswordRecovery';
 import { OtherMarketsPage } from './pages/OtherMarketsPage';
 import { WatchlistSidebar } from './components/WatchlistSidebar';
+import { LeftSidebarAd } from './components/LeftSidebarAd';
 import { getDateDetailsByOffset, getPastDatesList } from './lib/dateUtils';
 
 
@@ -2123,10 +2124,13 @@ export default function App() {
         </section>
 
 
-        {/* 7. MAIN DASHBOARD 2-COLUMN GRID (Fixtures Stream + Watchlist Sidebar) */}
+        {/* 7. MAIN DASHBOARD 3-COLUMN GRID (Left Ad Sidebar + Fixtures Stream + Watchlist Sidebar) */}
         <div className="main-dashboard-grid">
-        {/* CENTER MAIN STREAM: DECOUPLED FOOTBALL MARKET TERMINAL */}
-        <div className="fixtures-stream-column">
+          {/* LEFT SIDEBAR: AD BANNER */}
+          <LeftSidebarAd />
+
+          {/* CENTER MAIN STREAM: DECOUPLED FOOTBALL MARKET TERMINAL */}
+          <div className="fixtures-stream-column">
             {/* Scroll Target Anchor for Smooth Pagination Scrolling */}
             <div id="market-terminal-stream-top" />
 
