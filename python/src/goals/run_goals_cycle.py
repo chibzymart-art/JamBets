@@ -13,9 +13,10 @@ if hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(encoding='utf-8')
 
 from python.src.goals.over25_engine import Over25GoalsEngine
+from python.src.goals.ht_over05_engine import HtOver05GoalsEngine
 from python.src.goals.goals_settlement import GoalsSettlementEngine
 
-def run_cycle(predict: bool = True, settle: bool = True):
+def run_cycle(predict: bool = True, settle: bool = True, wipe_pending: bool = False):
     print(f"\n⚡ ========================================================")
     print(f"⚡ JamBets Goals Specialist Engine Cycle — {datetime.now(timezone.utc).isoformat()}")
     print(f"⚡ ========================================================\n")
@@ -24,11 +25,15 @@ def run_cycle(predict: bool = True, settle: bool = True):
 
     if predict:
         print("--- 1. RUNNING REBUILT OVER 2.5 GOALS PREDICTION PASS ---")
-        p_res = Over25GoalsEngine().run()
-        results["prediction"] = p_res
+        p_res = Over25GoalsEngine().run(wipe_pending=wipe_pending)
+        results["prediction_over25"] = p_res
+
+        print("\n--- 2. RUNNING STANDALONE 1H OVER 0.5 GOALS BLITZ PASS ---")
+        ht_res = HtOver05GoalsEngine().run(wipe_pending=wipe_pending)
+        results["prediction_ht05"] = ht_res
 
     if settle:
-        print("\n--- 2. RUNNING GOALS SETTLEMENT PASS ---")
+        print("\n--- 3. RUNNING GOALS SETTLEMENT PASS ---")
         s_res = GoalsSettlementEngine().settle()
         results["settlement"] = s_res
 

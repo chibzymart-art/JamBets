@@ -1,16 +1,13 @@
 """
-JamBets — Over 2.5 Goals Specialist Engine (Ground-Up Rebuild)
-Integrates:
-1. High-capacity historical data provider (minimum 6 matches per team)
-2. Strict Tier 1 & Tier 2 competition whitelisting (bans amateur non-league)
-3. Resilient FotMob rolling npxG enricher
-4. Match Intent & Contextual Stakes Engine (MII multiplier)
-5. Bivariate Dixon-Coles joint distribution modeling
-6. 5-Stage Multi-Factor Quality Gates
+JamBets — Standalone 1st Half Over 0.5 Goals Blitz Engine
+Mathematical Model: Bivariate Half-Time Dixon-Coles Poisson + First-Half Match Intent Index (FHTI).
+Strictly decoupled: Independently evaluates, qualifies, and publishes to public.goals_predictions.
+Zero reliance on or cross-talk with the full-time Over 2.5 engine.
 """
 
 import sys
 import os
+import math
 from datetime import datetime, timezone, timedelta
 from typing import List, Dict, Any, Optional
 
@@ -18,58 +15,46 @@ from typing import List, Dict, Any, Optional
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../..')))
 if hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(encoding='utf-8')
+if hasattr(sys.stderr, 'reconfigure'):
+    sys.stderr.reconfigure(encoding='utf-8')
 
 from python.src.db.supabase_client import CloudSupabaseClient
-from python.src.goals.data_provider import GoalsDataProvider
+from python.src.goals.data_provider import GoalsDataProvider, WHITELISTED_LEAGUE_CODES
 from python.src.goals.fotmob_enricher import ResilientFotMobEnricher
-from python.src.goals.match_intent_engine import MatchIntentEngine
-from python.src.goals.dixon_coles_goals import DixonColesGoalsModel
+from python.src.goals.ht_dixon_coles import HalfTimeDixonColesModel
+from python.src.goals.first_half_intent_engine import FirstHalfIntentEngine
 from python.src.goals.ai_scout import GroundedGoalsAiScout
 
 
-def clean_league_name(name: str) -> str:
-    if not name:
-        return "Football League"
-    fixes = {
-        "Brasileiro Srie A": "Brasileirão Série A",
-        "Liga Profesional de Ftbol": "Liga Profesional de Fútbol",
-        "Sper Lig": "Süper Lig",
-    }
-    for bad, good in fixes.items():
-        name = name.replace(bad, good)
-    return name
-
-
-class Over25GoalsEngine:
+class HtOver05GoalsEngine:
     """
-    Dedicated institutional engine evaluating fixtures strictly for
-    Over 2.5 Goals and 1st Half Over 0.5 Goals signals.
+    Dedicated quantitative specialist engine for First-Half Over 0.5 Goals Blitz.
     """
+
+    # First-half standard historical ratio relative to full-time baseline (~44% in elite leagues)
+    DEFAULT_HT_RATIO = 0.44
 
     def __init__(self, db: Optional[CloudSupabaseClient] = None):
         self.db = db or CloudSupabaseClient()
-        self.data_provider = GoalsDataProvider(self.db)
+        self.data_provider = GoalsDataProvider(db=self.db)
         self.enricher = ResilientFotMobEnricher()
         self.ai_scout = GroundedGoalsAiScout()
 
     def run(self, max_fixtures: int = 500, wipe_pending: bool = False) -> Dict[str, Any]:
-        """
-        Executes a complete Over 2.5 evaluation pass.
-        """
-        print("⚽ [Over25Engine] Launching Rebuilt Institutional Over 2.5 Goals Engine...")
+        print("⏱️ [HtOver05Engine] Launching Standalone 1H Over 0.5 Goals Blitz Engine...")
         now = datetime.now(timezone.utc)
         now_iso = now.isoformat()
         min_kickoff = (now - timedelta(minutes=5)).isoformat()
         max_kickoff = (now + timedelta(days=4)).isoformat()
 
-        # 1. Load verified historical data into provider
+        # 1. Ingest multi-week verified historical dataset
         loaded = self.data_provider.load_historical_dataset()
-        print(f"📈 [Over25Engine] Active team profiles loaded: {len(self.data_provider.team_profiles)}")
+        print(f"📈 [HtOver05Engine] Active team profiles loaded: {len(self.data_provider.team_profiles)}")
 
         if wipe_pending:
-            print("🧹 [Over25Engine] Wiping pending over_2.5_goals predictions...")
+            print("🧹 [HtOver05Engine] Wiping pending ht_over_0.5_goals predictions...")
             self.db.delete("goals_predictions", {
-                "market": "eq.over_2.5_goals",
+                "market": "eq.ht_over_0.5_goals",
                 "settlement_status": "eq.pending"
             })
 
@@ -77,24 +62,20 @@ class Over25GoalsEngine:
         lock_window_iso = (now + timedelta(hours=48)).isoformat()
         locked_keys = set()
         try:
-            locked_48h = self.db.get("goals_predictions", {
-                "target_kickoff_at": f"lte.{lock_window_iso}",
-                "select": "fixture_id,market"
+            existing = self.db.get("goals_predictions", {
+                "market": "eq.ht_over_0.5_goals",
+                "select": "id,fixture_id,market,target_kickoff_at,settlement_status",
+                "limit": "1000"
             })
-            for p in (locked_48h or []):
-                locked_keys.add((p.get("fixture_id"), p.get("market")))
-
-            settled_preds = self.db.get("goals_predictions", {
-                "settlement_status": "in.(won,lost,void)",
-                "select": "fixture_id,market"
-            })
-            for p in (settled_preds or []):
-                locked_keys.add((p.get("fixture_id"), p.get("market")))
-
-            if locked_keys:
-                print(f"🔒 [Over25Engine] Preserving {len(locked_keys)} locked/settled prediction records.")
+            for p in existing:
+                fid = p["fixture_id"]
+                status = p.get("settlement_status", "pending")
+                kickoff = p.get("target_kickoff_at", "")
+                if status in ("won", "lost", "void") or (kickoff and kickoff <= lock_window_iso):
+                    locked_keys.add((fid, "ht_over_0.5_goals"))
+            print(f"🔒 [HtOver05Engine] Preserving {len(locked_keys)} locked/settled 1H prediction records.")
         except Exception as e:
-            print(f"⚠️ [Over25Engine] Lock check notice: {e}")
+            print(f"⚠️ [HtOver05Engine] Lock check notice: {e}")
 
         # 3. Query forward scheduled fixtures (up to 4 days)
         fixtures = self.db.get("football_fixtures", {
@@ -105,8 +86,8 @@ class Over25GoalsEngine:
         })
 
         if not fixtures:
-            print("ℹ️ [Over25Engine] No forward fixtures found for goal analysis.")
-            return {"status": "success", "evaluated": 0, "published": 0}
+            print("ℹ️ [HtOver05Engine] No forward candidate fixtures found.")
+            return {"status": "success", "published": 0, "evaluated": 0}
 
         # Query team names
         team_ids = list(set(
@@ -122,22 +103,21 @@ class Over25GoalsEngine:
 
         # Query leagues
         leagues_raw = self.db.get("football_leagues", {"limit": "500"})
-        leagues: Dict[str, str] = {l["id"]: clean_league_name(l["name"]) for l in leagues_raw}
+        leagues: Dict[str, str] = {l["id"]: l["name"] for l in leagues_raw}
         league_codes: Dict[str, str] = {l["id"]: l.get("code", "") for l in leagues_raw}
 
-        print(f"📊 [Over25Engine] Evaluating {len(fixtures)} candidate fixtures against 5 Quality Gates...")
+        print(f"📊 [HtOver05Engine] Evaluating {len(fixtures)} candidate fixtures against 5 Quality Gates...")
 
-        records_to_upsert: List[Dict[str, Any]] = []
-        over25_published = 0
-        ht05_published = 0
-        rejections: Dict[str, int] = {
+        published_count = 0
+        rejections = {
             "league_not_eligible": 0,
             "insufficient_sample_size": 0,
-            "tactical_gridlock_intent": 0,
-            "underdog_blowout_risk": 0,
-            "clean_sheet_suppression": 0,
+            "first_half_gridlock_intent": 0,
+            "low_early_goal_expectancy": 0,
             "below_probability_threshold": 0
         }
+
+        records_to_upsert: List[Dict[str, Any]] = []
 
         for f in fixtures:
             fid = f["id"]
@@ -168,32 +148,31 @@ class Over25GoalsEngine:
                 continue
 
             # =================================================================
-            # QUALITY GATE 1: Competition Whitelist
+            # QUALITY GATE 1: League Whitelist
             # =================================================================
             if not self.data_provider.is_league_eligible(l_code, league_name):
                 rejections["league_not_eligible"] += 1
                 continue
 
             # =================================================================
-            # QUALITY GATE 2: Minimum Sample Size (>= 6 verified matches)
+            # QUALITY GATE 2: Sufficient Historical Sample Size
             # =================================================================
             hp = self.data_provider.get_team_profile(home_team_id) or self.data_provider.get_team_profile(h_slug)
             ap = self.data_provider.get_team_profile(away_team_id) or self.data_provider.get_team_profile(a_slug)
 
-            # Require sufficient history for both clubs (strictly prevents blind 1.80+1.52 defaults)
             if not hp or not ap or not hp.has_sufficient_history or not ap.has_sufficient_history:
                 rejections["insufficient_sample_size"] += 1
                 continue
 
-            # Retrieve baseline league goal expectations
+            # Baseline 1H goal expectation for league
             baseline = self.data_provider.get_league_baseline(l_code)
-            base_h = baseline["home_goals"]
-            base_a = baseline["away_goals"]
+            base_ht_h = baseline["home_goals"] * self.DEFAULT_HT_RATIO
+            base_ht_a = baseline["away_goals"] * self.DEFAULT_HT_RATIO
 
             # =================================================================
-            # QUALITY GATE 3: Match Intent & Contextual Stakes
+            # QUALITY GATE 3: First-Half Match Intent & Early Urgency
             # =================================================================
-            intent = MatchIntentEngine.evaluate_intent(
+            intent = FirstHalfIntentEngine.evaluate_first_half_intent(
                 home_team=home_name,
                 away_team=away_name,
                 league_code=l_code,
@@ -206,55 +185,52 @@ class Over25GoalsEngine:
                 metadata=f.get("metadata")
             )
 
-            # Reject if tactical gridlock (fear of losing / low-block mid-block clash)
-            if intent.intent_classification == "TACTICAL_GRIDLOCK_PRAGMATISM" or intent.match_intent_index < 0.88:
-                rejections["tactical_gridlock_intent"] += 1
+            # Reject low-block early stalemates or high-friction cagey openings
+            if not intent.is_favorable_for_ht05 or intent.first_half_intent_index < 0.86:
+                rejections["first_half_gridlock_intent"] += 1
                 continue
 
             # =================================================================
-            # Compute Dixon-Coles Projected Lambdas
+            # Compute Half-Time Projected Lambdas
             # =================================================================
-            # Bayesian weighted attack/defense
             K = 4.0
             w_h = hp.home_matches / (hp.home_matches + K)
             w_a = ap.away_matches / (ap.away_matches + K)
 
-            att_h = w_h * (hp.home_scoring_rate / max(0.5, base_h)) + (1.0 - w_h) * 1.0
-            def_h = w_h * (hp.home_conceding_rate / max(0.5, base_a)) + (1.0 - w_h) * 1.0
-            att_a = w_a * (ap.away_scoring_rate / max(0.5, base_a)) + (1.0 - w_a) * 1.0
-            def_a = w_a * (ap.away_conceding_rate / max(0.5, base_h)) + (1.0 - w_a) * 1.0
+            att_h = w_h * (hp.home_scoring_rate / max(0.5, baseline["home_goals"])) + (1.0 - w_h) * 1.0
+            def_h = w_h * (hp.home_conceding_rate / max(0.5, baseline["away_goals"])) + (1.0 - w_h) * 1.0
+            att_a = w_a * (ap.away_scoring_rate / max(0.5, baseline["away_goals"])) + (1.0 - w_a) * 1.0
+            def_a = w_a * (ap.away_conceding_rate / max(0.5, baseline["home_goals"])) + (1.0 - w_a) * 1.0
 
-            # Scale by Match Intent Index (MII)
-            lambda_h = base_h * att_h * def_a * intent.lambda_modifier
-            lambda_a = base_a * att_a * def_h * intent.lambda_modifier
+            # Scale base 1H rates by attack/defense and First-Half Intent Index (FHTI)
+            lambda_ht_h = base_ht_h * att_h * def_a * intent.lambda_ht_modifier
+            lambda_ht_a = base_ht_a * att_a * def_h * intent.lambda_ht_modifier
 
-            # Blend with rolling FotMob npxG if available
+            # Blend with rolling FotMob xG if available
             xg_home = self.enricher.get_team_xg_metrics(home_name, l_code)
             xg_away = self.enricher.get_team_xg_metrics(away_name, l_code)
-
             if xg_home and "npxg_for" in xg_home:
-                lambda_h = 0.65 * lambda_h + 0.35 * xg_home["npxg_for"]
+                lambda_ht_h = 0.70 * lambda_ht_h + 0.30 * (xg_home["npxg_for"] * self.DEFAULT_HT_RATIO)
             if xg_away and "npxg_for" in xg_away:
-                lambda_a = 0.65 * lambda_a + 0.35 * xg_away["npxg_for"]
+                lambda_ht_a = 0.70 * lambda_ht_a + 0.30 * (xg_away["npxg_for"] * self.DEFAULT_HT_RATIO)
 
-            lambda_h = round(max(0.40, min(3.80, lambda_h)), 2)
-            lambda_a = round(max(0.30, min(3.20, lambda_a)), 2)
+            lambda_ht_h = round(max(0.20, min(2.40, lambda_ht_h)), 2)
+            lambda_ht_a = round(max(0.15, min(2.00, lambda_ht_a)), 2)
+            combined_ht_lambda = lambda_ht_h + lambda_ht_a
 
             # =================================================================
-            # QUALITY GATE 4: Dual Attacking Floor (BTTS Requirement)
+            # QUALITY GATE 4: 1H Goal Expectancy Floor
+            # Combined 1H expected goals must be >= 1.05
             # =================================================================
-            # Reject if underdog is expected to be shut out (< 0.85 goals)
-            # unless favorite is an absolute juggernaut (lambda >= 2.50)
-            if min(lambda_h, lambda_a) < 0.85 and max(lambda_h, lambda_a) < 2.50:
-                rejections["underdog_blowout_risk"] += 1
+            if combined_ht_lambda < 1.05:
+                rejections["low_early_goal_expectancy"] += 1
                 continue
 
             # =================================================================
-            # BIVARIATE DIXON-COLES PROBABILITIES
+            # BIVARIATE HALF-TIME DIXON-COLES PROBABILITIES
             # =================================================================
-            dixon_res = DixonColesGoalsModel.calculate_probabilities(lambda_h, lambda_a)
-            raw_p_over25 = dixon_res["p_over_25"]
-            raw_p_ht05 = dixon_res["p_ht_over05"]
+            dixon_ht = HalfTimeDixonColesModel.calculate_probabilities(lambda_ht_h, lambda_ht_a)
+            raw_p_ht05 = dixon_ht["p_ht_over05"]
 
             # =================================================================
             # GROUNDED AI TACTICAL SCOUT
@@ -263,11 +239,11 @@ class Over25GoalsEngine:
                 home_team=home_name,
                 away_team=away_name,
                 league_name=league_name,
-                lambda_h=lambda_h,
-                lambda_a=lambda_a,
-                p_over25=raw_p_over25,
-                p_btts=dixon_res["p_btts_yes"],
-                mii=intent.match_intent_index,
+                lambda_h=round(lambda_ht_h / self.DEFAULT_HT_RATIO, 2),
+                lambda_a=round(lambda_ht_a / self.DEFAULT_HT_RATIO, 2),
+                p_over25=raw_p_ht05,
+                p_btts=dixon_ht["p_btts_ht"],
+                mii=intent.first_half_intent_index,
                 intent_classification=intent.intent_classification,
                 home_over25_rate=int(hp.home_over25_pct * 100),
                 away_over25_rate=int(ap.away_over25_pct * 100),
@@ -275,84 +251,83 @@ class Over25GoalsEngine:
                 away_clean_sheet_rate=int(ap.away_clean_sheet_pct * 100)
             )
 
-            final_p_over25 = round(max(0.10, min(0.95, raw_p_over25 + ai_res["over25_adjustment"])), 4)
             final_p_ht05 = round(max(0.25, min(0.97, raw_p_ht05)), 4)
 
-            # Shared metadata
-            base_meta = {
+            # =================================================================
+            # QUALITY GATE 5: High-Conviction Probability Threshold (>= 76%)
+            # =================================================================
+            if final_p_ht05 < 0.76:
+                rejections["below_probability_threshold"] += 1
+                continue
+
+            # Check locked predictions
+            if (fid, "ht_over_0.5_goals") in locked_keys:
+                continue
+
+            # Determine Tier
+            # EARLY_STRIKE: Prob >= 82% & FHTI >= 1.05; TEMPO_HIGH: 76% <= Prob < 82%
+            if final_p_ht05 >= 0.82 and intent.first_half_intent_index >= 1.05:
+                tier = "EARLY_STRIKE"
+            else:
+                tier = "TEMPO_HIGH"
+
+            # Shared Metadata
+            meta = {
                 "home_team": home_name,
                 "away_team": away_name,
                 "league": league_name,
-                "lambda_home": lambda_h,
-                "lambda_away": lambda_a,
-                "xg_combined": dixon_res["xg_combined"],
-                "match_intent_index": intent.match_intent_index,
+                "lambda_ht_home": lambda_ht_h,
+                "lambda_ht_away": lambda_ht_a,
+                "lambda_ht_combined": dixon_ht["lambda_ht_combined"],
+                "first_half_intent_index": intent.first_half_intent_index,
+                "early_strike_tempo": intent.early_strike_tempo,
                 "intent_classification": intent.intent_classification,
                 "intent_rationale": intent.intent_rationale,
                 "tactical_rationale": ai_res["tactical_rationale"],
                 "goal_tempo": ai_res["goal_tempo"],
                 "ai_confidence": ai_res["ai_confidence"],
                 "ai_source": ai_res["source"],
+                "expected_first_goal_minute": dixon_ht["expected_first_goal_minute"],
                 "home_matches_evaluated": hp.matches_analyzed,
                 "away_matches_evaluated": ap.matches_analyzed,
                 "home_clean_sheet_pct": round(hp.home_clean_sheet_pct, 2),
                 "away_clean_sheet_pct": round(ap.away_clean_sheet_pct, 2),
-                "home_over25_pct": round(hp.home_over25_pct, 2),
-                "away_over25_pct": round(ap.away_over25_pct, 2),
                 "generated_at": now_iso
             }
 
-            # =================================================================
-            # QUALITY GATE 5: Over 2.5 Value Threshold (Requires >= 68%)
-            # =================================================================
-            qualifies_over25 = final_p_over25 >= 0.68 and intent.is_favorable_for_over
-
-            if qualifies_over25:
-                if (fid, "over_2.5_goals") not in locked_keys:
-                    tier_over25 = (
-                        "GOAL_MACHINE" if (final_p_over25 >= 0.80 and dixon_res["xg_combined"] >= 3.20)
-                        else ("OVER_25_LOCK" if final_p_over25 >= 0.74 else "LEAN_OVER")
-                    )
-                    records_to_upsert.append({
-                        "fixture_id": fid,
-                        "market": "over_2.5_goals",
-                        "predicted_outcome": "OVER_2.5",
-                        "probability": final_p_over25,
-                        "confidence_tier": tier_over25,
-                        "xg_combined": dixon_res["xg_combined"],
-                        "home_over25_rate": int(hp.home_over25_pct * 100),
-                        "away_over25_rate": int(ap.away_over25_pct * 100),
-                        "h2h_over25_rate": int(round((hp.home_over25_pct + ap.away_over25_pct) / 2.0 * 100)),
-                        "ht_goal_frequency": int(dixon_res["p_ht_over05"] * 100),
-                        "avg_first_goal_minute": max(15, min(36, int(35 - (raw_p_ht05 * 18)))),
-                        "target_kickoff_at": kickoff_at,
-                        "settlement_status": "pending",
-                        "metadata": base_meta
-                    })
-                    over25_published += 1
-            else:
-                rejections["below_probability_threshold"] += 1
+            records_to_upsert.append({
+                "fixture_id": fid,
+                "market": "ht_over_0.5_goals",
+                "predicted_outcome": "HT_OVER_0.5",
+                "probability": final_p_ht05,
+                "confidence_tier": tier,
+                "xg_combined": round(dixon_ht["lambda_ht_combined"] / self.DEFAULT_HT_RATIO, 2),
+                "home_over25_rate": int(hp.home_over25_pct * 100),
+                "away_over25_rate": int(ap.away_over25_pct * 100),
+                "h2h_over25_rate": int(round((hp.home_over25_pct + ap.away_over25_pct) / 2.0 * 100)),
+                "ht_goal_frequency": int(final_p_ht05 * 100),
+                "avg_first_goal_minute": dixon_ht["expected_first_goal_minute"],
+                "target_kickoff_at": kickoff_at,
+                "settlement_status": "pending",
+                "metadata": meta
+            })
+            published_count += 1
 
         # Batch upsert into public.goals_predictions
         if records_to_upsert:
             batch_size = 50
             for i in range(0, len(records_to_upsert), batch_size):
                 chunk = records_to_upsert[i:i + batch_size]
-                self.db.post("goals_predictions", chunk, on_conflict="fixture_id,market")
+                try:
+                    self.db.post("goals_predictions", chunk, on_conflict="fixture_id,market")
+                except Exception as e:
+                    print(f"⚠️ [HtOver05Engine] Batch insert notice: {e}")
 
-        print(f"✅ [Over25Engine] Completed run. Published {over25_published} Over 2.5 Goals predictions.")
+        print(f"✅ [HtOver05Engine] Completed run. Published {published_count} 1H Over 0.5 Goals Blitz predictions.")
         print(f"   Rejection Breakdown: {rejections}")
 
         return {
             "status": "success",
-            "evaluated": len(fixtures),
-            "published": len(records_to_upsert),
-            "over25_published": over25_published,
-            "ht05_published": ht05_published,
+            "published": published_count,
             "rejections": rejections
         }
-
-
-if __name__ == "__main__":
-    engine = Over25GoalsEngine()
-    engine.run()
