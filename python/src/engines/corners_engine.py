@@ -63,11 +63,11 @@ class CornersEngine:
             "limit": "1000"
         })
         existing_map = {(p["fixture_id"], p.get("market")): p["id"] for p in existing}
+        existing_pending_map = {p["fixture_id"]: p["id"] for p in existing if p.get("settlement_status") == "pending"}
         locked_fixture_ids = set()
         for p in existing:
-            if p.get("settlement_status") in ("won", "lost", "void"):
-                locked_fixture_ids.add(p["fixture_id"])
-            elif p.get("target_kickoff_at") and p["target_kickoff_at"] <= lock_window_iso:
+            # Only truly completed historical fixtures (won / lost) are permanently locked
+            if p.get("settlement_status") in ("won", "lost"):
                 locked_fixture_ids.add(p["fixture_id"])
 
         # 4. Fetch scheduled upcoming fixtures across 4-day window
@@ -145,6 +145,9 @@ class CornersEngine:
                 intent_data={"tactical_tag": eval_res["corner_tier"]}
             )
 
+            density_tag = f"[DENSITY:{eval_res['over_7_5_pct']}/{eval_res['over_8_5_pct']}]"
+            notes = f"{density_tag} {rationale}"
+
             payload = {
                 "fixture_id": fid,
                 "prediction": eval_res["prediction"],
@@ -161,12 +164,15 @@ class CornersEngine:
                 "target_kickoff_at": f["target_kickoff_at"],
                 "settlement_status": "pending",
                 "publication_status": "published",
-                "settlement_notes": rationale
+                "settlement_notes": notes
             }
 
-            lookup_key = (fid, eval_res["market"])
-            if lookup_key in existing_map:
-                pred_id = existing_map[lookup_key]
+            if fid in existing_pending_map:
+                pred_id = existing_pending_map[fid]
+                self.db.patch("corner_predictions", payload, {"id": f"eq.{pred_id}"})
+                updated_count += 1
+            elif (fid, eval_res["market"]) in existing_map:
+                pred_id = existing_map[(fid, eval_res["market"])]
                 self.db.patch("corner_predictions", payload, {"id": f"eq.{pred_id}"})
                 updated_count += 1
             else:

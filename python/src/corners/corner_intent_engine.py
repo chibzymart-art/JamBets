@@ -122,13 +122,13 @@ class CornerIntentEngine:
         else:
             c_pragmatic = 1.00
 
-        # Overall MCII multiplier
+        # Overall MCII multiplier (calibrated to modern game tempo)
         raw_mcii = s_siege * w_cross * d_stakes * c_pragmatic
-        mcii = max(0.80, min(1.25, raw_mcii))
+        mcii = max(0.85, min(1.15, raw_mcii))
 
-        # Venue-specific intent multipliers
-        mcii_home = max(0.80, min(1.28, s_siege_home * w_cross * d_stakes * c_pragmatic))
-        mcii_away = max(0.78, min(1.22, s_siege_away * w_cross * d_stakes * c_pragmatic))
+        # Venue-specific intent multipliers (strictly bounded to prevent compounding explosion)
+        mcii_home = max(0.85, min(1.15, s_siege_home * w_cross * d_stakes * c_pragmatic))
+        mcii_away = max(0.82, min(1.12, s_siege_away * w_cross * d_stakes * c_pragmatic))
 
         # Dynamic tactical tag
         if mcii >= 1.12 and w_cross >= 1.06:

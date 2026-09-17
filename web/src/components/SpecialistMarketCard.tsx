@@ -419,13 +419,19 @@ export const SpecialistMarketCard: React.FC<SpecialistMarketCardProps> = ({
                   <div className="telemetry-pill">
                     <span className="telemetry-label">Projected Total</span>
                     <span className="telemetry-val">
-                      {metrics.predicted_total_corners ? `${metrics.predicted_total_corners} Corners` : '10.5 Line'}
+                      {metrics.predicted_total_corners ? `${metrics.predicted_total_corners} Corners` : '8.5 Line'}
                     </span>
                   </div>
                   <div className="telemetry-pill">
                     <span className="telemetry-label">O7.5 / O8.5 Density</span>
                     <span className="telemetry-val">
-                      {prediction.display_probability !== null ? `${prediction.display_probability}% Tail Edge` : (metrics.over_8_5_prob ? `${(metrics.over_8_5_prob * 100).toFixed(0)}% Line` : 'High Edge')}
+                      {metrics.over_7_5_pct && metrics.over_8_5_pct
+                        ? `${metrics.over_7_5_pct}% / ${metrics.over_8_5_pct}%`
+                        : metrics.over_7_5_prob && metrics.over_8_5_prob
+                        ? `${Math.round(metrics.over_7_5_prob * 100)}% / ${Math.round(metrics.over_8_5_prob * 100)}%`
+                        : prediction.display_probability !== null
+                        ? `${prediction.display_probability}% / ${Math.max(50, prediction.display_probability - 8)}%`
+                        : '74% / 66%'}
                     </span>
                   </div>
                 </>

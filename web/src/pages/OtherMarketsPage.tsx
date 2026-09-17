@@ -148,6 +148,9 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
   // Client-side search & status filtering on the loaded batch
   const filteredPredictions = useMemo(() => {
     return predictions.filter((p) => {
+      // Exclude void or archived legacy records completely from user display
+      if (p.settlement_status === 'void' || (p as any).publication_status === 'archived') return false;
+
       // Status filter
       if (statusFilter === 'won' && p.settlement_status !== 'won') return false;
       if (statusFilter === 'lost' && p.settlement_status !== 'lost') return false;
@@ -172,20 +175,24 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
     let lost = 0;
     let pending = 0;
     for (const p of predictions) {
+      if (p.settlement_status === 'void' || (p as any).publication_status === 'archived') continue;
       if (p.settlement_status === 'won') won++;
       else if (p.settlement_status === 'lost') lost++;
       else pending++;
     }
-    return { total: predictions.length, won, lost, pending };
+    return { total: won + lost + pending, won, lost, pending };
   }, [predictions]);
 
   // Synchronize active market count with actual predictions loaded for 100% badge-to-card harmony
   const displayCounts = useMemo(() => {
+    const validCount = predictions.filter(
+      (p) => p.settlement_status !== 'void' && (p as any).publication_status !== 'archived'
+    ).length;
     return {
       ...marketCounts,
-      [activeMarket]: predictions.length,
+      [activeMarket]: validCount,
     };
-  }, [marketCounts, activeMarket, predictions.length]);
+  }, [marketCounts, activeMarket, predictions]);
 
   return (
     <DesktopSidebarLayout

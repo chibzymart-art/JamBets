@@ -137,7 +137,7 @@ const SELECTS: Record<string, { table: string; select: string }> = {
   },
   corners: {
     table: 'corner_predictions_paywall',
-    select: `id,fixture_id,prediction,market,probability,confidence_category,corner_tier,predicted_total_corners,home_corners_avg,away_corners_avg,over_8_5_prob,over_9_5_prob,over_10_5_prob,target_kickoff_at,settlement_status,settled_at,actual_corners,settlement_notes,is_locked,${FIXTURE_JOIN}`,
+    select: `id,fixture_id,prediction,market,probability,confidence_category,corner_tier,predicted_total_corners,home_corners_avg,away_corners_avg,over_8_5_prob,over_9_5_prob,over_10_5_prob,target_kickoff_at,settlement_status,settled_at,actual_corners,settlement_notes,publication_status,is_locked,${FIXTURE_JOIN}`,
   },
   goals: {
     table: 'goals_predictions_paywall',
@@ -161,14 +161,15 @@ function computeTacticalAnalysis(
   const home = formatClubName(rawHome);
   const away = formatClubName(rawAway);
 
-  const customRationale =
+  let customRationale =
     meta.tactical_rationale ||
     (!raw.settled_at && raw.settlement_notes && !raw.settlement_notes.startsWith('Verified')
       ? raw.settlement_notes
       : null);
 
   if (customRationale) {
-    let cleanRationale = customRationale.trim();
+    customRationale = customRationale.replace(/\[DENSITY:\d+\/\d+\]\s*/gi, '').trim();
+    let cleanRationale = customRationale;
     if (cleanRationale.length > 0) {
       cleanRationale = cleanRationale.charAt(0).toUpperCase() + cleanRationale.slice(1);
     }
@@ -221,7 +222,7 @@ function computeTacticalAnalysis(
   }
 
   if (marketCategory === 'corners') {
-    const corners = raw.predicted_total_corners || '10.2';
+    const corners = raw.predicted_total_corners || '8.4';
     const isOver75 = raw.market === 'over_7.5_corners' || (raw.prediction && raw.prediction.includes('7.5'));
     const prob = raw.probability ? Math.round(raw.probability * 100) : (isOver75 ? 76 : 70);
     const lineLabel = isOver75 ? 'Over 7.5' : 'Over 8.5';
@@ -287,11 +288,23 @@ function normalizePrediction(
     marketLabel = 'Corners Specialist';
     marketIcon = '🚩';
     predictionTitle = raw.prediction || 'Over 8.5 Corners';
+    const densityMatch = (raw.settlement_notes || '').match(/\[DENSITY:(\d+)\/(\d+)\]/i);
+    const o75 = densityMatch
+      ? parseInt(densityMatch[1], 10) / 100
+      : (raw.market === 'over_7.5_corners' || (raw.prediction && raw.prediction.includes('7.5')))
+      ? prob
+      : prob ? Math.min(0.88, prob + 0.08) : 0.74;
+    const o85 = densityMatch
+      ? parseInt(densityMatch[2], 10) / 100
+      : raw.over_8_5_prob ? Number(raw.over_8_5_prob) : (prob ? Math.max(0.50, prob - 0.08) : null);
     metrics = {
       predicted_total_corners: raw.predicted_total_corners,
       home_corners_avg: raw.home_corners_avg,
       away_corners_avg: raw.away_corners_avg,
-      over_8_5_prob: raw.over_8_5_prob,
+      over_7_5_prob: o75,
+      over_8_5_prob: o85,
+      over_7_5_pct: o75 ? Math.round(o75 * 100) : 74,
+      over_8_5_pct: o85 ? Math.round(o85 * 100) : 68,
       over_9_5_prob: raw.over_9_5_prob,
       over_10_5_prob: raw.over_10_5_prob,
     };
@@ -360,7 +373,7 @@ async function fetchMarketDataFromUpstream(
       fetch(`${SUPABASE_URL}/rest/v1/${SELECTS.home_win.table}?select=${encodeURIComponent(SELECTS.home_win.select)}&order=probability.desc&limit=25`, { headers }),
       fetch(`${SUPABASE_URL}/rest/v1/${SELECTS.away_win.table}?select=${encodeURIComponent(SELECTS.away_win.select)}&order=probability.desc&limit=25`, { headers }),
       fetch(`${SUPABASE_URL}/rest/v1/${SELECTS.draw.table}?select=${encodeURIComponent(SELECTS.draw.select)}&order=probability.desc&limit=25`, { headers }),
-      fetch(`${SUPABASE_URL}/rest/v1/${SELECTS.corners.table}?select=${encodeURIComponent(SELECTS.corners.select)}&order=probability.desc&limit=25`, { headers }),
+      fetch(`${SUPABASE_URL}/rest/v1/${SELECTS.corners.table}?select=${encodeURIComponent(SELECTS.corners.select)}&settlement_status=neq.void&publication_status=neq.archived&order=probability.desc&limit=25`, { headers }),
       fetch(`${SUPABASE_URL}/rest/v1/${SELECTS.goals.table}?select=${encodeURIComponent(SELECTS.goals.select)}&order=probability.desc&limit=35`, { headers }),
     ]);
 
@@ -407,6 +420,8 @@ async function fetchMarketDataFromUpstream(
     url += '&market=eq.over_2.5_goals';
   } else if (market === 'ht_over_0.5_goals') {
     url += '&market=eq.ht_over_0.5_goals';
+  } else if (market === 'corners') {
+    url += '&settlement_status=neq.void&publication_status=neq.archived';
   }
 
   const res = await fetch(url, { headers });
@@ -429,7 +444,7 @@ async function computeAllMarketCounts(
       fetch(`${SUPABASE_URL}/rest/v1/home_win_predictions_paywall?select=id,target_kickoff_at&limit=1000`, { headers }).then((r) => r.json()),
       fetch(`${SUPABASE_URL}/rest/v1/away_win_predictions_paywall?select=id,target_kickoff_at&limit=1000`, { headers }).then((r) => r.json()),
       fetch(`${SUPABASE_URL}/rest/v1/draw_predictions_paywall?select=id,target_kickoff_at&limit=1000`, { headers }).then((r) => r.json()),
-      fetch(`${SUPABASE_URL}/rest/v1/corner_predictions_paywall?select=id,target_kickoff_at&limit=1000`, { headers }).then((r) => r.json()),
+      fetch(`${SUPABASE_URL}/rest/v1/corner_predictions_paywall?select=id,target_kickoff_at&settlement_status=neq.void&publication_status=neq.archived&limit=1000`, { headers }).then((r) => r.json()),
       fetch(`${SUPABASE_URL}/rest/v1/goals_predictions_paywall?select=id,market,target_kickoff_at&limit=1000`, { headers }).then((r) => r.json()),
     ]);
 

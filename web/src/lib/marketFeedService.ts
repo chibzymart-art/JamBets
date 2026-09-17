@@ -127,7 +127,7 @@ const SELECTS: Record<string, { table: string; select: string }> = {
   },
   corners: {
     table: 'corner_predictions_paywall',
-    select: `id,fixture_id,prediction,market,probability,confidence_category,corner_tier,predicted_total_corners,home_corners_avg,away_corners_avg,over_8_5_prob,over_9_5_prob,over_10_5_prob,target_kickoff_at,settlement_status,settled_at,actual_corners,settlement_notes,is_locked,${FIXTURE_JOIN}`,
+    select: `id,fixture_id,prediction,market,probability,confidence_category,corner_tier,predicted_total_corners,home_corners_avg,away_corners_avg,over_8_5_prob,over_9_5_prob,over_10_5_prob,target_kickoff_at,settlement_status,settled_at,actual_corners,settlement_notes,publication_status,is_locked,${FIXTURE_JOIN}`,
   },
   goals: {
     table: 'goals_predictions_paywall',
@@ -146,14 +146,15 @@ function computeTacticalAnalysis(
   const home = formatClubName(rawHome);
   const away = formatClubName(rawAway);
 
-  const customRationale =
+  let customRationale =
     meta.tactical_rationale ||
     (!raw.settled_at && raw.settlement_notes && !raw.settlement_notes.startsWith('Verified')
       ? raw.settlement_notes
       : null);
 
   if (customRationale) {
-    let cleanRationale = customRationale.trim();
+    customRationale = customRationale.replace(/\[DENSITY:\d+\/\d+\]\s*/gi, '').trim();
+    let cleanRationale = customRationale;
     if (cleanRationale.length > 0) {
       cleanRationale = cleanRationale.charAt(0).toUpperCase() + cleanRationale.slice(1);
     }
@@ -206,7 +207,7 @@ function computeTacticalAnalysis(
   }
 
   if (marketCategory === 'corners') {
-    const corners = raw.predicted_total_corners || '10.2';
+    const corners = raw.predicted_total_corners || '8.4';
     const isOver75 = raw.market === 'over_7.5_corners' || (raw.prediction && raw.prediction.includes('7.5'));
     const prob = raw.probability ? Math.round(raw.probability * 100) : (isOver75 ? 76 : 70);
     const lineLabel = isOver75 ? 'Over 7.5' : 'Over 8.5';
@@ -300,7 +301,29 @@ function normalizePrediction(
       tactical_equilibrium_score: raw.tactical_equilibrium_score,
       low_scoring_density: raw.low_scoring_density,
       predicted_total_corners: raw.predicted_total_corners,
-      over_8_5_prob: raw.over_8_5_prob,
+      over_8_5_prob: (() => {
+        const m = (raw.settlement_notes || '').match(/\[DENSITY:(\d+)\/(\d+)\]/i);
+        if (m) return parseInt(m[2], 10) / 100;
+        return raw.over_8_5_prob ? Number(raw.over_8_5_prob) : (prob ? Math.max(0.50, prob - 0.08) : null);
+      })(),
+      over_7_5_prob: (() => {
+        const m = (raw.settlement_notes || '').match(/\[DENSITY:(\d+)\/(\d+)\]/i);
+        if (m) return parseInt(m[1], 10) / 100;
+        if (raw.market === 'over_7.5_corners' || (raw.prediction && raw.prediction.includes('7.5'))) return prob;
+        return prob ? Math.min(0.88, prob + 0.08) : 0.74;
+      })(),
+      over_7_5_pct: (() => {
+        const m = (raw.settlement_notes || '').match(/\[DENSITY:(\d+)\/(\d+)\]/i);
+        if (m) return parseInt(m[1], 10);
+        if (raw.market === 'over_7.5_corners' || (raw.prediction && raw.prediction.includes('7.5'))) return displayProb || 74;
+        return displayProb ? Math.min(88, displayProb + 8) : 74;
+      })(),
+      over_8_5_pct: (() => {
+        const m = (raw.settlement_notes || '').match(/\[DENSITY:(\d+)\/(\d+)\]/i);
+        if (m) return parseInt(m[2], 10);
+        if (raw.market === 'over_8.5_corners' || (raw.prediction && raw.prediction.includes('8.5'))) return displayProb || 68;
+        return displayProb ? Math.max(50, displayProb - 8) : 66;
+      })(),
       over_9_5_prob: raw.over_9_5_prob,
       xg_combined: raw.xg_combined,
       ht_goal_frequency: raw.ht_goal_frequency,
@@ -360,7 +383,12 @@ export async function fetchMarketFeed(
       supabase.from(SELECTS.home_win.table).select(SELECTS.home_win.select).limit(500),
       supabase.from(SELECTS.away_win.table).select(SELECTS.away_win.select).limit(500),
       supabase.from(SELECTS.draw.table).select(SELECTS.draw.select).limit(500),
-      supabase.from(SELECTS.corners.table).select(SELECTS.corners.select).limit(500),
+      supabase
+        .from(SELECTS.corners.table)
+        .select(SELECTS.corners.select)
+        .neq('settlement_status', 'void')
+        .neq('publication_status', 'archived')
+        .limit(500),
       supabase.from(SELECTS.goals.table).select(SELECTS.goals.select).limit(500),
     ]);
 

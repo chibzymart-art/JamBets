@@ -31,8 +31,8 @@ class TestCornersRebuild(unittest.TestCase):
 
     def test_negative_binomial_pmf_and_tail_probabilities(self):
         """Test NB GLM mathematical validity and probability ordering."""
-        mu = 10.4
-        r = 8.5
+        mu = 8.2
+        r = 7.5
 
         # Check PMF non-negativity and reasonable sum over range [0, 25]
         pmf_values = [NegativeBinomialCornersModel.pmf(k, mu, r) for k in range(30)]
@@ -45,13 +45,15 @@ class TestCornersRebuild(unittest.TestCase):
         self.assertIn("over_8_5_prob", probs)
         self.assertIn("over_9_5_prob", probs)
         self.assertIn("over_10_5_prob", probs)
+        self.assertIn("over_7_5_pct", probs)
+        self.assertIn("over_8_5_pct", probs)
 
         self.assertGreater(probs["over_7_5_prob"], probs["over_8_5_prob"])
         self.assertGreater(probs["over_8_5_prob"], probs["over_9_5_prob"])
         self.assertGreater(probs["over_9_5_prob"], probs["over_10_5_prob"])
 
     def test_match_corner_intent_bounds(self):
-        """Test MCII calculation stays strictly within [0.80, 1.25]."""
+        """Test MCII calculation stays strictly within [0.85, 1.15]."""
         home = DynamicClubProfile(
             team_id="t1", team_name="Arsenal",
             home_matches=10, home_goals_for=24, home_goals_against=8
@@ -62,18 +64,18 @@ class TestCornersRebuild(unittest.TestCase):
         )
         league = DynamicLeagueMetrics(
             league_id="l1", league_code="ENG_PL", league_name="Premier League",
-            dynamic_corner_base_total=10.45, dynamic_corner_base_home=5.75, dynamic_corner_base_away=4.70
+            dynamic_corner_base_total=7.80, dynamic_corner_base_home=4.30, dynamic_corner_base_away=3.50
         )
 
         intent = CornerIntentEngine.evaluate(home, away, league, competition_code="ENG_PL")
-        self.assertGreaterEqual(intent.mcii, 0.80)
-        self.assertLessEqual(intent.mcii, 1.25)
-        self.assertGreaterEqual(intent.mcii_home, 0.80)
-        self.assertLessEqual(intent.mcii_home, 1.28)
+        self.assertGreaterEqual(intent.mcii, 0.85)
+        self.assertLessEqual(intent.mcii, 1.15)
+        self.assertGreaterEqual(intent.mcii_home, 0.85)
+        self.assertLessEqual(intent.mcii_home, 1.15)
         self.assertIn(intent.tactical_tag, ["CORNER_FEST", "WING_PRESSURE", "HIGH_CROSS_VOLUME", "LEAN_OVER"])
 
     def test_market_selection_strictly_over75_or_over85(self):
-        """Test that only Over 7.5 and Over 8.5 markets are selected, never 9.5 or 10.5."""
+        """Test that only Over 7.5 and Over 8.5 markets are selected, and projected total is realistic (7.5-9.1)."""
         home = DynamicClubProfile(
             team_id="t1", team_name="Man City",
             home_matches=10, home_goals_for=28, home_goals_against=6
@@ -84,7 +86,7 @@ class TestCornersRebuild(unittest.TestCase):
         )
         league = DynamicLeagueMetrics(
             league_id="l1", league_code="ENG_PL", league_name="Premier League",
-            dynamic_corner_base_total=10.50, dynamic_corner_base_home=5.80, dynamic_corner_base_away=4.70
+            dynamic_corner_base_total=7.80, dynamic_corner_base_home=4.30, dynamic_corner_base_away=3.50
         )
         intent = CornerIntentEngine.evaluate(home, away, league)
 
@@ -93,6 +95,12 @@ class TestCornersRebuild(unittest.TestCase):
         self.assertIn(res["market"], ["over_7.5_corners", "over_8.5_corners"])
         self.assertIn(res["prediction"], ["Over 7.5 Corners", "Over 8.5 Corners"])
         self.assertNotIn(res["market"], ["over_9.5_corners", "over_10.5_corners"])
+        # Projected total corners must stay within realistic modern football bounds (7.5 to 9.1 corners)
+        self.assertGreaterEqual(res["predicted_total_corners"], 7.5)
+        self.assertLessEqual(res["predicted_total_corners"], 9.1)
+        # Dual density fields must be present
+        self.assertIn("over_7_5_pct", res)
+        self.assertIn("over_8_5_pct", res)
 
     def test_league_whitelist_bans_amateurs_and_youth(self):
         """Test Quality Gate 1 bans amateur non-league and youth competitions."""

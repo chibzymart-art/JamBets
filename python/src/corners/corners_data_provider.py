@@ -98,9 +98,9 @@ class DynamicLeagueMetrics(BaseModel):
     home_win_ratio: float = 0.44
     draw_ratio: float = 0.26
     away_win_ratio: float = 0.30
-    dynamic_corner_base_total: float = 9.85
-    dynamic_corner_base_home: float = 5.35
-    dynamic_corner_base_away: float = 4.50
+    dynamic_corner_base_total: float = 7.65
+    dynamic_corner_base_home: float = 4.20
+    dynamic_corner_base_away: float = 3.45
 
 
 class CornersDataProvider:
@@ -118,44 +118,33 @@ class CornersDataProvider:
 
     def load_dynamic_dataset(self) -> Dict[str, int]:
         """Loads and aggregates all historical fixtures and league metadata."""
-        # 1. Fetch active leagues
-        leagues = self.db.get("football_leagues", {
-            "is_active": "eq.true",
-            "select": "id,name,code,country"
-        })
+        # 1. Fetch all professional football leagues
+        leagues = self.db.get("football_leagues", {"select": "id,name,code,country,is_active"})
         for l in leagues:
-            self.leagues_by_id[l["id"]] = l
+            lid = l["id"]
+            self.leagues_by_id[lid] = l
 
-        # 2. Fetch completed fixtures
+        # 2. Fetch canonical fixtures for league baselines & club profiles
         fixtures = self.db.get("football_fixtures", {
-            "status": "in.(finished,ft,settled)",
-            "select": "id,league_id,home_team_id,away_team_id,home_score,away_score,target_kickoff_at",
-            "limit": "2000"
+            "status": "in.(finished,settled,ft,aet,pen)",
+            "select": "id,league_id,home_team_id,away_team_id,home_score,away_score,corners_home,corners_away,status",
+            "limit": "10000",
+            "order": "target_kickoff_at.desc"
         })
 
-        # Load team names for lookup
-        all_team_ids = set()
-        for f in fixtures:
-            if f.get("home_team_id"): all_team_ids.add(f["home_team_id"])
-            if f.get("away_team_id"): all_team_ids.add(f["away_team_id"])
+        # Pre-fetch team names
+        teams = self.db.get("football_teams", {"select": "id,name"})
+        team_name_map = {t["id"]: t["name"] for t in teams}
 
-        team_id_list = list(all_team_ids)
-        team_name_map = {}
-        for i in range(0, len(team_id_list), 50):
-            batch = team_id_list[i:i+50]
-            teams_res = self.db.get("football_teams", {
-                "id": f"in.({','.join(batch)})",
-                "select": "id,name"
-            })
-            for t in teams_res:
-                team_name_map[t["id"]] = t["name"]
-
-        # 3. Dynamically aggregate league statistics
+        # 3. Dynamically aggregate league profiles
         league_matches: Dict[str, List[Dict[str, Any]]] = {}
         for f in fixtures:
             lid = f.get("league_id")
-            if lid and f.get("home_score") is not None and f.get("away_score") is not None:
-                league_matches.setdefault(lid, []).append(f)
+            if not lid:
+                continue
+            if f.get("home_score") is None or f.get("away_score") is None:
+                continue
+            league_matches.setdefault(lid, []).append(f)
 
         for lid, m_list in league_matches.items():
             l_meta = self.leagues_by_id.get(lid, {})
@@ -177,10 +166,10 @@ class CornersDataProvider:
             a_win_rate = away_wins / m_count
 
             # Dynamic corner baseline derived from genuine match attacking density and goal tempo
-            # Football statistical standard: high-tempo attacking leagues produce higher cross/corner rates
-            dyn_corner_total = round(max(8.8, min(11.4, 8.40 + (avg_goals * 0.55) + (h_win_rate * 1.10))), 2)
-            # Home venue corner share typically spans 53% to 57%
-            home_share = max(0.52, min(0.58, 0.54 + ((h_win_rate - 0.40) * 0.20)))
+            # Modern football empirical reality: modern league fixtures cluster between 7.0 and 8.1 corners
+            dyn_corner_total = round(max(7.10, min(8.15, 6.50 + (avg_goals * 0.32) + (h_win_rate * 0.65))), 2)
+            # Home venue corner share typically spans 53% to 56%
+            home_share = max(0.52, min(0.56, 0.54 + ((h_win_rate - 0.40) * 0.15)))
             dyn_corner_home = round(dyn_corner_total * home_share, 2)
             dyn_corner_away = round(dyn_corner_total - dyn_corner_home, 2)
 
