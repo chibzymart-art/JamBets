@@ -42,7 +42,7 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
   initialMarket = 'over_2.5_goals',
 }) => {
   const [activeMarket, setActiveMarket] = useState<MarketType>(
-    initialMarket === 'general' ? 'over_2.5_goals' : initialMarket
+    initialMarket === 'general' || (initialMarket as string) === 'away_win' ? 'home_win' : initialMarket
   );
   const [dateFilter, setDateFilter] = useState<string>(getTodayIsoDate());
   const [statusFilter, setStatusFilter] = useState<'all' | 'won' | 'lost' | 'pending'>('all');

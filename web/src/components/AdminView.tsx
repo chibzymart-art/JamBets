@@ -724,25 +724,14 @@ export const AdminView: React.FC<AdminViewProps> = ({
         },
         {
           id: 'home_win',
-          name: 'Home Fortress',
-          marketTag: 'Direct Home Outright (1)',
-          modelName: 'Home Dominance Elo & xG',
-          icon: '🏰',
+          name: 'Home & Away (1X2)',
+          marketTag: 'Direct 1X2 Outright (1 / 2)',
+          modelName: 'Bivariate Poisson Dixon-Coles',
+          icon: '⚔️',
           table: 'home_win_predictions',
           paywallTable: 'home_win_predictions_paywall',
           accent: 'linear-gradient(90deg, #10b981, #059669)',
           triggerTask: 'RUN_HOME_WIN_ENGINE'
-        },
-        {
-          id: 'away_win',
-          name: 'Road Warrior',
-          marketTag: 'Direct Away Outright (2)',
-          modelName: 'Counter-Attack Away xG',
-          icon: '🚀',
-          table: 'away_win_predictions',
-          paywallTable: 'away_win_predictions_paywall',
-          accent: 'linear-gradient(90deg, #e11d48, #be123c)',
-          triggerTask: 'RUN_AWAY_WIN_ENGINE'
         },
         {
           id: 'draw',
@@ -995,7 +984,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
       try {
         const { data: pending, error } = await supabase
           .from(table)
-          .select('id, fixture_id, probability, market')
+          .select('id, fixture_id, probability, market, prediction')
           .eq('settlement_status', 'pending');
 
         if (error || !pending || pending.length === 0) return { settled: 0, won: 0, lost: 0 };
@@ -1064,12 +1053,13 @@ export const AdminView: React.FC<AdminViewProps> = ({
     };
 
     const [homeWin, awayWin, draw, corners] = await Promise.all([
-      settleSpecialistTable('home_win_predictions', 'home_win_settlements', (_p, f) => {
+      settleSpecialistTable('home_win_predictions', 'home_win_settlements', (p, f) => {
         const hs = f.home_score;
         const as_ = f.away_score;
         if (hs === null || as_ === null) return { status: null, notes: '', scoreStr: null };
-        const st = hs > as_ ? 'won' : 'lost';
-        return { status: st, notes: `Settled: Home ${hs}-${as_} Away`, scoreStr: `${hs}-${as_}` };
+        const isAway = p.prediction === 'Away Win';
+        const st = isAway ? (as_ > hs ? 'won' : 'lost') : (hs > as_ ? 'won' : 'lost');
+        return { status: st, notes: `Settled 1X2: ${hs}-${as_} (${isAway ? 'Away Win' : 'Home Win'})`, scoreStr: `${hs}-${as_}` };
       }),
       settleSpecialistTable('away_win_predictions', 'away_win_settlements', (_p, f) => {
         const hs = f.home_score;

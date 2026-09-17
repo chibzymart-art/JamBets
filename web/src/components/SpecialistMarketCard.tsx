@@ -332,7 +332,13 @@ export const SpecialistMarketCard: React.FC<SpecialistMarketCardProps> = ({
             <div className="prediction-headline-row">
               <div className="prediction-pick-wrap">
                 <span className="pick-prefix">CALIBRATED PICK:</span>
-                <span className="pick-value">{prediction.prediction}</span>
+                <span className="pick-value">
+                  {prediction.prediction === 'Home Win'
+                    ? '🏠 Home Win (1)'
+                    : prediction.prediction === 'Away Win'
+                    ? '✈️ Away Win (2)'
+                    : prediction.prediction}
+                </span>
               </div>
 
               {prediction.display_probability !== null && (
@@ -363,37 +369,47 @@ export const SpecialistMarketCard: React.FC<SpecialistMarketCardProps> = ({
 
             {/* Engine-Specific Telemetry Metrics Grid */}
             <div className="engine-telemetry-grid">
-              {prediction.market_category === 'home_win' && (
+              {(prediction.market_category === 'home_win' || prediction.market_category === 'away_win') && (
                 <>
-                  <div className="telemetry-pill">
-                    <span className="telemetry-label">Venue Dominance</span>
-                    <span className="telemetry-val">
-                      {metrics.home_venue_advantage ? `+${(metrics.home_venue_advantage * 100).toFixed(0)}% Fortress` : 'High Edge'}
-                    </span>
-                  </div>
-                  <div className="telemetry-pill">
-                    <span className="telemetry-label">Home Clean Sheet</span>
-                    <span className="telemetry-val">
-                      {metrics.home_clean_sheet_prob ? `${(metrics.home_clean_sheet_prob * 100).toFixed(0)}%` : 'Calibrated'}
-                    </span>
-                  </div>
-                </>
-              )}
-
-              {prediction.market_category === 'away_win' && (
-                <>
-                  <div className="telemetry-pill">
-                    <span className="telemetry-label">Road Counter Rating</span>
-                    <span className="telemetry-val">
-                      {metrics.away_counter_efficiency ? `${(metrics.away_counter_efficiency * 100).toFixed(0)}% Press Speed` : 'High Speed'}
-                    </span>
-                  </div>
-                  <div className="telemetry-pill">
-                    <span className="telemetry-label">Away Clean Sheet</span>
-                    <span className="telemetry-val">
-                      {metrics.away_clean_sheet_prob ? `${(metrics.away_clean_sheet_prob * 100).toFixed(0)}%` : 'Solid Box'}
-                    </span>
-                  </div>
+                  {prediction.prediction === 'Away Win' || prediction.market === 'away_win' ? (
+                    <>
+                      <div className="telemetry-pill">
+                        <span className="telemetry-label">Road Transition</span>
+                        <span className="telemetry-val">
+                          {metrics.home_venue_advantage || metrics.away_counter_efficiency
+                            ? `+${Math.round((metrics.home_venue_advantage || metrics.away_counter_efficiency) * 100)}% Speed`
+                            : 'High Speed'}
+                        </span>
+                      </div>
+                      <div className="telemetry-pill">
+                        <span className="telemetry-label">Away Clean Sheet</span>
+                        <span className="telemetry-val">
+                          {metrics.home_clean_sheet_prob || metrics.away_clean_sheet_prob
+                            ? `${Math.round((metrics.home_clean_sheet_prob || metrics.away_clean_sheet_prob) * 100)}%`
+                            : 'Solid Box'}
+                        </span>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="telemetry-pill">
+                        <span className="telemetry-label">Venue Dominance</span>
+                        <span className="telemetry-val">
+                          {metrics.home_venue_advantage
+                            ? `+${Math.round(metrics.home_venue_advantage * 100)}% Fortress`
+                            : 'High Edge'}
+                        </span>
+                      </div>
+                      <div className="telemetry-pill">
+                        <span className="telemetry-label">Home Clean Sheet</span>
+                        <span className="telemetry-val">
+                          {metrics.home_clean_sheet_prob
+                            ? `${Math.round(metrics.home_clean_sheet_prob * 100)}%`
+                            : 'Calibrated'}
+                        </span>
+                      </div>
+                    </>
+                  )}
                 </>
               )}
 

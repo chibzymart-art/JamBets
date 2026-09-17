@@ -236,11 +236,11 @@ function normalizePrediction(
   let marketIcon = '⚡';
 
   if (marketCategory === 'home_win') {
-    marketLabel = 'Home Win (HVDI)';
-    marketIcon = '🏠';
+    marketLabel = 'Home & Away (1X2)';
+    marketIcon = '⚔️';
   } else if (marketCategory === 'away_win') {
-    marketLabel = 'Away Win (CARE)';
-    marketIcon = '✈️';
+    marketLabel = 'Home & Away (1X2)';
+    marketIcon = '⚔️';
   } else if (marketCategory === 'draw') {
     marketLabel = 'Draw Hunter (Skellam)';
     marketIcon = '⚖️';
@@ -386,9 +386,8 @@ export async function fetchMarketFeed(
 
   // 2. Direct Supabase Fallback
   try {
-    const [hwRes, awRes, drRes, crRes, glRes] = await Promise.all([
+    const [hwRes, drRes, crRes, glRes] = await Promise.all([
       supabase.from(SELECTS.home_win.table).select(SELECTS.home_win.select).limit(500),
-      supabase.from(SELECTS.away_win.table).select(SELECTS.away_win.select).limit(500),
       supabase.from(SELECTS.draw.table).select(SELECTS.draw.select).limit(500),
       supabase
         .from(SELECTS.corners.table)
@@ -403,7 +402,6 @@ export async function fetchMarketFeed(
       (data || []).map((r) => normalizePrediction(r, cat, forced));
 
     const allHw = normalizeList(hwRes.data || [], 'home_win');
-    const allAw = normalizeList(awRes.data || [], 'away_win');
     const allDr = normalizeList(drRes.data || [], 'draw');
     const allCr = normalizeList(
       (crRes.data || []).filter(
@@ -442,7 +440,7 @@ export async function fetchMarketFeed(
       general: 0,
       curated: 0,
       home_win: filterByDate(allHw).length,
-      away_win: filterByDate(allAw).length,
+      away_win: 0,
       draw: filterByDate(allDr).length,
       'over_2.5_goals': filterByDate(allOver25).length,
       'ht_over_0.5_goals': filterByDate(allHt05).length,
@@ -452,7 +450,6 @@ export async function fetchMarketFeed(
     // Calculate Curated
     const crossCut = [
       ...filterByDate(allHw),
-      ...filterByDate(allAw),
       ...filterByDate(allDr),
       ...filterByDate(allOver25),
       ...filterByDate(allHt05),
@@ -464,8 +461,7 @@ export async function fetchMarketFeed(
     // Get active market target list
     let targetList: UnifiedMarketPrediction[] = [];
     if (market === 'curated') targetList = crossCut;
-    else if (market === 'home_win') targetList = filterByDate(allHw);
-    else if (market === 'away_win') targetList = filterByDate(allAw);
+    else if (market === 'home_win' || (market as string) === 'away_win') targetList = filterByDate(allHw);
     else if (market === 'draw') targetList = filterByDate(allDr);
     else if (market === 'corners') targetList = filterByDate(allCr);
     else if (market === 'over_2.5_goals') targetList = filterByDate(allOver25);

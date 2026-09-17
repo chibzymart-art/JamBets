@@ -47,10 +47,10 @@ const MARKET_TABS: MarketTabConfig[] = [
   },
   {
     id: 'home_win',
-    label: 'Home Win',
-    icon: '🏠',
-    badgeTag: 'HVDI MODEL',
-    description: 'Home Venue Dominance Index evaluating pitch familiarity & defensive fortress',
+    label: 'Home & Away',
+    icon: '⚔️',
+    badgeTag: '1X2 ELITE',
+    description: 'Full-Time Match Winner model evaluating home fortress dominance & lethal road transitions',
     accentColor: '#059669',
   },
   {
@@ -68,14 +68,6 @@ const MARKET_TABS: MarketTabConfig[] = [
     badgeTag: 'SKELLAM TES',
     description: 'Zero-Inflated Skellam Equilibrium measuring low-scoring tactical symmetry',
     accentColor: '#7c3aed',
-  },
-  {
-    id: 'away_win',
-    label: 'Away Win',
-    icon: '✈️',
-    badgeTag: 'CARE MODEL',
-    description: 'Counter-Attacking Road Efficiency tracking transition speed against high lines',
-    accentColor: '#0284c7',
   },
 ];
 

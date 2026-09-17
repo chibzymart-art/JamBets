@@ -254,25 +254,18 @@ function normalizePrediction(
   let confidenceTier = raw.dominance_tier || raw.counter_tier || raw.stalemate_tier || raw.corner_tier || raw.confidence_tier || 'TOP_PICK';
   let metrics: Record<string, any> = {};
 
-  if (marketCategory === 'home_win') {
+  if (marketCategory === 'home_win' || marketCategory === 'away_win') {
     market = 'home_win';
-    marketLabel = 'Home Win Dominance';
-    marketIcon = '🏠';
-    predictionTitle = 'Home Win (1)';
+    marketLabel = 'Home & Away (1X2)';
+    marketIcon = '⚔️';
+    predictionTitle = raw.prediction ? (raw.prediction.includes('Away') ? 'Away Win (2)' : 'Home Win (1)') : 'Home Win (1)';
     metrics = {
       home_venue_advantage: raw.home_venue_advantage,
       home_clean_sheet_prob: raw.home_clean_sheet_prob,
-      xg_home: raw.xg_home,
-      xg_away: raw.xg_away,
-    };
-  } else if (marketCategory === 'away_win') {
-    market = 'away_win';
-    marketLabel = 'Away Win Specialist';
-    marketIcon = '✈️';
-    predictionTitle = 'Away Win (2)';
-    metrics = {
       away_counter_efficiency: raw.away_counter_efficiency,
       away_clean_sheet_prob: raw.away_clean_sheet_prob,
+      xg_home: raw.xg_home,
+      xg_away: raw.xg_away,
     };
   } else if (marketCategory === 'draw') {
     market = 'draw';
@@ -368,18 +361,16 @@ async function fetchMarketDataFromUpstream(
 ): Promise<UnifiedMarketPrediction[]> {
   // 1. Determine which views to query
   if (market === 'curated') {
-    // Top edge queries top signals across all 5 engines
-    const [hwRes, awRes, drawRes, cornRes, goalsRes] = await Promise.all([
+    // Top edge queries top signals across all 4 specialist engines
+    const [hwRes, drawRes, cornRes, goalsRes] = await Promise.all([
       fetch(`${SUPABASE_URL}/rest/v1/${SELECTS.home_win.table}?select=${encodeURIComponent(SELECTS.home_win.select)}&order=probability.desc&limit=25`, { headers }),
-      fetch(`${SUPABASE_URL}/rest/v1/${SELECTS.away_win.table}?select=${encodeURIComponent(SELECTS.away_win.select)}&order=probability.desc&limit=25`, { headers }),
       fetch(`${SUPABASE_URL}/rest/v1/${SELECTS.draw.table}?select=${encodeURIComponent(SELECTS.draw.select)}&order=probability.desc&limit=25`, { headers }),
       fetch(`${SUPABASE_URL}/rest/v1/${SELECTS.corners.table}?select=${encodeURIComponent(SELECTS.corners.select)}&settlement_status=neq.void&publication_status=neq.archived&order=probability.desc&limit=25`, { headers }),
       fetch(`${SUPABASE_URL}/rest/v1/${SELECTS.goals.table}?select=${encodeURIComponent(SELECTS.goals.select)}&order=probability.desc&limit=35`, { headers }),
     ]);
 
-    const [hw, aw, dr, cr, gl] = await Promise.all([
+    const [hw, dr, cr, gl] = await Promise.all([
       hwRes.ok ? hwRes.json() : [],
-      awRes.ok ? awRes.json() : [],
       drawRes.ok ? drawRes.json() : [],
       cornRes.ok ? cornRes.json() : [],
       goalsRes.ok ? goalsRes.json() : [],
@@ -387,7 +378,6 @@ async function fetchMarketDataFromUpstream(
 
     const unified: UnifiedMarketPrediction[] = [
       ...hw.map((item: any) => normalizePrediction(item, 'home_win')),
-      ...aw.map((item: any) => normalizePrediction(item, 'away_win')),
       ...dr.map((item: any) => normalizePrediction(item, 'draw')),
       ...(Array.isArray(cr) ? cr : [])
         .filter((item: any) => item.settlement_status === 'pending' || (item.settlement_notes && item.settlement_notes.startsWith('Verified:')))
@@ -411,7 +401,9 @@ async function fetchMarketDataFromUpstream(
 
   // 2. Specific Engine Query
   let configKey = market;
-  if (market === 'over_2.5_goals' || market === 'ht_over_0.5_goals') {
+  if (market === 'away_win') {
+    configKey = 'home_win';
+  } else if (market === 'over_2.5_goals' || market === 'ht_over_0.5_goals') {
     configKey = 'goals';
   }
 
@@ -445,9 +437,8 @@ async function computeAllMarketCounts(
   dateParam: string = 'all'
 ): Promise<Record<MarketType, number>> {
   try {
-    const [hw, aw, dr, cr, gl] = await Promise.all([
+    const [hw, dr, cr, gl] = await Promise.all([
       fetch(`${SUPABASE_URL}/rest/v1/home_win_predictions_paywall?select=id,target_kickoff_at&limit=1000`, { headers }).then((r) => r.json()),
-      fetch(`${SUPABASE_URL}/rest/v1/away_win_predictions_paywall?select=id,target_kickoff_at&limit=1000`, { headers }).then((r) => r.json()),
       fetch(`${SUPABASE_URL}/rest/v1/draw_predictions_paywall?select=id,target_kickoff_at&limit=1000`, { headers }).then((r) => r.json()),
       fetch(`${SUPABASE_URL}/rest/v1/corner_predictions_paywall?select=id,target_kickoff_at,settlement_status,settlement_notes&settlement_status=neq.void&publication_status=neq.archived&limit=1000`, { headers }).then((r) => r.json()),
       fetch(`${SUPABASE_URL}/rest/v1/goals_predictions_paywall?select=id,market,target_kickoff_at&limit=1000`, { headers }).then((r) => r.json()),
@@ -483,13 +474,11 @@ async function computeAllMarketCounts(
       : [];
 
     const filteredHw = filterByDate(hw);
-    const filteredAw = filterByDate(aw);
     const filteredDr = filterByDate(dr);
     const filteredCr = filterByDate(validCr);
     const filteredGl = filterByDate(gl);
 
     const hwCount = filteredHw.length;
-    const awCount = filteredAw.length;
     const drCount = filteredDr.length;
     const crCount = filteredCr.length;
 
@@ -501,10 +490,10 @@ async function computeAllMarketCounts(
     }
 
     return {
-      general: Math.min(20, hwCount + awCount + o25Count),
-      curated: Math.min(20, hwCount + awCount + o25Count),
+      general: Math.min(20, hwCount + o25Count),
+      curated: Math.min(20, hwCount + o25Count),
       home_win: hwCount,
-      away_win: awCount,
+      away_win: 0,
       draw: drCount,
       'over_2.5_goals': o25Count,
       'ht_over_0.5_goals': ht05Count,

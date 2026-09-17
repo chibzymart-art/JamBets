@@ -32,16 +32,14 @@ class SpecialistSettlementPipeline:
         self.db = db or CloudSupabaseClient()
 
     def settle_all(self) -> Dict[str, Any]:
-        """Runs settlement passes across all four decoupled engines."""
+        """Runs settlement passes across decoupled engines."""
         print("🎯 [SpecialistSettlement] Starting decoupled settlement cycle...")
-        home_res = self.settle_home_wins()
-        away_res = self.settle_away_wins()
+        ha_res = self.settle_home_and_away()
         draw_res = self.settle_draws()
         corner_res = self.settle_corners()
 
         summary = {
-            "home_win": home_res,
-            "away_win": away_res,
+            "home_and_away": ha_res,
             "draw": draw_res,
             "corners": corner_res,
             "timestamp": datetime.now(timezone.utc).isoformat()
@@ -59,11 +57,11 @@ class SpecialistSettlementPipeline:
         })
         return {f["id"]: f for f in res}
 
-    def settle_home_wins(self) -> Dict[str, int]:
-        """Settles pending home win predictions."""
+    def settle_home_and_away(self) -> Dict[str, int]:
+        """Settles pending Home & Away 1X2 predictions."""
         pending = self.db.get("home_win_predictions", {
             "settlement_status": "eq.pending",
-            "select": "id,fixture_id,probability",
+            "select": "id,fixture_id,prediction,market,probability",
             "limit": "200"
         })
         if not pending:
@@ -82,7 +80,16 @@ class SpecialistSettlementPipeline:
             if hs is None or as_ is None:
                 continue
 
-            status = "won" if hs > as_ else "lost"
+            pred_text = (p.get("prediction") or "").lower()
+            is_away_pick = "away" in pred_text or p.get("market") == "away_win"
+
+            if is_away_pick:
+                status = "won" if as_ > hs else "lost"
+                settle_label = f"Away Win Pick | Result: {hs}-{as_}"
+            else:
+                status = "won" if hs > as_ else "lost"
+                settle_label = f"Home Win Pick | Result: {hs}-{as_}"
+
             score_str = f"{hs}-{as_}"
             now_iso = datetime.now(timezone.utc).isoformat()
 
@@ -100,7 +107,7 @@ class SpecialistSettlementPipeline:
                 "status": status,
                 "final_score": score_str,
                 "settled_at": now_iso,
-                "notes": f"Settled: Home {hs} - {as_} Away"
+                "notes": f"Settled: {settle_label}"
             }, on_conflict="prediction_id")
 
             settled_count += 1
@@ -109,15 +116,11 @@ class SpecialistSettlementPipeline:
 
         return {"settled": settled_count, "won": won_count, "lost": lost_count}
 
+    settle_home_wins = settle_home_and_away
+
     def settle_away_wins(self) -> Dict[str, int]:
-        """Settles pending away win predictions."""
-        pending = self.db.get("away_win_predictions", {
-            "settlement_status": "eq.pending",
-            "select": "id,fixture_id,probability",
-            "limit": "200"
-        })
-        if not pending:
-            return {"settled": 0, "won": 0, "lost": 0}
+        """Legacy helper maintained for backward compatibility."""
+        return {"settled": 0, "won": 0, "lost": 0}
 
         f_map = self._get_finished_fixtures_map([p["fixture_id"] for p in pending])
         settled_count = won_count = lost_count = 0
