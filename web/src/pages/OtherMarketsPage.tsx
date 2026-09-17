@@ -10,7 +10,6 @@ import { recordSportsSearch } from '../lib/sportsIntentTracker';
 import { trackSportsSearchEvent } from '../lib/pixelTracker';
 import { DesktopSidebarLayout } from '../components/DesktopSidebarLayout';
 import {
-  getTodayIsoDate,
   getDateDetailsByOffset,
   getPastDatesList
 } from '../lib/dateUtils';
@@ -44,7 +43,7 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
   const [activeMarket, setActiveMarket] = useState<MarketType>(
     initialMarket === 'general' || (initialMarket as string) === 'away_win' ? 'home_win' : initialMarket
   );
-  const [dateFilter, setDateFilter] = useState<string>(getTodayIsoDate());
+  const [dateFilter, setDateFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'won' | 'lost' | 'pending'>('all');
   const [searchQuery, setSearchQuery] = useState('');
 

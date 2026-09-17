@@ -332,6 +332,10 @@ function normalizePrediction(
   };
 }
 
+// Fast in-memory client cache to make market tab switching instantaneous (0ms)
+const clientMemoryCache = new Map<string, { data: UnifiedMarketFeedResponse; timestamp: number }>();
+const CLIENT_CACHE_TTL_MS = 60 * 1000; // 60s client cache
+
 export async function fetchMarketFeed(
   options: FetchMarketFeedOptions
 ): Promise<UnifiedMarketFeedResponse> {
@@ -344,6 +348,12 @@ export async function fetchMarketFeed(
     isAdmin = false,
     canViewPredictions = false,
   } = options;
+
+  const cacheKey = `${market}:${date}:${page}:${limit}:${Boolean(token)}`;
+  const cached = clientMemoryCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < CLIENT_CACHE_TTL_MS) {
+    return cached.data;
+  }
 
   // 1. Try Edge API Route first
   try {
@@ -379,7 +389,9 @@ export async function fetchMarketFeed(
               }
               return p;
             });
-          return json as UnifiedMarketFeedResponse;
+          const response = json as UnifiedMarketFeedResponse;
+          clientMemoryCache.set(cacheKey, { data: response, timestamp: Date.now() });
+          return response;
         }
       }
     }
@@ -395,15 +407,15 @@ export async function fetchMarketFeed(
         .select(SELECTS.home_win.select)
         .neq('settlement_status', 'void')
         .neq('publication_status', 'archived')
-        .limit(500),
-      supabase.from(SELECTS.draw.table).select(SELECTS.draw.select).limit(500),
+        .limit(150),
+      supabase.from(SELECTS.draw.table).select(SELECTS.draw.select).limit(150),
       supabase
         .from(SELECTS.corners.table)
         .select(SELECTS.corners.select)
         .neq('settlement_status', 'void')
         .neq('publication_status', 'archived')
-        .limit(500),
-      supabase.from(SELECTS.goals.table).select(SELECTS.goals.select).limit(500),
+        .limit(150),
+      supabase.from(SELECTS.goals.table).select(SELECTS.goals.select).limit(150),
     ]);
 
     const normalizeList = (data: any[], cat: any, forced?: MarketType) =>
@@ -504,7 +516,7 @@ export async function fetchMarketFeed(
       };
     });
 
-    return {
+    const fallbackResult: UnifiedMarketFeedResponse = {
       success: true,
       market,
       page: safePage,
@@ -518,6 +530,8 @@ export async function fetchMarketFeed(
       predictions: finalData,
       cached_at: new Date().toISOString(),
     };
+    clientMemoryCache.set(cacheKey, { data: fallbackResult, timestamp: Date.now() });
+    return fallbackResult;
   } catch (err: any) {
     return {
       success: false,

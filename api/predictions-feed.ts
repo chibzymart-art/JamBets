@@ -27,12 +27,12 @@ const CACHE_TTL_MS = 45 * 1000; // 45 seconds instance memory cache
 
 async function fetchFromUpstream(headers: Record<string, string>): Promise<FeedData> {
   const selectQuery = encodeURIComponent(
-    `id,fixture_id,prediction,market,probability,confidence_category,secondary_predictions,metadata,settlement_status,settlement_notes,settled_at,actual_score,publication_status,simulations_count,target_kickoff_at,tier_required,is_locked,fixture:football_fixtures!inner(id,canonical_key,target_kickoff_at,status,queue_day,in_prediction_queue,home_score,away_score,match_minute,period,half_time_home_score,half_time_away_score,corners_home,corners_away,postponed_at,cancelled_at,venue,metadata,league:football_leagues!inner(id,name,code,country),home_team:football_teams!football_fixtures_home_team_id_fkey(id,name),away_team:football_teams!football_fixtures_away_team_id_fkey(id,name))`
+    `id,fixture_id,prediction,market,probability,confidence_category,secondary_predictions,metadata,settlement_status,settlement_notes,settled_at,actual_score,publication_status,simulations_count,target_kickoff_at,tier_required,fixture:football_fixtures!inner(id,canonical_key,target_kickoff_at,status,queue_day,in_prediction_queue,home_score,away_score,match_minute,period,half_time_home_score,half_time_away_score,corners_home,corners_away,postponed_at,cancelled_at,venue,metadata,league:football_leagues!inner(id,name,code,country),home_team:football_teams!football_fixtures_home_team_id_fkey(id,name),away_team:football_teams!football_fixtures_away_team_id_fkey(id,name))`
   );
 
   const [predRes, leagueRes] = await Promise.all([
     fetch(
-      `${SUPABASE_URL}/rest/v1/football_predictions_paywall?select=${selectQuery}&publication_status=eq.published&order=target_kickoff_at.asc,id.asc&limit=2000`,
+      `${SUPABASE_URL}/rest/v1/football_predictions?select=${selectQuery}&publication_status=eq.published&order=target_kickoff_at.asc,id.asc&limit=2000`,
       { headers }
     ),
     fetch(
@@ -45,16 +45,46 @@ async function fetchFromUpstream(headers: Record<string, string>): Promise<FeedD
     throw new Error(`Supabase upstream status: pred=${predRes.status}, league=${leagueRes.status}`);
   }
 
-  const [predictions, leagues] = await Promise.all([
+  const [rawPredictions, leagues] = await Promise.all([
     predRes.json(),
     leagueRes.json(),
   ]);
+
+  // Apply default is_locked: false on base dataset
+  const predictions = (Array.isArray(rawPredictions) ? rawPredictions : []).map((p: any) => ({
+    ...p,
+    is_locked: false,
+  }));
 
   return {
     predictions,
     leagues,
     cached_at: new Date().toISOString(),
   };
+}
+
+// Applies paywall redaction for non-authenticated guests (first 3 free, remaining locked)
+function applyPaywallRedaction(predictions: any[]): any[] {
+  let pendingCount = 0;
+  return predictions.map((p: any) => {
+    const isPending = !p.settlement_status || p.settlement_status === 'pending';
+    if (isPending) {
+      pendingCount++;
+      if (pendingCount > 3) {
+        return {
+          ...p,
+          is_locked: true,
+          probability: null,
+          confidence_category: 'LOCKED',
+          prediction: 'LOCKED',
+        };
+      }
+    }
+    return {
+      ...p,
+      is_locked: false,
+    };
+  });
 }
 
 export default async function handler(req: Request) {
@@ -106,8 +136,12 @@ export default async function handler(req: Request) {
 
     // 1. Return fresh in-memory cache if available (for unauthenticated public feed)
     if (!userAuthToken && memoryCache && now < memoryCache.expiresAt) {
+      const paywalledData = {
+        ...memoryCache.data,
+        predictions: applyPaywallRedaction(memoryCache.data.predictions),
+      };
       return new Response(
-        JSON.stringify({ success: true, ...memoryCache.data }),
+        JSON.stringify({ success: true, ...paywalledData }),
         { status: 200, headers: responseHeaders }
       );
     }
@@ -132,15 +166,22 @@ export default async function handler(req: Request) {
       feedData = await fetchFromUpstream(headers);
     }
 
+    const payload = !userAuthToken
+      ? { ...feedData, predictions: applyPaywallRedaction(feedData.predictions) }
+      : feedData;
+
     return new Response(
-      JSON.stringify({ success: true, ...feedData }),
+      JSON.stringify({ success: true, ...payload }),
       { status: 200, headers: responseHeaders }
     );
   } catch (err: any) {
     // Fallback: If upstream errors but we have stale in-memory cache, return stale cache
     if (memoryCache) {
+      const paywalledData = !userAuthToken
+        ? { ...memoryCache.data, predictions: applyPaywallRedaction(memoryCache.data.predictions) }
+        : memoryCache.data;
       return new Response(
-        JSON.stringify({ success: true, ...memoryCache.data, stale: true }),
+        JSON.stringify({ success: true, ...paywalledData, stale: true }),
         { status: 200, headers: responseHeaders }
       );
     }

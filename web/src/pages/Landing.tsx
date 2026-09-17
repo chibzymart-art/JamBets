@@ -33,7 +33,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
         // Fetch settled predictions to display accuracy ledger
         const { data: preds, error: pErr } = await supabase
-          .from('football_predictions_paywall')
+          .from('football_predictions')
           .select(`
             id,
             fixture_id,
@@ -80,7 +80,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
         // Fetch total count of settled matches
         const { count } = await supabase
-          .from('football_predictions_paywall')
+          .from('football_predictions')
           .select('*', { count: 'exact', head: true })
           .in('settlement_status', ['won', 'lost', 'settled']);
 

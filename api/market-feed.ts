@@ -96,7 +96,11 @@ interface CacheEntry {
 
 const memoryCache = new Map<string, CacheEntry>();
 const inflightPromises = new Map<string, Promise<MarketFeedResponse>>();
-const CACHE_TTL_MS = 25 * 1000; // 25s edge cache
+const CACHE_TTL_MS = 60 * 1000; // 60s edge cache
+
+// Dedicated memory cache for cross-market counts to avoid 4 redundant Supabase calls per tab switch
+const countsMemoryCache = new Map<string, { counts: Record<MarketType, number>; expiresAt: number }>();
+const COUNTS_TTL_MS = 60 * 1000; // 60s memory cache for counts
 
 // Lagos WAT (UTC+1) date helpers
 function getLagosDate(d: Date = new Date()): string {
@@ -416,6 +420,11 @@ async function computeAllMarketCounts(
   headers: Record<string, string>,
   dateParam: string = 'all'
 ): Promise<Record<MarketType, number>> {
+  const cached = countsMemoryCache.get(dateParam);
+  if (cached && Date.now() < cached.expiresAt) {
+    return cached.counts;
+  }
+
   try {
     const [hw, aw, dr, cr, gl] = await Promise.all([
       fetch(`${SUPABASE_URL}/rest/v1/home_win_predictions_paywall?select=id,target_kickoff_at&limit=1000`, { headers }).then((r) => r.json()),
@@ -464,7 +473,7 @@ async function computeAllMarketCounts(
       else o25Count++;
     }
 
-    return {
+    const counts: Record<MarketType, number> = {
       general: Math.min(20, hwCount + awCount + o25Count),
       curated: Math.min(20, hwCount + awCount + o25Count),
       home_win: hwCount,
@@ -474,6 +483,8 @@ async function computeAllMarketCounts(
       'ht_over_0.5_goals': ht05Count,
       corners: crCount,
     };
+    countsMemoryCache.set(dateParam, { counts, expiresAt: Date.now() + COUNTS_TTL_MS });
+    return counts;
   } catch (err) {
     return {
       general: 0,
@@ -541,8 +552,9 @@ export default async function handler(req: Request) {
 
   const responseHeaders = {
     'Content-Type': 'application/json',
-    'Cache-Control': 'public, s-maxage=25, stale-while-revalidate=50',
-    'CDN-Cache-Control': 'public, s-maxage=25',
+    'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300',
+    'CDN-Cache-Control': 'public, s-maxage=60',
+    'Vercel-CDN-Cache-Control': 'public, s-maxage=60',
     'Access-Control-Allow-Origin': '*',
   };
 
