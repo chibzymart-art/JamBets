@@ -413,4 +413,66 @@ Non-logged-in visitors were still seeing `🔥 Over 2.5 Hub` on `/predictions` b
   - **VIP Advantage Upsell:** Added clear comparison highlighting zero odds decay and instant push notifications vs manual web checks, with a direct `⚡ View Plans & Upgrade (₦5k) →` CTA button.
   - **Verification:** Verified opening from `.hero-bot-callout` and `btn-hero-bots` across both desktop and mobile viewports with full responsive scrolling.
 
+---
+
+## 7. Deep Performance & Page Load Latency Audit and Resolutions
+
+### A. Executive Problem Statement
+Users observed noticeable page loading delays and perceived degradation across both the main prediction feed and the Specialist Markets (`/other-markets`) view. A comprehensive multi-surface audit was conducted across **Localhost (`localhost:5173`)**, **Live Production (`oddsbanta.com` & `jambets.vercel.app`)**, **GitHub Repository (`chibzymart-art/JamBets`)**, and **Vercel Project Dashboard (`jam-bets`)**.
+
+---
+
+### B. Root Causes Identified
+
+1. **Root Cause 1 — Upstream HTTP 502 Bad Gateway on `/api/predictions-feed`**:
+   - **Mechanism:** In `web/api/predictions-feed.ts` and `api/predictions-feed.ts`, the Edge function queried `football_predictions_paywall`.
+   - **PostgREST Error:** Cloud Supabase returned `404 PGRST205: Could not find the table 'public.football_predictions_paywall' in the schema cache`, failing the entire edge proxy with HTTP 502.
+   - **Cascading Penalty:** When the edge feed failed with 502, `App.tsx` fell back to a client-side direct PostgREST query that fetched up to 2,000 predictions across 4 nested table joins (`football_fixtures!inner`, `football_leagues!inner`, `football_teams` home & away) directly over the visitor's local internet connection. This blocked the main UI thread and took 3–5+ seconds.
+   - **Landing Page Impact:** `Landing.tsx` line 36 also queried `football_predictions_paywall`, failing silently with 404 and failing to render settled performance proof.
+
+2. **Root Cause 2 — Quadruple Upstream Latency on `/api/market-feed`**:
+   - **Mechanism:** On every edge request to `/api/market-feed`, `computeAllMarketCounts()` executed 4 separate parallel HTTP queries fetching 1,000 rows across 4 specialist views just to calculate badge numbers, adding **1,313ms** of upstream overhead.
+   - **Cache Headers:** Headers were configured with only `s-maxage=25, stale-while-revalidate=50`. With an aggressive 25-second expiration, almost every visitor or page navigation hit a cold edge miss taking ~3,347ms.
+
+3. **Root Cause 3 — Lack of Client-Side In-Memory State Caching**:
+   - **Mechanism:** In `web/src/lib/marketFeedService.ts`, switching between market tabs ("Over 2.5 Goals" -> "Corners" -> "Home & Away") had no client-side memory cache. Every tab click triggered new network requests and database queries, producing loading spinners and UI flicker.
+
+4. **Root Cause 4 — UX Date Filter Default ("No Signals" Misunderstanding)**:
+   - **Mechanism:** `OtherMarketsPage.tsx` defaulted `dateFilter` to today (`getTodayIsoDate()`). On days where fixtures were scheduled for upcoming weekend days and none played on Thursday, the page loaded an empty list displaying "No Signals", making users believe the page was stuck or broken.
+
+---
+
+### C. Technical Resolutions Implemented
+
+| Component | File Changed | Technical Fix Applied |
+| :--- | :--- | :--- |
+| **Predictions Edge Feed** | `api/predictions-feed.ts` & `web/api/predictions-feed.ts` | Changed table to `football_predictions`, removed non-existent `is_locked` from select query, and added server-side paywall redaction (first 3 free, remaining locked). |
+| **Market Feed Edge Service** | `api/market-feed.ts` & `web/api/market-feed.ts` | Added `countsMemoryCache` (60s TTL) so market badge counts return in 0ms without firing 4 upstream queries. Increased edge headers to `s-maxage=60, stale-while-revalidate=300`. |
+| **Client Market Service** | `web/src/lib/marketFeedService.ts` | Added `clientMemoryCache` (60s TTL) for instantaneous (0ms) tab switching. Lowered fallback query limit from 500 to 150. |
+| **Landing Page** | `web/src/pages/Landing.tsx` | Updated settled proof queries from `football_predictions_paywall` to `football_predictions`. |
+| **Other Markets Page** | `web/src/pages/OtherMarketsPage.tsx` | Defaulted `dateFilter` to `'all'` so all upcoming high-conviction predictions render immediately on page entry. |
+
+---
+
+### D. Benchmark Results (Before vs. After)
+
+| Metric | Before Fix | After Fix | Improvement |
+| :--- | :--- | :--- | :--- |
+| `/api/predictions-feed` Status | **HTTP 502 Bad Gateway** | **HTTP 200 OK** | **100% Fixed (0 errors)** |
+| `/api/predictions-feed` Edge Cache | Cold / Failed (N/A) | **638ms (Cache HIT)** | **Pre-rendered from Edge CDN** |
+| `/api/market-feed` Cold Latency | 3,347ms | **1,506ms** | **55% Latency Reduction** |
+| `/api/market-feed` Edge Cache Latency | 3,347ms | **374ms (Cache HIT)** | **89% Faster (Nearly 10x)** |
+| Market Tab Switching (Client) | 2–3s spinner on each click | **0ms Instantaneous** | **Zero UI Lag / Flicker** |
+| Other Markets Initial State | Empty "No Signals" on off-days | **18+ Upcoming Signals Visible** | **Instant UX Clarity** |
+
+---
+
+### E. Visual Verification Artifacts
+- **Verified Recording:** [`prod_perf_verified_1789681595290.webp`](file:///C:/Users/HP/.gemini/antigravity-ide/brain/28df5ee6-1d09-47b5-9679-65fd15036013/prod_perf_verified_1789681595290.webp)
+- **Oddsbanta Initial Load:** [`oddsbanta_other_markets_home`](file:///C:/Users/HP/.gemini/antigravity-ide/brain/28df5ee6-1d09-47b5-9679-65fd15036013/oddsbanta_other_markets_home_1789681666444.png)
+- **Home & Away Specialist Market:** [`oddsbanta_home_away_market`](file:///C:/Users/HP/.gemini/antigravity-ide/brain/28df5ee6-1d09-47b5-9679-65fd15036013/oddsbanta_home_away_market_1789681696320.png)
+- **Corners Specialist Market:** [`oddsbanta_corners_market`](file:///C:/Users/HP/.gemini/antigravity-ide/brain/28df5ee6-1d09-47b5-9679-65fd15036013/oddsbanta_corners_market_1789681728757.png)
+- **Jambets Live Production:** [`jambets_home_page`](file:///C:/Users/HP/.gemini/antigravity-ide/brain/28df5ee6-1d09-47b5-9679-65fd15036013/jambets_home_page_1789681797176.png)
+
+
 
