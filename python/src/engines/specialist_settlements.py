@@ -206,64 +206,15 @@ class SpecialistSettlementPipeline:
         return {"settled": settled_count, "won": won_count, "lost": lost_count}
 
     def settle_corners(self) -> Dict[str, int]:
-        """Settles pending corner predictions."""
-        pending = self.db.get("corner_predictions", {
-            "settlement_status": "eq.pending",
-            "select": "id,fixture_id,market,probability",
-            "limit": "200"
-        })
-        if not pending:
-            return {"settled": 0, "won": 0, "lost": 0}
-
-        f_map = self._get_finished_fixtures_map([p["fixture_id"] for p in pending])
-        settled_count = won_count = lost_count = 0
-
-        for p in pending:
-            f = f_map.get(p["fixture_id"])
-            if not f or f.get("status") not in ("finished", "ft", "settled"):
-                continue
-
-            # Standard line thresholds: Over 7.5 requires >= 8 | Over 8.5 requires >= 9
-            threshold = 8.5
-            if "7.5" in p.get("market", ""):
-                threshold = 7.5
-            elif "8.5" in p.get("market", ""):
-                threshold = 8.5
-
-            ch = f.get("corners_home")
-            ca = f.get("corners_away")
-            
-            # Strict Institutional Integrity: Settle ONLY when verified corner counts exist
-            if ch is None or ca is None:
-                continue
-
-            total_corners = ch + ca
-            notes_str = f"Verified: Total Corners {total_corners} ({ch} Home - {ca} Away) vs Line {threshold}"
-
-            status = "won" if total_corners > threshold else "lost"
-            now_iso = datetime.now(timezone.utc).isoformat()
-
-            self.db.patch("corner_predictions", {
-                "settlement_status": status,
-                "actual_corners": f"{total_corners} corners",
-                "settled_at": now_iso
-            }, {"id": f"eq.{p['id']}"})
-
-            self.db.post("corner_settlements", {
-                "prediction_id": p["id"],
-                "fixture_id": p["fixture_id"],
-                "market": p.get("market", "corners"),
-                "status": status,
-                "total_corners": total_corners,
-                "settled_at": now_iso,
-                "notes": notes_str
-            }, on_conflict="prediction_id")
-
-            settled_count += 1
-            if status == "won": won_count += 1
-            else: lost_count += 1
-
-        return {"settled": settled_count, "won": won_count, "lost": lost_count}
+        """Settles pending corner predictions via the dedicated CornersSettlementEngine."""
+        from python.src.corners.corners_settlement_engine import CornersSettlementEngine
+        engine = CornersSettlementEngine(self.db)
+        res = engine.settle()
+        return {
+            "settled": res.get("settled", 0),
+            "won": res.get("won", 0),
+            "lost": res.get("lost", 0)
+        }
 
 
 if __name__ == "__main__":

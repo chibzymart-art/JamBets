@@ -389,7 +389,9 @@ async function fetchMarketDataFromUpstream(
       ...hw.map((item: any) => normalizePrediction(item, 'home_win')),
       ...aw.map((item: any) => normalizePrediction(item, 'away_win')),
       ...dr.map((item: any) => normalizePrediction(item, 'draw')),
-      ...cr.map((item: any) => normalizePrediction(item, 'corners')),
+      ...(Array.isArray(cr) ? cr : [])
+        .filter((item: any) => item.settlement_status === 'pending' || (item.settlement_notes && item.settlement_notes.startsWith('Verified:')))
+        .map((item: any) => normalizePrediction(item, 'corners')),
       ...gl.map((item: any) => normalizePrediction(item, 'goals')),
     ];
 
@@ -431,7 +433,10 @@ async function fetchMarketDataFromUpstream(
 
   const rawList = await res.json();
   const category = (configKey === 'goals' ? 'goals' : configKey) as any;
-  return rawList.map((item: any) => normalizePrediction(item, category, market));
+  const filteredList = category === 'corners'
+    ? (Array.isArray(rawList) ? rawList : []).filter((item: any) => item.settlement_status === 'pending' || (item.settlement_notes && item.settlement_notes.startsWith('Verified:')))
+    : rawList;
+  return filteredList.map((item: any) => normalizePrediction(item, category, market));
 }
 
 // Computes signal counts across all 6 markets for dynamic badges
@@ -444,7 +449,7 @@ async function computeAllMarketCounts(
       fetch(`${SUPABASE_URL}/rest/v1/home_win_predictions_paywall?select=id,target_kickoff_at&limit=1000`, { headers }).then((r) => r.json()),
       fetch(`${SUPABASE_URL}/rest/v1/away_win_predictions_paywall?select=id,target_kickoff_at&limit=1000`, { headers }).then((r) => r.json()),
       fetch(`${SUPABASE_URL}/rest/v1/draw_predictions_paywall?select=id,target_kickoff_at&limit=1000`, { headers }).then((r) => r.json()),
-      fetch(`${SUPABASE_URL}/rest/v1/corner_predictions_paywall?select=id,target_kickoff_at&settlement_status=neq.void&publication_status=neq.archived&limit=1000`, { headers }).then((r) => r.json()),
+      fetch(`${SUPABASE_URL}/rest/v1/corner_predictions_paywall?select=id,target_kickoff_at,settlement_status,settlement_notes&settlement_status=neq.void&publication_status=neq.archived&limit=1000`, { headers }).then((r) => r.json()),
       fetch(`${SUPABASE_URL}/rest/v1/goals_predictions_paywall?select=id,market,target_kickoff_at&limit=1000`, { headers }).then((r) => r.json()),
     ]);
 
@@ -469,10 +474,18 @@ async function computeAllMarketCounts(
       });
     };
 
+    const validCr = Array.isArray(cr)
+      ? cr.filter(
+          (item: any) =>
+            item.settlement_status === 'pending' ||
+            (item.settlement_notes && item.settlement_notes.startsWith('Verified:'))
+        )
+      : [];
+
     const filteredHw = filterByDate(hw);
     const filteredAw = filterByDate(aw);
     const filteredDr = filterByDate(dr);
-    const filteredCr = filterByDate(cr);
+    const filteredCr = filterByDate(validCr);
     const filteredGl = filterByDate(gl);
 
     const hwCount = filteredHw.length;

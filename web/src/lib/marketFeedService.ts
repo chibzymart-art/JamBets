@@ -361,14 +361,21 @@ export async function fetchMarketFeed(
         const json = await res.json();
         if (json.success && Array.isArray(json.predictions)) {
           // Guarantee tactical_rationale & tactical_tag are present on every prediction
-          json.predictions = json.predictions.map((p: UnifiedMarketPrediction) => {
-            if (!p.tactical_rationale) {
-              const tactical = computeTacticalAnalysis(p, p.market_category, p.market as MarketType);
-              p.tactical_tag = p.tactical_tag || tactical.tag;
-              p.tactical_rationale = tactical.rationale;
-            }
-            return p;
-          });
+          json.predictions = json.predictions
+            .filter((p: UnifiedMarketPrediction) => {
+              if (p.market_category === 'corners') {
+                return p.settlement_status === 'pending' || (p.settlement_notes && p.settlement_notes.startsWith('Verified:'));
+              }
+              return true;
+            })
+            .map((p: UnifiedMarketPrediction) => {
+              if (!p.tactical_rationale) {
+                const tactical = computeTacticalAnalysis(p, p.market_category, p.market as MarketType);
+                p.tactical_tag = p.tactical_tag || tactical.tag;
+                p.tactical_rationale = tactical.rationale;
+              }
+              return p;
+            });
           return json as UnifiedMarketFeedResponse;
         }
       }
@@ -398,7 +405,12 @@ export async function fetchMarketFeed(
     const allHw = normalizeList(hwRes.data || [], 'home_win');
     const allAw = normalizeList(awRes.data || [], 'away_win');
     const allDr = normalizeList(drRes.data || [], 'draw');
-    const allCr = normalizeList(crRes.data || [], 'corners');
+    const allCr = normalizeList(
+      (crRes.data || []).filter(
+        (r: any) => r.settlement_status === 'pending' || (r.settlement_notes && r.settlement_notes.startsWith('Verified:'))
+      ),
+      'corners'
+    );
     const rawGoals: any[] = (glRes.data as any[]) || [];
     const allOver25 = normalizeList(
       rawGoals.filter((r) => r.market === 'over_2.5_goals'),
