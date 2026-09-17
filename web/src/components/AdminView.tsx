@@ -1086,21 +1086,17 @@ export const AdminView: React.FC<AdminViewProps> = ({
         return { status: st, notes: `Settled: Draw ${hs}-${as_}`, scoreStr: `${hs}-${as_}` };
       }),
       settleSpecialistTable('corner_predictions', 'corner_settlements', (p, f) => {
-        const line = p.market?.includes('8.5') ? 8.5 : p.market?.includes('10.5') ? 10.5 : 9.5;
-        let total = 0;
-        if (f.corners_home !== null && f.corners_away !== null) {
-          total = f.corners_home + f.corners_away;
-        } else {
-          const hs = f.home_score || 0;
-          const as_ = f.away_score || 0;
-          total = Math.max(5, Math.floor(8 + (hs + as_) * 0.8 + 2));
+        const line = p.market?.includes('7.5') ? 7.5 : p.market?.includes('8.5') ? 8.5 : p.market?.includes('10.5') ? 10.5 : 9.5;
+        if (f.corners_home === null || f.corners_away === null || f.corners_home === undefined || f.corners_away === undefined) {
+          return { status: null, notes: 'Awaiting official corner counts', scoreStr: null };
         }
+        const total = f.corners_home + f.corners_away;
         const st = total > line ? 'won' : 'lost';
         return {
           status: st,
           totalCorners: total,
           cornersStr: `${total} corners`,
-          notes: `Verified: Total Corners ${total} vs Line ${line}`,
+          notes: `Verified: Total Corners ${total} (${f.corners_home} Home - ${f.corners_away} Away) vs Line ${line}`,
           scoreStr: null
         };
       })

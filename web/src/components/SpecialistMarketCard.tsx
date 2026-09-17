@@ -423,9 +423,9 @@ export const SpecialistMarketCard: React.FC<SpecialistMarketCardProps> = ({
                     </span>
                   </div>
                   <div className="telemetry-pill">
-                    <span className="telemetry-label">O8.5 / O9.5 Density</span>
+                    <span className="telemetry-label">O7.5 / O8.5 Density</span>
                     <span className="telemetry-val">
-                      {metrics.over_8_5_prob ? `${(metrics.over_8_5_prob * 100).toFixed(0)}% / ${(metrics.over_9_5_prob * 100).toFixed(0)}%` : 'High Cross'}
+                      {prediction.display_probability !== null ? `${prediction.display_probability}% Tail Edge` : (metrics.over_8_5_prob ? `${(metrics.over_8_5_prob * 100).toFixed(0)}% Line` : 'High Edge')}
                     </span>
                   </div>
                 </>

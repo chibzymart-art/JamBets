@@ -223,24 +223,22 @@ class SpecialistSettlementPipeline:
             if not f or f.get("status") not in ("finished", "ft", "settled"):
                 continue
 
-            # Standard line thresholds
-            # over_8.5 requires >= 9 | over_9.5 requires >= 10 | over_10.5 requires >= 11
-            threshold = 9.5
-            if "8.5" in p.get("market", ""):
+            # Standard line thresholds: Over 7.5 requires >= 8 | Over 8.5 requires >= 9
+            threshold = 8.5
+            if "7.5" in p.get("market", ""):
+                threshold = 7.5
+            elif "8.5" in p.get("market", ""):
                 threshold = 8.5
-            elif "10.5" in p.get("market", ""):
-                threshold = 10.5
 
             ch = f.get("corners_home")
             ca = f.get("corners_away")
-            if ch is not None and ca is not None:
-                total_corners = ch + ca
-                notes_str = f"Verified: Total Corners {total_corners} ({ch} Home - {ca} Away) vs Line {threshold}"
-            else:
-                hs = f.get("home_score", 0) or 0
-                as_ = f.get("away_score", 0) or 0
-                total_corners = max(5, int(8 + (hs + as_) * 0.8 + ((p["id"][-1].isdigit() and int(p["id"][-1]) % 5) or 2)))
-                notes_str = f"Settled: Total Corners {total_corners} vs Line {threshold}"
+            
+            # Strict Institutional Integrity: Settle ONLY when verified corner counts exist
+            if ch is None or ca is None:
+                continue
+
+            total_corners = ch + ca
+            notes_str = f"Verified: Total Corners {total_corners} ({ch} Home - {ca} Away) vs Line {threshold}"
 
             status = "won" if total_corners > threshold else "lost"
             now_iso = datetime.now(timezone.utc).isoformat()

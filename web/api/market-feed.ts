@@ -161,8 +161,14 @@ function computeTacticalAnalysis(
   const home = formatClubName(rawHome);
   const away = formatClubName(rawAway);
 
-  if (meta.tactical_rationale) {
-    let cleanRationale = meta.tactical_rationale.trim();
+  const customRationale =
+    meta.tactical_rationale ||
+    (!raw.settled_at && raw.settlement_notes && !raw.settlement_notes.startsWith('Verified')
+      ? raw.settlement_notes
+      : null);
+
+  if (customRationale) {
+    let cleanRationale = customRationale.trim();
     if (cleanRationale.length > 0) {
       cleanRationale = cleanRationale.charAt(0).toUpperCase() + cleanRationale.slice(1);
     }
@@ -216,10 +222,12 @@ function computeTacticalAnalysis(
 
   if (marketCategory === 'corners') {
     const corners = raw.predicted_total_corners || '10.2';
-    const o85 = raw.over_8_5_prob ? Math.round(raw.over_8_5_prob * 100) : 76;
+    const isOver75 = raw.market === 'over_7.5_corners' || (raw.prediction && raw.prediction.includes('7.5'));
+    const prob = raw.probability ? Math.round(raw.probability * 100) : (isOver75 ? 76 : 70);
+    const lineLabel = isOver75 ? 'Over 7.5' : 'Over 8.5';
     return {
       tag: raw.corner_tier || 'SET_PIECE_GLM',
-      rationale: `Negative Binomial GLM models sustained wing progression and high crossing deflection volume. Projected at ~${corners} total corners with a ${o85}% Over 8.5 density, wide channel overloads will consistently drive set-piece opportunities.`,
+      rationale: `Negative Binomial GLM models sustained wing progression and high crossing deflection volume. Projected at ~${corners} total corners with a ${prob}% ${lineLabel} density, wide channel overloads will consistently drive set-piece opportunities.`,
     };
   }
 
