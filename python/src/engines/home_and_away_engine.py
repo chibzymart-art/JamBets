@@ -331,12 +331,12 @@ class HomeAndAwayEngine:
         # 2. Check locked existing predictions to protect immutability
         existing = self.db.get("home_win_predictions", {
             "select": "id,fixture_id,target_kickoff_at,settlement_status",
-            "limit": "1000"
+            "limit": "5000"
         })
         existing_map = {p["fixture_id"]: p["id"] for p in existing}
         locked_fixture_ids = set()
         for p in existing:
-            if p.get("settlement_status") in ("won", "lost", "void"):
+            if p.get("settlement_status") in ("won", "lost") and p.get("target_kickoff_at", "") < min_kickoff:
                 locked_fixture_ids.add(p["fixture_id"])
 
         # 3. Fetch scheduled upcoming fixtures

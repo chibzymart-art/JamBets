@@ -115,7 +115,7 @@ const FIXTURE_JOIN =
 const SELECTS: Record<string, { table: string; select: string }> = {
   home_win: {
     table: 'home_win_predictions_paywall',
-    select: `id,fixture_id,prediction,probability,confidence_category,dominance_tier,home_venue_advantage,home_clean_sheet_prob,xg_home,xg_away,target_kickoff_at,settlement_status,settled_at,actual_score,settlement_notes,is_locked,${FIXTURE_JOIN}`,
+    select: `id,fixture_id,prediction,probability,confidence_category,dominance_tier,home_venue_advantage,home_clean_sheet_prob,xg_home,xg_away,target_kickoff_at,settlement_status,settled_at,actual_score,settlement_notes,publication_status,is_locked,${FIXTURE_JOIN}`,
   },
   away_win: {
     table: 'away_win_predictions_paywall',
@@ -363,6 +363,9 @@ export async function fetchMarketFeed(
           // Guarantee tactical_rationale & tactical_tag are present on every prediction
           json.predictions = json.predictions
             .filter((p: UnifiedMarketPrediction) => {
+              if (p.settlement_status === 'void' || (p as any).publication_status === 'archived') {
+                return false;
+              }
               if (p.market_category === 'corners') {
                 return p.settlement_status === 'pending' || (p.settlement_notes && p.settlement_notes.startsWith('Verified:'));
               }
@@ -387,7 +390,12 @@ export async function fetchMarketFeed(
   // 2. Direct Supabase Fallback
   try {
     const [hwRes, drRes, crRes, glRes] = await Promise.all([
-      supabase.from(SELECTS.home_win.table).select(SELECTS.home_win.select).limit(500),
+      supabase
+        .from(SELECTS.home_win.table)
+        .select(SELECTS.home_win.select)
+        .neq('settlement_status', 'void')
+        .neq('publication_status', 'archived')
+        .limit(500),
       supabase.from(SELECTS.draw.table).select(SELECTS.draw.select).limit(500),
       supabase
         .from(SELECTS.corners.table)

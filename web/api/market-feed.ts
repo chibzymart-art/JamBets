@@ -125,7 +125,7 @@ const FIXTURE_JOIN =
 const SELECTS: Record<string, { table: string; select: string }> = {
   home_win: {
     table: 'home_win_predictions_paywall',
-    select: `id,fixture_id,prediction,probability,confidence_category,dominance_tier,home_venue_advantage,home_clean_sheet_prob,xg_home,xg_away,target_kickoff_at,settlement_status,settled_at,actual_score,settlement_notes,is_locked,${FIXTURE_JOIN}`,
+    select: `id,fixture_id,prediction,probability,confidence_category,dominance_tier,home_venue_advantage,home_clean_sheet_prob,xg_home,xg_away,target_kickoff_at,settlement_status,settled_at,actual_score,settlement_notes,publication_status,is_locked,${FIXTURE_JOIN}`,
   },
   away_win: {
     table: 'away_win_predictions_paywall',
@@ -363,7 +363,7 @@ async function fetchMarketDataFromUpstream(
   if (market === 'curated') {
     // Top edge queries top signals across all 4 specialist engines
     const [hwRes, drawRes, cornRes, goalsRes] = await Promise.all([
-      fetch(`${SUPABASE_URL}/rest/v1/${SELECTS.home_win.table}?select=${encodeURIComponent(SELECTS.home_win.select)}&order=probability.desc&limit=25`, { headers }),
+      fetch(`${SUPABASE_URL}/rest/v1/${SELECTS.home_win.table}?select=${encodeURIComponent(SELECTS.home_win.select)}&settlement_status=neq.void&publication_status=neq.archived&order=probability.desc&limit=25`, { headers }),
       fetch(`${SUPABASE_URL}/rest/v1/${SELECTS.draw.table}?select=${encodeURIComponent(SELECTS.draw.select)}&order=probability.desc&limit=25`, { headers }),
       fetch(`${SUPABASE_URL}/rest/v1/${SELECTS.corners.table}?select=${encodeURIComponent(SELECTS.corners.select)}&settlement_status=neq.void&publication_status=neq.archived&order=probability.desc&limit=25`, { headers }),
       fetch(`${SUPABASE_URL}/rest/v1/${SELECTS.goals.table}?select=${encodeURIComponent(SELECTS.goals.select)}&order=probability.desc&limit=35`, { headers }),
@@ -377,7 +377,9 @@ async function fetchMarketDataFromUpstream(
     ]);
 
     const unified: UnifiedMarketPrediction[] = [
-      ...hw.map((item: any) => normalizePrediction(item, 'home_win')),
+      ...(Array.isArray(hw) ? hw : [])
+        .filter((item: any) => item.settlement_status !== 'void' && item.publication_status !== 'archived')
+        .map((item: any) => normalizePrediction(item, 'home_win')),
       ...dr.map((item: any) => normalizePrediction(item, 'draw')),
       ...(Array.isArray(cr) ? cr : [])
         .filter((item: any) => item.settlement_status === 'pending' || (item.settlement_notes && item.settlement_notes.startsWith('Verified:')))
@@ -416,6 +418,8 @@ async function fetchMarketDataFromUpstream(
     url += '&market=eq.ht_over_0.5_goals';
   } else if (market === 'corners') {
     url += '&settlement_status=neq.void&publication_status=neq.archived';
+  } else if (market === 'home_win' || market === 'away_win') {
+    url += '&settlement_status=neq.void&publication_status=neq.archived';
   }
 
   const res = await fetch(url, { headers });
@@ -427,6 +431,8 @@ async function fetchMarketDataFromUpstream(
   const category = (configKey === 'goals' ? 'goals' : configKey) as any;
   const filteredList = category === 'corners'
     ? (Array.isArray(rawList) ? rawList : []).filter((item: any) => item.settlement_status === 'pending' || (item.settlement_notes && item.settlement_notes.startsWith('Verified:')))
+    : category === 'home_win'
+    ? (Array.isArray(rawList) ? rawList : []).filter((item: any) => item.settlement_status !== 'void' && item.publication_status !== 'archived')
     : rawList;
   return filteredList.map((item: any) => normalizePrediction(item, category, market));
 }
@@ -438,7 +444,7 @@ async function computeAllMarketCounts(
 ): Promise<Record<MarketType, number>> {
   try {
     const [hw, dr, cr, gl] = await Promise.all([
-      fetch(`${SUPABASE_URL}/rest/v1/home_win_predictions_paywall?select=id,target_kickoff_at&limit=1000`, { headers }).then((r) => r.json()),
+      fetch(`${SUPABASE_URL}/rest/v1/home_win_predictions_paywall?select=id,target_kickoff_at,settlement_status,publication_status&settlement_status=neq.void&publication_status=neq.archived&limit=1000`, { headers }).then((r) => r.json()),
       fetch(`${SUPABASE_URL}/rest/v1/draw_predictions_paywall?select=id,target_kickoff_at&limit=1000`, { headers }).then((r) => r.json()),
       fetch(`${SUPABASE_URL}/rest/v1/corner_predictions_paywall?select=id,target_kickoff_at,settlement_status,settlement_notes&settlement_status=neq.void&publication_status=neq.archived&limit=1000`, { headers }).then((r) => r.json()),
       fetch(`${SUPABASE_URL}/rest/v1/goals_predictions_paywall?select=id,market,target_kickoff_at&limit=1000`, { headers }).then((r) => r.json()),
@@ -473,7 +479,15 @@ async function computeAllMarketCounts(
         )
       : [];
 
-    const filteredHw = filterByDate(hw);
+    const validHw = Array.isArray(hw)
+      ? hw.filter(
+          (item: any) =>
+            item.settlement_status !== 'void' &&
+            item.publication_status !== 'archived'
+        )
+      : [];
+
+    const filteredHw = filterByDate(validHw);
     const filteredDr = filterByDate(dr);
     const filteredCr = filterByDate(validCr);
     const filteredGl = filterByDate(gl);
