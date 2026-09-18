@@ -44,9 +44,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Addsbanta Goals Specialist Engine")
     parser.add_argument("--predict-only", action="store_true", help="Run only predictions pass")
     parser.add_argument("--settle-only", action="store_true", help="Run only settlement pass")
+    parser.add_argument("--wipe-pending", action="store_true", help="Wipe and recalculate pending predictions")
     args = parser.parse_args()
 
     do_predict = not args.settle_only
     do_settle = not args.predict_only
 
-    run_cycle(predict=do_predict, settle=do_settle)
+    run_cycle(predict=do_predict, settle=do_settle, wipe_pending=args.wipe_pending)

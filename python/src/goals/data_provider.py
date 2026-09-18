@@ -23,6 +23,7 @@ if hasattr(sys.stderr, 'reconfigure'):
 
 from python.src.db.supabase_client import CloudSupabaseClient
 from python.src.football.historical_dataset import HistoricalDatasetBuilder
+from python.src.football.league_filter import is_fixture_eligible
 
 CACHE_DIR = Path(__file__).resolve().parent.parent.parent / "scratch" / "cache"
 
@@ -42,18 +43,28 @@ WHITELISTED_LEAGUE_CODES: Set[str] = {
     "ENG_CH",    # Championship
     "ENG_L1",    # League One
     "ENG_L2",    # League Two
+    "ENG_NL",    # National League (Tier 5 floor)
     "GER_2BL",   # 2. Bundesliga
+    "GER_3L",    # 3. Liga
     "ESP_LL2",   # LaLiga 2
     "ITA_SB",    # Serie B
     "FRA_L2",    # Ligue 2
+    "NED_EED",   # Eerste Divisie
     "TUR_SL",    # Süper Lig
     "SCO_PL",    # Scottish Premiership
+    "SCO_CH",    # Scottish Championship
     "AUT_BL",    # Austrian Bundesliga
     "SUI_SL",    # Swiss Super League
     "NOR_EL",    # Eliteserien
     "SWE_AL",    # Allsvenskan
+    "DEN_SL",    # Danish Superliga
+    "GRE_SL",    # Super League Greece
     "USA_MLS",   # Major League Soccer
+    "USA_USLC",  # USL Championship
     "BRA_SA",    # Brasileirão Série A
+    "ARG_PD",    # Liga Profesional Argentina
+    "MEX_LMX",   # Liga MX
+    "JPN_J1",    # J1 League
     "EUR_CL",    # UEFA Champions League
     "EUR_EL",    # UEFA Europa League
     "EUR_ECL",   # UEFA Conference League
@@ -61,23 +72,38 @@ WHITELISTED_LEAGUE_CODES: Set[str] = {
 
 LEAGUE_BASELINES: Dict[str, Dict[str, float]] = {
     "NED_ED": {"home_goals": 1.72, "away_goals": 1.42, "avg_total": 3.14, "over25_rate": 0.61, "btts_rate": 0.58},
+    "NED_EED": {"home_goals": 1.70, "away_goals": 1.38, "avg_total": 3.08, "over25_rate": 0.59, "btts_rate": 0.57},
     "GER_BL": {"home_goals": 1.70, "away_goals": 1.40, "avg_total": 3.10, "over25_rate": 0.60, "btts_rate": 0.59},
+    "GER_2BL": {"home_goals": 1.64, "away_goals": 1.36, "avg_total": 3.00, "over25_rate": 0.58, "btts_rate": 0.56},
+    "GER_3L": {"home_goals": 1.58, "away_goals": 1.28, "avg_total": 2.86, "over25_rate": 0.54, "btts_rate": 0.53},
     "ENG_PL": {"home_goals": 1.58, "away_goals": 1.28, "avg_total": 2.86, "over25_rate": 0.55, "btts_rate": 0.53},
+    "ENG_CH": {"home_goals": 1.46, "away_goals": 1.20, "avg_total": 2.66, "over25_rate": 0.50, "btts_rate": 0.50},
+    "ENG_L1": {"home_goals": 1.48, "away_goals": 1.22, "avg_total": 2.70, "over25_rate": 0.51, "btts_rate": 0.51},
+    "ENG_L2": {"home_goals": 1.45, "away_goals": 1.20, "avg_total": 2.65, "over25_rate": 0.50, "btts_rate": 0.50},
+    "ENG_NL": {"home_goals": 1.54, "away_goals": 1.26, "avg_total": 2.80, "over25_rate": 0.53, "btts_rate": 0.52},
     "BEL_PL": {"home_goals": 1.56, "away_goals": 1.30, "avg_total": 2.86, "over25_rate": 0.54, "btts_rate": 0.53},
     "SUI_SL": {"home_goals": 1.58, "away_goals": 1.32, "avg_total": 2.90, "over25_rate": 0.56, "btts_rate": 0.55},
     "AUT_BL": {"home_goals": 1.55, "away_goals": 1.30, "avg_total": 2.85, "over25_rate": 0.54, "btts_rate": 0.52},
     "NOR_EL": {"home_goals": 1.62, "away_goals": 1.33, "avg_total": 2.95, "over25_rate": 0.57, "btts_rate": 0.54},
     "SWE_AL": {"home_goals": 1.52, "away_goals": 1.25, "avg_total": 2.77, "over25_rate": 0.53, "btts_rate": 0.51},
+    "DEN_SL": {"home_goals": 1.60, "away_goals": 1.30, "avg_total": 2.90, "over25_rate": 0.56, "btts_rate": 0.53},
+    "GRE_SL": {"home_goals": 1.42, "away_goals": 1.10, "avg_total": 2.52, "over25_rate": 0.47, "btts_rate": 0.46},
     "USA_MLS": {"home_goals": 1.57, "away_goals": 1.25, "avg_total": 2.82, "over25_rate": 0.54, "btts_rate": 0.53},
-    "ENG_CH": {"home_goals": 1.46, "away_goals": 1.20, "avg_total": 2.66, "over25_rate": 0.50, "btts_rate": 0.50},
-    "GER_2BL": {"home_goals": 1.64, "away_goals": 1.36, "avg_total": 3.00, "over25_rate": 0.58, "btts_rate": 0.56},
+    "USA_USLC": {"home_goals": 1.56, "away_goals": 1.25, "avg_total": 2.81, "over25_rate": 0.53, "btts_rate": 0.52},
     "ITA_SA": {"home_goals": 1.42, "away_goals": 1.14, "avg_total": 2.56, "over25_rate": 0.49, "btts_rate": 0.49},
+    "ITA_SB": {"home_goals": 1.38, "away_goals": 1.08, "avg_total": 2.46, "over25_rate": 0.45, "btts_rate": 0.46},
     "ESP_LL": {"home_goals": 1.40, "away_goals": 1.11, "avg_total": 2.51, "over25_rate": 0.47, "btts_rate": 0.48},
+    "ESP_LL2": {"home_goals": 1.32, "away_goals": 0.98, "avg_total": 2.30, "over25_rate": 0.41, "btts_rate": 0.44},
     "FRA_L1": {"home_goals": 1.45, "away_goals": 1.15, "avg_total": 2.60, "over25_rate": 0.49, "btts_rate": 0.49},
+    "FRA_L2": {"home_goals": 1.36, "away_goals": 1.05, "avg_total": 2.41, "over25_rate": 0.44, "btts_rate": 0.45},
     "POR_PL": {"home_goals": 1.44, "away_goals": 1.16, "avg_total": 2.60, "over25_rate": 0.49, "btts_rate": 0.48},
     "TUR_SL": {"home_goals": 1.55, "away_goals": 1.25, "avg_total": 2.80, "over25_rate": 0.53, "btts_rate": 0.52},
     "SCO_PL": {"home_goals": 1.48, "away_goals": 1.20, "avg_total": 2.68, "over25_rate": 0.50, "btts_rate": 0.49},
+    "SCO_CH": {"home_goals": 1.50, "away_goals": 1.24, "avg_total": 2.74, "over25_rate": 0.51, "btts_rate": 0.51},
     "BRA_SA": {"home_goals": 1.40, "away_goals": 1.05, "avg_total": 2.45, "over25_rate": 0.45, "btts_rate": 0.46},
+    "ARG_PD": {"home_goals": 1.28, "away_goals": 0.95, "avg_total": 2.23, "over25_rate": 0.40, "btts_rate": 0.42},
+    "MEX_LMX": {"home_goals": 1.58, "away_goals": 1.25, "avg_total": 2.83, "over25_rate": 0.54, "btts_rate": 0.53},
+    "JPN_J1": {"home_goals": 1.45, "away_goals": 1.18, "avg_total": 2.63, "over25_rate": 0.49, "btts_rate": 0.50},
     "EUR_CL": {"home_goals": 1.68, "away_goals": 1.34, "avg_total": 3.02, "over25_rate": 0.58, "btts_rate": 0.54},
     "EUR_EL": {"home_goals": 1.60, "away_goals": 1.30, "avg_total": 2.90, "over25_rate": 0.55, "btts_rate": 0.53},
     "EUR_ECL": {"home_goals": 1.58, "away_goals": 1.28, "avg_total": 2.86, "over25_rate": 0.54, "btts_rate": 0.52},
@@ -148,7 +174,7 @@ class GoalsDataProvider:
     Ingests, validates, and serves empirical team metrics.
     Combines Supabase settled fixtures with disk-cached LiveScore historical results.
     """
-    MIN_MATCHES_THRESHOLD = 5  # Gate: minimum 5 verified matches
+    MIN_MATCHES_THRESHOLD = 3  # Gate: minimum 3 verified matches with Bayesian shrinkage
 
     def __init__(self, db: Optional[CloudSupabaseClient] = None):
         self.db = db or CloudSupabaseClient()
@@ -336,26 +362,11 @@ class GoalsDataProvider:
 
         return records
 
-    def is_league_eligible(self, league_code: str, league_name: str = "") -> bool:
-        """Strict whitelist verification: rejects amateur 7th tier and youth leagues."""
-        if league_code in WHITELISTED_LEAGUE_CODES:
-            return True
-
-        lname = (league_name or "").lower()
-        banned_tokens = [
-            "u18", "u19", "u21", "u23", "premier league 2", "isthmian",
-            "northern premier", "southern premier", "regional", "amateur",
-            "challenge cup", "reserve"
-        ]
-        if any(b in lname for b in banned_tokens):
+    def is_league_eligible(self, league_code: str, league_name: str = "", home_team: str = "", away_team: str = "") -> bool:
+        """Strict whitelist verification: rejects amateur divisions below Tier 5, youth leagues, and women's football."""
+        if not is_fixture_eligible(league_code=league_code, league_name=league_name, home_team=home_team, away_team=away_team):
             return False
-
-        allowed_names = [
-            "premier league", "la liga", "serie a", "bundesliga", "ligue 1",
-            "eredivisie", "championship", "uefa champions league", "uefa europa league",
-            "major league soccer", "brasileirão", "süper lig", "primeira liga", "pro league"
-        ]
-        return any(a in lname for a in allowed_names)
+        return league_code in WHITELISTED_LEAGUE_CODES
 
     def get_league_baseline(self, league_code: str) -> Dict[str, float]:
         """Returns verified empirical goal baselines for a competition."""

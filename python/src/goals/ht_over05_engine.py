@@ -74,7 +74,9 @@ class HtOver05GoalsEngine:
                 fid = p["fixture_id"]
                 status = p.get("settlement_status", "pending")
                 kickoff = p.get("target_kickoff_at", "")
-                if status in ("won", "lost", "void") or (kickoff and kickoff <= lock_window_iso):
+                if status in ("won", "lost"):
+                    locked_keys.add((fid, "ht_over_0.5_goals"))
+                elif not wipe_pending and kickoff and kickoff <= lock_window_iso:
                     locked_keys.add((fid, "ht_over_0.5_goals"))
             print(f"🔒 [HtOver05Engine] Preserving {len(locked_keys)} locked/settled 1H prediction records.")
         except Exception as e:
@@ -153,7 +155,7 @@ class HtOver05GoalsEngine:
             # =================================================================
             # QUALITY GATE 1: League Whitelist
             # =================================================================
-            if not self.data_provider.is_league_eligible(l_code, league_name):
+            if not self.data_provider.is_league_eligible(l_code, league_name, home_name, away_name):
                 rejections["league_not_eligible"] += 1
                 continue
 

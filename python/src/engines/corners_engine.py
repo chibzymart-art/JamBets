@@ -49,29 +49,31 @@ class CornersEngine:
 
         # 2. Reset/Wipe existing corner predictions if requested per user directive
         if wipe_all:
-            print("🧹 [CornersEngine] Archiving existing active corner predictions for fresh run...")
+            print("🧹 [CornersEngine] Archiving existing pending/void corner predictions for fresh run...")
             try:
                 self.db.patch("corner_predictions", {
                     "publication_status": "archived"
                 }, {
-                    "settlement_status": "eq.pending"
+                    "settlement_status": "in.(pending,void)"
                 })
-                print("✨ [CornersEngine] Successfully marked prior active corner predictions as archived.")
+                print("✨ [CornersEngine] Successfully marked prior active/void corner predictions as archived.")
             except Exception as e:
                 print(f"⚠️ [CornersEngine] Notice during reset: {e}")
 
         # 3. Query existing predictions to respect 48-hour lock & settlement status (if any preserved)
         existing = self.db.get("corner_predictions", {
-            "select": "id,fixture_id,target_kickoff_at,settlement_status,market",
+            "select": "id,fixture_id,target_kickoff_at,settlement_status,market,publication_status",
             "limit": "1000"
         })
         existing_map = {(p["fixture_id"], p.get("market")): p["id"] for p in existing}
-        existing_pending_map = {p["fixture_id"]: p["id"] for p in existing if p.get("settlement_status") == "pending"}
+        existing_pending_map = {p["fixture_id"]: p["id"] for p in existing if p.get("settlement_status") == "pending" and p.get("publication_status") != "archived"}
         locked_fixture_ids = set()
         for p in existing:
-            if p.get("settlement_status") in ("won", "lost", "void"):
+            if p.get("publication_status") == "archived":
+                continue
+            if p.get("settlement_status") in ("won", "lost"):
                 locked_fixture_ids.add(p["fixture_id"])
-            elif p.get("target_kickoff_at") and p["target_kickoff_at"] <= lock_window_iso:
+            elif not wipe_all and p.get("target_kickoff_at") and p["target_kickoff_at"] <= lock_window_iso:
                 locked_fixture_ids.add(p["fixture_id"])
 
         # 4. Fetch scheduled upcoming fixtures across 4-day window
@@ -95,8 +97,15 @@ class CornersEngine:
             fid = f["id"]
             lid = f.get("league_id")
 
-            # Quality Gate 1: Whitelist Tier 1 & Tier 2 professional leagues
-            if not self.data_provider.is_league_whitelisted(lid):
+            hid = f.get("home_team_id")
+            aid = f.get("away_team_id")
+            h_profile = self.data_provider.club_profiles.get(hid)
+            a_profile = self.data_provider.club_profiles.get(aid)
+            h_name = h_profile.team_name if h_profile else ""
+            a_name = a_profile.team_name if a_profile else ""
+
+            # Quality Gate 1: Whitelist Tier 1 & Tier 2 professional leagues (National League floor, no women's)
+            if not self.data_provider.is_league_whitelisted(lid, home_team=h_name, away_team=a_name):
                 skipped_unwhitelisted += 1
                 continue
 
@@ -104,12 +113,7 @@ class CornersEngine:
                 skipped_locked += 1
                 continue
 
-            hid = f.get("home_team_id")
-            aid = f.get("away_team_id")
-
             # Quality Gate 2: Data Sufficiency
-            h_profile = self.data_provider.club_profiles.get(hid)
-            a_profile = self.data_provider.club_profiles.get(aid)
             if not h_profile or not a_profile:
                 skipped_insufficient_edge += 1
                 continue

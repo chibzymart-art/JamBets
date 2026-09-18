@@ -28,6 +28,7 @@ from python.src.db.universal_data_store import UniversalDataStore, UnifiedTeamPr
 from python.src.football.h2h_analyzer import H2HAnalyzer
 from python.src.football.match_motivation import MatchMotivationEngine
 from python.src.football.identity import normalize_team_name
+from python.src.football.league_filter import is_fixture_eligible
 
 
 class DrawModel:
@@ -184,26 +185,49 @@ class DrawEngine:
         self.db = db or CloudSupabaseClient()
         self.data_store = UniversalDataStore.get_instance(db=self.db)
 
-    def run(self, max_fixtures: int = 500) -> Dict[str, Any]:
+    def run(self, max_fixtures: int = 500, wipe_pending: bool = False) -> Dict[str, Any]:
         print("⚖️ [DrawEngine] Launching Draw Hunter Equilibrium Engine with Universal Data...")
         now = datetime.now(timezone.utc)
         min_kickoff = (now - timedelta(minutes=5)).isoformat()
         lock_window_iso = (now + timedelta(hours=48)).isoformat()
+
+        if wipe_pending:
+            print("🧹 [DrawEngine] Archiving existing pending/void predictions...")
+            try:
+                dr_pending = self.db.get("draw_predictions", {
+                    "settlement_status": "in.(pending,void)",
+                    "target_kickoff_at": f"gte.{min_kickoff}",
+                    "select": "id",
+                    "limit": "5000"
+                }) or []
+                dr_ids = [r["id"] for r in dr_pending]
+                for b in range(0, len(dr_ids), 100):
+                    chunk = dr_ids[b:b + 100]
+                    self.db.patch("draw_predictions", {
+                        "publication_status": "archived",
+                        "settlement_status": "void",
+                        "settlement_notes": "Archived: Wiped for fresh Draw rebuild"
+                    }, {"id": f"in.({','.join(chunk)})"})
+                print(f"✨ [DrawEngine] Successfully archived {len(dr_ids)} pending predictions.")
+            except Exception as e:
+                print(f"⚠️ [DrawEngine] Notice during reset: {e}")
 
         # 1. Warm up universal data store
         self.data_store.warm_up()
 
         # 2. Check locked predictions within 48h to preserve immutability
         existing = self.db.get("draw_predictions", {
-            "select": "id,fixture_id,target_kickoff_at,settlement_status",
-            "limit": "2000"
+            "select": "id,fixture_id,target_kickoff_at,settlement_status,publication_status",
+            "limit": "5000"
         })
         existing_map = {p["fixture_id"]: p["id"] for p in (existing or [])}
         locked_fixture_ids = set()
         for p in (existing or []):
-            if p.get("settlement_status") in ("won", "lost", "void"):
+            if p.get("publication_status") == "archived" or p.get("settlement_status") == "void":
+                continue
+            if p.get("settlement_status") in ("won", "lost"):
                 locked_fixture_ids.add(p["fixture_id"])
-            elif p.get("target_kickoff_at") and p["target_kickoff_at"] <= lock_window_iso:
+            elif not wipe_pending and p.get("target_kickoff_at") and p["target_kickoff_at"] <= lock_window_iso:
                 locked_fixture_ids.add(p["fixture_id"])
 
         # 3. Fetch scheduled upcoming fixtures
@@ -244,6 +268,11 @@ class DrawEngine:
             h_name = team_name_map.get(hid) or (parts[1] if len(parts) > 1 else str(hid))
             a_name = team_name_map.get(aid) or (parts[2] if len(parts) > 2 else str(aid))
             l_code = parts[0] if parts else "OTHER"
+
+            # Filter out sub-National League, youth, and women's football
+            if not is_fixture_eligible(league_code=l_code, home_team=h_name, away_team=a_name):
+                skipped_count += 1
+                continue
 
             p_h = self.data_store.get_profile(hid or h_name)
             p_a = self.data_store.get_profile(aid or a_name)
@@ -305,6 +334,11 @@ class DrawEngine:
 
 
 if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser(description="Oddsbanta Draw Hunter Engine")
+    parser.add_argument("--wipe-pending", action="store_true", help="Wipe pending and void predictions before running")
+    args = parser.parse_args()
+
     engine = DrawEngine()
-    summary = engine.run()
+    summary = engine.run(wipe_pending=args.wipe_pending)
     print("Execution Summary:", summary)

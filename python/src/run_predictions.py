@@ -32,6 +32,7 @@ from python.src.sources.sportybet import SportyBetAdapter
 from python.src.sources.google_news import GoogleNewsAdapter
 from python.src.db.supabase_client import CloudSupabaseClient
 from python.src.alerts.email_notifier import send_pipeline_failure_alert, send_zero_predictions_alert
+from python.src.football.league_filter import is_fixture_eligible
 
 
 def run():
@@ -253,6 +254,11 @@ def run():
         print(f"\n--- [{idx}/{len(fixtures_to_process)}] Fixture: {h_team} vs {a_team} ({l_code}) ---", flush=True)
         print(f"    Canonical Key: {canonical_key}", flush=True)
         print(f"    Kickoff: {kickoff.isoformat()}", flush=True)
+
+        # Strict Quality Gate: English Tier 5 (National League) cutoff and Women's exclusion
+        if not is_fixture_eligible(league_code=l_code, home_team=h_team, away_team=a_team):
+            print(f"    [EXCLUDED] Fixture in excluded league/division or women's football: {l_code} ({h_team} vs {a_team})", flush=True)
+            continue
 
         # SMART REPREDICTION: Check if already predicted and game data unchanged
         existing_pred = existing_preds_map.get(f_id)

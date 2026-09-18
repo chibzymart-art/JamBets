@@ -17,11 +17,12 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../.
 from python.src.db.supabase_client import CloudSupabaseClient
 from python.src.sources.fotmob import FotMobAdapter
 from python.src.db.universal_data_store import UniversalDataStore
+from python.src.football.league_filter import is_fixture_eligible
 
 # Whitelist of verified Tier 1 & Tier 2 professional leagues
 # Amateur (7th/8th-tier non-league) and youth (U18/U21) divisions are excluded.
 PROFESSIONAL_LEAGUE_CODES: Set[str] = {
-    "ENG_PL", "ENG_CH", "ENG_L1", "ENG_L2",
+    "ENG_PL", "ENG_CH", "ENG_L1", "ENG_L2", "ENG_NL",
     "ESP_LL", "ESP_LL2",
     "GER_BL", "GER_2BL", "GER_3L",
     "ITA_SA", "ITA_SB",
@@ -357,22 +358,17 @@ class CornersDataProvider:
             dynamic_corner_base_away=4.58
         )
 
-    def is_league_whitelisted(self, league_id: Optional[str]) -> bool:
-        """Strictly verifies if a league belongs to Tier 1 / Tier 2 professional football."""
+    def is_league_whitelisted(self, league_id: Optional[str], home_team: str = "", away_team: str = "") -> bool:
+        """Strictly verifies if a league belongs to Tier 1 / Tier 2 / Tier 5 professional football."""
         if not league_id:
             return False
         l_meta = self.leagues_by_id.get(league_id)
         if not l_meta:
             return False
         code = l_meta.get("code")
-        name = (l_meta.get("name") or "").lower()
+        name = l_meta.get("name") or ""
 
-        # Ban amateur 7th/8th tier non-league and youth divisions explicitly
-        banned_tokens = [
-            "isthmian", "northern premier", "southern league", "u18", "u21",
-            "premier league 2", "reserve", "non league", "regional"
-        ]
-        if any(b in name for b in banned_tokens):
+        if not is_fixture_eligible(league_code=code, league_name=name, home_team=home_team, away_team=away_team):
             return False
 
         return code in PROFESSIONAL_LEAGUE_CODES or any(p in (code or "") for p in ["_PL", "_LL", "_BL", "_SA", "_L1", "_ED", "_CL", "_EL", "_MLS"])

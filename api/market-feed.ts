@@ -386,16 +386,16 @@ async function fetchMarketDataFromUpstream(
 
     const unified: UnifiedMarketPrediction[] = [
       ...(Array.isArray(hw) ? hw : [])
-        .filter((item: any) => item.settlement_status !== 'void' && item.publication_status !== 'archived')
+        .filter((item: any) => item.settlement_status !== 'void' && item.publication_status !== 'archived' && item.fixture?.status !== 'cancelled' && item.fixture?.status !== 'postponed')
         .map((item: any) => normalizePrediction(item, 'home_win')),
       ...(Array.isArray(dr) ? dr : [])
-        .filter((item: any) => item.settlement_status !== 'void' && item.publication_status !== 'archived')
+        .filter((item: any) => item.settlement_status !== 'void' && item.publication_status !== 'archived' && item.fixture?.status !== 'cancelled' && item.fixture?.status !== 'postponed')
         .map((item: any) => normalizePrediction(item, 'draw')),
       ...(Array.isArray(cr) ? cr : [])
-        .filter((item: any) => item.settlement_status === 'pending' || (item.settlement_notes && item.settlement_notes.startsWith('Verified:')))
+        .filter((item: any) => (item.settlement_status === 'pending' || (item.settlement_notes && item.settlement_notes.startsWith('Verified:'))) && item.fixture?.status !== 'cancelled' && item.fixture?.status !== 'postponed')
         .map((item: any) => normalizePrediction(item, 'corners')),
       ...(Array.isArray(gl) ? gl : [])
-        .filter((item: any) => item.settlement_status !== 'void' && item.publication_status !== 'archived')
+        .filter((item: any) => item.settlement_status !== 'void' && item.publication_status !== 'archived' && item.fixture?.status !== 'cancelled' && item.fixture?.status !== 'postponed')
         .map((item: any) => normalizePrediction(item, 'goals')),
     ];
 
@@ -447,6 +447,9 @@ async function fetchMarketDataFromUpstream(
     if (item.settlement_status === 'void' || item.publication_status === 'archived') {
       return false;
     }
+    if (item.fixture?.status === 'cancelled' || item.fixture?.status === 'postponed') {
+      return false;
+    }
     if (category === 'corners') {
       return item.settlement_status === 'pending' || (item.settlement_notes && item.settlement_notes.startsWith('Verified:'));
     }
@@ -467,10 +470,10 @@ async function computeAllMarketCounts(
 
   try {
     const [hw, dr, cr, gl] = await Promise.all([
-      fetch(`${SUPABASE_URL}/rest/v1/home_win_predictions_paywall?select=id,target_kickoff_at,settlement_status,publication_status,fixture:football_fixtures!inner(id)&settlement_status=neq.void&publication_status=neq.archived&limit=1000`, { headers }).then((r) => r.json()),
-      fetch(`${SUPABASE_URL}/rest/v1/draw_predictions_paywall?select=id,target_kickoff_at,settlement_status,publication_status,fixture:football_fixtures!inner(id)&settlement_status=neq.void&publication_status=neq.archived&limit=1000`, { headers }).then((r) => r.json()),
-      fetch(`${SUPABASE_URL}/rest/v1/corner_predictions_paywall?select=id,target_kickoff_at,settlement_status,publication_status,settlement_notes,fixture:football_fixtures!inner(id)&settlement_status=neq.void&publication_status=neq.archived&limit=1000`, { headers }).then((r) => r.json()),
-      fetch(`${SUPABASE_URL}/rest/v1/goals_predictions_paywall?select=id,market,target_kickoff_at,settlement_status,publication_status,fixture:football_fixtures!inner(id)&settlement_status=neq.void&publication_status=neq.archived&limit=1000`, { headers }).then((r) => r.json()),
+      fetch(`${SUPABASE_URL}/rest/v1/home_win_predictions_paywall?select=id,target_kickoff_at,settlement_status,publication_status,fixture:football_fixtures!inner(id,status)&settlement_status=neq.void&publication_status=neq.archived&limit=1000`, { headers }).then((r) => r.json()),
+      fetch(`${SUPABASE_URL}/rest/v1/draw_predictions_paywall?select=id,target_kickoff_at,settlement_status,publication_status,fixture:football_fixtures!inner(id,status)&settlement_status=neq.void&publication_status=neq.archived&limit=1000`, { headers }).then((r) => r.json()),
+      fetch(`${SUPABASE_URL}/rest/v1/corner_predictions_paywall?select=id,target_kickoff_at,settlement_status,publication_status,settlement_notes,fixture:football_fixtures!inner(id,status)&settlement_status=neq.void&publication_status=neq.archived&limit=1000`, { headers }).then((r) => r.json()),
+      fetch(`${SUPABASE_URL}/rest/v1/goals_predictions_paywall?select=id,market,target_kickoff_at,settlement_status,publication_status,fixture:football_fixtures!inner(id,status)&settlement_status=neq.void&publication_status=neq.archived&limit=1000`, { headers }).then((r) => r.json()),
     ]);
 
     let targetDateStr = dateParam;
@@ -499,6 +502,8 @@ async function computeAllMarketCounts(
           (item: any) =>
             item.settlement_status !== 'void' &&
             item.publication_status !== 'archived' &&
+            item.fixture?.status !== 'cancelled' &&
+            item.fixture?.status !== 'postponed' &&
             (item.settlement_status === 'pending' ||
               (item.settlement_notes && item.settlement_notes.startsWith('Verified:')))
         )
@@ -508,7 +513,9 @@ async function computeAllMarketCounts(
       ? hw.filter(
           (item: any) =>
             item.settlement_status !== 'void' &&
-            item.publication_status !== 'archived'
+            item.publication_status !== 'archived' &&
+            item.fixture?.status !== 'cancelled' &&
+            item.fixture?.status !== 'postponed'
         )
       : [];
 
@@ -516,7 +523,9 @@ async function computeAllMarketCounts(
       ? dr.filter(
           (item: any) =>
             item.settlement_status !== 'void' &&
-            item.publication_status !== 'archived'
+            item.publication_status !== 'archived' &&
+            item.fixture?.status !== 'cancelled' &&
+            item.fixture?.status !== 'postponed'
         )
       : [];
 
@@ -524,7 +533,9 @@ async function computeAllMarketCounts(
       ? gl.filter(
           (item: any) =>
             item.settlement_status !== 'void' &&
-            item.publication_status !== 'archived'
+            item.publication_status !== 'archived' &&
+            item.fixture?.status !== 'cancelled' &&
+            item.fixture?.status !== 'postponed'
         )
       : [];
 

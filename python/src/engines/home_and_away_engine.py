@@ -35,6 +35,7 @@ from python.src.football.h2h_analyzer import H2HAnalyzer
 from python.src.football.match_motivation import MatchMotivationEngine
 from python.src.sources.google_news import GoogleNewsAdapter
 from python.src.football.identity import normalize_team_name
+from python.src.football.league_filter import is_fixture_eligible
 
 
 class DixonColes1X2Model:
@@ -287,7 +288,7 @@ class HomeAndAwayEngine:
 
         return None
 
-    def run(self, max_fixtures: int = 500) -> Dict[str, Any]:
+    def run(self, max_fixtures: int = 500, wipe_pending: bool = False) -> Dict[str, Any]:
         """
         Executes the master prediction cycle for Home & Away 1X2 market.
         """
@@ -296,20 +297,43 @@ class HomeAndAwayEngine:
         min_kickoff = (now - timedelta(minutes=5)).isoformat()
         lock_window_iso = (now + timedelta(hours=48)).isoformat()
 
+        if wipe_pending:
+            print("🧹 [HomeAndAwayEngine] Archiving existing pending/void predictions...")
+            try:
+                hw_pending = self.db.get("home_win_predictions", {
+                    "settlement_status": "in.(pending,void)",
+                    "target_kickoff_at": f"gte.{min_kickoff}",
+                    "select": "id",
+                    "limit": "5000"
+                }) or []
+                hw_ids = [r["id"] for r in hw_pending]
+                for b in range(0, len(hw_ids), 100):
+                    chunk = hw_ids[b:b + 100]
+                    self.db.patch("home_win_predictions", {
+                        "publication_status": "archived",
+                        "settlement_status": "void",
+                        "settlement_notes": "Archived: Wiped for fresh 1X2 rebuild"
+                    }, {"id": f"in.({','.join(chunk)})"})
+                print(f"✨ [HomeAndAwayEngine] Successfully archived {len(hw_ids)} pending predictions.")
+            except Exception as e:
+                print(f"⚠️ [HomeAndAwayEngine] Notice during reset: {e}")
+
         # 1. Warm up universal data store
         self.data_store.warm_up()
 
         # 2. Check locked existing predictions to protect immutability
         existing = self.db.get("home_win_predictions", {
-            "select": "id,fixture_id,target_kickoff_at,settlement_status",
+            "select": "id,fixture_id,target_kickoff_at,settlement_status,publication_status",
             "limit": "5000"
         })
         existing_map = {p["fixture_id"]: p["id"] for p in (existing or [])}
         locked_fixture_ids = set()
         for p in (existing or []):
-            if p.get("settlement_status") in ("won", "lost", "void"):
+            if p.get("publication_status") == "archived" or p.get("settlement_status") == "void":
+                continue
+            if p.get("settlement_status") in ("won", "lost"):
                 locked_fixture_ids.add(p["fixture_id"])
-            elif p.get("target_kickoff_at") and p["target_kickoff_at"] <= lock_window_iso:
+            elif not wipe_pending and p.get("target_kickoff_at") and p["target_kickoff_at"] <= lock_window_iso:
                 locked_fixture_ids.add(p["fixture_id"])
 
         # 3. Fetch scheduled upcoming fixtures
@@ -355,6 +379,11 @@ class HomeAndAwayEngine:
             h_name = team_name_map.get(hid) or (parts[1] if len(parts) > 1 else str(hid))
             a_name = team_name_map.get(aid) or (parts[2] if len(parts) > 2 else str(aid))
             l_code = parts[0] if parts else "OTHER"
+
+            # Filter out sub-National League, youth, and women's football
+            if not is_fixture_eligible(league_code=l_code, home_team=h_name, away_team=a_name):
+                skipped_count += 1
+                continue
 
             eval_res = self.evaluate_matchup(
                 home_identifier=h_name,
@@ -423,6 +452,11 @@ class HomeAndAwayEngine:
 
 
 if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser(description="Oddsbanta Home and Away 1X2 Prediction Engine")
+    parser.add_argument("--wipe-pending", action="store_true", help="Wipe pending and void predictions before running")
+    args = parser.parse_args()
+
     engine = HomeAndAwayEngine()
-    summary = engine.run()
+    summary = engine.run(wipe_pending=args.wipe_pending)
     print("Execution Summary:", summary)

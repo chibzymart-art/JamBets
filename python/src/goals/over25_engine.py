@@ -80,15 +80,17 @@ class Over25GoalsEngine:
         lock_window_iso = (now + timedelta(hours=48)).isoformat()
         locked_keys = set()
         try:
-            locked_48h = self.db.get("goals_predictions", {
-                "target_kickoff_at": f"lte.{lock_window_iso}",
-                "select": "fixture_id,market"
-            })
-            for p in (locked_48h or []):
-                locked_keys.add((p.get("fixture_id"), p.get("market")))
+            if not wipe_pending:
+                locked_48h = self.db.get("goals_predictions", {
+                    "target_kickoff_at": f"lte.{lock_window_iso}",
+                    "settlement_status": "eq.pending",
+                    "select": "fixture_id,market"
+                })
+                for p in (locked_48h or []):
+                    locked_keys.add((p.get("fixture_id"), p.get("market")))
 
             settled_preds = self.db.get("goals_predictions", {
-                "settlement_status": "in.(won,lost,void)",
+                "settlement_status": "in.(won,lost)",
                 "select": "fixture_id,market"
             })
             for p in (settled_preds or []):
@@ -173,7 +175,7 @@ class Over25GoalsEngine:
             # =================================================================
             # QUALITY GATE 1: Competition Whitelist
             # =================================================================
-            if not self.data_provider.is_league_eligible(l_code, league_name):
+            if not self.data_provider.is_league_eligible(l_code, league_name, home_name, away_name):
                 rejections["league_not_eligible"] += 1
                 continue
 
