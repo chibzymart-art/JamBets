@@ -129,7 +129,7 @@ const FIXTURE_JOIN =
 const SELECTS: Record<string, { table: string; select: string }> = {
   home_win: {
     table: 'home_win_predictions_paywall',
-    select: `id,fixture_id,prediction,probability,confidence_category,dominance_tier,home_venue_advantage,home_clean_sheet_prob,xg_home,xg_away,target_kickoff_at,settlement_status,settled_at,actual_score,settlement_notes,is_locked,${FIXTURE_JOIN}`,
+    select: `id,fixture_id,prediction,probability,confidence_category,dominance_tier,home_venue_advantage,home_clean_sheet_prob,xg_home,xg_away,target_kickoff_at,settlement_status,settled_at,actual_score,settlement_notes,publication_status,is_locked,${FIXTURE_JOIN}`,
   },
   away_win: {
     table: 'away_win_predictions_paywall',
@@ -141,7 +141,7 @@ const SELECTS: Record<string, { table: string; select: string }> = {
   },
   corners: {
     table: 'corner_predictions_paywall',
-    select: `id,fixture_id,prediction,market,probability,confidence_category,corner_tier,predicted_total_corners,home_corners_avg,away_corners_avg,over_8_5_prob,over_9_5_prob,over_10_5_prob,target_kickoff_at,settlement_status,settled_at,actual_corners,settlement_notes,is_locked,${FIXTURE_JOIN}`,
+    select: `id,fixture_id,prediction,market,probability,confidence_category,corner_tier,predicted_total_corners,home_corners_avg,away_corners_avg,over_8_5_prob,over_9_5_prob,over_10_5_prob,target_kickoff_at,settlement_status,settled_at,actual_corners,settlement_notes,publication_status,is_locked,${FIXTURE_JOIN}`,
   },
   goals: {
     table: 'goals_predictions_paywall',
@@ -165,8 +165,15 @@ function computeTacticalAnalysis(
   const home = formatClubName(rawHome);
   const away = formatClubName(rawAway);
 
-  if (meta.tactical_rationale) {
-    let cleanRationale = meta.tactical_rationale.trim();
+  let customRationale =
+    meta.tactical_rationale ||
+    (!raw.settled_at && raw.settlement_notes && !raw.settlement_notes.startsWith('Verified')
+      ? raw.settlement_notes
+      : null);
+
+  if (customRationale) {
+    customRationale = customRationale.replace(/\[DENSITY:\d+\/\d+\]\s*/gi, '').trim();
+    let cleanRationale = customRationale;
     if (cleanRationale.length > 0) {
       cleanRationale = cleanRationale.charAt(0).toUpperCase() + cleanRationale.slice(1);
     }
@@ -219,11 +226,13 @@ function computeTacticalAnalysis(
   }
 
   if (marketCategory === 'corners') {
-    const corners = raw.predicted_total_corners || '10.2';
-    const o85 = raw.over_8_5_prob ? Math.round(raw.over_8_5_prob * 100) : 76;
+    const corners = raw.predicted_total_corners || '8.4';
+    const isOver75 = raw.market === 'over_7.5_corners' || (raw.prediction && raw.prediction.includes('7.5'));
+    const prob = raw.probability ? Math.round(raw.probability * 100) : (isOver75 ? 76 : 70);
+    const lineLabel = isOver75 ? 'Over 7.5' : 'Over 8.5';
     return {
       tag: raw.corner_tier || 'SET_PIECE_GLM',
-      rationale: `Negative Binomial GLM models sustained wing progression and high crossing deflection volume. Projected at ~${corners} total corners with a ${o85}% Over 8.5 density, wide channel overloads will consistently drive set-piece opportunities.`,
+      rationale: `Negative Binomial GLM models sustained wing progression and high crossing deflection volume. Projected at ~${corners} total corners with a ${prob}% ${lineLabel} density, wide channel overloads will consistently drive set-piece opportunities.`,
     };
   }
 
@@ -249,25 +258,18 @@ function normalizePrediction(
   let confidenceTier = raw.dominance_tier || raw.counter_tier || raw.stalemate_tier || raw.corner_tier || raw.confidence_tier || 'TOP_PICK';
   let metrics: Record<string, any> = {};
 
-  if (marketCategory === 'home_win') {
+  if (marketCategory === 'home_win' || marketCategory === 'away_win') {
     market = 'home_win';
-    marketLabel = 'Home Win Dominance';
-    marketIcon = '🏠';
-    predictionTitle = 'Home Win (1)';
+    marketLabel = 'Home & Away (1X2)';
+    marketIcon = '⚔️';
+    predictionTitle = raw.prediction ? (raw.prediction.includes('Away') ? 'Away Win (2)' : 'Home Win (1)') : 'Home Win (1)';
     metrics = {
       home_venue_advantage: raw.home_venue_advantage,
       home_clean_sheet_prob: raw.home_clean_sheet_prob,
-      xg_home: raw.xg_home,
-      xg_away: raw.xg_away,
-    };
-  } else if (marketCategory === 'away_win') {
-    market = 'away_win';
-    marketLabel = 'Away Win Specialist';
-    marketIcon = '✈️';
-    predictionTitle = 'Away Win (2)';
-    metrics = {
       away_counter_efficiency: raw.away_counter_efficiency,
       away_clean_sheet_prob: raw.away_clean_sheet_prob,
+      xg_home: raw.xg_home,
+      xg_away: raw.xg_away,
     };
   } else if (marketCategory === 'draw') {
     market = 'draw';
@@ -283,12 +285,28 @@ function normalizePrediction(
     marketLabel = 'Corners Specialist';
     marketIcon = '🚩';
     predictionTitle = raw.prediction || 'Over 8.5 Corners';
+    const densityMatch = (raw.settlement_notes || '').match(/\[DENSITY:(\d+)\/(\d+)(?:\/(\d+))?\]/i);
+    const o75 = densityMatch
+      ? parseInt(densityMatch[1], 10) / 100
+      : (raw.market === 'over_7.5_corners' || (raw.prediction && raw.prediction.includes('7.5')))
+      ? prob
+      : prob ? Math.min(0.88, prob + 0.08) : 0.74;
+    const o85 = densityMatch
+      ? parseInt(densityMatch[2], 10) / 100
+      : raw.over_8_5_prob ? Number(raw.over_8_5_prob) : (prob ? Math.max(0.50, prob - 0.08) : null);
+    const o95 = densityMatch && densityMatch[3]
+      ? parseInt(densityMatch[3], 10) / 100
+      : raw.over_9_5_prob ? Number(raw.over_9_5_prob) : (prob && (raw.market === 'over_9.5_corners' || (raw.prediction && raw.prediction.includes('9.5'))) ? prob : null);
     metrics = {
       predicted_total_corners: raw.predicted_total_corners,
       home_corners_avg: raw.home_corners_avg,
       away_corners_avg: raw.away_corners_avg,
-      over_8_5_prob: raw.over_8_5_prob,
-      over_9_5_prob: raw.over_9_5_prob,
+      over_7_5_prob: o75,
+      over_8_5_prob: o85,
+      over_9_5_prob: o95,
+      over_7_5_pct: o75 ? Math.round(o75 * 100) : 74,
+      over_8_5_pct: o85 ? Math.round(o85 * 100) : 68,
+      over_9_5_pct: o95 ? Math.round(o95 * 100) : null,
       over_10_5_prob: raw.over_10_5_prob,
     };
   } else if (marketCategory === 'goals') {
@@ -351,29 +369,34 @@ async function fetchMarketDataFromUpstream(
 ): Promise<UnifiedMarketPrediction[]> {
   // 1. Determine which views to query
   if (market === 'curated') {
-    // Top edge queries top signals across all 5 engines
-    const [hwRes, awRes, drawRes, cornRes, goalsRes] = await Promise.all([
-      fetch(`${SUPABASE_URL}/rest/v1/${SELECTS.home_win.table}?select=${encodeURIComponent(SELECTS.home_win.select)}&order=probability.desc&limit=25`, { headers }),
-      fetch(`${SUPABASE_URL}/rest/v1/${SELECTS.away_win.table}?select=${encodeURIComponent(SELECTS.away_win.select)}&order=probability.desc&limit=25`, { headers }),
-      fetch(`${SUPABASE_URL}/rest/v1/${SELECTS.draw.table}?select=${encodeURIComponent(SELECTS.draw.select)}&order=probability.desc&limit=25`, { headers }),
-      fetch(`${SUPABASE_URL}/rest/v1/${SELECTS.corners.table}?select=${encodeURIComponent(SELECTS.corners.select)}&order=probability.desc&limit=25`, { headers }),
-      fetch(`${SUPABASE_URL}/rest/v1/${SELECTS.goals.table}?select=${encodeURIComponent(SELECTS.goals.select)}&order=probability.desc&limit=35`, { headers }),
+    // Top edge queries top signals across all 4 specialist engines
+    const [hwRes, drawRes, cornRes, goalsRes] = await Promise.all([
+      fetch(`${SUPABASE_URL}/rest/v1/${SELECTS.home_win.table}?select=${encodeURIComponent(SELECTS.home_win.select)}&settlement_status=neq.void&publication_status=neq.archived&order=probability.desc&limit=50`, { headers }),
+      fetch(`${SUPABASE_URL}/rest/v1/${SELECTS.draw.table}?select=${encodeURIComponent(SELECTS.draw.select)}&settlement_status=neq.void&publication_status=neq.archived&order=probability.desc&limit=50`, { headers }),
+      fetch(`${SUPABASE_URL}/rest/v1/${SELECTS.corners.table}?select=${encodeURIComponent(SELECTS.corners.select)}&settlement_status=neq.void&publication_status=neq.archived&order=probability.desc&limit=50`, { headers }),
+      fetch(`${SUPABASE_URL}/rest/v1/${SELECTS.goals.table}?select=${encodeURIComponent(SELECTS.goals.select)}&settlement_status=neq.void&publication_status=neq.archived&order=probability.desc&limit=50`, { headers }),
     ]);
 
-    const [hw, aw, dr, cr, gl] = await Promise.all([
+    const [hw, dr, cr, gl] = await Promise.all([
       hwRes.ok ? hwRes.json() : [],
-      awRes.ok ? awRes.json() : [],
       drawRes.ok ? drawRes.json() : [],
       cornRes.ok ? cornRes.json() : [],
       goalsRes.ok ? goalsRes.json() : [],
     ]);
 
     const unified: UnifiedMarketPrediction[] = [
-      ...hw.map((item: any) => normalizePrediction(item, 'home_win')),
-      ...aw.map((item: any) => normalizePrediction(item, 'away_win')),
-      ...dr.map((item: any) => normalizePrediction(item, 'draw')),
-      ...cr.map((item: any) => normalizePrediction(item, 'corners')),
-      ...gl.map((item: any) => normalizePrediction(item, 'goals')),
+      ...(Array.isArray(hw) ? hw : [])
+        .filter((item: any) => item.settlement_status !== 'void' && item.publication_status !== 'archived')
+        .map((item: any) => normalizePrediction(item, 'home_win')),
+      ...(Array.isArray(dr) ? dr : [])
+        .filter((item: any) => item.settlement_status !== 'void' && item.publication_status !== 'archived')
+        .map((item: any) => normalizePrediction(item, 'draw')),
+      ...(Array.isArray(cr) ? cr : [])
+        .filter((item: any) => item.settlement_status === 'pending' || (item.settlement_notes && item.settlement_notes.startsWith('Verified:')))
+        .map((item: any) => normalizePrediction(item, 'corners')),
+      ...(Array.isArray(gl) ? gl : [])
+        .filter((item: any) => item.settlement_status !== 'void' && item.publication_status !== 'archived')
+        .map((item: any) => normalizePrediction(item, 'goals')),
     ];
 
     // Deduplicate by fixture_id (keeping highest probability signal per fixture)
@@ -392,17 +415,25 @@ async function fetchMarketDataFromUpstream(
 
   // 2. Specific Engine Query
   let configKey = market;
-  if (market === 'over_2.5_goals' || market === 'ht_over_0.5_goals') {
+  if (market === 'away_win') {
+    configKey = 'home_win';
+  } else if (market === 'over_2.5_goals' || market === 'ht_over_0.5_goals') {
     configKey = 'goals';
   }
 
   const { table, select } = SELECTS[configKey] || SELECTS.home_win;
-  let url = `${SUPABASE_URL}/rest/v1/${table}?select=${encodeURIComponent(select)}&order=probability.desc&limit=500`;
+  let url = `${SUPABASE_URL}/rest/v1/${table}?select=${encodeURIComponent(select)}&order=probability.desc&limit=1000`;
 
   if (market === 'over_2.5_goals') {
-    url += '&market=eq.over_2.5_goals';
+    url += '&market=eq.over_2.5_goals&settlement_status=neq.void&publication_status=neq.archived';
   } else if (market === 'ht_over_0.5_goals') {
-    url += '&market=eq.ht_over_0.5_goals';
+    url += '&market=eq.ht_over_0.5_goals&settlement_status=neq.void&publication_status=neq.archived';
+  } else if (market === 'corners') {
+    url += '&settlement_status=neq.void&publication_status=neq.archived';
+  } else if (market === 'home_win' || market === 'away_win') {
+    url += '&settlement_status=neq.void&publication_status=neq.archived';
+  } else if (market === 'draw') {
+    url += '&settlement_status=neq.void&publication_status=neq.archived';
   }
 
   const res = await fetch(url, { headers });
@@ -412,7 +443,16 @@ async function fetchMarketDataFromUpstream(
 
   const rawList = await res.json();
   const category = (configKey === 'goals' ? 'goals' : configKey) as any;
-  return rawList.map((item: any) => normalizePrediction(item, category, market));
+  const filteredList = (Array.isArray(rawList) ? rawList : []).filter((item: any) => {
+    if (item.settlement_status === 'void' || item.publication_status === 'archived') {
+      return false;
+    }
+    if (category === 'corners') {
+      return item.settlement_status === 'pending' || (item.settlement_notes && item.settlement_notes.startsWith('Verified:'));
+    }
+    return true;
+  });
+  return filteredList.map((item: any) => normalizePrediction(item, category, market));
 }
 
 // Computes signal counts across all 6 markets for dynamic badges
@@ -426,12 +466,11 @@ async function computeAllMarketCounts(
   }
 
   try {
-    const [hw, aw, dr, cr, gl] = await Promise.all([
-      fetch(`${SUPABASE_URL}/rest/v1/home_win_predictions_paywall?select=id,target_kickoff_at&limit=1000`, { headers }).then((r) => r.json()),
-      fetch(`${SUPABASE_URL}/rest/v1/away_win_predictions_paywall?select=id,target_kickoff_at&limit=1000`, { headers }).then((r) => r.json()),
-      fetch(`${SUPABASE_URL}/rest/v1/draw_predictions_paywall?select=id,target_kickoff_at&limit=1000`, { headers }).then((r) => r.json()),
-      fetch(`${SUPABASE_URL}/rest/v1/corner_predictions_paywall?select=id,target_kickoff_at&limit=1000`, { headers }).then((r) => r.json()),
-      fetch(`${SUPABASE_URL}/rest/v1/goals_predictions_paywall?select=id,market,target_kickoff_at&limit=1000`, { headers }).then((r) => r.json()),
+    const [hw, dr, cr, gl] = await Promise.all([
+      fetch(`${SUPABASE_URL}/rest/v1/home_win_predictions_paywall?select=id,target_kickoff_at,settlement_status,publication_status,fixture:football_fixtures!inner(id)&settlement_status=neq.void&publication_status=neq.archived&limit=1000`, { headers }).then((r) => r.json()),
+      fetch(`${SUPABASE_URL}/rest/v1/draw_predictions_paywall?select=id,target_kickoff_at,settlement_status,publication_status,fixture:football_fixtures!inner(id)&settlement_status=neq.void&publication_status=neq.archived&limit=1000`, { headers }).then((r) => r.json()),
+      fetch(`${SUPABASE_URL}/rest/v1/corner_predictions_paywall?select=id,target_kickoff_at,settlement_status,publication_status,settlement_notes,fixture:football_fixtures!inner(id)&settlement_status=neq.void&publication_status=neq.archived&limit=1000`, { headers }).then((r) => r.json()),
+      fetch(`${SUPABASE_URL}/rest/v1/goals_predictions_paywall?select=id,market,target_kickoff_at,settlement_status,publication_status,fixture:football_fixtures!inner(id)&settlement_status=neq.void&publication_status=neq.archived&limit=1000`, { headers }).then((r) => r.json()),
     ]);
 
     let targetDateStr = dateParam;
@@ -455,14 +494,46 @@ async function computeAllMarketCounts(
       });
     };
 
-    const filteredHw = filterByDate(hw);
-    const filteredAw = filterByDate(aw);
-    const filteredDr = filterByDate(dr);
-    const filteredCr = filterByDate(cr);
-    const filteredGl = filterByDate(gl);
+    const validCr = Array.isArray(cr)
+      ? cr.filter(
+          (item: any) =>
+            item.settlement_status !== 'void' &&
+            item.publication_status !== 'archived' &&
+            (item.settlement_status === 'pending' ||
+              (item.settlement_notes && item.settlement_notes.startsWith('Verified:')))
+        )
+      : [];
+
+    const validHw = Array.isArray(hw)
+      ? hw.filter(
+          (item: any) =>
+            item.settlement_status !== 'void' &&
+            item.publication_status !== 'archived'
+        )
+      : [];
+
+    const validDr = Array.isArray(dr)
+      ? dr.filter(
+          (item: any) =>
+            item.settlement_status !== 'void' &&
+            item.publication_status !== 'archived'
+        )
+      : [];
+
+    const validGl = Array.isArray(gl)
+      ? gl.filter(
+          (item: any) =>
+            item.settlement_status !== 'void' &&
+            item.publication_status !== 'archived'
+        )
+      : [];
+
+    const filteredHw = filterByDate(validHw);
+    const filteredDr = filterByDate(validDr);
+    const filteredCr = filterByDate(validCr);
+    const filteredGl = filterByDate(validGl);
 
     const hwCount = filteredHw.length;
-    const awCount = filteredAw.length;
     const drCount = filteredDr.length;
     const crCount = filteredCr.length;
 
@@ -474,10 +545,10 @@ async function computeAllMarketCounts(
     }
 
     const counts: Record<MarketType, number> = {
-      general: Math.min(20, hwCount + awCount + o25Count),
-      curated: Math.min(20, hwCount + awCount + o25Count),
+      general: Math.min(20, hwCount + o25Count),
+      curated: Math.min(20, hwCount + o25Count),
       home_win: hwCount,
-      away_win: awCount,
+      away_win: 0,
       draw: drCount,
       'over_2.5_goals': o25Count,
       'ht_over_0.5_goals': ht05Count,
