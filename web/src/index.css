@@ -12689,6 +12689,54 @@ body {
   color: #b45309;
 }
 
+/* Simulation outline prediction card add button */
+.outline-card-fav-btn {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  color: #64748b;
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 5px;
+  padding: 2px 6px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  transition: all 0.15s ease;
+  line-height: 1.2;
+}
+
+.outline-card-fav-btn:hover,
+.outline-card-fav-btn.active {
+  background: #fef3c7;
+  border-color: #fbbf24;
+  color: #b45309;
+}
+
+/* Glance header key pick slip button */
+.glance-slip-add-btn {
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid #cbd5e1;
+  color: #475569;
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 5px;
+  padding: 2px 6px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  margin-left: 6px;
+  transition: all 0.15s ease;
+  line-height: 1.2;
+}
+
+.glance-slip-add-btn:hover,
+.glance-slip-add-btn.active {
+  background: #fef3c7;
+  border-color: #fbbf24;
+  color: #b45309;
+}
+
 /* Primary prediction card add button */
 .primary-card-fav-btn {
   background: #ffffff;

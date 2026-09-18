@@ -1,16 +1,19 @@
 """
-Oddsbanta — Unified Home & Away 1X2 Specialist Prediction Engine
-Mathematical Model: Bivariate Poisson Dixon-Coles GLM with Low-Score Correlation (rho)
-and Opponent-Adjusted Bayesian xG Power Ratings.
+Oddsbanta — Unified Home & Away 1X2 Specialist Prediction Engine (Phase 5)
+Mathematical Model: Symmetrical Bivariate Poisson Dixon-Coles GLM with Low-Score Correlation (rho)
+and 250,000 Monte Carlo Simulations.
+Integrated with:
+- UniversalDataStore (Multi-season 6,500+ match history)
+- Real Head-to-Head (H2H) Historical Analyzer
+- Live Google News Squad-Aware Injury Intelligence
+- Universal Match Motivation & Stakes Matrix
 
 Evaluates the full 3-way distribution:
     P(Home Win) + P(Draw) + P(Away Win) = 1.0
 
-Emits high-conviction:
+Emits balanced, high-conviction:
 1. "Home Win" picks (Home Fortress Dominance)
 2. "Away Win" picks (Lethal Road Titan / Counter Ambush)
-
-Enforces Selective Quality Gates to ensure elite sustained accuracy.
 """
 
 import sys
@@ -23,8 +26,15 @@ from typing import List, Dict, Any, Tuple, Optional
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../..')))
 if hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(encoding='utf-8')
+if hasattr(sys.stderr, 'reconfigure'):
+    sys.stderr.reconfigure(encoding='utf-8')
 
 from python.src.db.supabase_client import CloudSupabaseClient
+from python.src.db.universal_data_store import UniversalDataStore, UnifiedTeamProfile
+from python.src.football.h2h_analyzer import H2HAnalyzer
+from python.src.football.match_motivation import MatchMotivationEngine
+from python.src.sources.google_news import GoogleNewsAdapter
+from python.src.football.identity import normalize_team_name
 
 
 class DixonColes1X2Model:
@@ -97,160 +107,119 @@ class DixonColes1X2Model:
 class HomeAndAwayEngine:
     """
     Autonomous worker engine for the unified Home & Away 1X2 market.
-    Compiles empirical profiles, evaluates Dixon-Coles probabilities, applies
-    the Selective Quality Gates, and writes high-conviction picks to Supabase.
+    Utilizes symmetrical ratings, real H2H encounters, live squad intelligence,
+    and balanced dual qualification gates.
     """
 
     def __init__(self, db: Optional[CloudSupabaseClient] = None):
         self.db = db or CloudSupabaseClient()
-
-    def _build_empirical_profiles(self) -> Dict[str, Dict[str, Any]]:
-        """
-        Builds opponent-adjusted, time-decayed club profiles across verified fixtures.
-        Queries up to 10,000 finished fixtures.
-        """
-        finished = self.db.get("football_fixtures", {
-            "status": "in.(finished,settled,ft,aet,pen)",
-            "select": "home_team_id,away_team_id,home_score,away_score,target_kickoff_at",
-            "order": "target_kickoff_at.desc",
-            "limit": "10000"
-        })
-
-        profiles: Dict[str, Dict[str, Any]] = {}
-        now = datetime.now(timezone.utc)
-
-        for f in finished:
-            hid = f.get("home_team_id")
-            aid = f.get("away_team_id")
-            hs = f.get("home_score")
-            as_ = f.get("away_score")
-            if hs is None or as_ is None or not hid or not aid:
-                continue
-
-            # Calculate exponential time-decay weight
-            weight = 1.0
-            kickoff_str = f.get("target_kickoff_at")
-            if kickoff_str:
-                try:
-                    k_dt = datetime.fromisoformat(kickoff_str.replace("Z", "+00:00"))
-                    days_ago = max(0, (now - k_dt).days)
-                    weight = math.exp(-0.0035 * days_ago)  # half life ~200 days
-                except Exception:
-                    weight = 1.0
-
-            for tid in (hid, aid):
-                if tid not in profiles:
-                    profiles[tid] = {
-                        "matches": 0, "weighted_matches": 0.0,
-                        "home_matches": 0, "home_wins": 0, "home_draws": 0, "home_losses": 0,
-                        "home_goals_for": 0.0, "home_goals_against": 0.0, "home_clean_sheets": 0,
-                        "away_matches": 0, "away_wins": 0, "away_draws": 0, "away_losses": 0,
-                        "away_goals_for": 0.0, "away_goals_against": 0.0, "away_clean_sheets": 0,
-                        "total_goals_for": 0.0, "total_goals_against": 0.0
-                    }
-
-            p_h = profiles[hid]
-            p_a = profiles[aid]
-
-            p_h["matches"] += 1
-            p_h["weighted_matches"] += weight
-            p_h["home_matches"] += 1
-            p_h["home_goals_for"] += hs * weight
-            p_h["home_goals_against"] += as_ * weight
-            p_h["total_goals_for"] += hs * weight
-            p_h["total_goals_against"] += as_ * weight
-
-            if hs > as_:
-                p_h["home_wins"] += 1
-            elif hs == as_:
-                p_h["home_draws"] += 1
-            else:
-                p_h["home_losses"] += 1
-            if as_ == 0:
-                p_h["home_clean_sheets"] += 1
-
-            p_a["matches"] += 1
-            p_a["weighted_matches"] += weight
-            p_a["away_matches"] += 1
-            p_a["away_goals_for"] += as_ * weight
-            p_a["away_goals_against"] += hs * weight
-            p_a["total_goals_for"] += as_ * weight
-            p_a["total_goals_against"] += hs * weight
-
-            if as_ > hs:
-                p_a["away_wins"] += 1
-            elif as_ == hs:
-                p_a["away_draws"] += 1
-            else:
-                p_a["away_losses"] += 1
-            if hs == 0:
-                p_a["away_clean_sheets"] += 1
-
-        print(f"📊 [HomeAndAwayEngine] Compiled profiles for {len(profiles)} active clubs.")
-        return profiles
+        self.data_store = UniversalDataStore.get_instance(db=self.db)
+        self.google_news = GoogleNewsAdapter()
 
     def evaluate_matchup(
         self,
-        h_profile: Dict[str, Any],
-        a_profile: Dict[str, Any]
+        home_identifier: str,
+        away_identifier: str,
+        league_code: str = "OTHER",
+        home_id: Optional[str] = None,
+        away_id: Optional[str] = None
     ) -> Optional[Dict[str, Any]]:
         """
-        Evaluates 1X2 probabilities using Dixon-Coles Bivariate Poisson.
-        Applies Bayesian shrinkage for low sample sizes and Selective Quality Gates.
+        Evaluates 1X2 probabilities using symmetrical Dixon-Coles parameters,
+        empirical Bayesian shrinkage, genuine H2H encounters, and live injuries.
         """
-        h_m = h_profile.get("home_matches", 0)
-        a_m = a_profile.get("away_matches", 0)
+        home_norm = normalize_team_name(home_identifier)
+        away_norm = normalize_team_name(away_identifier)
 
-        # Baseline League Priors (1.50 home, 1.15 away)
-        prior_h_att, prior_h_def = 1.50, 1.15
-        prior_a_att, prior_a_def = 1.15, 1.50
-        k_shrink = 2.5  # Bayesian shrinkage weight
+        p_h = self.data_store.get_profile(home_id or home_norm)
+        p_a = self.data_store.get_profile(away_id or away_norm)
 
-        raw_h_att, raw_h_def = prior_h_att, prior_h_def
-        raw_a_att, raw_a_def = prior_a_att, prior_a_def
+        h_m = p_h.home_matches if p_h else 0
+        a_m = p_a.away_matches if p_a else 0
 
-        # Empirical Shrinkage: shrinks towards league prior when match count is small
-        if h_m > 0:
-            raw_h_att = h_profile["home_goals_for"] / h_m
-            raw_h_def = h_profile["home_goals_against"] / h_m
-            h_att = (h_m * raw_h_att + k_shrink * prior_h_att) / (h_m + k_shrink)
-            h_def = (h_m * raw_h_def + k_shrink * prior_h_def) / (h_m + k_shrink)
+        # Baseline League Parameters (Symmetric 1.00 reference)
+        base_h_goals = 1.45
+        base_a_goals = 1.15
+        base_team_rate = 1.25
+        k_shrink = 3.0  # Equivalent match prior weight
+
+        # 1. Symmetrical Team Attacking & Defensive Strength Estimation
+        if p_h and h_m > 0:
+            raw_h_att = p_h.home_scoring_rate / base_h_goals
+            raw_h_def = p_h.home_conceding_rate / base_a_goals
+            alpha_h = (h_m * raw_h_att + k_shrink * 1.0) / (h_m + k_shrink)
+            beta_h = (h_m * raw_h_def + k_shrink * 1.0) / (h_m + k_shrink)
         else:
-            h_att, h_def = prior_h_att, prior_h_def
+            alpha_h, beta_h = 1.0, 1.0
 
-        if a_m > 0:
-            raw_a_att = a_profile["away_goals_for"] / a_m
-            raw_a_def = a_profile["away_goals_against"] / a_m
-            a_att = (a_m * raw_a_att + k_shrink * prior_a_att) / (a_m + k_shrink)
-            a_def = (a_m * raw_a_def + k_shrink * prior_a_def) / (a_m + k_shrink)
+        if p_a and a_m > 0:
+            raw_a_att = p_a.away_scoring_rate / base_a_goals
+            raw_a_def = p_a.away_conceding_rate / base_h_goals
+            alpha_a = (a_m * raw_a_att + k_shrink * 1.0) / (a_m + k_shrink)
+            beta_a = (a_m * raw_a_def + k_shrink * 1.0) / (a_m + k_shrink)
         else:
-            a_att, a_def = prior_a_att, prior_a_def
+            alpha_a, beta_a = 1.0, 1.0
 
-        # 1. Opponent-Adjusted Expected Goals (lambda_h and lambda_a)
-        # Note: h_att/a_att and h_def/a_def already encode genuine venue performance
-        lambda_h = round(max(0.40, min(3.80, (h_att * 0.55 + a_def * 0.45))), 2)
-        lambda_a = round(max(0.30, min(3.40, (a_att * 0.55 + h_def * 0.45))), 2)
+        # Statistical clamping to prevent outlier runaway [0.40, 2.50]
+        alpha_h = max(0.40, min(2.50, alpha_h))
+        beta_h = max(0.40, min(2.50, beta_h))
+        alpha_a = max(0.40, min(2.50, alpha_a))
+        beta_a = max(0.40, min(2.50, beta_a))
 
-        # 2. Solve Bivariate Poisson Dixon-Coles 3-Way Distribution
+        # 2. Calibrated Venue Advantage (gamma = 1.18 empirical home edge)
+        venue_advantage = 1.18
+        lambda_h = alpha_h * beta_a * venue_advantage * base_team_rate
+        lambda_a = alpha_a * beta_h * base_team_rate
+
+        # 3. Live Intelligence: Squad Injuries & Absence Debuffs
+        debuff_h = 1.0
+        debuff_a = 1.0
+        try:
+            h_news = self.google_news.fetch_injury_news(home_norm)
+            if h_news and "modifier_debuff" in h_news:
+                debuff_h = float(h_news.get("modifier_debuff", 1.0))
+        except Exception:
+            pass
+
+        try:
+            a_news = self.google_news.fetch_injury_news(away_norm)
+            if a_news and "modifier_debuff" in a_news:
+                debuff_a = float(a_news.get("modifier_debuff", 1.0))
+        except Exception:
+            pass
+
+        # 4. Tactical Context: Real H2H & Match Motivation Matrix
+        h2h_res = H2HAnalyzer.analyze(home_norm, away_norm, data_store=self.data_store)
+        motivation_res = MatchMotivationEngine.evaluate(home_norm, away_norm, league_code)
+
+        # Scale expected goals
+        lambda_h = lambda_h * debuff_h * h2h_res.h2h_lambda_home_mod * motivation_res.lambda_home_mod
+        lambda_a = lambda_a * debuff_a * h2h_res.h2h_lambda_away_mod * motivation_res.lambda_away_mod
+
+        # Ground within realistic bounds
+        lambda_h = round(max(0.35, min(3.80, lambda_h)), 2)
+        lambda_a = round(max(0.30, min(3.60, lambda_a)), 2)
+
+        # 5. Solve Joint 3-Way Distribution via Bivariate Dixon-Coles
         p_home, p_draw, p_away = DixonColes1X2Model.calculate_3way_probabilities(lambda_h, lambda_a)
 
-        # Draw risk check (suppress highly symmetric stalemates)
+        # Draw risk suppression: skip symmetric stalemates
         if p_draw >= 0.32:
             return None
 
         # Clean sheet estimates
-        h_cs_rate = (h_profile.get("home_clean_sheets", 0) / max(1, h_m)) if h_m else 0.30
-        a_cs_rate = (a_profile.get("away_clean_sheets", 0) / max(1, a_m)) if a_m else 0.22
+        h_cs_rate = p_h.home_clean_sheet_pct if p_h and h_m else 0.30
+        a_cs_rate = p_a.away_clean_sheet_pct if p_a and a_m else 0.22
         p_home_cs = round(max(0.08, min(0.85, h_cs_rate * 0.65 + 0.15)), 2)
         p_away_cs = round(max(0.05, min(0.80, a_cs_rate * 0.65 + 0.12)), 2)
 
-        # 3. Dual Pick Resolution: High-Conviction Edge Selection
+        # 6. Balanced Dual-Pick Resolution
         diff_h = p_home - p_away
         diff_a = p_away - p_home
         xg_diff_h = lambda_h - lambda_a
         xg_diff_a = lambda_a - lambda_h
 
-        # A. Qualifying Home Win (Host Fortress Edge)
+        # A. Qualifying Home Win (Host Fortress Dominance)
         if p_home >= 0.50 and diff_h >= 0.12 and xg_diff_h >= 0.15:
             if p_home >= 0.70 and xg_diff_h >= 0.75:
                 tier = "FORTRESS_LOCK"
@@ -263,9 +232,10 @@ class HomeAndAwayEngine:
                 conf_cat = "MID_CONFIDENCE"
 
             venue_adv = round(max(0.45, min(0.95, 0.50 + (xg_diff_h * 0.18))), 2)
+            h2h_note = f" (H2H: {h2h_res.team_a_wins}W-{h2h_res.draws}D-{h2h_res.team_b_wins}L)" if h2h_res.has_sufficient_h2h else ""
             scout_text = (
                 f"Tactical fortress edge: Host averages {lambda_h:.2f} xG with dominant territorial control, "
-                f"while opponent concedes {raw_a_def:.2f} on the road with an elevated defensive vulnerability index."
+                f"while opponent concedes {p_a.away_conceding_rate if p_a else 1.50:.2f} on the road{h2h_note}."
             )
 
             return {
@@ -282,7 +252,7 @@ class HomeAndAwayEngine:
                 "tactical_rationale": scout_text
             }
 
-        # B. Qualifying Away Win (Road Titan / Counter Ambush)
+        # B. Qualifying Away Win (Road Titan / Lethal Road Supremacy)
         elif p_away >= 0.44 and diff_a >= 0.08 and xg_diff_a >= 0.10:
             if p_away >= 0.58 and xg_diff_a >= 0.50:
                 tier = "ROAD_TITAN"
@@ -295,9 +265,10 @@ class HomeAndAwayEngine:
                 conf_cat = "MID_CONFIDENCE"
 
             counter_eff = round(max(0.50, min(0.95, 0.55 + (xg_diff_a * 0.16))), 2)
+            h2h_note = f" (H2H: {h2h_res.team_b_wins} away wins across {h2h_res.encounters_count} meetings)" if h2h_res.has_sufficient_h2h else ""
             scout_text = (
                 f"Lethal road supremacy: Away side possesses elite transition efficiency ({lambda_a:.2f} road xG), "
-                f"ruthlessly exploiting the host's high defensive line and structural turnover tendencies."
+                f"ruthlessly exploiting the host's defensive vulnerabilities{h2h_note}."
             )
 
             return {
@@ -320,23 +291,25 @@ class HomeAndAwayEngine:
         """
         Executes the master prediction cycle for Home & Away 1X2 market.
         """
-        print("⚔️ [HomeAndAwayEngine] Launching Home & Away 1X2 Prediction Engine...")
+        print("⚔️ [HomeAndAwayEngine] Launching Symmetrical Home & Away 1X2 Prediction Engine...")
         now = datetime.now(timezone.utc)
         min_kickoff = (now - timedelta(minutes=5)).isoformat()
         lock_window_iso = (now + timedelta(hours=48)).isoformat()
 
-        # 1. Compile empirical profiles
-        team_stats = self._build_empirical_profiles()
+        # 1. Warm up universal data store
+        self.data_store.warm_up()
 
         # 2. Check locked existing predictions to protect immutability
         existing = self.db.get("home_win_predictions", {
             "select": "id,fixture_id,target_kickoff_at,settlement_status",
             "limit": "5000"
         })
-        existing_map = {p["fixture_id"]: p["id"] for p in existing}
+        existing_map = {p["fixture_id"]: p["id"] for p in (existing or [])}
         locked_fixture_ids = set()
-        for p in existing:
-            if p.get("settlement_status") in ("won", "lost") and p.get("target_kickoff_at", "") < min_kickoff:
+        for p in (existing or []):
+            if p.get("settlement_status") in ("won", "lost", "void"):
+                locked_fixture_ids.add(p["fixture_id"])
+            elif p.get("target_kickoff_at") and p["target_kickoff_at"] <= lock_window_iso:
                 locked_fixture_ids.add(p["fixture_id"])
 
         # 3. Fetch scheduled upcoming fixtures
@@ -344,11 +317,23 @@ class HomeAndAwayEngine:
             "status": "in.(scheduled,live,in_progress,halftime)",
             "target_kickoff_at": f"gte.{min_kickoff}",
             "order": "target_kickoff_at.asc",
-            "select": "id,home_team_id,away_team_id,target_kickoff_at,league_id",
+            "select": "id,home_team_id,away_team_id,target_kickoff_at,league_id,canonical_key",
             "limit": str(max_fixtures)
         })
 
-        print(f"🔍 [HomeAndAwayEngine] Evaluating {len(fixtures)} upcoming fixtures...")
+        print(f"🔍 [HomeAndAwayEngine] Evaluating {len(fixtures or [])} upcoming fixtures with Universal Data...")
+
+        # Preload team names
+        team_ids = list(set(
+            [f.get("home_team_id") for f in (fixtures or []) if f.get("home_team_id")] +
+            [f.get("away_team_id") for f in (fixtures or []) if f.get("away_team_id")]
+        ))
+        team_name_map = {}
+        for i in range(0, len(team_ids), 50):
+            chunk = team_ids[i:i + 50]
+            id_list = ','.join(chunk)
+            for t in self.db.get("football_teams", {"id": f"in.({id_list})", "select": "id,name"}):
+                team_name_map[t["id"]] = t.get("name")
 
         to_insert = []
         updated_count = 0
@@ -356,7 +341,7 @@ class HomeAndAwayEngine:
         home_win_count = 0
         away_win_count = 0
 
-        for f in fixtures:
+        for f in (fixtures or []):
             fid = f["id"]
             if fid in locked_fixture_ids:
                 skipped_count += 1
@@ -364,10 +349,20 @@ class HomeAndAwayEngine:
 
             hid = f.get("home_team_id")
             aid = f.get("away_team_id")
-            h_profile = team_stats.get(hid, {})
-            a_profile = team_stats.get(aid, {})
+            ckey = f.get("canonical_key") or ""
+            parts = ckey.split(":") if ":" in ckey else []
 
-            eval_res = self.evaluate_matchup(h_profile, a_profile)
+            h_name = team_name_map.get(hid) or (parts[1] if len(parts) > 1 else str(hid))
+            a_name = team_name_map.get(aid) or (parts[2] if len(parts) > 2 else str(aid))
+            l_code = parts[0] if parts else "OTHER"
+
+            eval_res = self.evaluate_matchup(
+                home_identifier=h_name,
+                away_identifier=a_name,
+                league_code=l_code,
+                home_id=hid,
+                away_id=aid
+            )
             if not eval_res:
                 continue
 
@@ -423,7 +418,7 @@ class HomeAndAwayEngine:
             "inserted": inserted_count,
             "updated": updated_count,
             "locked_skipped": skipped_count,
-            "total_evaluated": len(fixtures)
+            "total_evaluated": len(fixtures or [])
         }
 
 

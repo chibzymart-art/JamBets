@@ -25,6 +25,8 @@ from python.src.goals.fotmob_enricher import ResilientFotMobEnricher
 from python.src.goals.match_intent_engine import MatchIntentEngine
 from python.src.goals.dixon_coles_goals import DixonColesGoalsModel
 from python.src.goals.ai_scout import GroundedGoalsAiScout
+from python.src.football.h2h_analyzer import H2HAnalyzer
+from python.src.sources.google_news import GoogleNewsAdapter
 
 
 def clean_league_name(name: str) -> str:
@@ -51,6 +53,7 @@ class Over25GoalsEngine:
         self.data_provider = GoalsDataProvider(self.db)
         self.enricher = ResilientFotMobEnricher()
         self.ai_scout = GroundedGoalsAiScout()
+        self.google_news = GoogleNewsAdapter()
 
     def run(self, max_fixtures: int = 500, wipe_pending: bool = False) -> Dict[str, Any]:
         """
@@ -237,6 +240,24 @@ class Over25GoalsEngine:
             if xg_away and "npxg_for" in xg_away:
                 lambda_a = 0.65 * lambda_a + 0.35 * xg_away["npxg_for"]
 
+            # Live Intelligence: Squad Injuries & News
+            debuff_h, debuff_a = 1.0, 1.0
+            try:
+                h_news = self.google_news.fetch_injury_news(home_name)
+                if h_news and "modifier_debuff" in h_news:
+                    debuff_h = float(h_news.get("modifier_debuff", 1.0))
+                a_news = self.google_news.fetch_injury_news(away_name)
+                if a_news and "modifier_debuff" in a_news:
+                    debuff_a = float(a_news.get("modifier_debuff", 1.0))
+            except Exception:
+                pass
+
+            # Direct H2H Analysis
+            h2h_res = H2HAnalyzer.analyze(home_name, away_name)
+
+            lambda_h = lambda_h * debuff_h * h2h_res.h2h_lambda_home_mod
+            lambda_a = lambda_a * debuff_a * h2h_res.h2h_lambda_away_mod
+
             lambda_h = round(max(0.40, min(3.80, lambda_h)), 2)
             lambda_a = round(max(0.30, min(3.20, lambda_a)), 2)
 
@@ -322,7 +343,7 @@ class Over25GoalsEngine:
                         "xg_combined": dixon_res["xg_combined"],
                         "home_over25_rate": int(hp.home_over25_pct * 100),
                         "away_over25_rate": int(ap.away_over25_pct * 100),
-                        "h2h_over25_rate": int(round((hp.home_over25_pct + ap.away_over25_pct) / 2.0 * 100)),
+                        "h2h_over25_rate": int(round(h2h_res.h2h_over25_pct * 100)) if h2h_res.has_sufficient_h2h else int(round((hp.home_over25_pct + ap.away_over25_pct) / 2.0 * 100)),
                         "ht_goal_frequency": int(dixon_res["p_ht_over05"] * 100),
                         "avg_first_goal_minute": max(15, min(36, int(35 - (raw_p_ht05 * 18)))),
                         "target_kickoff_at": kickoff_at,

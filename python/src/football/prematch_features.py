@@ -20,6 +20,9 @@ from python.src.football.identity import normalize_team_name, resolve_fuzzy_team
 from python.src.football.team_strength import TeamStrengthEstimator, TeamStrengthProfile, CompetitionScoringBaseline
 from python.src.sources.fotmob import FotMobAdapter
 from python.src.sources.google_news import GoogleNewsAdapter
+from python.src.db.universal_data_store import UniversalDataStore
+from python.src.football.h2h_analyzer import H2HAnalyzer
+from python.src.football.match_motivation import MatchMotivationEngine
 
 
 class MissingDataException(Exception):
@@ -166,6 +169,41 @@ class PreMatchFeatureEngine:
         except Exception:
             return []
 
+    def _fetch_matches_from_universal_store(self, norm_name: str, cutoff_utc: datetime) -> List[HistoricalMatch]:
+        store = UniversalDataStore.get_instance()
+        prof = store.get_profile(norm_name)
+        if not prof or not prof.match_log:
+            return []
+        matches: List[HistoricalMatch] = []
+        for idx, m in enumerate(prof.match_log):
+            d_str = m.get("date") or "2026-01-01T00:00:00Z"
+            try:
+                k_dt = datetime.fromisoformat(d_str.replace("Z", "+00:00"))
+            except Exception:
+                k_dt = datetime(2026, 1, 1, tzinfo=timezone.utc)
+
+            if k_dt < cutoff_utc:
+                hs = int(m.get("home_score", 0))
+                as_ = int(m.get("away_score", 0))
+                matches.append(HistoricalMatch(
+                    provider_event_id=f"uds_{norm_name}_{idx}",
+                    source="universal_store",
+                    league_code=m.get("league", "OTHER"),
+                    season="2026",
+                    match_date=k_dt.date(),
+                    scheduled_kickoff=k_dt,
+                    actual_played_date=k_dt.date(),
+                    home_team_raw=m.get("home", ""),
+                    away_team_raw=m.get("away", ""),
+                    home_team_canonical=m.get("home", ""),
+                    away_team_canonical=m.get("away", ""),
+                    home_score=hs,
+                    away_score=as_,
+                    final_status="finished",
+                    result="HOME_WIN" if hs > as_ else ("DRAW" if hs == as_ else "AWAY_WIN")
+                ))
+        return matches
+
     def compute_features(
         self,
         canonical_key: str,
@@ -252,8 +290,13 @@ class PreMatchFeatureEngine:
 
             if len(home_matches) == 0:
                 home_matches = self._fetch_matches_from_supabase(home_norm, home_team_canonical, prediction_cutoff)
+            if len(home_matches) == 0:
+                home_matches = self._fetch_matches_from_universal_store(home_norm, prediction_cutoff)
+
             if len(away_matches) == 0:
                 away_matches = self._fetch_matches_from_supabase(away_norm, away_team_canonical, prediction_cutoff)
+            if len(away_matches) == 0:
+                away_matches = self._fetch_matches_from_universal_store(away_norm, prediction_cutoff)
 
             # Strict Zero-Hallucination Gate:
             # If a team has strictly zero verified historical matches, we MUST ABSTAIN.
@@ -307,12 +350,44 @@ class PreMatchFeatureEngine:
             uncertainty = round(math.sqrt((home_strength.uncertainty ** 2 + away_strength.uncertainty ** 2) / 2.0), 3)
             home_rest, away_rest = 7.0, 7.0
 
+        # -------------------------------------------------------------
+        # LIVE INTELLIGENCE: Squad-Aware Injury News & Absence Debuffs
+        # -------------------------------------------------------------
+        debuff_h = 1.0
+        debuff_a = 1.0
+        flagged_injuries = []
+        try:
+            h_news = self.google_news.fetch_injury_news(home_norm)
+            if h_news and "modifier_debuff" in h_news:
+                debuff_h = float(h_news.get("modifier_debuff", 1.0))
+                flagged_injuries.extend(h_news.get("flagged_absences", []))
+        except Exception:
+            pass
+
+        try:
+            a_news = self.google_news.fetch_injury_news(away_norm)
+            if a_news and "modifier_debuff" in a_news:
+                debuff_a = float(a_news.get("modifier_debuff", 1.0))
+                flagged_injuries.extend(a_news.get("flagged_absences", []))
+        except Exception:
+            pass
+
+        # -------------------------------------------------------------
+        # TACTICAL CONTEXT: Real H2H & Match Motivation Matrix
+        # -------------------------------------------------------------
+        h2h_res = H2HAnalyzer.analyze(home_norm, away_norm)
+        motivation_res = MatchMotivationEngine.evaluate(home_norm, away_norm, league_code)
+
+        # Scale lambdas by squad injuries, H2H, and match motivation
+        lambda_h = lambda_h * debuff_h * h2h_res.h2h_lambda_home_mod * motivation_res.lambda_home_mod
+        lambda_a = lambda_a * debuff_a * h2h_res.h2h_lambda_away_mod * motivation_res.lambda_away_mod
+
         # Bound lambdas within realistic football score rates
         lambda_h = max(0.35, min(3.80, round(lambda_h, 3)))
         lambda_a = max(0.25, min(3.40, round(lambda_a, 3)))
 
-        # Corners baseline
-        lambda_corners = round(baseline.corner_rate, 2)
+        # Corners baseline scaled by match purpose
+        lambda_corners = round(baseline.corner_rate * motivation_res.corner_mod, 2)
 
         # Signature for change detection & traceability
         sig_str = f"{canonical_key}:{lambda_h:.2f}:{lambda_a:.2f}:{alpha_home:.2f}:{alpha_away:.2f}:{beta_home:.2f}:{beta_away:.2f}"
@@ -354,6 +429,9 @@ class PreMatchFeatureEngine:
             dynamic_btts_rate=round(getattr(baseline, "btts_rate", 0.51), 3),
             half_time_split=round(getattr(baseline, "half_time_goal_ratio", 0.44), 3),
             uncertainty=uncertainty,
+            squad_injury_debuff_home=round(debuff_h, 3),
+            squad_injury_debuff_away=round(debuff_a, 3),
+            flagged_injuries=flagged_injuries,
             home_rest_days=home_rest,
             away_rest_days=away_rest,
             feature_signature=sig_hash,

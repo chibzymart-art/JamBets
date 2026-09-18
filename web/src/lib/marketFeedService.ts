@@ -302,29 +302,39 @@ function normalizePrediction(
       low_scoring_density: raw.low_scoring_density,
       predicted_total_corners: raw.predicted_total_corners,
       over_8_5_prob: (() => {
-        const m = (raw.settlement_notes || '').match(/\[DENSITY:(\d+)\/(\d+)\]/i);
+        const m = (raw.settlement_notes || '').match(/\[DENSITY:(\d+)\/(\d+)(?:\/(\d+))?\]/i);
         if (m) return parseInt(m[2], 10) / 100;
         return raw.over_8_5_prob ? Number(raw.over_8_5_prob) : (prob ? Math.max(0.50, prob - 0.08) : null);
       })(),
       over_7_5_prob: (() => {
-        const m = (raw.settlement_notes || '').match(/\[DENSITY:(\d+)\/(\d+)\]/i);
+        const m = (raw.settlement_notes || '').match(/\[DENSITY:(\d+)\/(\d+)(?:\/(\d+))?\]/i);
         if (m) return parseInt(m[1], 10) / 100;
         if (raw.market === 'over_7.5_corners' || (raw.prediction && raw.prediction.includes('7.5'))) return prob;
         return prob ? Math.min(0.88, prob + 0.08) : 0.74;
       })(),
       over_7_5_pct: (() => {
-        const m = (raw.settlement_notes || '').match(/\[DENSITY:(\d+)\/(\d+)\]/i);
+        const m = (raw.settlement_notes || '').match(/\[DENSITY:(\d+)\/(\d+)(?:\/(\d+))?\]/i);
         if (m) return parseInt(m[1], 10);
         if (raw.market === 'over_7.5_corners' || (raw.prediction && raw.prediction.includes('7.5'))) return displayProb || 74;
         return displayProb ? Math.min(88, displayProb + 8) : 74;
       })(),
       over_8_5_pct: (() => {
-        const m = (raw.settlement_notes || '').match(/\[DENSITY:(\d+)\/(\d+)\]/i);
+        const m = (raw.settlement_notes || '').match(/\[DENSITY:(\d+)\/(\d+)(?:\/(\d+))?\]/i);
         if (m) return parseInt(m[2], 10);
         if (raw.market === 'over_8.5_corners' || (raw.prediction && raw.prediction.includes('8.5'))) return displayProb || 68;
         return displayProb ? Math.max(50, displayProb - 8) : 66;
       })(),
-      over_9_5_prob: raw.over_9_5_prob,
+      over_9_5_pct: (() => {
+        const m = (raw.settlement_notes || '').match(/\[DENSITY:(\d+)\/(\d+)(?:\/(\d+))?\]/i);
+        if (m && m[3]) return parseInt(m[3], 10);
+        if (raw.market === 'over_9.5_corners' || (raw.prediction && raw.prediction.includes('9.5'))) return displayProb || 58;
+        return raw.over_9_5_prob ? Math.round(Number(raw.over_9_5_prob) * 100) : null;
+      })(),
+      over_9_5_prob: (() => {
+        const m = (raw.settlement_notes || '').match(/\[DENSITY:(\d+)\/(\d+)(?:\/(\d+))?\]/i);
+        if (m && m[3]) return parseInt(m[3], 10) / 100;
+        return raw.over_9_5_prob ? Number(raw.over_9_5_prob) : null;
+      })(),
       xg_combined: raw.xg_combined,
       ht_goal_frequency: raw.ht_goal_frequency,
     },
@@ -407,15 +417,29 @@ export async function fetchMarketFeed(
         .select(SELECTS.home_win.select)
         .neq('settlement_status', 'void')
         .neq('publication_status', 'archived')
-        .limit(150),
-      supabase.from(SELECTS.draw.table).select(SELECTS.draw.select).limit(150),
+        .order('probability', { ascending: false })
+        .limit(1000),
+      supabase
+        .from(SELECTS.draw.table)
+        .select(SELECTS.draw.select)
+        .neq('settlement_status', 'void')
+        .neq('publication_status', 'archived')
+        .order('probability', { ascending: false })
+        .limit(1000),
       supabase
         .from(SELECTS.corners.table)
         .select(SELECTS.corners.select)
         .neq('settlement_status', 'void')
         .neq('publication_status', 'archived')
-        .limit(150),
-      supabase.from(SELECTS.goals.table).select(SELECTS.goals.select).limit(150),
+        .order('probability', { ascending: false })
+        .limit(1000),
+      supabase
+        .from(SELECTS.goals.table)
+        .select(SELECTS.goals.select)
+        .neq('settlement_status', 'void')
+        .neq('publication_status', 'archived')
+        .order('probability', { ascending: false })
+        .limit(1000),
     ]);
 
     const normalizeList = (data: any[], cat: any, forced?: MarketType) =>

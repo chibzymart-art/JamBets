@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { MarketSwitchboardNav } from '../components/MarketSwitchboardNav';
 import { SpecialistMarketCard } from '../components/SpecialistMarketCard';
@@ -28,6 +29,17 @@ export interface OtherMarketsPageProps {
   initialMarket?: MarketType;
 }
 
+const VALID_MARKETS: MarketType[] = [
+  'home_win',
+  'away_win',
+  'draw',
+  'over_2.5_goals',
+  'ht_over_0.5_goals',
+  'corners',
+  'curated',
+  'general',
+];
+
 export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
   currentUser: _currentUser,
   userRole,
@@ -40,12 +52,7 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
   onOpenFavoritesDrawer,
   initialMarket = 'over_2.5_goals',
 }) => {
-  const [activeMarket, setActiveMarket] = useState<MarketType>(
-    initialMarket === 'general' || (initialMarket as string) === 'away_win' ? 'home_win' : initialMarket
-  );
-  const [dateFilter, setDateFilter] = useState<string>('all');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'won' | 'lost' | 'pending'>('all');
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchParams, setSearchParams] = useSearchParams();
 
   // Dynamic deterministic relative dates: Yesterday, Today, Day+1, Day+2, Day+3, Past Dates
   const dateTabs = useMemo(() => {
@@ -58,6 +65,71 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
 
     return { yesterday, today, day1, day2, day3, pastDates };
   }, []);
+
+  // 1. Resolve initial active market: URL query (?market=...) > sessionStorage > prop initialMarket > 'over_2.5_goals'
+  const resolveInitialMarket = (): MarketType => {
+    const urlMarket = searchParams.get('market') as MarketType | null;
+    if (urlMarket && VALID_MARKETS.includes(urlMarket)) {
+      return urlMarket === 'general' || (urlMarket as string) === 'away_win' ? 'home_win' : urlMarket;
+    }
+    const sessionMarket = (typeof window !== 'undefined'
+      ? sessionStorage.getItem('other_markets_tab')
+      : null) as MarketType | null;
+    if (sessionMarket && VALID_MARKETS.includes(sessionMarket)) {
+      return sessionMarket === 'general' || (sessionMarket as string) === 'away_win' ? 'home_win' : sessionMarket;
+    }
+    return initialMarket === 'general' || (initialMarket as string) === 'away_win' ? 'home_win' : initialMarket;
+  };
+
+  const [activeMarket, setActiveMarket] = useState<MarketType>(resolveInitialMarket);
+
+  // 2. Default date filter: Current date (Today) by default; or URL param ?date= if explicitly provided
+  const [dateFilter, setDateFilter] = useState<string>(() => {
+    const urlDate = searchParams.get('date');
+    if (urlDate) return urlDate;
+    return getDateDetailsByOffset(0).iso;
+  });
+
+  const [statusFilter, setStatusFilter] = useState<'all' | 'won' | 'lost' | 'pending'>('all');
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // Synchronize state changes to URL and sessionStorage so page reload preserves current page without resetting
+  const handleSelectMarket = useCallback((m: MarketType) => {
+    const safeMarket = m === 'general' || (m as string) === 'away_win' ? 'home_win' : m;
+    setActiveMarket(safeMarket);
+    try {
+      sessionStorage.setItem('other_markets_tab', safeMarket);
+    } catch {}
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set('market', safeMarket);
+      return next;
+    }, { replace: true });
+  }, [setSearchParams]);
+
+  const handleSelectDate = useCallback((d: string) => {
+    setDateFilter(d);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set('date', d);
+      return next;
+    }, { replace: true });
+  }, [setSearchParams]);
+
+  // Keep URL query in sync on mount
+  useEffect(() => {
+    const urlMarket = searchParams.get('market');
+    if (urlMarket !== activeMarket) {
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        next.set('market', activeMarket);
+        return next;
+      }, { replace: true });
+    }
+    try {
+      sessionStorage.setItem('other_markets_tab', activeMarket);
+    } catch {}
+  }, [activeMarket, searchParams, setSearchParams]);
 
   const isPastDateSelected =
     dateFilter !== 'all' &&
@@ -203,9 +275,7 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
         {/* 1. SPECIALIST MARKET SWITCHBOARD (Positioned First directly below Header/Ad Banner) */}
       <MarketSwitchboardNav
         activeMarket={activeMarket}
-        onSelectMarket={(m) => {
-          setActiveMarket(m);
-        }}
+        onSelectMarket={handleSelectMarket}
         counts={displayCounts}
         loading={loading}
         hideGeneral={true}
@@ -250,7 +320,7 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
                 value={isPastDateSelected ? dateFilter : ''}
                 onChange={(e) => {
                   if (e.target.value) {
-                    setDateFilter(e.target.value);
+                    handleSelectDate(e.target.value);
                   }
                 }}
                 aria-label="Select Past Date"
@@ -268,7 +338,7 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
             <button
               type="button"
               className={`cal-pill ${dateFilter === dateTabs.yesterday.iso ? 'active' : ''}`}
-              onClick={() => { setDateFilter(dateTabs.yesterday.iso); }}
+              onClick={() => { handleSelectDate(dateTabs.yesterday.iso); }}
             >
               <span className="cal-pill-text-desktop">⏪ Yesterday</span>
               <span className="cal-pill-text-mobile">Yesterday</span>
@@ -278,7 +348,7 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
             <button
               type="button"
               className={`cal-pill ${dateFilter === dateTabs.today.iso ? 'active' : ''}`}
-              onClick={() => { setDateFilter(dateTabs.today.iso); }}
+              onClick={() => { handleSelectDate(dateTabs.today.iso); }}
             >
               <span className="cal-pill-text-desktop">📍 Today</span>
               <span className="cal-pill-text-mobile">Today</span>
@@ -288,7 +358,7 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
             <button
               type="button"
               className={`cal-pill ${dateFilter === dateTabs.day1.iso ? 'active' : ''}`}
-              onClick={() => { setDateFilter(dateTabs.day1.iso); }}
+              onClick={() => { handleSelectDate(dateTabs.day1.iso); }}
             >
               <span className="cal-pill-text-desktop">{dateTabs.day1.fullLabel}</span>
               <span className="cal-pill-text-mobile">{dateTabs.day1.shortDay} {dateTabs.day1.iso.slice(8)}</span>
@@ -298,7 +368,7 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
             <button
               type="button"
               className={`cal-pill ${dateFilter === dateTabs.day2.iso ? 'active' : ''}`}
-              onClick={() => { setDateFilter(dateTabs.day2.iso); }}
+              onClick={() => { handleSelectDate(dateTabs.day2.iso); }}
             >
               <span className="cal-pill-text-desktop">{dateTabs.day2.fullLabel}</span>
               <span className="cal-pill-text-mobile">{dateTabs.day2.shortDay} {dateTabs.day2.iso.slice(8)}</span>
@@ -308,7 +378,7 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
             <button
               type="button"
               className={`cal-pill ${dateFilter === dateTabs.day3.iso ? 'active' : ''}`}
-              onClick={() => { setDateFilter(dateTabs.day3.iso); }}
+              onClick={() => { handleSelectDate(dateTabs.day3.iso); }}
             >
               <span className="cal-pill-text-desktop">{dateTabs.day3.fullLabel}</span>
               <span className="cal-pill-text-mobile">{dateTabs.day3.shortDay} {dateTabs.day3.iso.slice(8)}</span>
@@ -318,7 +388,7 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
             <button
               type="button"
               className={`cal-pill ${dateFilter === 'all' ? 'active' : ''}`}
-              onClick={() => { setDateFilter('all'); }}
+              onClick={() => { handleSelectDate('all'); }}
             >
               <span className="cal-pill-text-desktop">🌐 All Dates</span>
               <span className="cal-pill-text-mobile">All</span>

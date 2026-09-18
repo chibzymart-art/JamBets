@@ -652,28 +652,131 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
 
   const primaryPick = prediction?.prediction;
   const primaryMarket = prediction?.market;
-  const isPrimaryFav = isFavoriteItem && primaryMarket && primaryPick
-    ? isFavoriteItem(fixture.id, primaryMarket, primaryPick)
+  const formattedPrimaryMarket = primaryMarket ? formatMarketName(primaryMarket) : '';
+  const formattedPrimaryPick = primaryPick ? formatPredictionOutcome(primaryPick) : '';
+  const isPrimaryFav = isFavoriteItem && formattedPrimaryMarket && formattedPrimaryPick
+    ? isFavoriteItem(fixture.id, formattedPrimaryMarket, formattedPrimaryPick)
     : isStarred;
 
   const handleTogglePrimaryFav = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (onToggleFavoriteItem && primaryMarket && primaryPick && !isNoBanker) {
+    if (onToggleFavoriteItem && formattedPrimaryMarket && formattedPrimaryPick && !isNoBanker) {
       onToggleFavoriteItem({
-        id: `${fixture.id}::${primaryMarket}::${primaryPick}`,
+        id: `${fixture.id}::${formattedPrimaryMarket}::${formattedPrimaryPick}`,
         fixtureId: fixture.id,
         homeTeam: formatTeamName(fixture.home_team_name),
         awayTeam: formatTeamName(fixture.away_team_name),
         league: fixture.league_name || fixture.league_code,
         targetKickoffAt: fixture.target_kickoff_at,
-        market: formatMarketName(primaryMarket),
-        prediction: formatPredictionOutcome(primaryPick),
+        market: formattedPrimaryMarket,
+        prediction: formattedPrimaryPick,
         probability: Number(probPct) || 0,
         confidenceCategory: prediction?.confidence_category || undefined,
       });
     } else if (onToggleFavorite) {
       onToggleFavorite(fixture.id);
     }
+  };
+
+  // Simulation Outlines: Individual Favorite / Acca Slip Handlers for all 5 dimensions
+  const goalsPick = poissonData?.outlines.goals.top_market || '';
+  const isGoalsFav = Boolean(isFavoriteItem && goalsPick && isFavoriteItem(fixture.id, 'Goals', goalsPick));
+
+  const handleToggleGoalsFav = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!onToggleFavoriteItem || !goalsPick) return;
+    onToggleFavoriteItem({
+      id: `${fixture.id}::Goals::${goalsPick}`,
+      fixtureId: fixture.id,
+      homeTeam: formatTeamName(fixture.home_team_name),
+      awayTeam: formatTeamName(fixture.away_team_name),
+      league: fixture.league_name || fixture.league_code,
+      targetKickoffAt: fixture.target_kickoff_at,
+      market: 'Goals',
+      prediction: goalsPick,
+      probability: Number(poissonData?.outlines.goals.top_prob.toFixed(1)) || 0,
+      confidenceCategory: 'SIM_OUTLINE',
+    });
+  };
+
+  const moneylinePick = poissonData?.outlines.moneyline.top_pick || '';
+  const isMoneylineFav = Boolean(isFavoriteItem && moneylinePick && isFavoriteItem(fixture.id, '1X2', moneylinePick));
+
+  const handleToggleMoneylineFav = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!onToggleFavoriteItem || !moneylinePick) return;
+    onToggleFavoriteItem({
+      id: `${fixture.id}::1X2::${moneylinePick}`,
+      fixtureId: fixture.id,
+      homeTeam: formatTeamName(fixture.home_team_name),
+      awayTeam: formatTeamName(fixture.away_team_name),
+      league: fixture.league_name || fixture.league_code,
+      targetKickoffAt: fixture.target_kickoff_at,
+      market: '1X2',
+      prediction: moneylinePick,
+      probability: Number(poissonData?.outlines.moneyline.top_prob.toFixed(1)) || 0,
+      confidenceCategory: 'SIM_OUTLINE',
+    });
+  };
+
+  const cornersPick = poissonData?.outlines.corners.top_market || '';
+  const isCornersFav = Boolean(isFavoriteItem && cornersPick && isFavoriteItem(fixture.id, 'Corners', cornersPick));
+
+  const handleToggleCornersFav = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!onToggleFavoriteItem || !cornersPick) return;
+    onToggleFavoriteItem({
+      id: `${fixture.id}::Corners::${cornersPick}`,
+      fixtureId: fixture.id,
+      homeTeam: formatTeamName(fixture.home_team_name),
+      awayTeam: formatTeamName(fixture.away_team_name),
+      league: fixture.league_name || fixture.league_code,
+      targetKickoffAt: fixture.target_kickoff_at,
+      market: 'Corners',
+      prediction: cornersPick,
+      probability: Number(poissonData?.outlines.corners.top_prob.toFixed(1)) || 0,
+      confidenceCategory: 'SIM_OUTLINE',
+    });
+  };
+
+  const bttsPick = poissonData?.outlines.btts.top_market || '';
+  const isBttsFav = Boolean(isFavoriteItem && bttsPick && isFavoriteItem(fixture.id, 'BTTS', bttsPick));
+
+  const handleToggleBttsFav = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!onToggleFavoriteItem || !bttsPick) return;
+    onToggleFavoriteItem({
+      id: `${fixture.id}::BTTS::${bttsPick}`,
+      fixtureId: fixture.id,
+      homeTeam: formatTeamName(fixture.home_team_name),
+      awayTeam: formatTeamName(fixture.away_team_name),
+      league: fixture.league_name || fixture.league_code,
+      targetKickoffAt: fixture.target_kickoff_at,
+      market: 'BTTS',
+      prediction: bttsPick,
+      probability: Number(poissonData?.outlines.btts.top_prob.toFixed(1)) || 0,
+      confidenceCategory: 'SIM_OUTLINE',
+    });
+  };
+
+  const scorerPick = poissonData?.outlines.anytime_scorer.home_scorer || '';
+  const isScorerFav = Boolean(isFavoriteItem && scorerPick && isFavoriteItem(fixture.id, 'Anytime Scorer', scorerPick));
+
+  const handleToggleScorerFav = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!onToggleFavoriteItem || !scorerPick) return;
+    onToggleFavoriteItem({
+      id: `${fixture.id}::Anytime Scorer::${scorerPick}`,
+      fixtureId: fixture.id,
+      homeTeam: formatTeamName(fixture.home_team_name),
+      awayTeam: formatTeamName(fixture.away_team_name),
+      league: fixture.league_name || fixture.league_code,
+      targetKickoffAt: fixture.target_kickoff_at,
+      market: 'Anytime Scorer',
+      prediction: scorerPick,
+      probability: Number(poissonData?.outlines.anytime_scorer.home_scorer_prob.toFixed(1)) || 0,
+      confidenceCategory: 'SIM_OUTLINE',
+    });
   };
 
   return (
@@ -820,6 +923,19 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
               <div className="key-pick-badge">
                 <span className="key-pick-spark">✨</span>
                 <span>KEY 250,000 SIM PICK</span>
+                {!isNoBanker && (
+                  <button
+                    type="button"
+                    className={`glance-slip-add-btn ${isPrimaryFav ? 'active' : ''}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleTogglePrimaryFav(e);
+                    }}
+                    title={isPrimaryFav ? 'Remove from Acca Slip' : 'Add to Acca Slip'}
+                  >
+                    {isPrimaryFav ? '★ In Slip' : '+ Add to Slip'}
+                  </button>
+                )}
                 {isWon && (
                   <span style={{ marginLeft: 6, padding: '1px 6px', background: '#16a34a', color: '#fff', borderRadius: 4, fontSize: 10, fontWeight: 900 }}>
                     ✓ WON {isLive ? '(IN-PLAY)' : ''}
@@ -1068,7 +1184,17 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
                     <div className="sim-outline-card">
                       <div className="sim-outline-card-top">
                         <span className="sim-outline-dim-name">⚽ Goals Outcome</span>
-                        <span className="sim-outline-prob-tag">{poissonData.outlines.goals.top_prob.toFixed(1)}% Prob</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <button
+                            type="button"
+                            className={`outline-card-fav-btn ${isGoalsFav ? 'active' : ''}`}
+                            onClick={handleToggleGoalsFav}
+                            title={isGoalsFav ? 'Remove Goals pick from slip' : 'Add Goals pick to Acca slip'}
+                          >
+                            {isGoalsFav ? '★ In Slip' : '+ Add'}
+                          </button>
+                          <span className="sim-outline-prob-tag">{poissonData.outlines.goals.top_prob.toFixed(1)}% Prob</span>
+                        </div>
                       </div>
                       <div className="sim-outline-main-pick">
                         {poissonData.outlines.goals.top_market}
@@ -1082,7 +1208,17 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
                     <div className="sim-outline-card">
                       <div className="sim-outline-card-top">
                         <span className="sim-outline-dim-name">🏆 1X2 Win / Moneyline</span>
-                        <span className="sim-outline-prob-tag">{poissonData.outlines.moneyline.top_prob.toFixed(1)}% Prob</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <button
+                            type="button"
+                            className={`outline-card-fav-btn ${isMoneylineFav ? 'active' : ''}`}
+                            onClick={handleToggleMoneylineFav}
+                            title={isMoneylineFav ? 'Remove 1X2 pick from slip' : 'Add 1X2 pick to Acca slip'}
+                          >
+                            {isMoneylineFav ? '★ In Slip' : '+ Add'}
+                          </button>
+                          <span className="sim-outline-prob-tag">{poissonData.outlines.moneyline.top_prob.toFixed(1)}% Prob</span>
+                        </div>
                       </div>
                       <div className="sim-outline-main-pick">
                         {poissonData.outlines.moneyline.top_pick}
@@ -1096,7 +1232,17 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
                     <div className="sim-outline-card">
                       <div className="sim-outline-card-top">
                         <span className="sim-outline-dim-name">🚩 Corner Frequency</span>
-                        <span className="sim-outline-prob-tag">{poissonData.outlines.corners.top_prob.toFixed(1)}% Prob</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <button
+                            type="button"
+                            className={`outline-card-fav-btn ${isCornersFav ? 'active' : ''}`}
+                            onClick={handleToggleCornersFav}
+                            title={isCornersFav ? 'Remove Corners pick from slip' : 'Add Corners pick to Acca slip'}
+                          >
+                            {isCornersFav ? '★ In Slip' : '+ Add'}
+                          </button>
+                          <span className="sim-outline-prob-tag">{poissonData.outlines.corners.top_prob.toFixed(1)}% Prob</span>
+                        </div>
                       </div>
                       <div className="sim-outline-main-pick">
                         {poissonData.outlines.corners.top_market}
@@ -1110,7 +1256,17 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
                     <div className="sim-outline-card">
                       <div className="sim-outline-card-top">
                         <span className="sim-outline-dim-name">🔄 Both Teams to Score</span>
-                        <span className="sim-outline-prob-tag">{poissonData.outlines.btts.top_prob.toFixed(1)}% Prob</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <button
+                            type="button"
+                            className={`outline-card-fav-btn ${isBttsFav ? 'active' : ''}`}
+                            onClick={handleToggleBttsFav}
+                            title={isBttsFav ? 'Remove BTTS pick from slip' : 'Add BTTS pick to Acca slip'}
+                          >
+                            {isBttsFav ? '★ In Slip' : '+ Add'}
+                          </button>
+                          <span className="sim-outline-prob-tag">{poissonData.outlines.btts.top_prob.toFixed(1)}% Prob</span>
+                        </div>
                       </div>
                       <div className="sim-outline-main-pick">
                         {poissonData.outlines.btts.top_market}
@@ -1124,7 +1280,17 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
                     <div className="sim-outline-card">
                       <div className="sim-outline-card-top">
                         <span className="sim-outline-dim-name">🎯 Anytime Scorer</span>
-                        <span className="sim-outline-prob-tag">{poissonData.outlines.anytime_scorer.home_scorer_prob.toFixed(1)}% Probability</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <button
+                            type="button"
+                            className={`outline-card-fav-btn ${isScorerFav ? 'active' : ''}`}
+                            onClick={handleToggleScorerFav}
+                            title={isScorerFav ? 'Remove Scorer pick from slip' : 'Add Scorer pick to Acca slip'}
+                          >
+                            {isScorerFav ? '★ In Slip' : '+ Add'}
+                          </button>
+                          <span className="sim-outline-prob-tag">{poissonData.outlines.anytime_scorer.home_scorer_prob.toFixed(1)}% Probability</span>
+                        </div>
                       </div>
                       <div className="sim-outline-main-pick">
                         {poissonData.outlines.anytime_scorer.home_scorer}
@@ -1157,22 +1323,24 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
                         : sec.prob != null ? sec.prob : 0;
                       const secPct = (secProb <= 1 ? secProb * 100 : secProb).toFixed(1);
 
-                      const isSecFav = isFavoriteItem
-                        ? isFavoriteItem(fixture.id, sec.market || '', sec.prediction || '')
+                      const secMarket = formatMarketName(sec.market || '');
+                      const secPick = formatPredictionOutcome(sec.prediction || '');
+                      const isSecFav = isFavoriteItem && secMarket && secPick
+                        ? isFavoriteItem(fixture.id, secMarket, secPick)
                         : false;
 
                       const handleToggleSecFav = (e: React.MouseEvent) => {
                         e.stopPropagation();
-                        if (onToggleFavoriteItem && (sec.market || sec.prediction)) {
+                        if (onToggleFavoriteItem && secMarket && secPick) {
                           onToggleFavoriteItem({
-                            id: `${fixture.id}::${sec.market || ''}::${sec.prediction || ''}`,
+                            id: `${fixture.id}::${secMarket}::${secPick}`,
                             fixtureId: fixture.id,
                             homeTeam: formatTeamName(fixture.home_team_name),
                             awayTeam: formatTeamName(fixture.away_team_name),
                             league: fixture.league_name || fixture.league_code,
                             targetKickoffAt: fixture.target_kickoff_at,
-                            market: formatMarketName(sec.market || ''),
-                            prediction: formatPredictionOutcome(sec.prediction || ''),
+                            market: secMarket,
+                            prediction: secPick,
                             probability: Number(secPct) || 0,
                             confidenceCategory: sec.confidence_category || undefined,
                           });

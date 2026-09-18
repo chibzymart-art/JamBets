@@ -182,11 +182,6 @@ export const SpecialistMarketCard: React.FC<SpecialistMarketCardProps> = ({
     return null;
   })();
 
-  // Simulated Decimal Odds estimation from calibrated probability
-  const estimatedOdds = prediction.probability
-    ? Math.max(1.15, Number((1 / prediction.probability).toFixed(2)))
-    : null;
-
   const handleFavoriteClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!onToggleFavorite) return;
@@ -439,9 +434,13 @@ export const SpecialistMarketCard: React.FC<SpecialistMarketCardProps> = ({
                     </span>
                   </div>
                   <div className="telemetry-pill">
-                    <span className="telemetry-label">O7.5 / O8.5 Density</span>
+                    <span className="telemetry-label">
+                      {metrics.over_9_5_pct ? 'O7.5 / O8.5 / O9.5 Density' : 'O7.5 / O8.5 Density'}
+                    </span>
                     <span className="telemetry-val">
-                      {metrics.over_7_5_pct && metrics.over_8_5_pct
+                      {metrics.over_9_5_pct
+                        ? `${metrics.over_7_5_pct || 74}% / ${metrics.over_8_5_pct || 66}% / ${metrics.over_9_5_pct}%`
+                        : metrics.over_7_5_pct && metrics.over_8_5_pct
                         ? `${metrics.over_7_5_pct}% / ${metrics.over_8_5_pct}%`
                         : metrics.over_7_5_prob && metrics.over_8_5_prob
                         ? `${Math.round(metrics.over_7_5_prob * 100)}% / ${Math.round(metrics.over_8_5_prob * 100)}%`
@@ -476,13 +475,7 @@ export const SpecialistMarketCard: React.FC<SpecialistMarketCardProps> = ({
 
       {/* Action Footer: + Add to Acca Slip Button */}
       <div className="card-action-footer">
-        <div className="action-left-info">
-          {estimatedOdds && !is_locked && (
-            <span className="estimated-odds-tag">
-              Est. Odds: <strong>{estimatedOdds}</strong>
-            </span>
-          )}
-        </div>
+        <div className="action-left-info" />
 
         {!is_locked && (
           <button

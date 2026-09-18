@@ -1,6 +1,11 @@
 """
-Oddsbanta — Isolated Draw Hunter Equilibrium Engine
+Oddsbanta — Isolated Draw Hunter Equilibrium Engine (Phase 5)
 Mathematical Model: Zero-Inflated Skellam Distribution & Tactical Parity Model.
+Integrated with:
+- UniversalDataStore (Multi-season 6,500+ match history)
+- Real Head-to-Head (H2H) Historical Analyzer
+- Universal Match Motivation & Stakes Matrix (Derbies, 1st-leg cup caution)
+
 Strictly decoupled: Writes exclusively to public.draw_predictions.
 Zero cross-talk with Home Win, Away Win, Corners, or Goals engines.
 """
@@ -15,8 +20,14 @@ from typing import List, Dict, Any, Optional
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../..')))
 if hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(encoding='utf-8')
+if hasattr(sys.stderr, 'reconfigure'):
+    sys.stderr.reconfigure(encoding='utf-8')
 
 from python.src.db.supabase_client import CloudSupabaseClient
+from python.src.db.universal_data_store import UniversalDataStore, UnifiedTeamProfile
+from python.src.football.h2h_analyzer import H2HAnalyzer
+from python.src.football.match_motivation import MatchMotivationEngine
+from python.src.football.identity import normalize_team_name
 
 
 class DrawModel:
@@ -56,27 +67,59 @@ class DrawModel:
         return exp_decay * i0
 
     @classmethod
-    def evaluate_fixture(cls, home_stats: Dict[str, Any], away_stats: Dict[str, Any]) -> Dict[str, Any]:
+    def evaluate_fixture(
+        cls,
+        home_norm: str,
+        away_norm: str,
+        league_code: str = "OTHER",
+        p_h: Optional[UnifiedTeamProfile] = None,
+        p_a: Optional[UnifiedTeamProfile] = None,
+        data_store: Optional[UniversalDataStore] = None
+    ) -> Dict[str, Any]:
         """
-        Evaluates draw probability, tactical equilibrium score (TES), and low-scoring density (LSD).
+        Evaluates draw probability, tactical equilibrium score (TES), and low-scoring density (LSD)
+        using multi-season data, real H2H, and match purpose.
         """
-        home_matches = home_stats.get("home_matches", 0)
-        away_matches = away_stats.get("away_matches", 0)
+        h_m = p_h.home_matches if p_h else 0
+        a_m = p_a.away_matches if p_a else 0
 
-        # Priors
-        if home_matches < 3:
-            lambda_h = 1.45
+        # Baseline League Parameters
+        base_h = 1.45
+        base_a = 1.15
+        k_shrink = 3.0
+
+        if p_h and h_m > 0:
+            raw_h_att = p_h.home_scoring_rate / base_h
+            raw_h_def = p_h.home_conceding_rate / base_a
+            alpha_h = (h_m * raw_h_att + k_shrink * 1.0) / (h_m + k_shrink)
+            beta_h = (h_m * raw_h_def + k_shrink * 1.0) / (h_m + k_shrink)
+            home_draw_rate = p_h.home_draws / h_m
+        else:
+            alpha_h, beta_h = 1.0, 1.0
             home_draw_rate = 0.26
-        else:
-            lambda_h = max(0.5, min(3.2, home_stats.get("home_goals_for", 0) / home_matches))
-            home_draw_rate = home_stats.get("home_draws", 0) / home_matches
 
-        if away_matches < 3:
-            lambda_a = 1.15
-            away_draw_rate = 0.25
+        if p_a and a_m > 0:
+            raw_a_att = p_a.away_scoring_rate / base_a
+            raw_a_def = p_a.away_conceding_rate / base_h
+            alpha_a = (a_m * raw_a_att + k_shrink * 1.0) / (a_m + k_shrink)
+            beta_a = (a_m * raw_a_def + k_shrink * 1.0) / (a_m + k_shrink)
+            away_draw_rate = p_a.away_draws / a_m
         else:
-            lambda_a = max(0.4, min(3.0, away_stats.get("away_goals_for", 0) / away_matches))
-            away_draw_rate = away_stats.get("away_draws", 0) / away_matches
+            alpha_a, beta_a = 1.0, 1.0
+            away_draw_rate = 0.25
+
+        lambda_h = alpha_h * beta_a * 1.18 * 1.25
+        lambda_a = alpha_a * beta_h * 1.25
+
+        # Tactical Context: Real H2H & Match Motivation
+        h2h_res = H2HAnalyzer.analyze(home_norm, away_norm, data_store=data_store)
+        motivation_res = MatchMotivationEngine.evaluate(home_norm, away_norm, league_code)
+
+        lambda_h = lambda_h * h2h_res.h2h_lambda_home_mod * motivation_res.lambda_home_mod
+        lambda_a = lambda_a * h2h_res.h2h_lambda_away_mod * motivation_res.lambda_away_mod
+
+        lambda_h = round(max(0.40, min(3.50, lambda_h)), 2)
+        lambda_a = round(max(0.35, min(3.20, lambda_a)), 2)
 
         # 1. Base Skellam Draw Probability
         base_skellam = cls.skellam_draw_probability(lambda_h, lambda_a)
@@ -93,10 +136,13 @@ class DrawModel:
         lsd = p_00 + p_11
 
         # 4. Zero-Inflated Draw Calibration
-        # Draws in high-equilibrium matches have empirical bonus
+        # Draws in high-equilibrium matches have empirical bonus, scaled by derby/motivation
         draw_tendency = (home_draw_rate + away_draw_rate) / 2.0
-        inflated_prob = base_skellam * (0.85 + (0.35 * tes) + (0.30 * lsd) + (0.25 * draw_tendency))
-        final_prob = round(max(0.18, min(0.46, inflated_prob)), 4)
+        if h2h_res.has_sufficient_h2h:
+            draw_tendency = 0.65 * draw_tendency + 0.35 * h2h_res.draw_pct
+
+        inflated_prob = base_skellam * (0.85 + (0.35 * tes) + (0.30 * lsd) + (0.25 * draw_tendency)) * motivation_res.draw_mod
+        final_prob = round(max(0.18, min(0.48, inflated_prob)), 4)
 
         # Tiers & Confidence
         # In 3-way markets, standard draw probability is ~26%. Prob >= 32% represents massive +EV edge!
@@ -113,6 +159,9 @@ class DrawModel:
             stalemate_tier = "BALANCED"
             confidence_category = "SKIP"
 
+        h2h_tag = f" [H2H Draws: {h2h_res.draws}/{h2h_res.encounters_count}]" if h2h_res.has_sufficient_h2h else ""
+        rationale = f"Tactical equilibrium ({tes:.2f}) and low-scoring density ({lsd:.2f}) indicate high stalemate risk.{h2h_tag} {motivation_res.tactical_rationale}"
+
         return {
             "probability": final_prob,
             "confidence_category": confidence_category,
@@ -120,7 +169,8 @@ class DrawModel:
             "tactical_equilibrium_score": round(tes, 4),
             "low_scoring_density": round(lsd, 4),
             "lambda_home": round(lambda_h, 2),
-            "lambda_away": round(lambda_a, 2)
+            "lambda_away": round(lambda_a, 2),
+            "tactical_rationale": rationale
         }
 
 
@@ -132,60 +182,25 @@ class DrawEngine:
 
     def __init__(self, db: CloudSupabaseClient = None):
         self.db = db or CloudSupabaseClient()
+        self.data_store = UniversalDataStore.get_instance(db=self.db)
 
     def run(self, max_fixtures: int = 500) -> Dict[str, Any]:
-        print("⚖️ [DrawEngine] Launching Draw Hunter Equilibrium Engine...")
+        print("⚖️ [DrawEngine] Launching Draw Hunter Equilibrium Engine with Universal Data...")
         now = datetime.now(timezone.utc)
         min_kickoff = (now - timedelta(minutes=5)).isoformat()
-        max_kickoff = (now + timedelta(days=4)).isoformat()
         lock_window_iso = (now + timedelta(hours=48)).isoformat()
 
-        # 1. Fetch finished matches to build empirical profiles
-        finished = self.db.get("football_fixtures", {
-            "status": "in.(finished,ft,settled)",
-            "select": "home_team_id,away_team_id,home_score,away_score",
-            "limit": "1000"
-        })
-
-        team_stats: Dict[str, Dict[str, int]] = {}
-        for f in finished:
-            hid = f.get("home_team_id")
-            aid = f.get("away_team_id")
-            hs = f.get("home_score")
-            as_ = f.get("away_score")
-            if hs is None or as_ is None:
-                continue
-
-            for tid in (hid, aid):
-                if tid and tid not in team_stats:
-                    team_stats[tid] = {
-                        "home_matches": 0, "home_draws": 0, "home_goals_for": 0, "home_goals_against": 0,
-                        "away_matches": 0, "away_draws": 0, "away_goals_for": 0, "away_goals_against": 0
-                    }
-
-            team_stats[hid]["home_matches"] += 1
-            team_stats[hid]["home_goals_for"] += hs
-            team_stats[hid]["home_goals_against"] += as_
-            if hs == as_:
-                team_stats[hid]["home_draws"] += 1
-
-            team_stats[aid]["away_matches"] += 1
-            team_stats[aid]["away_goals_for"] += as_
-            team_stats[aid]["away_goals_against"] += hs
-            if as_ == hs:
-                team_stats[aid]["away_draws"] += 1
-
-
-        print(f"📊 [DrawEngine] Compiled empirical profiles for {len(team_stats)} clubs.")
+        # 1. Warm up universal data store
+        self.data_store.warm_up()
 
         # 2. Check locked predictions within 48h to preserve immutability
         existing = self.db.get("draw_predictions", {
             "select": "id,fixture_id,target_kickoff_at,settlement_status",
-            "limit": "1000"
+            "limit": "2000"
         })
-        existing_map = {p["fixture_id"]: p["id"] for p in existing}
+        existing_map = {p["fixture_id"]: p["id"] for p in (existing or [])}
         locked_fixture_ids = set()
-        for p in existing:
+        for p in (existing or []):
             if p.get("settlement_status") in ("won", "lost", "void"):
                 locked_fixture_ids.add(p["fixture_id"])
             elif p.get("target_kickoff_at") and p["target_kickoff_at"] <= lock_window_iso:
@@ -196,15 +211,26 @@ class DrawEngine:
             "status": "in.(scheduled,live,in_progress,halftime)",
             "target_kickoff_at": f"gte.{min_kickoff}",
             "order": "target_kickoff_at.asc",
-            "select": "id,home_team_id,away_team_id,target_kickoff_at,league_id",
+            "select": "id,home_team_id,away_team_id,target_kickoff_at,league_id,canonical_key",
             "limit": str(max_fixtures)
         })
+
+        team_ids = list(set(
+            [f.get("home_team_id") for f in (fixtures or []) if f.get("home_team_id")] +
+            [f.get("away_team_id") for f in (fixtures or []) if f.get("away_team_id")]
+        ))
+        team_name_map = {}
+        for i in range(0, len(team_ids), 50):
+            chunk = team_ids[i:i + 50]
+            id_list = ','.join(chunk)
+            for t in self.db.get("football_teams", {"id": f"in.({id_list})", "select": "id,name"}):
+                team_name_map[t["id"]] = t.get("name")
 
         to_insert = []
         updated_count = 0
         skipped_count = 0
 
-        for f in fixtures:
+        for f in (fixtures or []):
             fid = f["id"]
             if fid in locked_fixture_ids:
                 skipped_count += 1
@@ -212,55 +238,73 @@ class DrawEngine:
 
             hid = f.get("home_team_id")
             aid = f.get("away_team_id")
-            h_profile = team_stats.get(hid, {})
-            a_profile = team_stats.get(aid, {})
+            ckey = f.get("canonical_key") or ""
+            parts = ckey.split(":") if ":" in ckey else []
 
-            eval_res = DrawModel.evaluate_fixture(h_profile, a_profile)
+            h_name = team_name_map.get(hid) or (parts[1] if len(parts) > 1 else str(hid))
+            a_name = team_name_map.get(aid) or (parts[2] if len(parts) > 2 else str(aid))
+            l_code = parts[0] if parts else "OTHER"
 
-            # Draw threshold: >= 27.5% qualifies for Draw Hunter pick
-            if eval_res["probability"] >= 0.275:
-                payload = {
-                    "fixture_id": fid,
-                    "prediction": "Draw",
-                    "market": "draw",
-                    "probability": eval_res["probability"],
-                    "confidence_category": eval_res["confidence_category"],
-                    "stalemate_tier": eval_res["stalemate_tier"],
-                    "tactical_equilibrium_score": eval_res["tactical_equilibrium_score"],
-                    "low_scoring_density": eval_res["low_scoring_density"],
-                    "target_kickoff_at": f["target_kickoff_at"],
-                    "settlement_status": "pending",
-                    "publication_status": "published"
-                }
+            p_h = self.data_store.get_profile(hid or h_name)
+            p_a = self.data_store.get_profile(aid or a_name)
 
-                if fid in existing_map:
-                    pred_id = existing_map[fid]
-                    self.db.patch("draw_predictions", payload, {"id": f"eq.{pred_id}"})
-                    updated_count += 1
-                else:
-                    to_insert.append(payload)
+            eval_res = DrawModel.evaluate_fixture(
+                home_norm=h_name,
+                away_norm=a_name,
+                league_code=l_code,
+                p_h=p_h,
+                p_a=p_a,
+                data_store=self.data_store
+            )
 
-        # 4. Batch insert new predictions
+            # Institutional Quality Gate for Draws:
+            # Standard draw probability is ~26%. Any probability >= 31.0% represents elite value!
+            if eval_res["probability"] < 0.31:
+                continue
+
+            payload = {
+                "fixture_id": fid,
+                "prediction": "Draw",
+                "market": "draw",
+                "probability": eval_res["probability"],
+                "confidence_category": eval_res["confidence_category"],
+                "stalemate_tier": eval_res["stalemate_tier"],
+                "tactical_equilibrium_score": eval_res["tactical_equilibrium_score"],
+                "low_scoring_density": eval_res["low_scoring_density"],
+                "settlement_notes": f"[{eval_res['stalemate_tier']}] {eval_res['tactical_rationale']}",
+                "target_kickoff_at": f["target_kickoff_at"],
+                "settlement_status": "pending",
+                "publication_status": "published"
+            }
+
+            if fid in existing_map:
+                pred_id = existing_map[fid]
+                self.db.patch("draw_predictions", payload, {"id": f"eq.{pred_id}"})
+                updated_count += 1
+            else:
+                to_insert.append(payload)
+
+        # Batch insert
         inserted_count = 0
         for i in range(0, len(to_insert), 50):
-            batch = to_insert[i:i+50]
+            batch = to_insert[i:i + 50]
             res = self.db.post("draw_predictions", batch)
             inserted_count += len(res) if res else len(batch)
 
         total_published = inserted_count + updated_count
-        print(f"✅ [DrawEngine] Completed: {total_published} Draw Hunter predictions published ({inserted_count} new, {updated_count} updated, {skipped_count} locked).")
+        print(f"✅ [DrawEngine] Published {total_published} Stalemate/Draw picks "
+              f"({inserted_count} new, {updated_count} updated, {skipped_count} locked).")
+
         return {
             "engine": "draw_engine",
             "published": total_published,
             "inserted": inserted_count,
             "updated": updated_count,
-            "locked_skipped": skipped_count,
-            "total_evaluated": len(fixtures)
+            "skipped_locked": skipped_count
         }
-
 
 
 if __name__ == "__main__":
     engine = DrawEngine()
     summary = engine.run()
-    print("Summary:", summary)
+    print("Execution Summary:", summary)

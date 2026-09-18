@@ -285,7 +285,7 @@ function normalizePrediction(
     marketLabel = 'Corners Specialist';
     marketIcon = '🚩';
     predictionTitle = raw.prediction || 'Over 8.5 Corners';
-    const densityMatch = (raw.settlement_notes || '').match(/\[DENSITY:(\d+)\/(\d+)\]/i);
+    const densityMatch = (raw.settlement_notes || '').match(/\[DENSITY:(\d+)\/(\d+)(?:\/(\d+))?\]/i);
     const o75 = densityMatch
       ? parseInt(densityMatch[1], 10) / 100
       : (raw.market === 'over_7.5_corners' || (raw.prediction && raw.prediction.includes('7.5')))
@@ -294,15 +294,19 @@ function normalizePrediction(
     const o85 = densityMatch
       ? parseInt(densityMatch[2], 10) / 100
       : raw.over_8_5_prob ? Number(raw.over_8_5_prob) : (prob ? Math.max(0.50, prob - 0.08) : null);
+    const o95 = densityMatch && densityMatch[3]
+      ? parseInt(densityMatch[3], 10) / 100
+      : raw.over_9_5_prob ? Number(raw.over_9_5_prob) : (prob && (raw.market === 'over_9.5_corners' || (raw.prediction && raw.prediction.includes('9.5'))) ? prob : null);
     metrics = {
       predicted_total_corners: raw.predicted_total_corners,
       home_corners_avg: raw.home_corners_avg,
       away_corners_avg: raw.away_corners_avg,
       over_7_5_prob: o75,
       over_8_5_prob: o85,
+      over_9_5_prob: o95,
       over_7_5_pct: o75 ? Math.round(o75 * 100) : 74,
       over_8_5_pct: o85 ? Math.round(o85 * 100) : 68,
-      over_9_5_prob: raw.over_9_5_prob,
+      over_9_5_pct: o95 ? Math.round(o95 * 100) : null,
       over_10_5_prob: raw.over_10_5_prob,
     };
   } else if (marketCategory === 'goals') {
@@ -367,10 +371,10 @@ async function fetchMarketDataFromUpstream(
   if (market === 'curated') {
     // Top edge queries top signals across all 4 specialist engines
     const [hwRes, drawRes, cornRes, goalsRes] = await Promise.all([
-      fetch(`${SUPABASE_URL}/rest/v1/${SELECTS.home_win.table}?select=${encodeURIComponent(SELECTS.home_win.select)}&settlement_status=neq.void&publication_status=neq.archived&order=probability.desc&limit=25`, { headers }),
-      fetch(`${SUPABASE_URL}/rest/v1/${SELECTS.draw.table}?select=${encodeURIComponent(SELECTS.draw.select)}&order=probability.desc&limit=25`, { headers }),
-      fetch(`${SUPABASE_URL}/rest/v1/${SELECTS.corners.table}?select=${encodeURIComponent(SELECTS.corners.select)}&settlement_status=neq.void&publication_status=neq.archived&order=probability.desc&limit=25`, { headers }),
-      fetch(`${SUPABASE_URL}/rest/v1/${SELECTS.goals.table}?select=${encodeURIComponent(SELECTS.goals.select)}&order=probability.desc&limit=35`, { headers }),
+      fetch(`${SUPABASE_URL}/rest/v1/${SELECTS.home_win.table}?select=${encodeURIComponent(SELECTS.home_win.select)}&settlement_status=neq.void&publication_status=neq.archived&order=probability.desc&limit=50`, { headers }),
+      fetch(`${SUPABASE_URL}/rest/v1/${SELECTS.draw.table}?select=${encodeURIComponent(SELECTS.draw.select)}&settlement_status=neq.void&publication_status=neq.archived&order=probability.desc&limit=50`, { headers }),
+      fetch(`${SUPABASE_URL}/rest/v1/${SELECTS.corners.table}?select=${encodeURIComponent(SELECTS.corners.select)}&settlement_status=neq.void&publication_status=neq.archived&order=probability.desc&limit=50`, { headers }),
+      fetch(`${SUPABASE_URL}/rest/v1/${SELECTS.goals.table}?select=${encodeURIComponent(SELECTS.goals.select)}&settlement_status=neq.void&publication_status=neq.archived&order=probability.desc&limit=50`, { headers }),
     ]);
 
     const [hw, dr, cr, gl] = await Promise.all([
@@ -384,11 +388,15 @@ async function fetchMarketDataFromUpstream(
       ...(Array.isArray(hw) ? hw : [])
         .filter((item: any) => item.settlement_status !== 'void' && item.publication_status !== 'archived')
         .map((item: any) => normalizePrediction(item, 'home_win')),
-      ...dr.map((item: any) => normalizePrediction(item, 'draw')),
+      ...(Array.isArray(dr) ? dr : [])
+        .filter((item: any) => item.settlement_status !== 'void' && item.publication_status !== 'archived')
+        .map((item: any) => normalizePrediction(item, 'draw')),
       ...(Array.isArray(cr) ? cr : [])
         .filter((item: any) => item.settlement_status === 'pending' || (item.settlement_notes && item.settlement_notes.startsWith('Verified:')))
         .map((item: any) => normalizePrediction(item, 'corners')),
-      ...gl.map((item: any) => normalizePrediction(item, 'goals')),
+      ...(Array.isArray(gl) ? gl : [])
+        .filter((item: any) => item.settlement_status !== 'void' && item.publication_status !== 'archived')
+        .map((item: any) => normalizePrediction(item, 'goals')),
     ];
 
     // Deduplicate by fixture_id (keeping highest probability signal per fixture)
@@ -414,15 +422,17 @@ async function fetchMarketDataFromUpstream(
   }
 
   const { table, select } = SELECTS[configKey] || SELECTS.home_win;
-  let url = `${SUPABASE_URL}/rest/v1/${table}?select=${encodeURIComponent(select)}&order=probability.desc&limit=500`;
+  let url = `${SUPABASE_URL}/rest/v1/${table}?select=${encodeURIComponent(select)}&order=probability.desc&limit=1000`;
 
   if (market === 'over_2.5_goals') {
-    url += '&market=eq.over_2.5_goals';
+    url += '&market=eq.over_2.5_goals&settlement_status=neq.void&publication_status=neq.archived';
   } else if (market === 'ht_over_0.5_goals') {
-    url += '&market=eq.ht_over_0.5_goals';
+    url += '&market=eq.ht_over_0.5_goals&settlement_status=neq.void&publication_status=neq.archived';
   } else if (market === 'corners') {
     url += '&settlement_status=neq.void&publication_status=neq.archived';
   } else if (market === 'home_win' || market === 'away_win') {
+    url += '&settlement_status=neq.void&publication_status=neq.archived';
+  } else if (market === 'draw') {
     url += '&settlement_status=neq.void&publication_status=neq.archived';
   }
 
@@ -433,11 +443,15 @@ async function fetchMarketDataFromUpstream(
 
   const rawList = await res.json();
   const category = (configKey === 'goals' ? 'goals' : configKey) as any;
-  const filteredList = category === 'corners'
-    ? (Array.isArray(rawList) ? rawList : []).filter((item: any) => item.settlement_status === 'pending' || (item.settlement_notes && item.settlement_notes.startsWith('Verified:')))
-    : category === 'home_win'
-    ? (Array.isArray(rawList) ? rawList : []).filter((item: any) => item.settlement_status !== 'void' && item.publication_status !== 'archived')
-    : rawList;
+  const filteredList = (Array.isArray(rawList) ? rawList : []).filter((item: any) => {
+    if (item.settlement_status === 'void' || item.publication_status === 'archived') {
+      return false;
+    }
+    if (category === 'corners') {
+      return item.settlement_status === 'pending' || (item.settlement_notes && item.settlement_notes.startsWith('Verified:'));
+    }
+    return true;
+  });
   return filteredList.map((item: any) => normalizePrediction(item, category, market));
 }
 
@@ -453,10 +467,10 @@ async function computeAllMarketCounts(
 
   try {
     const [hw, dr, cr, gl] = await Promise.all([
-      fetch(`${SUPABASE_URL}/rest/v1/home_win_predictions_paywall?select=id,target_kickoff_at,settlement_status,publication_status&settlement_status=neq.void&publication_status=neq.archived&limit=1000`, { headers }).then((r) => r.json()),
-      fetch(`${SUPABASE_URL}/rest/v1/draw_predictions_paywall?select=id,target_kickoff_at&limit=1000`, { headers }).then((r) => r.json()),
-      fetch(`${SUPABASE_URL}/rest/v1/corner_predictions_paywall?select=id,target_kickoff_at,settlement_status,settlement_notes&settlement_status=neq.void&publication_status=neq.archived&limit=1000`, { headers }).then((r) => r.json()),
-      fetch(`${SUPABASE_URL}/rest/v1/goals_predictions_paywall?select=id,market,target_kickoff_at&limit=1000`, { headers }).then((r) => r.json()),
+      fetch(`${SUPABASE_URL}/rest/v1/home_win_predictions_paywall?select=id,target_kickoff_at,settlement_status,publication_status,fixture:football_fixtures!inner(id)&settlement_status=neq.void&publication_status=neq.archived&limit=1000`, { headers }).then((r) => r.json()),
+      fetch(`${SUPABASE_URL}/rest/v1/draw_predictions_paywall?select=id,target_kickoff_at,settlement_status,publication_status,fixture:football_fixtures!inner(id)&settlement_status=neq.void&publication_status=neq.archived&limit=1000`, { headers }).then((r) => r.json()),
+      fetch(`${SUPABASE_URL}/rest/v1/corner_predictions_paywall?select=id,target_kickoff_at,settlement_status,publication_status,settlement_notes,fixture:football_fixtures!inner(id)&settlement_status=neq.void&publication_status=neq.archived&limit=1000`, { headers }).then((r) => r.json()),
+      fetch(`${SUPABASE_URL}/rest/v1/goals_predictions_paywall?select=id,market,target_kickoff_at,settlement_status,publication_status,fixture:football_fixtures!inner(id)&settlement_status=neq.void&publication_status=neq.archived&limit=1000`, { headers }).then((r) => r.json()),
     ]);
 
     let targetDateStr = dateParam;
@@ -483,8 +497,10 @@ async function computeAllMarketCounts(
     const validCr = Array.isArray(cr)
       ? cr.filter(
           (item: any) =>
-            item.settlement_status === 'pending' ||
-            (item.settlement_notes && item.settlement_notes.startsWith('Verified:'))
+            item.settlement_status !== 'void' &&
+            item.publication_status !== 'archived' &&
+            (item.settlement_status === 'pending' ||
+              (item.settlement_notes && item.settlement_notes.startsWith('Verified:')))
         )
       : [];
 
@@ -496,10 +512,26 @@ async function computeAllMarketCounts(
         )
       : [];
 
+    const validDr = Array.isArray(dr)
+      ? dr.filter(
+          (item: any) =>
+            item.settlement_status !== 'void' &&
+            item.publication_status !== 'archived'
+        )
+      : [];
+
+    const validGl = Array.isArray(gl)
+      ? gl.filter(
+          (item: any) =>
+            item.settlement_status !== 'void' &&
+            item.publication_status !== 'archived'
+        )
+      : [];
+
     const filteredHw = filterByDate(validHw);
-    const filteredDr = filterByDate(dr);
+    const filteredDr = filterByDate(validDr);
     const filteredCr = filterByDate(validCr);
-    const filteredGl = filterByDate(gl);
+    const filteredGl = filterByDate(validGl);
 
     const hwCount = filteredHw.length;
     const drCount = filteredDr.length;

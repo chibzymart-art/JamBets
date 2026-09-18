@@ -25,7 +25,12 @@ class CornersAiScout:
     ) -> str:
         tag = intent_data.get("tactical_tag", "WING_PRESSURE")
         prob_pct = int(round(probability * 100))
-        line_str = "Over 7.5" if "7.5" in market else "Over 8.5"
+        if "9.5" in market:
+            line_str = "Over 9.5"
+        elif "8.5" in market:
+            line_str = "Over 8.5"
+        else:
+            line_str = "Over 7.5"
 
         if tag == "CORNER_FEST":
             return (

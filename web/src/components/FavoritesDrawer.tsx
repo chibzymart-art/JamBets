@@ -108,12 +108,9 @@ export const FavoritesDrawer: React.FC<FavoritesDrawerProps> = ({
               </div>
               <div className="acca-metric-divider" />
               <div className="acca-metric-item">
-                <span className="acca-metric-label">Est. Combined Odds</span>
-                <strong className="acca-metric-val acca-odds">
-                  {`~${Math.min(999, Math.max(1.10, favorites.reduce((acc, f) => {
-                    const fairOdd = 1 / Math.max(0.1, (f.probability || 75) / 100);
-                    return acc * fairOdd;
-                  }, 1))).toFixed(2)}x`}
+                <span className="acca-metric-label">Selections</span>
+                <strong className="acca-metric-val">
+                  {favorites.length} {favorites.length === 1 ? 'Pick' : 'Picks'}
                 </strong>
               </div>
             </div>
@@ -122,10 +119,9 @@ export const FavoritesDrawer: React.FC<FavoritesDrawerProps> = ({
             <div className="favorites-acca-actions">
               <a
                 href={`https://api.whatsapp.com/send?text=${encodeURIComponent(
-                  `🔥 *ODDSBANTA ACCA SLIP* (${favorites.length} Picks)\n` +
-                  `📊 Est. Combined Odds: ~${Math.min(999, Math.max(1.10, favorites.reduce((acc, f) => acc * (1 / Math.max(0.1, (f.probability || 75) / 100)), 1))).toFixed(2)}x\n\n` +
+                  `🔥 *ODDSBANTA ACCA SLIP* (${favorites.length} Picks)\n\n` +
                   favorites.map((f, i) => `${i + 1}. *${f.homeTeam} vs ${f.awayTeam}*\n   🎯 Pick: *${f.prediction}* (${f.market}) • ${Math.round(f.probability || 0)}%\n`).join('\n') +
-                  `\n🔒 Verified by Oddsbanta AI Engine\n👉 https://oddsbanta.com/goals`
+                  `\n🔒 Verified by Oddsbanta AI Engine\n👉 https://oddsbanta.com/dashboard`
                 )}`}
                 target="_blank"
                 rel="noopener noreferrer"

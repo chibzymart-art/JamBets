@@ -179,11 +179,18 @@ def run():
     )
     print(f"  • Retrieved {len(forward_fixtures)} fixtures from cutoff {today_start_utc.strftime('%Y-%m-%d')} across the 4-day window from Cloud Supabase", flush=True)
 
-    # Load existing predictions for smart change-detection reprediction
+    # Load existing predictions for smart change-detection and 48-hour immutability lock
+    lock_window_iso = (now_utc + timedelta(hours=48)).isoformat()
+    locked_fixture_ids = set()
     try:
-        existing_preds_raw = supabase.get("football_predictions", {"select": "fixture_id,market,prediction,metadata", "limit": "2000"})
+        existing_preds_raw = supabase.get("football_predictions", {"select": "fixture_id,market,prediction,settlement_status,target_kickoff_at", "limit": "2000"})
         existing_preds_map = {p["fixture_id"]: p for p in existing_preds_raw if "fixture_id" in p}
-        print(f"  • Found {len(existing_preds_map)} existing predictions in Cloud Supabase for change-detection evaluation.", flush=True)
+        for p in existing_preds_raw:
+            if p.get("settlement_status") in ("won", "lost", "void"):
+                locked_fixture_ids.add(p["fixture_id"])
+            elif p.get("target_kickoff_at") and p["target_kickoff_at"] <= lock_window_iso:
+                locked_fixture_ids.add(p["fixture_id"])
+        print(f"  • Found {len(existing_preds_map)} existing predictions in Cloud Supabase ({len(locked_fixture_ids)} strictly locked under 48h/settlement rules).", flush=True)
     except Exception as e_err:
         existing_preds_map = {}
         print(f"  [WARN] Could not load existing predictions: {e_err}", flush=True)
@@ -205,8 +212,8 @@ def run():
         print(f"  • Publication Lock Active: {len(forward_fixtures) - len(unpredicted_fixtures)} already published fixtures locked. {len(unpredicted_fixtures)} unpredicted fixtures to process.", flush=True)
         fixtures_to_process = unpredicted_fixtures
     else:
-        fixtures_to_process = forward_fixtures
-        print(f"  • Force repredict active: evaluating all {len(fixtures_to_process)} forward fixtures", flush=True)
+        fixtures_to_process = [f for f in forward_fixtures if f.get("id") not in locked_fixture_ids]
+        print(f"  • Force repredict active: evaluating {len(fixtures_to_process)} forward fixtures (strictly preserving {len(locked_fixture_ids)} locked 48h/settled predictions)", flush=True)
 
     # If argument provided, allow limiting for tests, otherwise drain the eligible forward window
     drain_all = True

@@ -24,6 +24,8 @@ from python.src.goals.fotmob_enricher import ResilientFotMobEnricher
 from python.src.goals.ht_dixon_coles import HalfTimeDixonColesModel
 from python.src.goals.first_half_intent_engine import FirstHalfIntentEngine
 from python.src.goals.ai_scout import GroundedGoalsAiScout
+from python.src.football.h2h_analyzer import H2HAnalyzer
+from python.src.sources.google_news import GoogleNewsAdapter
 
 
 class HtOver05GoalsEngine:
@@ -39,6 +41,7 @@ class HtOver05GoalsEngine:
         self.data_provider = GoalsDataProvider(db=self.db)
         self.enricher = ResilientFotMobEnricher()
         self.ai_scout = GroundedGoalsAiScout()
+        self.google_news = GoogleNewsAdapter()
 
     def run(self, max_fixtures: int = 500, wipe_pending: bool = False) -> Dict[str, Any]:
         print("⏱️ [HtOver05Engine] Launching Standalone 1H Over 0.5 Goals Blitz Engine...")
@@ -214,6 +217,24 @@ class HtOver05GoalsEngine:
             if xg_away and "npxg_for" in xg_away:
                 lambda_ht_a = 0.70 * lambda_ht_a + 0.30 * (xg_away["npxg_for"] * self.DEFAULT_HT_RATIO)
 
+            # Live Intelligence: Squad Injuries & News
+            debuff_h, debuff_a = 1.0, 1.0
+            try:
+                h_news = self.google_news.fetch_injury_news(home_name)
+                if h_news and "modifier_debuff" in h_news:
+                    debuff_h = float(h_news.get("modifier_debuff", 1.0))
+                a_news = self.google_news.fetch_injury_news(away_name)
+                if a_news and "modifier_debuff" in a_news:
+                    debuff_a = float(a_news.get("modifier_debuff", 1.0))
+            except Exception:
+                pass
+
+            # Direct H2H Analysis
+            h2h_res = H2HAnalyzer.analyze(home_name, away_name)
+
+            lambda_ht_h = lambda_ht_h * debuff_h * h2h_res.h2h_lambda_home_mod
+            lambda_ht_a = lambda_ht_a * debuff_a * h2h_res.h2h_lambda_away_mod
+
             lambda_ht_h = round(max(0.20, min(2.40, lambda_ht_h)), 2)
             lambda_ht_a = round(max(0.15, min(2.00, lambda_ht_a)), 2)
             combined_ht_lambda = lambda_ht_h + lambda_ht_a
@@ -304,7 +325,7 @@ class HtOver05GoalsEngine:
                 "xg_combined": round(dixon_ht["lambda_ht_combined"] / self.DEFAULT_HT_RATIO, 2),
                 "home_over25_rate": int(hp.home_over25_pct * 100),
                 "away_over25_rate": int(ap.away_over25_pct * 100),
-                "h2h_over25_rate": int(round((hp.home_over25_pct + ap.away_over25_pct) / 2.0 * 100)),
+                "h2h_over25_rate": int(round(h2h_res.h2h_over25_pct * 100)) if h2h_res.has_sufficient_h2h else int(round((hp.home_over25_pct + ap.away_over25_pct) / 2.0 * 100)),
                 "ht_goal_frequency": int(final_p_ht05 * 100),
                 "avg_first_goal_minute": dixon_ht["expected_first_goal_minute"],
                 "target_kickoff_at": kickoff_at,

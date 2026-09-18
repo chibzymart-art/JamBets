@@ -17,6 +17,7 @@ if hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(encoding='utf-8')
 
 from python.src.db.supabase_client import CloudSupabaseClient
+from python.src.db.universal_data_store import UniversalDataStore
 from python.src.corners.corners_data_provider import CornersDataProvider
 from python.src.corners.corner_intent_engine import CornerIntentEngine
 from python.src.corners.negative_binomial_corners import NegativeBinomialCornersModel
@@ -28,15 +29,15 @@ class CornersEngine:
     Autonomous worker engine for Corners Specialist predictions.
     Computes dynamic competition baselines, empirical club metrics,
     Match Corner Intent Index (MCII), and Negative Binomial tail probabilities.
-    Exclusively evaluates Over 7.5 and Over 8.5 corner lines.
+    Evaluates lines strictly between 7.5 and 9.5 (Over 7.5, Over 8.5, Over 9.5).
     """
 
     def __init__(self, db: Optional[CloudSupabaseClient] = None):
         self.db = db or CloudSupabaseClient()
         self.data_provider = CornersDataProvider(self.db)
 
-    def run(self, max_fixtures: int = 500, wipe_pending: bool = True) -> Dict[str, Any]:
-        print("🚩 [CornersEngine] Launching Dynamic Corners Specialist Engine...")
+    def run(self, max_fixtures: int = 500, wipe_all: bool = True) -> Dict[str, Any]:
+        print("🚩 [CornersEngine] Launching Dynamic Corners Specialist Engine (7.5 - 9.5)...")
         now = datetime.now(timezone.utc)
         min_kickoff = (now - timedelta(minutes=5)).isoformat()
         max_kickoff = (now + timedelta(days=4)).isoformat()
@@ -46,18 +47,20 @@ class CornersEngine:
         ds_stats = self.data_provider.load_dynamic_dataset()
         print(f"📈 [CornersEngine] Ingestion complete: {ds_stats}")
 
-        # 2. Wipe pending contaminated legacy clones if requested
-        if wipe_pending:
-            print("🧹 [CornersEngine] Wiping legacy pending records from corner_predictions...")
+        # 2. Reset/Wipe existing corner predictions if requested per user directive
+        if wipe_all:
+            print("🧹 [CornersEngine] Archiving existing active corner predictions for fresh run...")
             try:
-                self.db.delete("corner_predictions", {
+                self.db.patch("corner_predictions", {
+                    "publication_status": "archived"
+                }, {
                     "settlement_status": "eq.pending"
                 })
-                print("✨ [CornersEngine] Successfully purged legacy pending clone records.")
+                print("✨ [CornersEngine] Successfully marked prior active corner predictions as archived.")
             except Exception as e:
-                print(f"⚠️ [CornersEngine] Notice during pending wipe: {e}")
+                print(f"⚠️ [CornersEngine] Notice during reset: {e}")
 
-        # 3. Query existing predictions to respect 48-hour lock & settlement status
+        # 3. Query existing predictions to respect 48-hour lock & settlement status (if any preserved)
         existing = self.db.get("corner_predictions", {
             "select": "id,fixture_id,target_kickoff_at,settlement_status,market",
             "limit": "1000"
@@ -66,8 +69,9 @@ class CornersEngine:
         existing_pending_map = {p["fixture_id"]: p["id"] for p in existing if p.get("settlement_status") == "pending"}
         locked_fixture_ids = set()
         for p in existing:
-            # Only truly completed historical fixtures (won / lost) are permanently locked
-            if p.get("settlement_status") in ("won", "lost"):
+            if p.get("settlement_status") in ("won", "lost", "void"):
+                locked_fixture_ids.add(p["fixture_id"])
+            elif p.get("target_kickoff_at") and p["target_kickoff_at"] <= lock_window_iso:
                 locked_fixture_ids.add(p["fixture_id"])
 
         # 4. Fetch scheduled upcoming fixtures across 4-day window
@@ -84,6 +88,8 @@ class CornersEngine:
         skipped_locked = 0
         skipped_unwhitelisted = 0
         skipped_insufficient_edge = 0
+
+        store = UniversalDataStore.get_instance(db=self.db)
 
         for f in fixtures:
             fid = f["id"]
@@ -122,12 +128,16 @@ class CornersEngine:
                 competition_code=league_metrics.league_code
             )
 
-            # Quality Gates 3 & 4: Negative Binomial Tail Modeling (Over 7.5 and Over 8.5 ONLY)
+            # H2H pace retrieval
+            h2h = store.get_h2h(h_profile.team_name, a_profile.team_name)
+
+            # Quality Gates 3 & 4: Negative Binomial Tail Modeling (7.5 - 9.5 range)
             eval_res = NegativeBinomialCornersModel.evaluate_matchup(
                 h_profile,
                 a_profile,
                 league_metrics,
-                intent
+                intent,
+                h2h=h2h
             )
 
             if not eval_res:
@@ -145,7 +155,7 @@ class CornersEngine:
                 intent_data={"tactical_tag": eval_res["corner_tier"]}
             )
 
-            density_tag = f"[DENSITY:{eval_res['over_7_5_pct']}/{eval_res['over_8_5_pct']}]"
+            density_tag = f"[DENSITY:{eval_res['over_7_5_pct']}/{eval_res['over_8_5_pct']}/{eval_res['over_9_5_pct']}]"
             notes = f"{density_tag} {rationale}"
 
             payload = {
