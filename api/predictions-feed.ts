@@ -149,6 +149,7 @@ function applyPaywallRedaction(predictions: any[]): any[] {
         return {
           ...p,
           is_locked: false,
+          publication_status: p.publication_status || 'published',
         };
       }
 
@@ -159,6 +160,7 @@ function applyPaywallRedaction(predictions: any[]): any[] {
         probability: null,
         confidence_category: 'LOCKED',
         prediction: 'LOCKED',
+        publication_status: p.publication_status || 'published',
         secondary_predictions: [], // Strip data to prevent leakage
         metadata: {},              // Strip simulation details to prevent leakage
       };
@@ -220,6 +222,10 @@ function prunePrediction(p: any): any {
     market: p.market,
     probability: p.probability,
     confidence_category: p.confidence_category,
+    publication_status: p.publication_status || 'published',
+    secondary_predictions: p.secondary_predictions || [],
+    simulations_count: p.simulations_count || 250000,
+    tier_required: p.tier_required || 'free',
     settlement_status: p.settlement_status,
     settlement_notes: p.settlement_notes,
     settled_at: p.settled_at,
@@ -233,7 +239,7 @@ function prunePrediction(p: any): any {
 
 async function fetchFromUpstream(): Promise<FeedData> {
   const selectQuery = encodeURIComponent(
-    `id,fixture_id,prediction,market,probability,confidence_category,metadata,settlement_status,settlement_notes,settled_at,actual_score,publication_status,target_kickoff_at,fixture:football_fixtures!inner(id,canonical_key,target_kickoff_at,status,home_score,away_score,match_minute,period,half_time_home_score,half_time_away_score,corners_home,corners_away,postponed_at,cancelled_at,venue,league:football_leagues!inner(id,name,code,country),home_team:football_teams!football_fixtures_home_team_id_fkey(id,name),away_team:football_teams!football_fixtures_away_team_id_fkey(id,name))`
+    `id,fixture_id,prediction,market,probability,confidence_category,secondary_predictions,metadata,settlement_status,settlement_notes,settled_at,actual_score,publication_status,simulations_count,target_kickoff_at,tier_required,fixture:football_fixtures!inner(id,canonical_key,target_kickoff_at,status,home_score,away_score,match_minute,period,half_time_home_score,half_time_away_score,corners_home,corners_away,postponed_at,cancelled_at,venue,league:football_leagues!inner(id,name,code,country),home_team:football_teams!football_fixtures_home_team_id_fkey(id,name),away_team:football_teams!football_fixtures_away_team_id_fkey(id,name))`
   );
 
   const authKey = SUPABASE_SERVICE_ROLE_KEY || SUPABASE_ANON_KEY;

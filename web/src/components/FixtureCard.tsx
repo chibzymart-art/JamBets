@@ -531,7 +531,7 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
 }) => {
   // STRICT ARCHITECTURAL INVARIANT: UI MUST ONLY SHOW PREDICTED FIXTURES
   // Fixture may appear only with an authoritative, published prediction record
-  if (!prediction || prediction.publication_status !== 'published') {
+  if (!prediction || (prediction.publication_status && prediction.publication_status !== 'published')) {
     return null;
   }
 
