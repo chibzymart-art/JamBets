@@ -176,9 +176,64 @@ function getCorsOrigin(req: Request): string {
   return allowed.includes(origin) ? origin : 'https://www.oddsbanta.com';
 }
 
+function prunePrediction(p: any): any {
+  const meta = p.metadata;
+  let prunedMeta: Record<string, any> = {};
+  if (meta && typeof meta === 'object') {
+    if (meta.ai_summary) prunedMeta.ai_summary = meta.ai_summary;
+    if (meta.poisson_parameters) prunedMeta.poisson_parameters = meta.poisson_parameters;
+    if (meta.simulation_outlines) prunedMeta.simulation_outlines = meta.simulation_outlines;
+    if (meta.lambda_home != null) prunedMeta.lambda_home = meta.lambda_home;
+    if (meta.lambda_away != null) prunedMeta.lambda_away = meta.lambda_away;
+    if (meta.home_attack != null) prunedMeta.home_attack = meta.home_attack;
+    if (meta.away_attack != null) prunedMeta.away_attack = meta.away_attack;
+    if (meta.home_defense != null) prunedMeta.home_defense = meta.home_defense;
+    if (meta.away_defense != null) prunedMeta.away_defense = meta.away_defense;
+  }
+
+  const fix = p.fixture || {};
+  const prunedFix: Record<string, any> = {
+    id: fix.id,
+    canonical_key: fix.canonical_key || fix.id,
+    status: fix.status,
+    target_kickoff_at: fix.target_kickoff_at,
+    home_score: fix.home_score,
+    away_score: fix.away_score,
+    match_minute: fix.match_minute,
+    period: fix.period,
+    half_time_home_score: fix.half_time_home_score,
+    half_time_away_score: fix.half_time_away_score,
+    corners_home: fix.corners_home,
+    corners_away: fix.corners_away,
+    venue: fix.venue,
+    league: fix.league,
+    home_team: fix.home_team,
+    away_team: fix.away_team,
+  };
+  if (fix.cancelled_at) prunedFix.cancelled_at = fix.cancelled_at;
+  if (fix.postponed_at) prunedFix.postponed_at = fix.postponed_at;
+
+  return {
+    id: p.id,
+    fixture_id: p.fixture_id,
+    prediction: p.prediction,
+    market: p.market,
+    probability: p.probability,
+    confidence_category: p.confidence_category,
+    settlement_status: p.settlement_status,
+    settlement_notes: p.settlement_notes,
+    settled_at: p.settled_at,
+    actual_score: p.actual_score,
+    target_kickoff_at: p.target_kickoff_at,
+    is_locked: false,
+    metadata: prunedMeta,
+    fixture: prunedFix,
+  };
+}
+
 async function fetchFromUpstream(): Promise<FeedData> {
   const selectQuery = encodeURIComponent(
-    `id,fixture_id,prediction,market,probability,confidence_category,secondary_predictions,metadata,settlement_status,settlement_notes,settled_at,actual_score,publication_status,simulations_count,target_kickoff_at,tier_required,fixture:football_fixtures!inner(id,canonical_key,target_kickoff_at,status,queue_day,in_prediction_queue,home_score,away_score,match_minute,period,half_time_home_score,half_time_away_score,corners_home,corners_away,postponed_at,cancelled_at,venue,metadata,league:football_leagues!inner(id,name,code,country),home_team:football_teams!football_fixtures_home_team_id_fkey(id,name),away_team:football_teams!football_fixtures_away_team_id_fkey(id,name))`
+    `id,fixture_id,prediction,market,probability,confidence_category,metadata,settlement_status,settlement_notes,settled_at,actual_score,publication_status,target_kickoff_at,fixture:football_fixtures!inner(id,canonical_key,target_kickoff_at,status,home_score,away_score,match_minute,period,half_time_home_score,half_time_away_score,corners_home,corners_away,postponed_at,cancelled_at,venue,league:football_leagues!inner(id,name,code,country),home_team:football_teams!football_fixtures_home_team_id_fkey(id,name),away_team:football_teams!football_fixtures_away_team_id_fkey(id,name))`
   );
 
   const authKey = SUPABASE_SERVICE_ROLE_KEY || SUPABASE_ANON_KEY;
@@ -208,10 +263,7 @@ async function fetchFromUpstream(): Promise<FeedData> {
     leagueRes.json(),
   ]);
 
-  const predictions = (Array.isArray(rawPredictions) ? rawPredictions : []).map((p: any) => ({
-    ...p,
-    is_locked: false,
-  }));
+  const predictions = (Array.isArray(rawPredictions) ? rawPredictions : []).map(prunePrediction);
 
   return {
     predictions,
@@ -228,9 +280,9 @@ export default async function handler(req: Request) {
     });
   }
 
-  // Rate Limiting (SEC-04): 60 requests per minute per IP
+  // Rate Limiting (SEC-04): 120 requests per minute per IP (tuned for African mobile CGNAT e.g. MTN, Airtel, Glo)
   const clientIp = getClientIp(req);
-  const rateLimit = checkRateLimit(`pred-feed:${clientIp}`, 60, 60);
+  const rateLimit = checkRateLimit(`pred-feed:${clientIp}`, 120, 60);
   if (!rateLimit.allowed) {
     return new Response(
       JSON.stringify({ success: false, error: 'Rate limit exceeded. Please retry shortly.' }),
@@ -239,7 +291,7 @@ export default async function handler(req: Request) {
         headers: {
           'Content-Type': 'application/json',
           'Retry-After': String(rateLimit.resetSec),
-          'X-RateLimit-Limit': '60',
+          'X-RateLimit-Limit': '120',
           'X-RateLimit-Remaining': '0',
           'X-RateLimit-Reset': String(rateLimit.resetSec),
         },
@@ -266,7 +318,7 @@ export default async function handler(req: Request) {
     'Vercel-CDN-Cache-Control': isVipOrAdmin ? 'no-store' : 'public, s-maxage=60',
     'Access-Control-Allow-Origin': corsOrigin,
     'Access-Control-Allow-Credentials': 'true',
-    'X-RateLimit-Limit': '60',
+    'X-RateLimit-Limit': '120',
     'X-RateLimit-Remaining': String(rateLimit.remaining),
   };
 

@@ -704,9 +704,9 @@ export default async function handler(req: Request) {
     });
   }
 
-  // 1. Rate Limiting: 60 req/min per IP
+  // 1. Rate Limiting: 120 req/min per IP (tuned for African mobile CGNAT gateways e.g. MTN, Airtel, Glo)
   const clientIp = getClientIp(req);
-  const rateLimit = checkRateLimit(`market-feed:${clientIp}`, 60, 60);
+  const rateLimit = checkRateLimit(`market-feed:${clientIp}`, 120, 60);
   if (!rateLimit.allowed) {
     return new Response(
       JSON.stringify({ success: false, error: 'Rate limit exceeded. Please retry shortly.' }),
@@ -715,6 +715,9 @@ export default async function handler(req: Request) {
         headers: {
           'Content-Type': 'application/json',
           'Retry-After': String(rateLimit.resetSec),
+          'X-RateLimit-Limit': '120',
+          'X-RateLimit-Remaining': '0',
+          'X-RateLimit-Reset': String(rateLimit.resetSec),
         },
       }
     );

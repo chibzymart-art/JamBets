@@ -186,9 +186,9 @@ export default async function handler(req: Request) {
     });
   }
 
-  // Rate Limiting (SEC-04): 60 requests per minute per IP
+  // Rate Limiting (SEC-04): 120 requests per minute per IP (tuned for African mobile CGNAT e.g. MTN, Airtel, Glo)
   const clientIp = getClientIp(req);
-  const rateLimit = checkRateLimit(`goals-feed:${clientIp}`, 60, 60);
+  const rateLimit = checkRateLimit(`goals-feed:${clientIp}`, 120, 60);
   if (!rateLimit.allowed) {
     return new Response(
       JSON.stringify({ success: false, error: 'Rate limit exceeded. Please retry shortly.' }),
@@ -197,7 +197,7 @@ export default async function handler(req: Request) {
         headers: {
           'Content-Type': 'application/json',
           'Retry-After': String(rateLimit.resetSec),
-          'X-RateLimit-Limit': '60',
+          'X-RateLimit-Limit': '120',
           'X-RateLimit-Remaining': '0',
           'X-RateLimit-Reset': String(rateLimit.resetSec),
         },
