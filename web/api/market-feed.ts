@@ -110,56 +110,63 @@ const ADMIN_EMAILS = new Set([
   'nnamdiamuchie@gmail.com',
 ]);
 
-function parseJwtPayload(token: string): any {
-  try {
-    const raw = token.startsWith('Bearer ') ? token.slice(7) : token;
-    const parts = raw.split('.');
-    if (parts.length < 2) return null;
-    const base64Url = parts[1];
-    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-    const jsonPayload = decodeURIComponent(
-      atob(base64)
-        .split('')
-        .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
-        .join('')
-    );
-    return JSON.parse(jsonPayload);
-  } catch {
-    return null;
-  }
-}
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 
+// In-memory cache for user auth verification (120s for valid users, 30s for invalid)
 const userAuthCache = new Map<string, { isPaid: boolean; expiresAt: number }>();
 
 async function checkIsPaidOrAdmin(authToken: string | null): Promise<boolean> {
   if (!authToken) return false;
-  const payload = parseJwtPayload(authToken);
-  if (!payload) return false;
+  const rawToken = authToken.startsWith('Bearer ') ? authToken.slice(7).trim() : authToken.trim();
+  if (!rawToken) return false;
 
-  if (payload.role === 'service_role' || payload.app_metadata?.role === 'admin') {
+  // 1. Direct Service Role Key Match (internal/admin scripts)
+  if (SUPABASE_SERVICE_ROLE_KEY && rawToken === SUPABASE_SERVICE_ROLE_KEY) {
     return true;
   }
 
-  const email = (payload.email || '').toLowerCase().trim();
-  if (email && ADMIN_EMAILS.has(email)) {
-    return true;
-  }
-
-  const userId = payload.sub || payload.id;
-  if (!userId) return false;
-
-  const cached = userAuthCache.get(userId);
+  // 2. Check in-memory cache to eliminate duplicate Supabase Auth roundtrips
+  const cached = userAuthCache.get(rawToken);
   if (cached && Date.now() < cached.expiresAt) {
     return cached.isPaid;
   }
 
   try {
+    // 3. Cryptographically verify token signature against Supabase Auth API
+    const authRes = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${rawToken}`,
+      },
+    });
+
+    if (!authRes.ok) {
+      // Signature is invalid, token is forged or expired -> fail closed
+      userAuthCache.set(rawToken, { isPaid: false, expiresAt: Date.now() + 30 * 1000 });
+      return false;
+    }
+
+    const authUser = await authRes.json();
+    if (!authUser || !authUser.id) {
+      userAuthCache.set(rawToken, { isPaid: false, expiresAt: Date.now() + 30 * 1000 });
+      return false;
+    }
+
+    // 4. Server-verified role or admin email whitelist
+    const email = (authUser.email || '').toLowerCase().trim();
+    if (authUser.app_metadata?.role === 'admin' || (email && ADMIN_EMAILS.has(email))) {
+      userAuthCache.set(rawToken, { isPaid: true, expiresAt: Date.now() + 120 * 1000 });
+      return true;
+    }
+
+    const userId = authUser.id;
     const headers = {
       apikey: SUPABASE_ANON_KEY,
-      Authorization: authToken.startsWith('Bearer ') ? authToken : `Bearer ${authToken}`,
+      Authorization: `Bearer ${rawToken}`,
       Accept: 'application/json',
     };
 
+    // 5. Query active subscriptions & entitlements for this verified user
     const [subRes, entRes] = await Promise.all([
       fetch(`${SUPABASE_URL}/rest/v1/subscriptions?user_id=eq.${userId}&status=eq.active&select=tier&limit=1`, { headers }),
       fetch(`${SUPABASE_URL}/rest/v1/entitlements?user_id=eq.${userId}&select=tier,valid_until,can_view_predictions&limit=1`, { headers }),
@@ -191,9 +198,10 @@ async function checkIsPaidOrAdmin(authToken: string | null): Promise<boolean> {
       }
     }
 
-    userAuthCache.set(userId, { isPaid, expiresAt: Date.now() + 120 * 1000 });
+    userAuthCache.set(rawToken, { isPaid, expiresAt: Date.now() + 120 * 1000 });
     return isPaid;
-  } catch {
+  } catch (err) {
+    console.error('Cryptographic auth verification error:', err);
     return false;
   }
 }
@@ -733,14 +741,15 @@ export default async function handler(req: Request) {
   const activeMarket = validMarkets.includes(marketParam) ? marketParam : 'general';
 
   const userAuthToken = req.headers.get('Authorization');
+  const isVipOrAdmin = await checkIsPaidOrAdmin(userAuthToken);
+  const upstreamAuth = isVipOrAdmin && userAuthToken ? userAuthToken : `Bearer ${SUPABASE_ANON_KEY}`;
   const headers: Record<string, string> = {
     apikey: SUPABASE_ANON_KEY,
-    Authorization: userAuthToken || `Bearer ${SUPABASE_ANON_KEY}`,
+    Authorization: upstreamAuth.startsWith('Bearer ') ? upstreamAuth : `Bearer ${upstreamAuth}`,
     Accept: 'application/json',
   };
 
-    const corsOrigin = getCorsOrigin(req);
-    const isVipOrAdmin = await checkIsPaidOrAdmin(userAuthToken);
+  const corsOrigin = getCorsOrigin(req);
 
     const responseHeaders = {
       'Content-Type': 'application/json',
