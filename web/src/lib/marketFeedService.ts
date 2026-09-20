@@ -365,51 +365,60 @@ export async function fetchMarketFeed(
     return cached.data;
   }
 
-  // 1. Try Edge API Route first
-  try {
-    const url = `/api/market-feed?market=${encodeURIComponent(market)}&date=${encodeURIComponent(
-      date
-    )}&page=${page}&limit=${limit}`;
+  // 1. Try Edge API Route first (with 1 retry to protect DB connection pool)
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const url = `/api/market-feed?market=${encodeURIComponent(market)}&date=${encodeURIComponent(
+        date
+      )}&page=${page}&limit=${limit}`;
 
-    const headers: Record<string, string> = { Accept: 'application/json' };
-    if (token) headers['Authorization'] = `Bearer ${token}`;
+      const headers: Record<string, string> = { Accept: 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
 
-    const res = await fetch(url, { headers });
-    if (res.ok) {
-      const contentType = res.headers.get('content-type') || '';
-      if (contentType.includes('application/json')) {
-        const json = await res.json();
-        if (json.success && Array.isArray(json.predictions)) {
-          // Guarantee tactical_rationale & tactical_tag are present on every prediction
-          json.predictions = json.predictions
-            .filter((p: UnifiedMarketPrediction) => {
-              if (p.settlement_status === 'void' || (p as any).publication_status === 'archived') {
-                return false;
-              }
-              if (p.market_category === 'corners') {
-                return p.settlement_status === 'pending' || (p.settlement_notes && p.settlement_notes.startsWith('Verified:'));
-              }
-              return true;
-            })
-            .map((p: UnifiedMarketPrediction) => {
-              if (!p.tactical_rationale) {
-                const tactical = computeTacticalAnalysis(p, p.market_category, p.market as MarketType);
-                p.tactical_tag = p.tactical_tag || tactical.tag;
-                p.tactical_rationale = tactical.rationale;
-              }
-              return p;
-            });
-          const response = json as UnifiedMarketFeedResponse;
-          clientMemoryCache.set(cacheKey, { data: response, timestamp: Date.now() });
-          return response;
+      const res = await fetch(url, { headers });
+      if (res.ok) {
+        const contentType = res.headers.get('content-type') || '';
+        if (contentType.includes('application/json')) {
+          const json = await res.json();
+          if (json.success && Array.isArray(json.predictions)) {
+            // Guarantee tactical_rationale & tactical_tag are present on every prediction
+            json.predictions = json.predictions
+              .filter((p: UnifiedMarketPrediction) => {
+                if (p.settlement_status === 'void' || (p as any).publication_status === 'archived') {
+                  return false;
+                }
+                if (p.market_category === 'corners') {
+                  return p.settlement_status === 'pending' || (p.settlement_notes && p.settlement_notes.startsWith('Verified:'));
+                }
+                return true;
+              })
+              .map((p: UnifiedMarketPrediction) => {
+                if (!p.tactical_rationale) {
+                  const tactical = computeTacticalAnalysis(p, p.market_category, p.market as MarketType);
+                  p.tactical_tag = p.tactical_tag || tactical.tag;
+                  p.tactical_rationale = tactical.rationale;
+                }
+                return p;
+              });
+            const response = json as UnifiedMarketFeedResponse;
+            clientMemoryCache.set(cacheKey, { data: response, timestamp: Date.now() });
+            return response;
+          }
         }
       }
+    } catch {
+      if (attempt === 0) {
+        await new Promise((resolve) => setTimeout(resolve, 400));
+      }
     }
-  } catch {
-    // Fall back to direct Supabase queries
   }
 
-  // 2. Direct Supabase Fallback
+  // 2. If Edge route fails, return stale client cache if available to shield DB
+  if (cached) {
+    return cached.data;
+  }
+
+  // 3. Direct Supabase Fallback (strict emergency fallback with reduced limit to shield connection pool)
   try {
     const [hwRes, drRes, crRes, glRes] = await Promise.all([
       supabase
@@ -418,28 +427,28 @@ export async function fetchMarketFeed(
         .neq('settlement_status', 'void')
         .neq('publication_status', 'archived')
         .order('probability', { ascending: false })
-        .limit(1000),
+        .limit(200),
       supabase
         .from(SELECTS.draw.table)
         .select(SELECTS.draw.select)
         .neq('settlement_status', 'void')
         .neq('publication_status', 'archived')
         .order('probability', { ascending: false })
-        .limit(1000),
+        .limit(200),
       supabase
         .from(SELECTS.corners.table)
         .select(SELECTS.corners.select)
         .neq('settlement_status', 'void')
         .neq('publication_status', 'archived')
         .order('probability', { ascending: false })
-        .limit(1000),
+        .limit(200),
       supabase
         .from(SELECTS.goals.table)
         .select(SELECTS.goals.select)
         .neq('settlement_status', 'void')
         .neq('publication_status', 'archived')
         .order('probability', { ascending: false })
-        .limit(1000),
+        .limit(200),
     ]);
 
     const normalizeList = (data: any[], cat: any, forced?: MarketType) =>

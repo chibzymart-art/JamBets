@@ -424,13 +424,19 @@ export default function App() {
       let rawPredRecords: any[] = [];
       let returnedLeagues: LeagueRecord[] = [];
 
-      // Edge CDN Acceleration: Query global edge cache for high-concurrency visitor traffic
+      // Edge Shield: Query global edge cache for all users (guests, VIPs, admins) to protect Supabase connection pool
       let usedEdgeCache = false;
-      if (!isAdmin && !canViewPredictions && typeof window !== 'undefined') {
+      if (typeof window !== 'undefined') {
         try {
+          const session = (await supabase.auth.getSession()).data.session;
+          const reqHeaders: Record<string, string> = { Accept: 'application/json' };
+          if (session?.access_token) {
+            reqHeaders['Authorization'] = `Bearer ${session.access_token}`;
+          }
+
           const edgeRes = await fetch('/api/predictions-feed', {
-            headers: { Accept: 'application/json' },
-            cache: 'default'
+            headers: reqHeaders,
+            cache: session?.access_token ? 'no-cache' : 'default'
           });
           if (edgeRes.ok) {
             const edgeData = await edgeRes.json();
@@ -441,7 +447,7 @@ export default function App() {
             }
           }
         } catch {
-          // Graceful fallback to direct Supabase PostgREST query
+          // Graceful fallback to direct Supabase PostgREST query if Edge API is unavailable
         }
       }
 

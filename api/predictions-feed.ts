@@ -275,19 +275,16 @@ export default async function handler(req: Request) {
   try {
     const now = Date.now();
 
-    // 1. For unauthenticated / non-paid users, return cached Edge data if fresh
-    if (!isVipOrAdmin) {
-      const cached = memoryCache.get(cacheKey);
-      if (cached && now < cached.expiresAt) {
-        const paywalledData = {
-          ...cached.data,
-          predictions: applyPaywallRedaction(cached.data.predictions),
-        };
-        return new Response(
-          JSON.stringify({ success: true, ...paywalledData }),
-          { status: 200, headers: responseHeaders }
-        );
-      }
+    // 1. Return cached Edge data if fresh (shields Supabase from both guest & VIP queries!)
+    const cached = memoryCache.get(cacheKey);
+    if (cached && now < cached.expiresAt) {
+      const payload = !isVipOrAdmin
+        ? { ...cached.data, predictions: applyPaywallRedaction(cached.data.predictions) }
+        : cached.data;
+      return new Response(
+        JSON.stringify({ success: true, ...payload }),
+        { status: 200, headers: responseHeaders }
+      );
     }
 
     // 2. Fetch with promise deduplication to avoid thundering herd

@@ -767,15 +767,13 @@ export default async function handler(req: Request) {
     try {
       const now = Date.now();
 
-      // Check memory cache for guest / unauthenticated requests
-      if (!isVipOrAdmin) {
-        const cached = memoryCache.get(cacheKey);
-        if (cached && now < cached.expiresAt) {
-          return new Response(JSON.stringify(cached.data), {
-            status: 200,
-            headers: responseHeaders,
-          });
-        }
+      // Check memory cache for fresh data (shields Supabase for both guest & VIP queries!)
+      const cached = memoryCache.get(cacheKey);
+      if (cached && now < cached.expiresAt) {
+        return new Response(JSON.stringify(cached.data), {
+          status: 200,
+          headers: responseHeaders,
+        });
       }
 
       // 3. Fetch predictions & counts
@@ -892,9 +890,7 @@ export default async function handler(req: Request) {
           cached_at: new Date().toISOString(),
         };
 
-        if (!userAuthToken) {
-          memoryCache.set(cacheKey, { data: responsePayload, expiresAt: Date.now() + CACHE_TTL_MS });
-        }
+        memoryCache.set(cacheKey, { data: responsePayload, expiresAt: Date.now() + CACHE_TTL_MS });
 
         return responsePayload;
       })();
