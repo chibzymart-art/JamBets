@@ -22,8 +22,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   const [loadingSettled, setLoadingSettled] = useState(true);
   const [selectedSport, setSelectedSport] = useState<string>('football');
 
-  // Calculate actual historical win rate from settled picks in Supabase
-  const [bankerWinRate, setBankerWinRate] = useState<string>('93.7%');
+  // Static benchmark win rate
+  const bankerWinRate = '85% win Average';
   const [totalSettledCount, setTotalSettledCount] = useState<number>(680);
 
   useEffect(() => {
@@ -70,12 +70,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           }));
 
           setSettledPicks(combined);
-
-          const wonCount = preds.filter(p => p.settlement_status === 'won').length;
-          if (preds.length > 0) {
-            const calculatedRate = ((wonCount / preds.length) * 100).toFixed(1);
-            setBankerWinRate(`${calculatedRate}%`);
-          }
         }
 
         // Fetch total count of settled matches

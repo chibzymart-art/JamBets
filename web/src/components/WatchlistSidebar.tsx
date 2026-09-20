@@ -50,18 +50,18 @@ export const WatchlistSidebar: React.FC<WatchlistSidebarProps> = ({
           </div>
         </div>
 
-        {/* Watchlist Content Box */}
+        {/* Watchlist Content Box (Internally scrollable when multiple fixtures added) */}
         <div className="watchlist-content-box">
           {favoriteItems.length === 0 ? (
-            <>
+            <div className="watchlist-empty-wrap">
               <div className="watchlist-empty-icon">★</div>
               <div className="watchlist-empty-title">Slip Empty</div>
               <p className="watchlist-empty-sub">
                 Click the star icon (☆) or "+ Add" on any match card to pin predictions here or build your custom slip.
               </p>
-            </>
+            </div>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, textAlign: 'left' }}>
+            <div className="watchlist-items-scroll-list">
               {favoriteItems.map((fav) => {
                 const time = fav.targetKickoffAt ? formatKickoff(fav.targetKickoffAt) : null;
                 return (
@@ -97,19 +97,23 @@ export const WatchlistSidebar: React.FC<WatchlistSidebarProps> = ({
                   </div>
                 );
               })}
-              {onOpenFavoritesDrawer && (
-                <button
-                  type="button"
-                  onClick={onOpenFavoritesDrawer}
-                  className="btn-paywall-unlock-prominent"
-                  style={{ marginTop: 8, padding: '8px 12px', fontSize: 12, textAlign: 'center' }}
-                >
-                  📋 View Full Slip ({favoriteItems.length}) →
-                </button>
-              )}
             </div>
           )}
         </div>
+
+        {/* Pinned Footer Action: Always visible at bottom of sidebar card */}
+        {favoriteItems.length > 0 && onOpenFavoritesDrawer && (
+          <div className="watchlist-sidebar-footer">
+            <button
+              type="button"
+              onClick={onOpenFavoritesDrawer}
+              className="btn-paywall-unlock-prominent"
+              style={{ width: '100%', padding: '9px 12px', fontSize: 12, textAlign: 'center', display: 'block' }}
+            >
+              📋 View Full Slip ({favoriteItems.length}) →
+            </button>
+          </div>
+        )}
       </aside>
 
       {/* UNDER FAVORITES SIDEBAR AD SLOT (DESKTOP, EXACT SAME WIDTH) */}

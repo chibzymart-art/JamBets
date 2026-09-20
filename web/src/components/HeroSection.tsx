@@ -5,7 +5,7 @@ interface HeroSectionProps {
   onSeePlans: () => void;
   onSelectSport: (sportId: string) => void;
   selectedSport: string;
-  modelWinRate: number | string;
+  modelWinRate?: number | string;
   settledCount: number | string;
   onScrollToFixtures: () => void;
 }
@@ -15,7 +15,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
   onSeePlans,
   onSelectSport,
   selectedSport,
-  modelWinRate,
+  modelWinRate = '85% win Average',
   settledCount,
   onScrollToFixtures
 }) => {
@@ -83,7 +83,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
           <div className="hero-metrics-grid">
             <div className="hero-metric-card">
               <span className="metric-label">Model win rate</span>
-              <span className="metric-value win-rate">{modelWinRate}%</span>
+              <span className="metric-value win-rate">{modelWinRate}</span>
               <span className="metric-sub">Verified Consensus</span>
             </div>
 
