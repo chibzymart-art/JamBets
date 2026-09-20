@@ -203,16 +203,14 @@ export default async function handler(req: Request) {
     });
   }
 
-  // SEC-03: Validate Telegram Webhook Secret Token
-  if (TELEGRAM_WEBHOOK_SECRET) {
-    const incomingSecret = req.headers.get('x-telegram-bot-api-secret-token');
-    if (!incomingSecret || incomingSecret !== TELEGRAM_WEBHOOK_SECRET) {
-      console.warn('Blocked unauthorized Telegram webhook call: missing or invalid secret');
-      return new Response(JSON.stringify({ success: false, error: 'Unauthorized: Invalid webhook secret' }), {
-        status: 401,
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
+  // SEC-03: Validate Telegram Webhook Secret Token (Strict Fail-Closed)
+  const incomingSecret = req.headers.get('x-telegram-bot-api-secret-token');
+  if (!TELEGRAM_WEBHOOK_SECRET || incomingSecret !== TELEGRAM_WEBHOOK_SECRET) {
+    console.warn('Blocked unauthorized Telegram webhook call: missing or invalid secret token');
+    return new Response(JSON.stringify({ success: false, error: 'Unauthorized: Invalid webhook secret' }), {
+      status: 401,
+      headers: { 'Content-Type': 'application/json' },
+    });
   }
 
   // SEC-06: Fail securely if server credentials are not configured

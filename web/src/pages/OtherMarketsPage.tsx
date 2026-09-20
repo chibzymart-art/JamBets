@@ -222,9 +222,12 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
       // Exclude void or archived legacy records completely from user display
       if (p.settlement_status === 'void' || (p as any).publication_status === 'archived') return false;
 
+      // Strict Paywall: Non-paid users NEVER see lost predictions
+      if (!isPaidUser && p.settlement_status === 'lost') return false;
+
       // Status filter
       if (statusFilter === 'won' && p.settlement_status !== 'won') return false;
-      if (statusFilter === 'lost' && p.settlement_status !== 'lost') return false;
+      if (statusFilter === 'lost' && (p.settlement_status !== 'lost' || !isPaidUser)) return false;
       if (statusFilter === 'pending' && p.settlement_status !== 'pending') return false;
 
       // Search query
@@ -238,7 +241,7 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
 
       return true;
     });
-  }, [predictions, statusFilter, searchQuery]);
+  }, [predictions, statusFilter, searchQuery, isPaidUser]);
 
   // Summary counts for current batch
   const statusStats = useMemo(() => {
@@ -248,11 +251,13 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
     for (const p of predictions) {
       if (p.settlement_status === 'void' || (p as any).publication_status === 'archived') continue;
       if (p.settlement_status === 'won') won++;
-      else if (p.settlement_status === 'lost') lost++;
+      else if (p.settlement_status === 'lost') {
+        if (isPaidUser) lost++;
+      }
       else pending++;
     }
-    return { total: won + lost + pending, won, lost, pending };
-  }, [predictions]);
+    return { total: won + (isPaidUser ? lost : 0) + pending, won, lost, pending };
+  }, [predictions, isPaidUser]);
 
   // Synchronize active market count with actual predictions loaded for 100% badge-to-card harmony
   const displayCounts = useMemo(() => {
@@ -411,14 +416,16 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
               <span className="scorecard-text-desktop">Won ✅ ({statusStats.won})</span>
               <span className="scorecard-text-mobile">Won ({statusStats.won})</span>
             </button>
-            <button
-              type="button"
-              className={`scorecard-pill lost ${statusFilter === 'lost' ? 'active' : ''}`}
-              onClick={() => setStatusFilter('lost')}
-            >
-              <span className="scorecard-text-desktop">Lost ❌ ({statusStats.lost})</span>
-              <span className="scorecard-text-mobile">Lost ({statusStats.lost})</span>
-            </button>
+            {isPaidUser && (
+              <button
+                type="button"
+                className={`scorecard-pill lost ${statusFilter === 'lost' ? 'active' : ''}`}
+                onClick={() => setStatusFilter('lost')}
+              >
+                <span className="scorecard-text-desktop">Lost ❌ ({statusStats.lost})</span>
+                <span className="scorecard-text-mobile">Lost ({statusStats.lost})</span>
+              </button>
+            )}
             <button
               type="button"
               className={`scorecard-pill pending ${statusFilter === 'pending' ? 'active' : ''}`}

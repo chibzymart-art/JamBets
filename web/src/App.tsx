@@ -1152,6 +1152,17 @@ export default function App() {
         if (!hasTier) return false;
       }
 
+      // Strict User Rule: Non-paid users only see won predictions for the day, lost ones are hidden
+      if (!isAdmin && !canViewPredictions) {
+        const hasWonPred = fixturePreds.some((p) => p.settlement_status === 'won');
+        const hasLostPred = fixturePreds.some(
+          (p) => p.settlement_status === 'lost' || p.settlement_status === 'void' || p.settlement_status === 'voided'
+        );
+        if ((hasLostPred && !hasWonPred) || (isFinished && !hasWonPred)) {
+          return false;
+        }
+      }
+
       // Settlement Status filter
       if (settlementFilter !== 'all') {
         if (canViewPredictions) {

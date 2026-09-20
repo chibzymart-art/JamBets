@@ -33,6 +33,25 @@ export const FavoritesDrawer: React.FC<FavoritesDrawerProps> = ({
 }) => {
   const [copied, setCopied] = useState(false);
 
+  // Prevent background page scrolling when the drawer is open
+  React.useEffect(() => {
+    if (isOpen) {
+      const originalOverflow = document.body.style.overflow;
+      const originalPaddingRight = document.body.style.paddingRight;
+      const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
+
+      document.body.style.overflow = 'hidden';
+      if (scrollbarWidth > 0) {
+        document.body.style.paddingRight = `${scrollbarWidth}px`;
+      }
+
+      return () => {
+        document.body.style.overflow = originalOverflow;
+        document.body.style.paddingRight = originalPaddingRight;
+      };
+    }
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   const handleCopySlip = () => {
@@ -68,7 +87,7 @@ export const FavoritesDrawer: React.FC<FavoritesDrawerProps> = ({
   return (
     <div className="favorites-drawer-overlay" onClick={onClose}>
       <aside className="favorites-drawer-container" onClick={(e) => e.stopPropagation()}>
-        {/* Drawer Header */}
+        {/* Drawer Header (Fixed) */}
         <div className="favorites-drawer-header">
           <div className="favorites-drawer-title-group">
             <div className="favorites-drawer-icon-box">⭐</div>
@@ -90,71 +109,73 @@ export const FavoritesDrawer: React.FC<FavoritesDrawerProps> = ({
           </button>
         </div>
 
-        {/* Acca Summary Card */}
-        {favorites.length > 0 && (
-          <div className="favorites-acca-card">
-            <div className="favorites-acca-header">
-              <span className="acca-title-badge">🎯 ACCUMULATOR MULTIPLIER</span>
-              <span className="acca-picks-count">{favorites.length} Selection{favorites.length > 1 ? 's' : ''}</span>
-            </div>
-            <div className="favorites-acca-metrics">
-              <div className="acca-metric-item">
-                <span className="acca-metric-label">Combined Confidence</span>
-                <strong className="acca-metric-val acca-prob">
-                  {favorites.reduce((acc, f) => acc * ((f.probability || 75) / 100), 1) * 100 < 1
-                    ? '< 1%'
-                    : `${(favorites.reduce((acc, f) => acc * ((f.probability || 75) / 100), 1) * 100).toFixed(1)}%`}
-                </strong>
+        {/* Unified Internal Scroll Container: Acca Card + Items Scroll Seamlessly Together */}
+        <div className="favorites-drawer-scrollable-content">
+          {/* Acca Summary Card */}
+          {favorites.length > 0 && (
+            <div className="favorites-acca-card">
+              <div className="favorites-acca-header">
+                <span className="acca-title-badge">🎯 ACCUMULATOR MULTIPLIER</span>
+                <span className="acca-picks-count">{favorites.length} Selection{favorites.length > 1 ? 's' : ''}</span>
               </div>
-              <div className="acca-metric-divider" />
-              <div className="acca-metric-item">
-                <span className="acca-metric-label">Selections</span>
-                <strong className="acca-metric-val">
-                  {favorites.length} {favorites.length === 1 ? 'Pick' : 'Picks'}
-                </strong>
+              <div className="favorites-acca-metrics">
+                <div className="acca-metric-item">
+                  <span className="acca-metric-label">Combined Confidence</span>
+                  <strong className="acca-metric-val acca-prob">
+                    {favorites.reduce((acc, f) => acc * ((f.probability || 75) / 100), 1) * 100 < 1
+                      ? '< 1%'
+                      : `${(favorites.reduce((acc, f) => acc * ((f.probability || 75) / 100), 1) * 100).toFixed(1)}%`}
+                  </strong>
+                </div>
+                <div className="acca-metric-divider" />
+                <div className="acca-metric-item">
+                  <span className="acca-metric-label">Selections</span>
+                  <strong className="acca-metric-val">
+                    {favorites.length} {favorites.length === 1 ? 'Pick' : 'Picks'}
+                  </strong>
+                </div>
+              </div>
+
+              {/* Acca Action Buttons */}
+              <div className="favorites-acca-actions">
+                <a
+                  href={`https://api.whatsapp.com/send?text=${encodeURIComponent(
+                    `🔥 *ODDSBANTA ACCA SLIP* (${favorites.length} Picks)\n\n` +
+                    favorites.map((f, i) => `${i + 1}. *${f.homeTeam} vs ${f.awayTeam}*\n   🎯 Pick: *${f.prediction}* (${f.market}) • ${Math.round(f.probability || 0)}%\n`).join('\n') +
+                    `\n🔒 Verified by Oddsbanta AI Engine\n👉 https://oddsbanta.com/dashboard`
+                  )}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="favorites-whatsapp-btn"
+                >
+                  <span>📲</span> Share Acca to WhatsApp
+                </a>
+
+                <button
+                  type="button"
+                  className={`favorites-copy-slip-btn ${copied ? 'copied' : ''}`}
+                  onClick={handleCopySlip}
+                >
+                  {copied ? '✓ Copied!' : '📋 Copy Slip'}
+                </button>
+
+                <button
+                  type="button"
+                  className="favorites-clear-btn"
+                  onClick={onClearAll}
+                  title="Remove all saved selections"
+                >
+                  Clear
+                </button>
               </div>
             </div>
+          )}
 
-            {/* Acca Action Buttons */}
-            <div className="favorites-acca-actions">
-              <a
-                href={`https://api.whatsapp.com/send?text=${encodeURIComponent(
-                  `🔥 *ODDSBANTA ACCA SLIP* (${favorites.length} Picks)\n\n` +
-                  favorites.map((f, i) => `${i + 1}. *${f.homeTeam} vs ${f.awayTeam}*\n   🎯 Pick: *${f.prediction}* (${f.market}) • ${Math.round(f.probability || 0)}%\n`).join('\n') +
-                  `\n🔒 Verified by Oddsbanta AI Engine\n👉 https://oddsbanta.com/dashboard`
-                )}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="favorites-whatsapp-btn"
-              >
-                <span>📲</span> Share Acca to WhatsApp
-              </a>
+          {/* SPONSORED PARTNER BANNER */}
+          <AdBannerSlot slotType="drawer-banner" />
 
-              <button
-                type="button"
-                className={`favorites-copy-slip-btn ${copied ? 'copied' : ''}`}
-                onClick={handleCopySlip}
-              >
-                {copied ? '✓ Copied!' : '📋 Copy Slip'}
-              </button>
-
-              <button
-                type="button"
-                className="favorites-clear-btn"
-                onClick={onClearAll}
-                title="Remove all saved selections"
-              >
-                Clear
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* SPONSORED PARTNER BANNER (mybrainpadi.com test) */}
-        <AdBannerSlot slotType="drawer-banner" />
-
-        {/* Drawer Body Items */}
-        <div className="favorites-drawer-body">
+          {/* Drawer Body Items */}
+          <div className="favorites-drawer-body">
           {favorites.length === 0 ? (
             <div className="favorites-empty-state">
               <div className="favorites-empty-icon">⭐</div>
@@ -246,8 +267,9 @@ export const FavoritesDrawer: React.FC<FavoritesDrawerProps> = ({
             </div>
           )}
         </div>
+        </div>
 
-        {/* Drawer Footer */}
+        {/* Drawer Footer (Fixed at Bottom) */}
         {favorites.length > 0 && (
           <div className="favorites-drawer-footer">
             <div className="favorites-footer-summary">

@@ -102,6 +102,113 @@ const CACHE_TTL_MS = 60 * 1000; // 60s edge cache
 const countsMemoryCache = new Map<string, { counts: Record<MarketType, number>; expiresAt: number }>();
 const COUNTS_TTL_MS = 60 * 1000; // 60s memory cache for counts
 
+const ADMIN_EMAILS = new Set([
+  'chibzymart@gmail.com',
+  'whizzchibz@gmail.com',
+  'chibuezec.amuchie@gmail.com',
+  'chibuezeamuchie@gmail.com',
+  'nnamdiamuchie@gmail.com',
+]);
+
+function parseJwtPayload(token: string): any {
+  try {
+    const raw = token.startsWith('Bearer ') ? token.slice(7) : token;
+    const parts = raw.split('.');
+    if (parts.length < 2) return null;
+    const base64Url = parts[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = decodeURIComponent(
+      atob(base64)
+        .split('')
+        .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+        .join('')
+    );
+    return JSON.parse(jsonPayload);
+  } catch {
+    return null;
+  }
+}
+
+const userAuthCache = new Map<string, { isPaid: boolean; expiresAt: number }>();
+
+async function checkIsPaidOrAdmin(authToken: string | null): Promise<boolean> {
+  if (!authToken) return false;
+  const payload = parseJwtPayload(authToken);
+  if (!payload) return false;
+
+  if (payload.role === 'service_role' || payload.app_metadata?.role === 'admin') {
+    return true;
+  }
+
+  const email = (payload.email || '').toLowerCase().trim();
+  if (email && ADMIN_EMAILS.has(email)) {
+    return true;
+  }
+
+  const userId = payload.sub || payload.id;
+  if (!userId) return false;
+
+  const cached = userAuthCache.get(userId);
+  if (cached && Date.now() < cached.expiresAt) {
+    return cached.isPaid;
+  }
+
+  try {
+    const headers = {
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: authToken.startsWith('Bearer ') ? authToken : `Bearer ${authToken}`,
+      Accept: 'application/json',
+    };
+
+    const [subRes, entRes] = await Promise.all([
+      fetch(`${SUPABASE_URL}/rest/v1/subscriptions?user_id=eq.${userId}&status=eq.active&select=tier&limit=1`, { headers }),
+      fetch(`${SUPABASE_URL}/rest/v1/entitlements?user_id=eq.${userId}&select=tier,valid_until,can_view_predictions&limit=1`, { headers }),
+    ]);
+
+    let isPaid = false;
+
+    if (subRes.ok) {
+      const subData = await subRes.json();
+      if (Array.isArray(subData) && subData.length > 0) {
+        const tier = (subData[0].tier || '').toLowerCase();
+        if (['standard', 'bigbang', 'vip', 'pro', 'admin'].includes(tier)) {
+          isPaid = true;
+        }
+      }
+    }
+
+    if (!isPaid && entRes.ok) {
+      const entData = await entRes.json();
+      if (Array.isArray(entData) && entData.length > 0) {
+        const ent = entData[0];
+        const validUntil = ent.valid_until ? new Date(ent.valid_until).getTime() : Infinity;
+        if (validUntil > Date.now()) {
+          const tier = (ent.tier || '').toLowerCase();
+          if (ent.can_view_predictions === true || ['standard', 'bigbang', 'vip', 'pro', 'admin'].includes(tier)) {
+            isPaid = true;
+          }
+        }
+      }
+    }
+
+    userAuthCache.set(userId, { isPaid, expiresAt: Date.now() + 120 * 1000 });
+    return isPaid;
+  } catch {
+    return false;
+  }
+}
+
+function getCorsOrigin(req: Request): string {
+  const origin = req.headers.get('Origin') || '';
+  const allowed = [
+    'https://www.oddsbanta.com',
+    'https://oddsbanta.com',
+    'http://localhost:5173',
+    'http://localhost:3000',
+  ];
+  return allowed.includes(origin) ? origin : 'https://www.oddsbanta.com';
+}
+
 // Lagos WAT (UTC+1) date helpers
 function getLagosDate(d: Date = new Date()): string {
   return new Intl.DateTimeFormat('en-CA', {
@@ -632,120 +739,133 @@ export default async function handler(req: Request) {
     Accept: 'application/json',
   };
 
-  const responseHeaders = {
-    'Content-Type': 'application/json',
-    'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300',
-    'CDN-Cache-Control': 'public, s-maxage=60',
-    'Vercel-CDN-Cache-Control': 'public, s-maxage=60',
-    'Access-Control-Allow-Origin': '*',
-  };
+    const corsOrigin = getCorsOrigin(req);
+    const isVipOrAdmin = await checkIsPaidOrAdmin(userAuthToken);
 
-  const cacheKey = `${activeMarket}:${dateParam}:${leagueParam}:${pageParam}:${limitParam}:${Boolean(userAuthToken)}`;
+    const responseHeaders = {
+      'Content-Type': 'application/json',
+      'Cache-Control': isVipOrAdmin
+        ? 'private, no-cache, no-store, must-revalidate'
+        : 'public, s-maxage=60, stale-while-revalidate=300',
+      'CDN-Cache-Control': isVipOrAdmin ? 'no-store' : 'public, s-maxage=60',
+      'Vercel-CDN-Cache-Control': isVipOrAdmin ? 'no-store' : 'public, s-maxage=60',
+      'Access-Control-Allow-Origin': corsOrigin,
+      'Access-Control-Allow-Credentials': 'true',
+    };
 
-  try {
-    const now = Date.now();
+    const cacheKey = `${activeMarket}:${dateParam}:${leagueParam}:${pageParam}:${limitParam}:${Boolean(isVipOrAdmin)}`;
 
-    // Check memory cache for guest / unauthenticated requests
-    if (!userAuthToken) {
-      const cached = memoryCache.get(cacheKey);
-      if (cached && now < cached.expiresAt) {
-        return new Response(JSON.stringify(cached.data), {
-          status: 200,
-          headers: responseHeaders,
-        });
+    try {
+      const now = Date.now();
+
+      // Check memory cache for guest / unauthenticated requests
+      if (!isVipOrAdmin) {
+        const cached = memoryCache.get(cacheKey);
+        if (cached && now < cached.expiresAt) {
+          return new Response(JSON.stringify(cached.data), {
+            status: 200,
+            headers: responseHeaders,
+          });
+        }
       }
-    }
 
-    // 3. Fetch predictions & counts
-    let fetchPromise = inflightPromises.get(cacheKey);
-    if (!fetchPromise) {
-      fetchPromise = (async () => {
-        const [allPredictions, counts] = await Promise.all([
-          fetchMarketDataFromUpstream(activeMarket, headers),
-          computeAllMarketCounts(headers, dateParam),
-        ]);
+      // 3. Fetch predictions & counts
+      let fetchPromise = inflightPromises.get(cacheKey);
+      if (!fetchPromise) {
+        fetchPromise = (async () => {
+          const [allPredictions, counts] = await Promise.all([
+            fetchMarketDataFromUpstream(activeMarket, headers),
+            computeAllMarketCounts(headers, dateParam),
+          ]);
 
-        // 4. In-Memory Date & League Filtering
-        let filtered = allPredictions;
+          // 4. In-Memory Date & League Filtering
+          let filtered = allPredictions;
 
-        if (dateParam !== 'all') {
-          let targetDateStr = dateParam;
-          const todayStr = getLagosDate();
-          if (dateParam === 'today') {
-            targetDateStr = todayStr;
-          } else if (dateParam === 'tomorrow') {
-            targetDateStr = getLagosDate(new Date(Date.now() + 86400000));
-          } else if (dateParam === 'yesterday') {
-            targetDateStr = getLagosDate(new Date(Date.now() - 86400000));
+          if (dateParam !== 'all') {
+            let targetDateStr = dateParam;
+            const todayStr = getLagosDate();
+            if (dateParam === 'today') {
+              targetDateStr = todayStr;
+            } else if (dateParam === 'tomorrow') {
+              targetDateStr = getLagosDate(new Date(Date.now() + 86400000));
+            } else if (dateParam === 'yesterday') {
+              targetDateStr = getLagosDate(new Date(Date.now() - 86400000));
+            }
+
+            filtered = filtered.filter((p) => {
+              const pDate = getLagosDateFromIso(p.target_kickoff_at);
+              return pDate === targetDateStr;
+            });
+          } else {
+            // All dates: current date and future dates, no past dates
+            const todayStr = getLagosDate();
+            filtered = filtered.filter((p) => {
+              const pDate = getLagosDateFromIso(p.target_kickoff_at);
+              return !pDate || pDate >= todayStr;
+            });
           }
 
-          filtered = filtered.filter((p) => {
-            const pDate = getLagosDateFromIso(p.target_kickoff_at);
-            return pDate === targetDateStr;
-          });
-        } else {
-          // All dates: current date and future dates, no past dates
-          const todayStr = getLagosDate();
-          filtered = filtered.filter((p) => {
-            const pDate = getLagosDateFromIso(p.target_kickoff_at);
-            return !pDate || pDate >= todayStr;
-          });
-        }
-
-        if (leagueParam) {
-          filtered = filtered.filter((p) => {
-            const lCode = (p.fixture?.league?.code || '').toLowerCase();
-            return lCode === leagueParam.toLowerCase();
-          });
-        }
-
-        // Collect available leagues
-        const leagueMap = new Map<string, string>();
-        for (const p of allPredictions) {
-          const code = p.fixture?.league?.code;
-          const name = p.fixture?.league?.name;
-          if (code && name && !leagueMap.has(code)) {
-            leagueMap.set(code, name);
-          }
-        }
-        const leagues = Array.from(leagueMap.entries()).map(([code, name]) => ({ code, name }));
-
-        const total = filtered.length;
-        const totalPages = Math.ceil(total / limitParam) || 1;
-        const offset = (pageParam - 1) * limitParam;
-        const paginatedRaw = filtered.slice(offset, offset + limitParam);
-
-        // 5. Apply Freemium 3/7 Redaction Rule for non-VIP visitors
-        // In continuous scrolling: picks 0..2 are free & unlocked. Picks 3+ are locked teaser cards.
-        const isVipOrAdmin = Boolean(userAuthToken); // Database view also enforces RLS
-        const predictions = paginatedRaw.map((item, idx) => {
-          const globalIdx = offset + idx;
-          const isSettled = ['won', 'lost', 'void'].includes(item.settlement_status);
-
-          // If paid/admin or settled, always unlocked
-          if (isVipOrAdmin || isSettled) {
-            return item;
+          if (leagueParam) {
+            filtered = filtered.filter((p) => {
+              const lCode = (p.fixture?.league?.code || '').toLowerCase();
+              return lCode === leagueParam.toLowerCase();
+            });
           }
 
-          // Freemium 3/7 Rule: First 3 picks free in continuous stream
-          if (globalIdx < 3) {
+          // Collect available leagues
+          const leagueMap = new Map<string, string>();
+          for (const p of allPredictions) {
+            const code = p.fixture?.league?.code;
+            const name = p.fixture?.league?.name;
+            if (code && name && !leagueMap.has(code)) {
+              leagueMap.set(code, name);
+            }
+          }
+          const leagues = Array.from(leagueMap.entries()).map(([code, name]) => ({ code, name }));
+
+          // 5. Strict Paywall Redaction:
+          // Rule 1: Non-paid users are locked from seeing any pending predictions (0 free)
+          // Rule 2: Non-paid users only see WON predictions for the day (unlocked)
+          // Rule 3: Lost predictions are completely hidden from non-paid visitors
+          let filteredForAudience = filtered;
+          if (!isVipOrAdmin) {
+            filteredForAudience = filtered.filter((p) => {
+              return p.settlement_status !== 'lost' && p.settlement_status !== 'void';
+            });
+          }
+
+          const total = filteredForAudience.length;
+          const totalPages = Math.ceil(total / limitParam) || 1;
+          const offset = (pageParam - 1) * limitParam;
+          const paginatedRaw = filteredForAudience.slice(offset, offset + limitParam);
+
+          const predictions = paginatedRaw.map((item) => {
+            if (isVipOrAdmin) {
+              return item;
+            }
+
+            // Won predictions are visible as proof
+            if (item.settlement_status === 'won') {
+              return {
+                ...item,
+                is_locked: false,
+              };
+            }
+
+            // ALL pending predictions are locked
             return {
               ...item,
-              is_locked: false,
+              is_locked: true,
+              prediction: 'LOCKED',
+              probability: null,
+              display_probability: null,
+              confidence_tier: 'LOCKED',
+              confidence_category: 'LOCKED',
+              metrics: {},
+              tactical_rationale: null,
+              tactical_tag: null,
             };
-          }
-
-          // Remaining picks are locked teasers
-          return {
-            ...item,
-            is_locked: true,
-            prediction: 'LOCKED',
-            probability: null,
-            display_probability: null,
-            confidence_tier: 'LOCKED',
-            metrics: {},
-          };
-        });
+          });
 
         const responsePayload: MarketFeedResponse = {
           success: true,

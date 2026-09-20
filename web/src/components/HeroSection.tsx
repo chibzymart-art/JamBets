@@ -24,12 +24,11 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
       {/* Dynamic Background with Floodlit Soccer Stadium & Action Photo (Picture 3) */}
       <div className="hero-bg-wrapper">
         <img
-          src="/hero-bg.jpg"
+          src="/hero-bg.webp"
           alt="Oddsbanta Live Football Prediction Engine"
           className="hero-bg-image"
           onError={(e) => {
-            // Fallback to absolute or public path if needed
-            (e.target as HTMLImageElement).src = '/Gemini_Generated_Image_9yaair9yaair9yaa.jpg';
+            (e.target as HTMLImageElement).src = '/hero-fallback.webp';
           }}
         />
         <div className="hero-gradient-overlay" />

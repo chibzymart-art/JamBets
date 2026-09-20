@@ -104,11 +104,11 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       <section className="hero-light-section" aria-label="Oddsbanta Hero Section">
         <div className="hero-light-backdrop">
           <img
-            src="/hero-bg.jpg"
+            src="/hero-bg.webp"
             alt="Oddsbanta Football Action"
             className="hero-light-bg-img"
             onError={(e) => {
-              (e.target as HTMLImageElement).src = '/Gemini_Generated_Image_9yaair9yaair9yaa.jpg';
+              (e.target as HTMLImageElement).src = '/hero-fallback.webp';
             }}
           />
           <div className="hero-light-gradient-overlay" />

@@ -12296,6 +12296,8 @@ body {
   z-index: 10000;
   display: flex;
   justify-content: flex-end;
+  overscroll-behavior: contain;
+  touch-action: none;
   animation: fadeIn 0.2s ease-out;
 }
 
@@ -12303,10 +12305,13 @@ body {
   width: 100%;
   max-width: 440px;
   height: 100%;
+  max-height: 100vh;
   background: #ffffff;
   box-shadow: -8px 0 32px rgba(0, 0, 0, 0.25);
   display: flex;
   flex-direction: column;
+  overflow: hidden;
+  overscroll-behavior: contain;
   animation: slideLeft 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
@@ -12323,6 +12328,7 @@ body {
   align-items: center;
   justify-content: space-between;
   border-bottom: 1px solid #1e293b;
+  flex-shrink: 0;
 }
 
 .favorites-drawer-title-group {
@@ -12428,11 +12434,22 @@ body {
   color: #b91c1c;
 }
 
-.favorites-drawer-body {
+/* Unified internal scroll area for the drawer */
+.favorites-drawer-scrollable-content {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
-  padding: 16px;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
   background: #f1f5f9;
+  display: flex;
+  flex-direction: column;
+}
+
+.favorites-drawer-body {
+  padding: 0 16px 16px 16px;
+  background: transparent;
 }
 
 .favorites-empty-state {

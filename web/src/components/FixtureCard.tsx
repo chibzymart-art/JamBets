@@ -546,17 +546,22 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
   // Format Kickoff in Lagos WAT (UTC+1)
   const kickoffDate = new Date(fixture.target_kickoff_at);
 
-  // Paywall lock evaluation:
-  // Admin and verified paid users NEVER see locks.
-  // Settled / finished fixtures are public to prove track record.
-  // Free users see locks on active scheduled predictions.
-  const isSettled = prediction.settlement_status === 'won' ||
-    prediction.settlement_status === 'lost' ||
-    prediction.settlement_status === 'void' ||
-    prediction.settlement_status === 'voided' ||
-    isFinished;
+  // Strict Paywall Evaluation:
+  // Paid / Admin: 100% full visibility of all predictions (pending, won, lost, void).
+  // Non-paid users:
+  // 1. Completely hide lost and void predictions (only won predictions are visible).
+  // 2. All pending/upcoming predictions are strictly locked.
+  if (!isAdmin && !canViewPredictions) {
+    if (prediction.settlement_status === 'lost' ||
+        prediction.settlement_status === 'void' ||
+        prediction.settlement_status === 'voided' ||
+        (isFinished && prediction.settlement_status !== 'won')) {
+      return null;
+    }
+  }
 
-  const isLocked = !isAdmin && !canViewPredictions && !isSettled;
+  const isWon = prediction.settlement_status === 'won';
+  const isLocked = !isAdmin && !canViewPredictions && !isWon;
 
   const effectiveCategory = isLocked
     ? 'LOCKED'
@@ -607,8 +612,6 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
   }, [prediction?.metadata, poissonData, fixture]);
 
   // If the match is live and the prediction has been met or settled while live, it settles the match by showing WON.
-  const isWon = prediction?.settlement_status === 'won';
-
   const isLost = prediction?.settlement_status === 'lost';
   const isVoid = prediction?.settlement_status === 'void' || prediction?.settlement_status === 'voided';
   const isPending = !isWon && !isLost && !isVoid;
