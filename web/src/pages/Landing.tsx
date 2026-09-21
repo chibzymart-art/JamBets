@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 
 interface LandingPageProps {
@@ -18,6 +18,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   onOpenPricing,
   onOpenBotHub
 }) => {
+  const navigate = useNavigate();
   const [settledPicks, setSettledPicks] = useState<any[]>([]);
   const [loadingSettled, setLoadingSettled] = useState(true);
   const [selectedSport, setSelectedSport] = useState<string>('football');
@@ -250,7 +251,10 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               <button
                 type="button"
                 className={`hero-light-sport-pill ${selectedSport === 'tennis' ? 'active' : ''}`}
-                onClick={() => setSelectedSport('tennis')}
+                onClick={() => {
+                  setSelectedSport('tennis');
+                  navigate('/tennis');
+                }}
               >
                 <span>🎾 Tennis (ATP & WTA Tour)</span>
                 <span className="pill-live-badge">LIVE</span>

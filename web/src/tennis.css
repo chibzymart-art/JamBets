@@ -1,0 +1,1018 @@
+/* ==========================================================================
+   Oddsbanta — Autonomous Tennis Hub Stylesheet
+   Modern Glassmorphic Visual Language & Dynamic Surface-Calibrated Aesthetics
+   ========================================================================== */
+
+:root {
+  --tennis-clay-primary: #dc2626;
+  --tennis-clay-bg: rgba(220, 38, 38, 0.08);
+  --tennis-clay-border: rgba(220, 38, 38, 0.25);
+
+  --tennis-grass-primary: #16a34a;
+  --tennis-grass-bg: rgba(22, 163, 74, 0.08);
+  --tennis-grass-border: rgba(22, 163, 74, 0.25);
+
+  --tennis-hard-primary: #2563eb;
+  --tennis-hard-bg: rgba(37, 99, 235, 0.08);
+  --tennis-hard-border: rgba(37, 99, 235, 0.25);
+
+  --tennis-indoor-primary: #7c3aed;
+  --tennis-indoor-bg: rgba(124, 58, 237, 0.08);
+  --tennis-indoor-border: rgba(124, 58, 237, 0.25);
+
+  --tennis-gold: #f59e0b;
+  --tennis-card-bg: rgba(255, 255, 255, 0.96);
+  --tennis-card-border: #e2e8f0;
+  --tennis-text-main: #0f172a;
+  --tennis-text-muted: #64748b;
+}
+
+.tennis-hub-container {
+  width: 100%;
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 12px 16px 80px 16px;
+  color: var(--tennis-text-main);
+  animation: fadeInHub 0.3s ease-out;
+}
+
+@keyframes fadeInHub {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 1. HERO & TELEMETRY STATS BAR */
+.tennis-hero-banner {
+  background: linear-gradient(135deg, #0b1329 0%, #1e1b4b 50%, #0f172a 100%);
+  border-radius: 20px;
+  padding: 24px 28px;
+  margin-bottom: 24px;
+  color: #ffffff;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.tennis-hero-banner::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  right: -20%;
+  width: 320px;
+  height: 320px;
+  background: radial-gradient(circle, rgba(16, 185, 129, 0.25) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.tennis-hero-content {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.tennis-hero-tag-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.tennis-live-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(16, 185, 129, 0.2);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.4);
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.tennis-live-dot {
+  width: 7px;
+  height: 7px;
+  background: #10b981;
+  border-radius: 50%;
+  box-shadow: 0 0 10px #10b981;
+  animation: pulseTennisDot 1.8s infinite;
+}
+
+@keyframes pulseTennisDot {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.4); opacity: 0.6; }
+}
+
+.tennis-model-tag {
+  color: #94a3b8;
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.tennis-hero-title {
+  font-size: 1.65rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.tennis-hero-desc {
+  color: #cbd5e1;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  margin: 0;
+  max-width: 760px;
+}
+
+/* Telemetry Counter Chips */
+.tennis-telemetry-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.tennis-telemetry-card {
+  background: rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  transition: transform 0.2s ease, border-color 0.2s ease;
+}
+
+.tennis-telemetry-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+.telemetry-val {
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.telemetry-val.highlight {
+  color: #34d399;
+}
+
+.telemetry-lbl {
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* 2. SUB-NAVIGATION & FILTER TABS */
+.tennis-controls-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-bottom: 22px;
+}
+
+.tennis-nav-tabs {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  scrollbar-width: none;
+}
+
+.tennis-nav-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.tennis-nav-tab {
+  white-space: nowrap;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  color: #475569;
+  padding: 10px 20px;
+  border-radius: 12px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+}
+
+.tennis-nav-tab:hover {
+  background: #f8fafc;
+  color: #0f172a;
+  border-color: #cbd5e1;
+}
+
+.tennis-nav-tab.active {
+  background: #0f172a;
+  color: #ffffff;
+  border-color: #0f172a;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.15);
+}
+
+.tab-badge {
+  background: rgba(0, 0, 0, 0.06);
+  color: #475569;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+.tennis-nav-tab.active .tab-badge {
+  background: rgba(255, 255, 255, 0.22);
+  color: #ffffff;
+}
+
+/* Surface Filter Bar */
+.tennis-surface-bar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  background: #f8fafc;
+  padding: 8px 12px;
+  border-radius: 14px;
+  border: 1px solid #e2e8f0;
+}
+
+.surface-bar-label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-right: 4px;
+}
+
+.tennis-surface-pill {
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  color: #475569;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s ease;
+}
+
+.tennis-surface-pill:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+.tennis-surface-pill.active {
+  background: #0f172a;
+  color: #ffffff;
+  border-color: #0f172a;
+}
+
+.tennis-surface-pill.clay.active {
+  background: var(--tennis-clay-primary);
+  border-color: var(--tennis-clay-primary);
+}
+
+.tennis-surface-pill.grass.active {
+  background: var(--tennis-grass-primary);
+  border-color: var(--tennis-grass-primary);
+}
+
+.tennis-surface-pill.hard.active {
+  background: var(--tennis-hard-primary);
+  border-color: var(--tennis-hard-primary);
+}
+
+.tennis-surface-pill.indoor.active {
+  background: var(--tennis-indoor-primary);
+  border-color: var(--tennis-indoor-primary);
+}
+
+/* Search Bar */
+.tennis-search-input {
+  flex: 1;
+  min-width: 200px;
+  padding: 8px 14px;
+  border-radius: 10px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #0f172a;
+  font-size: 0.84rem;
+  outline: none;
+  transition: border-color 0.2s ease;
+}
+
+.tennis-search-input:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+/* 3. TENNIS CARDS GRID */
+.tennis-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: 18px;
+}
+
+/* 4. INDIVIDUAL TENNIS CARD */
+.tennis-card {
+  background: var(--tennis-card-bg);
+  border: 1px solid var(--tennis-card-border);
+  border-radius: 16px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  position: relative;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.03);
+}
+
+.tennis-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px -4px rgba(15, 23, 42, 0.08);
+  border-color: #cbd5e1;
+}
+
+/* Card Header */
+.tennis-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #f1f5f9;
+  padding-bottom: 10px;
+}
+
+.card-header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow: hidden;
+}
+
+.tour-tag {
+  font-size: 0.72rem;
+  font-weight: 800;
+  padding: 3px 8px;
+  border-radius: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.tour-tag.atp {
+  background: #1e3a8a;
+  color: #93c5fd;
+}
+
+.tour-tag.wta {
+  background: #831843;
+  color: #fbcfe8;
+}
+
+.tour-tag.gs {
+  background: #14532d;
+  color: #86efac;
+}
+
+.tour-tag.ch {
+  background: #374151;
+  color: #e5e7eb;
+}
+
+.tournament-title {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #1e293b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 170px;
+}
+
+.round-badge {
+  background: #f1f5f9;
+  color: #64748b;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 6px;
+}
+
+.card-header-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Surface & CPI Badges */
+.surface-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 6px;
+  text-transform: capitalize;
+}
+
+.surface-badge.clay {
+  background: var(--tennis-clay-bg);
+  color: var(--tennis-clay-primary);
+  border: 1px solid var(--tennis-clay-border);
+}
+
+.surface-badge.grass {
+  background: var(--tennis-grass-bg);
+  color: var(--tennis-grass-primary);
+  border: 1px solid var(--tennis-grass-border);
+}
+
+.surface-badge.hard_outdoor {
+  background: var(--tennis-hard-bg);
+  color: var(--tennis-hard-primary);
+  border: 1px solid var(--tennis-hard-border);
+}
+
+.surface-badge.hard_indoor {
+  background: var(--tennis-indoor-bg);
+  color: var(--tennis-indoor-primary);
+  border: 1px solid var(--tennis-indoor-border);
+}
+
+.cpi-meter-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  color: #475569;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 3px 7px;
+  border-radius: 6px;
+}
+
+.cpi-meter-pill.fast {
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: #dc2626;
+}
+
+.cpi-meter-pill.medium {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+  color: #2563eb;
+}
+
+.cpi-meter-pill.slow {
+  background: #fefce8;
+  border-color: #fef08a;
+  color: #ca8a04;
+}
+
+/* Competitor Matchup Rows */
+.tennis-matchup-box {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: #f8fafc;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+}
+
+.competitor-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.competitor-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.competitor-name {
+  font-size: 0.94rem;
+  font-weight: 700;
+  color: #0f172a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rank-badge {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #64748b;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+.competitor-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.surface-elo-chip {
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: #1e293b;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  padding: 2px 7px;
+  border-radius: 6px;
+}
+
+.match-set-score {
+  font-size: 1rem;
+  font-weight: 800;
+  color: #0f172a;
+  min-width: 20px;
+  text-align: right;
+}
+
+/* ELO Differential Comparison Bar */
+.elo-differential-container {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px 0;
+}
+
+.elo-diff-header {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #64748b;
+}
+
+.elo-diff-bar {
+  width: 100%;
+  height: 6px;
+  background: #e2e8f0;
+  border-radius: 999px;
+  overflow: hidden;
+  position: relative;
+  display: flex;
+}
+
+.elo-diff-fill-p1 {
+  background: #2563eb;
+  height: 100%;
+  transition: width 0.3s ease;
+}
+
+.elo-diff-fill-p2 {
+  background: #7c3aed;
+  height: 100%;
+  transition: width 0.3s ease;
+}
+
+/* Kickoff Time & Live Status Row */
+.tennis-status-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.78rem;
+  color: #64748b;
+  padding: 2px 4px;
+}
+
+.kickoff-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-weight: 600;
+}
+
+.match-live-chip {
+  background: #fef2f2;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* 5. MONTE CARLO 250k SIMULATION BREAKDOWN */
+.tennis-sim-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.sim-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.mc-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.tier-badge {
+  font-size: 0.74rem;
+  font-weight: 800;
+  padding: 3px 9px;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.tier-badge.banger {
+  background: #ecfdf5;
+  color: #059669;
+  border: 1px solid #a7f3d0;
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.2);
+}
+
+.tier-badge.top-pick {
+  background: #eff6ff;
+  color: #2563eb;
+  border: 1px solid #bfdbfe;
+}
+
+.tier-badge.high-conf {
+  background: #f5f3ff;
+  color: #7c3aed;
+  border: 1px solid #ddd6fe;
+}
+
+.tier-badge.no-banker {
+  background: #f8fafc;
+  color: #64748b;
+  border: 1px solid #cbd5e1;
+}
+
+/* Primary Pick Card */
+.tennis-primary-pick {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  padding: 10px 12px;
+  border-radius: 10px;
+}
+
+.pick-market-lbl {
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+}
+
+.pick-selection-val {
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.pick-prob-box {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.prob-val {
+  font-size: 1.25rem;
+  font-weight: 900;
+  color: #059669;
+}
+
+.prob-lbl {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+}
+
+/* Secondary Markets Row */
+.secondary-picks-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.secondary-chip {
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 4px 8px;
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: #334155;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.secondary-chip strong {
+  color: #0f172a;
+}
+
+/* Markov Metrics Strip */
+.markov-metrics-strip {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  background: #f8fafc;
+  padding: 8px;
+  border-radius: 8px;
+  text-align: center;
+}
+
+.markov-metric-box {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.mm-val {
+  font-size: 0.84rem;
+  font-weight: 800;
+  color: #1e293b;
+}
+
+.mm-lbl {
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+}
+
+/* AI Tactical Rationale Box */
+.tactical-narrative-box {
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 8px;
+  padding: 10px;
+  font-size: 0.8rem;
+  color: #166534;
+  line-height: 1.45;
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.tactical-icon {
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+
+/* 6. SUBSCRIBER TIER PAYWALL LOCKED TEASER */
+.tennis-locked-teaser {
+  position: relative;
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  border: 1px dashed #cbd5e1;
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 10px;
+  overflow: hidden;
+}
+
+.locked-blur-preview {
+  filter: blur(5px);
+  user-select: none;
+  pointer-events: none;
+  opacity: 0.5;
+  display: flex;
+  width: 100%;
+  justify-content: space-between;
+}
+
+.locked-cta-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  z-index: 2;
+}
+
+.lock-shield-icon {
+  font-size: 1.75rem;
+  color: #f59e0b;
+  filter: drop-shadow(0 2px 8px rgba(245, 158, 11, 0.3));
+}
+
+.locked-title {
+  font-size: 0.94rem;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0;
+}
+
+.locked-subtext {
+  font-size: 0.78rem;
+  color: #64748b;
+  max-width: 280px;
+  margin: 0;
+}
+
+.tennis-unlock-btn {
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  color: #ffffff;
+  border: none;
+  border-radius: 10px;
+  padding: 8px 18px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
+  transition: all 0.2s ease;
+}
+
+.tennis-unlock-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(245, 158, 11, 0.4);
+}
+
+/* 7. SETTLEMENT HISTORY TABLE & CARDS */
+.settlement-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.settlement-card.won {
+  border-left: 4px solid #10b981;
+}
+
+.settlement-card.lost {
+  border-left: 4px solid #ef4444;
+}
+
+.settlement-card.void {
+  border-left: 4px solid #94a3b8;
+}
+
+.settlement-status-tag {
+  font-size: 0.74rem;
+  font-weight: 800;
+  padding: 2px 8px;
+  border-radius: 999px;
+  text-transform: uppercase;
+}
+
+.settlement-status-tag.won {
+  background: #ecfdf5;
+  color: #059669;
+}
+
+.settlement-status-tag.lost {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+.settlement-status-tag.void {
+  background: #f1f5f9;
+  color: #64748b;
+}
+
+.set-scores-wrap {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.set-score-chip {
+  background: #f1f5f9;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #1e293b;
+  padding: 2px 7px;
+  border-radius: 6px;
+}
+
+.rule-audit-badge {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #d97706;
+  background: #fffbeb;
+  border: 1px solid #fef3c7;
+  padding: 2px 6px;
+  border-radius: 6px;
+}
+
+/* 8. EMPTY & LOADING STATES */
+.tennis-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 20px;
+  text-align: center;
+  background: #ffffff;
+  border: 1px dashed #cbd5e1;
+  border-radius: 16px;
+  gap: 12px;
+}
+
+.tennis-empty-icon {
+  font-size: 2.5rem;
+}
+
+.tennis-empty-title {
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0;
+}
+
+.tennis-empty-desc {
+  font-size: 0.85rem;
+  color: #64748b;
+  max-width: 420px;
+  margin: 0;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .tennis-hub-container {
+    padding: 8px 12px 70px 12px;
+  }
+
+  .tennis-hero-banner {
+    padding: 18px 16px;
+  }
+
+  .tennis-hero-title {
+    font-size: 1.35rem;
+  }
+
+  .tennis-cards-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .tennis-telemetry-row {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}

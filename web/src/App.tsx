@@ -30,6 +30,8 @@ import { OtherMarketsPage } from './pages/OtherMarketsPage';
 import { WatchlistSidebar } from './components/WatchlistSidebar';
 import { LeftSidebarAd } from './components/LeftSidebarAd';
 import { getDateDetailsByOffset, getPastDatesList } from './lib/dateUtils';
+import './tennis.css';
+import { TennisHubView } from './components/TennisHubView';
 
 
 export default function App() {
@@ -86,7 +88,7 @@ export default function App() {
     football: { isAvailable: true, fixtureCount: 433, leagueCount: 30 },
     american_football: { isAvailable: false, fixtureCount: 0, leagueCount: 0 },
     basketball: { isAvailable: false, fixtureCount: 0, leagueCount: 0 },
-    tennis: { isAvailable: false, fixtureCount: 0, leagueCount: 0 },
+    tennis: { isAvailable: true, fixtureCount: 203, leagueCount: 8 },
     cricket: { isAvailable: false, fixtureCount: 0, leagueCount: 0 }
   });
 
@@ -123,6 +125,11 @@ export default function App() {
       updatePageSeo({
         title: 'Admin Command Deck | Oddsbanta',
         description: 'Internal operations, prediction queue management, and model telemetry.',
+      });
+    } else if (location.pathname === '/tennis') {
+      updatePageSeo({
+        title: 'Tennis Predictions & 250k Monte Carlo Hub | Oddsbanta AI',
+        description: 'Autonomous tennis prediction engine featuring 250,000 Monte Carlo simulations, Court Pace Index (CPI) calibration, and surface ELO models.',
       });
     } else {
       updatePageSeo({
@@ -395,13 +402,17 @@ export default function App() {
     navigate('/dashboard');
   };
 
-  // Redirect /dashboard?market=... to /other-markets?market=... for specialist markets
+  // Redirect /dashboard?market=... to /other-markets?market=... for specialist markets, handle ?sport=tennis
   useEffect(() => {
     try {
       const searchParams = new URLSearchParams(location.search);
       const m = searchParams.get('market');
       if (m && m !== 'general' && location.pathname.startsWith('/dashboard')) {
         navigate(`/other-markets?market=${m}`, { replace: true });
+      }
+      const sportParam = searchParams.get('sport');
+      if (sportParam === 'tennis') {
+        setSelectedSport('tennis');
       }
     } catch {}
   }, [location.search, location.pathname, navigate]);
@@ -602,6 +613,20 @@ export default function App() {
       setLeaguesList(returnedLeagues);
       setPredictions(embeddedPreds);
 
+      // Query dynamic tennis counts from Supabase
+      let dynamicTennisCount = 203;
+      let dynamicTennisTournamentCount = 8;
+      try {
+        const [tfCountRes, ttCountRes] = await Promise.all([
+          supabase.from('tennis_fixtures').select('*', { count: 'exact', head: true }),
+          supabase.from('tennis_tournaments').select('*', { count: 'exact', head: true })
+        ]);
+        if (typeof tfCountRes.count === 'number' && tfCountRes.count > 0) dynamicTennisCount = tfCountRes.count;
+        if (typeof ttCountRes.count === 'number' && ttCountRes.count > 0) dynamicTennisTournamentCount = ttCountRes.count;
+      } catch {
+        // Fallback to baseline
+      }
+
       // Fast static sports state avoiding 404 HTTP round-trips
       setSportsState({
         football: {
@@ -611,7 +636,7 @@ export default function App() {
         },
         american_football: { isAvailable: false, fixtureCount: 0, leagueCount: 0 },
         basketball: { isAvailable: false, fixtureCount: 0, leagueCount: 0 },
-        tennis: { isAvailable: false, fixtureCount: 0, leagueCount: 0 },
+        tennis: { isAvailable: true, fixtureCount: dynamicTennisCount, leagueCount: dynamicTennisTournamentCount },
         cricket: { isAvailable: false, fixtureCount: 0, leagueCount: 0 }
       });
 
@@ -813,12 +838,12 @@ export default function App() {
       id: 'tennis',
       name: 'Tennis',
       icon: '🎾',
-      isAvailable: sportsState.tennis?.isAvailable ?? false,
-      fixtureCount: sportsState.tennis?.fixtureCount ?? 0,
-      leagueCount: sportsState.tennis?.leagueCount ?? 0,
+      isAvailable: sportsState.tennis?.isAvailable ?? true,
+      fixtureCount: sportsState.tennis?.fixtureCount ?? 203,
+      leagueCount: sportsState.tennis?.leagueCount ?? 8,
       statusLabel: sportsState.tennis?.isAvailable ? 'Available' : 'Coming Soon',
       subtext: sportsState.tennis?.isAvailable
-        ? `${sportsState.tennis.leagueCount} Available Leagues`
+        ? `${sportsState.tennis.leagueCount} Available Tournaments`
         : 'Coming Soon'
     },
     {
@@ -1260,6 +1285,13 @@ export default function App() {
             >
               Other Markets
             </Link>
+            <Link
+              to="/tennis"
+              className={`nav-link-btn ${location.pathname === '/tennis' || (isPredictionsOrDashboard && selectedSport === 'tennis') ? 'active' : ''}`}
+              onClick={() => setSelectedSport('tennis')}
+            >
+              🎾 Tennis Hub
+            </Link>
             <button
               type="button"
               className={`nav-link-btn ${location.pathname === '/subscription' ? 'active' : ''}`}
@@ -1630,6 +1662,30 @@ export default function App() {
           />
           <Route path="/over-2-5" element={<Navigate to="/other-markets" replace />} />
 
+          {/* ROUTE: TENNIS PREDICTIONS & MONTE CARLO HUB */}
+          <Route
+            path="/tennis"
+            element={
+              <div id="fixtures-view-section" style={{ paddingTop: '8px' }}>
+                <TennisHubView
+                  currentUser={currentUser}
+                  userRole={profile?.role}
+                  isAdmin={isAdmin}
+                  canViewPredictions={canViewPredictions}
+                  onOpenAuth={(mode) => {
+                    setAuthModalMode(mode);
+                    setIsAuthModalOpen(true);
+                  }}
+                  onOpenSubscription={() => setIsPricingModalOpen(true)}
+                  onBackToFootball={() => {
+                    setSelectedSport('football');
+                    navigate('/dashboard');
+                  }}
+                />
+              </div>
+            }
+          />
+
           {/* ROUTE 4: ADMIN COMMAND DECK (STRICTLY GATED) */}
           <Route
             path="/admin"
@@ -1801,6 +1857,19 @@ export default function App() {
               ⚽ Explore Active Football Predictions ({sportsState.football?.fixtureCount || 433}+ Matches Live)
             </button>
           </div>
+        ) : selectedSport === 'tennis' ? (
+          <TennisHubView
+            currentUser={currentUser}
+            userRole={profile?.role}
+            isAdmin={isAdmin}
+            canViewPredictions={canViewPredictions}
+            onOpenAuth={(mode) => {
+              setAuthModalMode(mode);
+              setIsAuthModalOpen(true);
+            }}
+            onOpenSubscription={() => setIsPricingModalOpen(true)}
+            onBackToFootball={() => setSelectedSport('football')}
+          />
         ) : (
           <>
             {/* 3. DAILY VERIFIED SCORECARD SECTION */}
@@ -2326,6 +2395,14 @@ export default function App() {
         >
           <span className="mobile-tab-icon">🎯</span>
           <span className="mobile-tab-label">Other Markets</span>
+        </Link>
+        <Link
+          to="/tennis"
+          className={`mobile-tab-item ${location.pathname === '/tennis' || (isPredictionsOrDashboard && selectedSport === 'tennis') ? 'active' : ''}`}
+          onClick={() => setSelectedSport('tennis')}
+        >
+          <span className="mobile-tab-icon">🎾</span>
+          <span className="mobile-tab-label">Tennis</span>
         </Link>
         <button
           type="button"
