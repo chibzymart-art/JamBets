@@ -1285,13 +1285,6 @@ export default function App() {
             >
               Other Markets
             </Link>
-            <Link
-              to="/tennis"
-              className={`nav-link-btn ${location.pathname === '/tennis' || (isPredictionsOrDashboard && selectedSport === 'tennis') ? 'active' : ''}`}
-              onClick={() => setSelectedSport('tennis')}
-            >
-              🎾 Tennis Hub
-            </Link>
             <button
               type="button"
               className={`nav-link-btn ${location.pathname === '/subscription' ? 'active' : ''}`}
@@ -2395,14 +2388,6 @@ export default function App() {
         >
           <span className="mobile-tab-icon">🎯</span>
           <span className="mobile-tab-label">Other Markets</span>
-        </Link>
-        <Link
-          to="/tennis"
-          className={`mobile-tab-item ${location.pathname === '/tennis' || (isPredictionsOrDashboard && selectedSport === 'tennis') ? 'active' : ''}`}
-          onClick={() => setSelectedSport('tennis')}
-        >
-          <span className="mobile-tab-icon">🎾</span>
-          <span className="mobile-tab-label">Tennis</span>
         </Link>
         <button
           type="button"
