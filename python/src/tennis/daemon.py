@@ -43,6 +43,8 @@ class TennisScraperDaemon:
         self.pipeline = TennisIngestionPipeline(db_client=self.db)
         from .prediction_engine import TennisPredictionEngine
         self.predictor = TennisPredictionEngine(db_client=self.db)
+        from .settlement import TennisSettlementEngine
+        self.settler = TennisSettlementEngine(db_client=self.db)
 
         # Register OS signal handlers for graceful shutdown
         signal.signal(signal.SIGINT, self._handle_exit)
@@ -52,12 +54,12 @@ class TennisScraperDaemon:
         logger.info("Termination signal received. Shutting down Tennis Scraper Daemon...")
         self.running = False
 
-    def run_cycle(self, sync_rankings: bool = True, date_str: Optional[str] = None, run_predictions: bool = True):
+    def run_cycle(self, sync_rankings: bool = True, date_str: Optional[str] = None, run_predictions: bool = True, run_settlement: bool = True):
         """
-        Executes a complete synchronization and prediction cycle.
+        Executes a complete synchronization, settlement, and prediction cycle.
         """
         start_t = time.time()
-        logger.info("=== Starting Autonomous Tennis Sync & Prediction Cycle ===")
+        logger.info("=== Starting Autonomous Tennis Sync, Settlement & Prediction Cycle ===")
 
         try:
             # 1. Sync Rankings (ATP & WTA)
@@ -66,12 +68,18 @@ class TennisScraperDaemon:
                 synced_players = self.pipeline.sync_player_rankings(tours=["atp", "wta"])
                 logger.info("Rankings sync complete: %d players updated.", synced_players)
 
-            # 2. Sync Scoreboards & Fixtures
+            # 2. Sync Scoreboards & Live/Completed Fixtures
             logger.info("Fetching ATP/WTA live scoreboards and matches...")
             stats = self.pipeline.sync_live_scoreboard(tours=["atp", "wta"], date_str=date_str)
             logger.info("Scoreboard sync complete: %s", stats)
 
-            # 3. Generate Predictions for Scheduled Fixtures
+            # 3. Audit and Settle Completed Matches
+            if run_settlement:
+                logger.info("Auditing and settling completed tennis predictions...")
+                settle_stats = self.settler.run_settlement_cycle()
+                logger.info("Settlement audit complete: %s", settle_stats)
+
+            # 4. Generate Predictions for Scheduled Fixtures
             if run_predictions:
                 logger.info("Executing Hierarchical Markov & Monte Carlo Prediction Engine...")
                 pred_stats = self.predictor.generate_all_predictions()

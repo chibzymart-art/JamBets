@@ -134,7 +134,8 @@ class TennisDbClient:
         p2_sets: int,
         total_games: int,
         was_retired: bool = False,
-        was_walkover: bool = False
+        was_walkover: bool = False,
+        actual_result: Optional[str] = None
     ) -> Dict[str, Any]:
         now_iso = datetime.now(timezone.utc).isoformat()
 
@@ -144,6 +145,8 @@ class TennisDbClient:
             "settlement_notes": notes,
             "settled_at": now_iso
         }
+        if actual_result:
+            pred_update["actual_result"] = actual_result
         self.client.patch("/tennis_predictions", json=pred_update, params={"id": f"eq.{prediction_id}"})
 
         # 2. Audit record in tennis_settlements table
