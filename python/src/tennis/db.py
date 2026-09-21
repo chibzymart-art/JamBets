@@ -76,8 +76,7 @@ class TennisDbClient:
     # ------------------------------------------------------------------
     def get_upcoming_fixtures(self, start_iso: str, end_iso: str) -> List[Dict[str, Any]]:
         params = {
-            "target_kickoff_at": f"gte.{start_iso}",
-            "target_kickoff_at": f"lte.{end_iso}",
+            "and": f"(target_kickoff_at.gte.{start_iso},target_kickoff_at.lte.{end_iso})",
             "status": "eq.scheduled",
             "select": "*,tournament:tennis_tournaments(*),player1:tennis_players!tennis_fixtures_player1_id_fkey(*),player2:tennis_players!tennis_fixtures_player2_id_fkey(*)",
             "order": "target_kickoff_at.asc"
