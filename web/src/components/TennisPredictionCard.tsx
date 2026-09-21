@@ -1,10 +1,15 @@
 import React, { useState } from 'react';
 import { TennisPrediction, TennisSurface } from '../types/tennis';
 import { getTierConfig } from './FixtureCard';
+import { FavoritePredictionItem } from './FavoritesDrawer';
 
 export interface TennisPredictionCardProps {
   prediction: TennisPrediction;
   isSubscriber: boolean;
+  isAdmin?: boolean;
+  canViewPredictions?: boolean;
+  isFavorite?: boolean;
+  onToggleFavorite?: (item: FavoritePredictionItem) => void;
   onOpenUpgrade?: () => void;
   onOpenAuth?: (mode: 'signin' | 'register') => void;
 }
@@ -12,6 +17,10 @@ export interface TennisPredictionCardProps {
 export const TennisPredictionCard: React.FC<TennisPredictionCardProps> = ({
   prediction,
   isSubscriber,
+  isAdmin = false,
+  canViewPredictions = false,
+  isFavorite = false,
+  onToggleFavorite,
   onOpenUpgrade,
   onOpenAuth,
 }) => {
@@ -74,7 +83,10 @@ export const TennisPredictionCard: React.FC<TennisPredictionCardProps> = ({
   const isWon = prediction.settlement_status === 'won';
   const isLost = prediction.settlement_status === 'lost';
   const isVoid = prediction.settlement_status === 'void';
-  const isLocked = !isSubscriber || is_locked;
+
+  // Entitlement: Admins, entitled subscribers, or settled/finished matches are unlocked
+  const isUserEntitled = Boolean(isAdmin || canViewPredictions || isSubscriber);
+  const isLocked = !isUserEntitled && (is_locked || !(isWon || isLost || isVoid || isFinished));
 
   // Confidence tier configuration (matching Football FixtureCard exactly)
   const effectiveCategory = isLocked ? 'LOCKED' : (prediction.confidence_category || 'TOP PICK');
@@ -99,6 +111,24 @@ export const TennisPredictionCard: React.FC<TennisPredictionCardProps> = ({
   const p2RankText = player2?.current_rank ? ` #${player2.current_rank}` : '';
 
   const markov = prediction.metadata?.markov;
+
+  const handleFavoriteClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!onToggleFavorite) return;
+    const favoriteItem: FavoritePredictionItem = {
+      id: `${prediction.fixture_id}::${prediction.market || 'Match Winner'}::${prediction.prediction}`,
+      fixtureId: prediction.fixture_id,
+      homeTeam: p1DisplayName,
+      awayTeam: p2DisplayName,
+      league: tournament?.name || `${tour} Tour`,
+      targetKickoffAt: prediction.target_kickoff_at || fixture?.target_kickoff_at || new Date().toISOString(),
+      market: 'Match Winner',
+      prediction: prediction.prediction,
+      probability: (probPct ? Number(probPct) / 100 : prediction.probability) || 0.7,
+      confidenceCategory: prediction.confidence_category,
+    };
+    onToggleFavorite(favoriteItem);
+  };
 
   return (
     <div
@@ -153,7 +183,7 @@ export const TennisPredictionCard: React.FC<TennisPredictionCardProps> = ({
               {cleanTierLabel}
             </span>
 
-            {scoreRating && (
+            {scoreRating && !isLocked && (
               <span className="glance-score-pill">
                 Score: {scoreRating} / 10
               </span>
@@ -200,8 +230,33 @@ export const TennisPredictionCard: React.FC<TennisPredictionCardProps> = ({
           </div>
         </div>
 
-        {/* Right Col: Exact Football Key 250,000 Sim Pick Card + Chevron */}
+        {/* Right Col: Exact Football Key 250,000 Sim Pick Card + Favorite Button + Chevron */}
         <div className="glance-right-col">
+          {onToggleFavorite && (
+            <button
+              type="button"
+              className="tennis-fav-btn"
+              onClick={handleFavoriteClick}
+              title={isFavorite ? 'Remove from Watchlist' : 'Add to Watchlist'}
+              aria-label={isFavorite ? 'Remove from Watchlist' : 'Add to Watchlist'}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                cursor: 'pointer',
+                fontSize: '1.15rem',
+                color: isFavorite ? '#f59e0b' : '#94a3b8',
+                padding: '4px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                lineHeight: 1,
+                transition: 'color 0.2s ease, transform 0.15s ease',
+              }}
+            >
+              {isFavorite ? '★' : '☆'}
+            </button>
+          )}
+
           {isLocked ? (
             <div className="glance-key-pick-card locked" onClick={() => setIsExpanded(!isExpanded)}>
               <div className="key-pick-badge">
@@ -267,7 +322,7 @@ export const TennisPredictionCard: React.FC<TennisPredictionCardProps> = ({
         </div>
       </div>
 
-      {/* 3. EXPANDABLE BREAKDOWN BODY (MATCHING FOOTBALL CARD BREAKDOWN EXACTLY) */}
+      {/* 3. EXPANDABLE BREAKDOWN BODY (MATCHING PRODUCTION VERSION 1 CARD EXACTLY) */}
       {isExpanded && (
         <div className="expanded-breakdown-body" onClick={(e) => e.stopPropagation()}>
           {isLocked ? (

@@ -122,3 +122,23 @@ export const formatKickoff = (isoString: string) => {
     dateStr: d.toLocaleDateString('en-GB', { timeZone: 'Africa/Lagos', month: 'short', day: 'numeric' })
   };
 };
+
+/**
+ * Extract YYYY-MM-DD date strictly in Africa/Lagos (WAT / UTC+1) timezone
+ */
+export const getFixtureWatDate = (targetKickoffIso?: string | null): string => {
+  if (!targetKickoffIso) return '';
+  try {
+    const d = new Date(targetKickoffIso);
+    if (isNaN(d.getTime())) return '';
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Africa/Lagos',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    }).format(d);
+  } catch {
+    return '';
+  }
+};
+

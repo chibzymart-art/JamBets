@@ -14,7 +14,7 @@ Invariant: Interacts exclusively with public.tennis_* via TennisDbClient. Zero f
 
 import logging
 from typing import Dict, Any, List, Optional
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 from ..db import TennisDbClient
 from ..cpi_registry import CpiRegistry
@@ -159,74 +159,96 @@ class TennisIngestionPipeline:
             logger.error("Error creating player %s: %s", canonical, e)
             raise
 
-    def sync_live_scoreboard(self, tours: List[str] = ["atp", "wta"], date_str: Optional[str] = None) -> Dict[str, int]:
+    def sync_live_scoreboard(
+        self,
+        tours: List[str] = ["atp", "wta"],
+        date_str: Optional[str] = None,
+        days_ahead: int = 3,
+        strict_upcoming_only: bool = True
+    ) -> Dict[str, int]:
         """
-        Pulls live scoreboards, extracts matches, registers players and tournaments,
-        and upserts fixtures into Supabase.
+        Pulls scoreboards strictly for current time to the next 3 days,
+        extracts matches, registers players and tournaments, and upserts fixtures into Supabase.
+        Past concluded fixtures are strictly discarded.
         """
         stats = {"fixtures_synced": 0, "completed_updated": 0, "tournaments_indexed": 0}
 
-        for tour in tours:
-            raw_data = self.scraper.fetch_scoreboard(tour=tour, date_str=date_str)
-            if not raw_data:
-                continue
+        now_utc = datetime.now(timezone.utc)
+        min_kickoff = now_utc - timedelta(minutes=30) if strict_upcoming_only else None
+        max_kickoff = now_utc + timedelta(days=days_ahead) if strict_upcoming_only else None
 
-            fixtures = self.scraper.parse_fixtures_from_scoreboard(raw_data, tour=tour)
-            for f in fixtures:
-                try:
-                    # 1. Resolve Tournament
-                    tournament_id = self.get_or_create_tournament(
-                        raw_name=f["raw_tournament_name"],
-                        tour=f["tour"]
-                    )
+        if date_str:
+            dates = [date_str]
+        else:
+            dates = [(now_utc + timedelta(days=i)).strftime("%Y%m%d") for i in range(days_ahead + 1)]
 
-                    # 2. Resolve Players
-                    p1_id = self.get_or_create_player(f["player1"])
-                    p2_id = self.get_or_create_player(f["player2"])
+        for d in dates:
+            for tour in tours:
+                raw_data = self.scraper.fetch_scoreboard(tour=tour, date_str=d)
+                if not raw_data:
+                    continue
 
-                    winner_id = None
-                    if f.get("winner_canonical") == f["player1"]["canonical_name"]:
-                        winner_id = p1_id
-                    elif f.get("winner_canonical") == f["player2"]["canonical_name"]:
-                        winner_id = p2_id
+                fixtures = self.scraper.parse_fixtures_from_scoreboard(
+                    raw_data,
+                    tour=tour,
+                    min_kickoff=min_kickoff,
+                    max_kickoff=max_kickoff
+                )
+                for f in fixtures:
+                    try:
+                        # 1. Resolve Tournament
+                        tournament_id = self.get_or_create_tournament(
+                            raw_name=f["raw_tournament_name"],
+                            tour=f["tour"]
+                        )
 
-                    retired_player_id = None
-                    if f.get("was_retired"):
-                        # In retired matches, the loser is the retired player
-                        if winner_id == p1_id:
-                            retired_player_id = p2_id
-                        elif winner_id == p2_id:
-                            retired_player_id = p1_id
+                        # 2. Resolve Players
+                        p1_id = self.get_or_create_player(f["player1"])
+                        p2_id = self.get_or_create_player(f["player2"])
 
-                    fixture_record = {
-                        "canonical_key": f["canonical_key"],
-                        "tournament_id": tournament_id,
-                        "round": f["round"],
-                        "player1_id": p1_id,
-                        "player2_id": p2_id,
-                        "best_of_sets": f["best_of_sets"],
-                        "target_kickoff_at": f["target_kickoff_at"],
-                        "status": f["status"],
-                        "score_p1_sets": f["score_p1_sets"],
-                        "score_p2_sets": f["score_p2_sets"],
-                        "set_scores": f["set_scores"],
-                        "winner_id": winner_id,
-                        "retired_player_id": retired_player_id,
-                        "metadata": {
-                            "venue": f.get("venue_name"),
-                            "was_walkover": f.get("was_walkover"),
-                            "was_retired": f.get("was_retired"),
-                            "last_synced_at": datetime.now(timezone.utc).isoformat()
+                        winner_id = None
+                        if f.get("winner_canonical") == f["player1"]["canonical_name"]:
+                            winner_id = p1_id
+                        elif f.get("winner_canonical") == f["player2"]["canonical_name"]:
+                            winner_id = p2_id
+
+                        retired_player_id = None
+                        if f.get("was_retired"):
+                            # In retired matches, the loser is the retired player
+                            if winner_id == p1_id:
+                                retired_player_id = p2_id
+                            elif winner_id == p2_id:
+                                retired_player_id = p1_id
+
+                        fixture_record = {
+                            "canonical_key": f["canonical_key"],
+                            "tournament_id": tournament_id,
+                            "round": f["round"],
+                            "player1_id": p1_id,
+                            "player2_id": p2_id,
+                            "best_of_sets": f["best_of_sets"],
+                            "target_kickoff_at": f["target_kickoff_at"],
+                            "status": f["status"],
+                            "score_p1_sets": f["score_p1_sets"],
+                            "score_p2_sets": f["score_p2_sets"],
+                            "set_scores": f["set_scores"],
+                            "winner_id": winner_id,
+                            "retired_player_id": retired_player_id,
+                            "metadata": {
+                                "venue": f.get("venue_name"),
+                                "was_walkover": f.get("was_walkover"),
+                                "was_retired": f.get("was_retired"),
+                                "last_synced_at": datetime.now(timezone.utc).isoformat()
+                            }
                         }
-                    }
 
-                    res = self.db.upsert_fixture(fixture_record)
-                    stats["fixtures_synced"] += 1
-                    if f["status"] in ("finished", "retired", "walkover"):
-                        stats["completed_updated"] += 1
+                        res = self.db.upsert_fixture(fixture_record)
+                        stats["fixtures_synced"] += 1
+                        if f["status"] in ("finished", "retired", "walkover"):
+                            stats["completed_updated"] += 1
 
-                except Exception as e:
-                    logger.error("Failed to sync fixture %s: %s", f.get("canonical_key"), e)
+                    except Exception as e:
+                        logger.error("Failed to sync fixture %s: %s", f.get("canonical_key"), e)
 
         logger.info("Pipeline sync complete: %s", stats)
         return stats

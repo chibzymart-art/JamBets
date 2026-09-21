@@ -104,9 +104,16 @@ class EspnTennisFeedScraper(BaseTennisScraper):
             logger.error("Error fetching %s scoreboard (dates=%s): %s", tour, date_str, e)
             return {}
 
-    def parse_fixtures_from_scoreboard(self, raw_data: Dict[str, Any], tour: str = "atp") -> List[Dict[str, Any]]:
+    def parse_fixtures_from_scoreboard(
+        self,
+        raw_data: Dict[str, Any],
+        tour: str = "atp",
+        min_kickoff: Optional[datetime] = None,
+        max_kickoff: Optional[datetime] = None
+    ) -> List[Dict[str, Any]]:
         """
         Extracts and normalizes singles matches from ESPN scoreboard JSON.
+        Optionally filters matches to [min_kickoff, max_kickoff] window and discards past concluded matches.
         """
         fixtures = []
         events = raw_data.get("events", [])
@@ -152,9 +159,11 @@ class EspnTennisFeedScraper(BaseTennisScraper):
                     # Kickoff Time
                     kickoff_raw = comp.get("date") or comp.get("startDate") or ev.get("date")
                     try:
-                        kickoff_iso = datetime.fromisoformat(kickoff_raw.replace("Z", "+00:00")).isoformat()
+                        kickoff_dt = datetime.fromisoformat(kickoff_raw.replace("Z", "+00:00"))
+                        kickoff_iso = kickoff_dt.isoformat()
                     except Exception:
-                        kickoff_iso = datetime.now(timezone.utc).isoformat()
+                        kickoff_dt = datetime.now(timezone.utc)
+                        kickoff_iso = kickoff_dt.isoformat()
 
                     # Match Status Mapping
                     status_obj = comp.get("status", {})
@@ -180,6 +189,21 @@ class EspnTennisFeedScraper(BaseTennisScraper):
                         status = "postponed"
                     elif raw_status_name == "STATUS_CANCELED":
                         status = "cancelled"
+
+                    # STRICT TEMPORAL FILTERING:
+                    # Oddsbanta is a prediction website that must NEVER ingest past concluded fixtures.
+                    if min_kickoff is not None:
+                        # Drop past finished/settled/retired/cancelled matches
+                        if status in ("finished", "retired", "walkover", "cancelled"):
+                            continue
+                        # If kickoff has passed and match is not currently live in-play, discard
+                        if kickoff_dt < min_kickoff and status != "live":
+                            continue
+
+                    if max_kickoff is not None:
+                        # Drop fixtures scheduled beyond the approved horizon (e.g. > 3 days)
+                        if kickoff_dt > max_kickoff:
+                            continue
 
                     # Score extraction
                     lines_p1 = [int(float(l.get("value", 0))) for l in c1.get("linescores", []) if l.get("value") is not None]

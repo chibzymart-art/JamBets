@@ -1,12 +1,25 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { fetchTennisFeed, TennisFeedResponse } from '../lib/tennisFeedService';
+import { TennisPrediction } from '../types/tennis';
+import {
+  getDateDetailsByOffset,
+  getPastDatesList,
+  getFixtureWatDate,
+} from '../lib/dateUtils';
 import { TennisPredictionCard } from './TennisPredictionCard';
+import { LeftSidebarAd } from './LeftSidebarAd';
+import { WatchlistSidebar } from './WatchlistSidebar';
+import { FavoritePredictionItem } from './FavoritesDrawer';
 
 export interface TennisHubViewProps {
   currentUser?: any;
   userRole?: string;
   isAdmin?: boolean;
   canViewPredictions?: boolean;
+  favoriteItems?: FavoritePredictionItem[];
+  onToggleFavoriteItem?: (item: FavoritePredictionItem) => void;
+  isFavoriteItem?: (fixtureId: string, market: string, pick: string) => boolean;
+  onOpenFavoritesDrawer?: () => void;
   onOpenAuth?: (mode: 'signin' | 'register') => void;
   onOpenSubscription?: () => void;
   onBackToFootball?: () => void;
@@ -16,11 +29,16 @@ export const TennisHubView: React.FC<TennisHubViewProps> = ({
   currentUser: _currentUser = null,
   isAdmin = false,
   canViewPredictions = false,
+  favoriteItems = [],
+  onToggleFavoriteItem,
+  isFavoriteItem,
+  onOpenFavoritesDrawer,
   onOpenAuth,
   onOpenSubscription,
   onBackToFootball,
 }) => {
   const [selectedTournament, setSelectedTournament] = useState<string>('all');
+  const [selectedDate, setSelectedDate] = useState<string>(() => getDateDetailsByOffset(0).iso);
   const [selectedTier, setSelectedTier] = useState<string>('all');
   const [settlementFilter, setSettlementFilter] = useState<'all' | 'pending' | 'won' | 'lost' | 'void'>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -72,8 +90,105 @@ export const TennisHubView: React.FC<TennisHubViewProps> = ({
   const allPredictions = feedData?.predictions || [];
   const tournaments = feedData?.tournaments || [];
 
+  // Dynamic Lagos (WAT / UTC+1) relative calendar dates
+  const dynamicDateTabs = useMemo(() => {
+    // Map prediction counts by WAT kickoff date
+    const fixtureCountByDate = new Map<string, number>();
+    allPredictions.forEach((p) => {
+      const kickoff = p.target_kickoff_at || p.fixture?.target_kickoff_at;
+      const d = getFixtureWatDate(kickoff);
+      if (d) {
+        fixtureCountByDate.set(d, (fixtureCountByDate.get(d) || 0) + 1);
+      }
+    });
+
+    const yesterday = getDateDetailsByOffset(-1);
+    const today = getDateDetailsByOffset(0);
+    const day1 = getDateDetailsByOffset(1);
+    const day2 = getDateDetailsByOffset(2);
+    const day3 = getDateDetailsByOffset(3);
+
+    // Past dates list (last 30 days plus any fixture dates before today)
+    const rawPastDates = getPastDatesList(30, Array.from(fixtureCountByDate.keys()));
+    const pastDates = rawPastDates.map((pd) => ({
+      ...pd,
+      count: fixtureCountByDate.get(pd.iso) || 0,
+    }));
+
+    // Count fixtures for current date and future dates (strictly no past dates)
+    let currentAndFutureCount = 0;
+    allPredictions.forEach((p) => {
+      const kickoff = p.target_kickoff_at || p.fixture?.target_kickoff_at;
+      const d = getFixtureWatDate(kickoff);
+      if (!d || d >= today.iso) currentAndFutureCount++;
+    });
+
+    return {
+      all: {
+        id: 'all',
+        label: 'All Dates',
+        subLabel: 'Current & Future',
+        count: currentAndFutureCount,
+      },
+      yesterday: {
+        ...yesterday,
+        id: yesterday.iso,
+        count: fixtureCountByDate.get(yesterday.iso) || 0,
+      },
+      today: {
+        ...today,
+        id: today.iso,
+        count: fixtureCountByDate.get(today.iso) || 0,
+      },
+      day1: {
+        ...day1,
+        id: day1.iso,
+        count: fixtureCountByDate.get(day1.iso) || 0,
+      },
+      day2: {
+        ...day2,
+        id: day2.iso,
+        count: fixtureCountByDate.get(day2.iso) || 0,
+      },
+      day3: {
+        ...day3,
+        id: day3.iso,
+        count: fixtureCountByDate.get(day3.iso) || 0,
+      },
+      pastDates,
+      todayIso: today.iso,
+      yesterdayIso: yesterday.iso,
+    };
+  }, [allPredictions]);
+
+  const isPastDateSelected =
+    selectedDate !== 'all' &&
+    selectedDate < dynamicDateTabs.todayIso &&
+    selectedDate !== dynamicDateTabs.yesterdayIso;
+
+  const selectedPastOption = isPastDateSelected
+    ? dynamicDateTabs.pastDates.find((p) => p.iso === selectedDate)
+    : null;
+  const selectedPastFormatted = selectedPastOption?.shortFormatted || selectedDate;
+
+  // Active predictions matching the selected date
+  const dateScopedPredictions = useMemo(() => {
+    if (selectedDate === 'all') {
+      return allPredictions.filter((p) => {
+        const kickoff = p.target_kickoff_at || p.fixture?.target_kickoff_at;
+        const d = getFixtureWatDate(kickoff);
+        return !d || d >= dynamicDateTabs.todayIso;
+      });
+    }
+    return allPredictions.filter((p) => {
+      const kickoff = p.target_kickoff_at || p.fixture?.target_kickoff_at;
+      const d = getFixtureWatDate(kickoff);
+      return d === selectedDate;
+    });
+  }, [allPredictions, selectedDate, dynamicDateTabs.todayIso]);
+
   const filteredPredictions = useMemo(() => {
-    let list = allPredictions;
+    let list = dateScopedPredictions;
 
     // Filter by tournament dropdown
     if (selectedTournament !== 'all') {
@@ -108,12 +223,56 @@ export const TennisHubView: React.FC<TennisHubViewProps> = ({
       });
     }
 
-    return list;
-  }, [allPredictions, selectedTournament, selectedTier, settlementFilter, searchQuery]);
+    // UI ORDERING RULE:
+    // Make Banger predictions top of the list, then Top Pick, then High Confidence, etc. (highest rating first)
+    // Predictions with NO SAFE BANKER (High Volatility) strictly come below them.
+    const getConfidenceWeight = (p: TennisPrediction): number => {
+      const market = (p.market || '').toUpperCase().replace(/ /g, '_');
+      const pred = (p.prediction || '').toUpperCase().replace(/ /g, '_');
+      const cat = (p.confidence_category || '').toUpperCase().replace(/ /g, '_');
 
-  // Compute live scorecard KPI statistics from actual predictions
+      // NO SAFE BANKER (High Volatility) strictly sinks to the bottom
+      if (cat.includes('NO_SAFE_BANKER') || market.includes('NO_SAFE_BANKER') || pred.includes('NO_SAFE_BANKER')) {
+        return -1;
+      }
+      if (cat.includes('BANGER')) return 6;
+      if (cat.includes('TOP_PICK') || cat.includes('TOPPICK')) return 5;
+      if (cat.includes('HIGH_CONFIDENCE') || cat.includes('HIGHCONFIDENCE')) return 4;
+      if (cat.includes('MID_CONFIDENCE') || cat.includes('MIDCONFIDENCE')) return 3;
+      if (cat.includes('LOW_CONFIDENCE') || cat.includes('LOWCONFIDENCE')) return 2;
+      if (cat.includes('RISKY')) return 1;
+
+      // Fallbacks for paywall-locked records where category may be masked
+      if (market === 'SET_HANDICAP') return 6;
+      if (market === 'MATCH_WINNER') return 5;
+
+      return 1;
+    };
+
+    return [...list].sort((a, b) => {
+      const weightA = getConfidenceWeight(a);
+      const weightB = getConfidenceWeight(b);
+      if (weightB !== weightA) {
+        return weightB - weightA; // higher confidence tier first
+      }
+
+      // Secondary: highest rating / probability first
+      const probA = a.probability != null ? (a.probability <= 1 ? a.probability * 100 : a.probability) : 0;
+      const probB = b.probability != null ? (b.probability <= 1 ? b.probability * 100 : b.probability) : 0;
+      if (Math.abs(probB - probA) > 0.01) {
+        return probB - probA;
+      }
+
+      // Tertiary: earliest kickoff time first
+      const timeA = new Date(a.target_kickoff_at || a.fixture?.target_kickoff_at || 0).getTime();
+      const timeB = new Date(b.target_kickoff_at || b.fixture?.target_kickoff_at || 0).getTime();
+      return timeA - timeB;
+    });
+  }, [dateScopedPredictions, selectedTournament, selectedTier, settlementFilter, searchQuery]);
+
+  // Compute live scorecard KPI statistics from date-scoped predictions
   const scorecardStats = useMemo(() => {
-    let allTotal = allPredictions.length;
+    let allTotal = dateScopedPredictions.length;
     let allWon = 0;
     let allLost = 0;
     let allVoid = 0;
@@ -131,24 +290,24 @@ export const TennisHubView: React.FC<TennisHubViewProps> = ({
     let highWon = 0;
     let highLost = 0;
 
-    for (const p of allPredictions) {
-      const tier = (p.confidence_category || '').toUpperCase();
+    for (const p of dateScopedPredictions) {
+      const tier = (p.confidence_category || '').toUpperCase().replace(/ /g, '_');
       const status = (p.settlement_status || 'pending').toLowerCase();
 
       if (status === 'won') allWon++;
       else if (status === 'lost') allLost++;
-      else if (status === 'void') allVoid++;
+      else if (status === 'void' || status === 'voided') allVoid++;
       else allPending++;
 
       if (tier === 'BANGER') {
         bangerTotal++;
         if (status === 'won') bangerWon++;
         else if (status === 'lost') bangerLost++;
-      } else if (tier === 'TOP PICK' || tier === 'TOP_PICK') {
+      } else if (tier === 'TOP_PICK' || tier === 'TOP PICK') {
         topPickTotal++;
         if (status === 'won') topPickWon++;
         else if (status === 'lost') topPickLost++;
-      } else if (tier === 'HIGH CONFIDENCE' || tier === 'HIGH_CONFIDENCE') {
+      } else if (tier === 'HIGH_CONFIDENCE' || tier === 'HIGH CONFIDENCE') {
         highTotal++;
         if (status === 'won') highWon++;
         else if (status === 'lost') highLost++;
@@ -157,7 +316,7 @@ export const TennisHubView: React.FC<TennisHubViewProps> = ({
 
     const calcWinRate = (w: number, l: number) => {
       const decisive = w + l;
-      return decisive > 0 ? ((w / decisive) * 100).toFixed(1) : '88.5';
+      return decisive > 0 ? String(Math.round((w / decisive) * 100)) : '0';
     };
 
     return {
@@ -180,10 +339,10 @@ export const TennisHubView: React.FC<TennisHubViewProps> = ({
       highLost,
       highWinRate: calcWinRate(highWon, highLost),
     };
-  }, [allPredictions]);
+  }, [dateScopedPredictions]);
 
   return (
-    <div style={{ width: '100%', maxWidth: '1240px', margin: '0 auto', padding: '0 16px 80px 16px' }}>
+    <div className="tennis-hub-view-wrapper" style={{ width: '100%', maxWidth: '1480px', margin: '0 auto', padding: '0 16px 80px 16px' }}>
       {error && (
         <div style={{ background: '#fef2f2', border: '1px solid #fecaca', color: '#dc2626', padding: '12px 16px', borderRadius: '12px', marginBottom: '16px', fontSize: '0.86rem' }}>
           <strong>Notice:</strong> {error}
@@ -209,7 +368,7 @@ export const TennisHubView: React.FC<TennisHubViewProps> = ({
                 onChange={(e) => setSelectedTournament(e.target.value)}
                 aria-label="Filter by Tournament"
               >
-                <option value="all">All Tournaments ({allPredictions.length})</option>
+                <option value="all">All Tournaments ({dateScopedPredictions.length})</option>
                 {tournaments.map((t) => (
                   <option key={t.id} value={t.id}>
                     {t.tour} • {t.name}
@@ -221,10 +380,118 @@ export const TennisHubView: React.FC<TennisHubViewProps> = ({
           </div>
         </div>
 
-        {/* 2. DECONGESTED SCORECARD KPI SECTION (TWO COMPACT CARDS MATCHING FOOTBALL DASHBOARD) */}
+        {/* Date Navigation Pills Bar: Strictly Ordered: Select Date (Drop down) | Yesterday | Today | Day+1 | Day+2 | Day+3 | All Dates */}
+        <div className="date-nav-pills-bar">
+          {/* Pill 1: Select Date (Drop down of all past dates) */}
+          <div
+            className={`date-pill-btn date-pill-dropdown-wrap ${isPastDateSelected ? 'active' : ''}`}
+          >
+            <span className="date-pill-main-row">
+              📅 {isPastDateSelected ? selectedPastFormatted : 'Select Date'} ▾
+            </span>
+            <span className="date-pill-sub-label">
+              {isPastDateSelected ? 'Past Archive' : 'All Past Dates'}
+            </span>
+            <select
+              className="date-pill-native-select"
+              value={isPastDateSelected ? selectedDate : ''}
+              onChange={(e) => {
+                if (e.target.value) setSelectedDate(e.target.value);
+              }}
+              aria-label="Select Past Date"
+            >
+              <option value="" disabled>Select Past Date...</option>
+              {dynamicDateTabs.pastDates.map((pd) => (
+                <option key={pd.iso} value={pd.iso}>
+                  {pd.formatted}{pd.count ? ` (${pd.count} M)` : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Pill 2: Yesterday */}
+          <button
+            type="button"
+            className={`date-pill-btn yesterday-pill ${selectedDate === dynamicDateTabs.yesterday.iso ? 'active' : ''}`}
+            onClick={() => setSelectedDate(dynamicDateTabs.yesterday.iso)}
+          >
+            <span className="date-pill-main-row">
+              Yesterday
+              <span className="date-pill-winloss">{dynamicDateTabs.yesterday.count} M</span>
+            </span>
+            <span className="date-pill-sub-label">{dynamicDateTabs.yesterday.dateFormatted}</span>
+          </button>
+
+          {/* Pill 3: Today */}
+          <button
+            type="button"
+            className={`date-pill-btn ${selectedDate === dynamicDateTabs.today.iso ? 'active' : ''}`}
+            onClick={() => setSelectedDate(dynamicDateTabs.today.iso)}
+          >
+            <span className="date-pill-main-row">
+              Today
+              <span className="date-pill-winloss">{dynamicDateTabs.today.count} M</span>
+            </span>
+            <span className="date-pill-sub-label">{dynamicDateTabs.today.dateFormatted}</span>
+          </button>
+
+          {/* Pill 4: Day (with date) - Day + 1 */}
+          <button
+            type="button"
+            className={`date-pill-btn ${selectedDate === dynamicDateTabs.day1.iso ? 'active' : ''}`}
+            onClick={() => setSelectedDate(dynamicDateTabs.day1.iso)}
+          >
+            <span className="date-pill-main-row">
+              {dynamicDateTabs.day1.shortDay}
+              <span className="date-pill-winloss">{dynamicDateTabs.day1.count} M</span>
+            </span>
+            <span className="date-pill-sub-label">{dynamicDateTabs.day1.dateFormatted}</span>
+          </button>
+
+          {/* Pill 5: Day (with date) - Day + 2 */}
+          <button
+            type="button"
+            className={`date-pill-btn ${selectedDate === dynamicDateTabs.day2.iso ? 'active' : ''}`}
+            onClick={() => setSelectedDate(dynamicDateTabs.day2.iso)}
+          >
+            <span className="date-pill-main-row">
+              {dynamicDateTabs.day2.shortDay}
+              <span className="date-pill-winloss">{dynamicDateTabs.day2.count} M</span>
+            </span>
+            <span className="date-pill-sub-label">{dynamicDateTabs.day2.dateFormatted}</span>
+          </button>
+
+          {/* Pill 6: Day (with date) - Day + 3 */}
+          <button
+            type="button"
+            className={`date-pill-btn ${selectedDate === dynamicDateTabs.day3.iso ? 'active' : ''}`}
+            onClick={() => setSelectedDate(dynamicDateTabs.day3.iso)}
+          >
+            <span className="date-pill-main-row">
+              {dynamicDateTabs.day3.shortDay}
+              <span className="date-pill-winloss">{dynamicDateTabs.day3.count} M</span>
+            </span>
+            <span className="date-pill-sub-label">{dynamicDateTabs.day3.dateFormatted}</span>
+          </button>
+
+          {/* Pill 7: All Dates */}
+          <button
+            type="button"
+            className={`date-pill-btn ${selectedDate === 'all' ? 'active' : ''}`}
+            onClick={() => setSelectedDate('all')}
+          >
+            <span className="date-pill-main-row">
+              All Dates
+              <span className="date-pill-winloss">{dynamicDateTabs.all.count} M</span>
+            </span>
+            <span className="date-pill-sub-label">{dynamicDateTabs.all.subLabel}</span>
+          </button>
+        </div>
+
+        {/* 2. DECONGESTED SCORECARD KPI SECTION (SINGLE COMPACT CARD WITH ALL PREDS, BANGERS/TOP PICKS, HIGH CONF, AND WON) */}
         <div className="scorecard-two-cards-row">
-          {/* Card 1: 4 Unified Confidence Tabs inside one single-card footprint */}
-          <div className="compact-kpi-card winrates-kpi-card">
+          {/* Unified Confidence Tabs & Won Tab inside single-card footprint */}
+          <div className="compact-kpi-card winrates-kpi-card tennis-winrates-kpi-card">
             {/* Tab 1: All Predictions */}
             <div
               className={`compact-kpi-segment all-preds-seg ${selectedTier === 'all' && settlementFilter === 'all' ? 'active-seg' : ''}`}
@@ -294,13 +561,16 @@ export const TennisHubView: React.FC<TennisHubViewProps> = ({
                 <span className="compact-kpi-ratio">{scorecardStats.highWon}W • {scorecardStats.highLost}L</span>
               </div>
             </div>
-          </div>
 
-          {/* Card 2: Settled Matches Summary */}
-          <div className="compact-kpi-card settled-summary-kpi-card">
+            {/* Tab 4: Won (Placed on right-hand side after High Confidence) */}
             <div
               className={`compact-kpi-segment won-seg ${settlementFilter === 'won' ? 'active-seg' : ''}`}
-              onClick={() => setSettlementFilter(settlementFilter === 'won' ? 'all' : 'won')}
+              onClick={() => {
+                setSettlementFilter(settlementFilter === 'won' ? 'all' : 'won');
+                if (settlementFilter !== 'won') {
+                  setSelectedTier('all');
+                }
+              }}
               title="Click to filter Won tennis predictions"
             >
               <div className="compact-kpi-header">
@@ -309,141 +579,120 @@ export const TennisHubView: React.FC<TennisHubViewProps> = ({
               </div>
               <div className="compact-kpi-val-row">
                 <span className="compact-kpi-pct won-text">✓ Won</span>
-                <span className="compact-kpi-ratio">Verified</span>
+                <span className="compact-kpi-ratio">{scorecardStats.allWon}W • {scorecardStats.allLost}L</span>
               </div>
             </div>
-
-            <div
-              className={`compact-kpi-segment lost-seg ${settlementFilter === 'lost' ? 'active-seg' : ''}`}
-              onClick={() => setSettlementFilter(settlementFilter === 'lost' ? 'all' : 'lost')}
-              title="Click to filter Lost tennis predictions"
-            >
-              <div className="compact-kpi-header">
-                <span className="compact-kpi-title">Lost</span>
-                <span className="compact-kpi-pill lost-pill">{scorecardStats.allLost}</span>
-              </div>
-              <div className="compact-kpi-val-row">
-                <span className="compact-kpi-pct lost-text">✗ Lost</span>
-                <span className="compact-kpi-ratio">Settled</span>
-              </div>
-            </div>
-
-            <div
-              className={`compact-kpi-segment void-seg ${settlementFilter === 'void' ? 'active-seg' : ''}`}
-              onClick={() => setSettlementFilter(settlementFilter === 'void' ? 'all' : 'void')}
-              title="Click to filter Void tennis predictions"
-            >
-              <div className="compact-kpi-header">
-                <span className="compact-kpi-title">Void</span>
-                <span className="compact-kpi-pill void-pill">{scorecardStats.allVoid}</span>
-              </div>
-              <div className="compact-kpi-val-row">
-                <span className="compact-kpi-pct void-text">⊘ Void</span>
-                <span className="compact-kpi-ratio">Refunded</span>
-              </div>
-            </div>
-
-            <div
-              className={`compact-kpi-segment pending-seg ${settlementFilter === 'pending' ? 'active-seg' : ''}`}
-              onClick={() => setSettlementFilter(settlementFilter === 'pending' ? 'all' : 'pending')}
-              title="Click to filter Pending matches"
-            >
-              <div className="compact-kpi-header">
-                <span className="compact-kpi-title">Pending</span>
-                <span className="compact-kpi-pill pending-pill">{scorecardStats.allPending}</span>
-              </div>
-              <div className="compact-kpi-val-row">
-                <span className="compact-kpi-pct pending-text">⏳ Live/Wait</span>
-                <span className="compact-kpi-ratio">Upcoming</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* 3. SEARCH BAR ROW (MATCHING FOOTBALL DASHBOARD EXACTLY) */}
-        <div className="search-filter-row" style={{ marginTop: 14 }}>
-          <div className="search-input-wrapper">
-            <span className="search-icon">🔍</span>
-            <input
-              type="text"
-              className="search-input"
-              placeholder="Search players, tournaments, or tour..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              aria-label="Filter tennis predictions"
-            />
-            {searchQuery && (
-              <button
-                type="button"
-                className="search-clear-btn"
-                onClick={() => setSearchQuery('')}
-              >
-                ✕
-              </button>
-            )}
           </div>
         </div>
       </section>
 
-      {/* 4. PREDICTIONS FIXTURES LIST (MATCHING FOOTBALL CARDS LAYOUT) */}
-      <div style={{ marginTop: 16 }}>
-        {loading && !feedData ? (
-          <div
-            style={{
-              padding: 40,
-              background: '#ffffff',
-              borderRadius: 16,
-              border: '1px solid var(--border-subtle, #e2e8f0)',
-              textAlign: 'center',
-            }}
-          >
-            <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-emerald-600 mb-3" />
-            <div style={{ fontWeight: 800, color: 'var(--text-primary, #0f172a)' }}>
-              Synchronizing Tennis Prediction Queue...
-            </div>
-            <div style={{ fontSize: 12, color: 'var(--text-muted, #64748b)', marginTop: 4 }}>
-              Fetching verified 250,000 Monte Carlo simulations and ATP/WTA match draws.
+      {/* 2. MAIN DASHBOARD 3-COLUMN GRID (Left Ad Sidebar + Tennis Fixtures Stream + Watchlist Sidebar) */}
+      <div className="main-dashboard-grid" style={{ marginTop: 14 }}>
+        {/* LEFT SIDEBAR: AD BANNER */}
+        <LeftSidebarAd />
+
+        {/* CENTER MAIN STREAM: TENNIS PREDICTIONS STREAM */}
+        <div className="fixtures-stream-column">
+          {/* SEARCH BAR ROW */}
+          <div className="search-filter-row" style={{ marginTop: 0 }}>
+            <div className="search-input-wrapper">
+              <span className="search-icon">🔍</span>
+              <input
+                type="text"
+                className="search-input"
+                placeholder="Search players, tournaments, or tour..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                aria-label="Filter tennis predictions"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  className="search-clear-btn"
+                  onClick={() => setSearchQuery('')}
+                >
+                  ✕
+                </button>
+              )}
             </div>
           </div>
-        ) : filteredPredictions.length === 0 ? (
-          <div
-            style={{
-              padding: 48,
-              background: '#ffffff',
-              borderRadius: 16,
-              border: '1px solid var(--border-subtle, #e2e8f0)',
-              textAlign: 'center',
-            }}
-          >
-            <div style={{ fontSize: 32, marginBottom: 8 }}>🎾</div>
-            <div style={{ fontWeight: 800, fontSize: 16, color: 'var(--text-primary, #0f172a)' }}>
-              No tennis predictions match your current selection.
-            </div>
-            <div style={{ fontSize: 13, color: 'var(--text-muted, #64748b)', marginTop: 4 }}>
-              Try resetting the tournament filter or clearing search keywords.
-            </div>
-            {onBackToFootball && (
-              <button
-                type="button"
-                className="coming-soon-back-btn"
-                style={{ marginTop: 14 }}
-                onClick={onBackToFootball}
+
+          {/* PREDICTIONS FIXTURES LIST */}
+          <div style={{ marginTop: 14 }}>
+            {loading && !feedData ? (
+              <div
+                style={{
+                  padding: 40,
+                  background: '#ffffff',
+                  borderRadius: 16,
+                  border: '1px solid var(--border-subtle, #e2e8f0)',
+                  textAlign: 'center',
+                }}
               >
-                ⚽ Explore Football Predictions
-              </button>
+                <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-emerald-600 mb-3" />
+                <div style={{ fontWeight: 800, color: 'var(--text-primary, #0f172a)' }}>
+                  Synchronizing Tennis Prediction Queue...
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted, #64748b)', marginTop: 4 }}>
+                  Fetching verified 250,000 Monte Carlo simulations and ATP/WTA match draws.
+                </div>
+              </div>
+            ) : filteredPredictions.length === 0 ? (
+              <div
+                style={{
+                  padding: 48,
+                  background: '#ffffff',
+                  borderRadius: 16,
+                  border: '1px solid var(--border-subtle, #e2e8f0)',
+                  textAlign: 'center',
+                }}
+              >
+                <div style={{ fontSize: 32, marginBottom: 8 }}>🎾</div>
+                <div style={{ fontWeight: 800, fontSize: 16, color: 'var(--text-primary, #0f172a)' }}>
+                  No tennis predictions match your current selection.
+                </div>
+                <div style={{ fontSize: 13, color: 'var(--text-muted, #64748b)', marginTop: 4 }}>
+                  Try resetting the tournament or date filter, or clearing search keywords.
+                </div>
+                {onBackToFootball && (
+                  <button
+                    type="button"
+                    className="coming-soon-back-btn"
+                    style={{ marginTop: 14 }}
+                    onClick={onBackToFootball}
+                  >
+                    ⚽ Explore Football Predictions
+                  </button>
+                )}
+              </div>
+            ) : (
+              filteredPredictions.map((prediction) => (
+                <TennisPredictionCard
+                  key={prediction.id}
+                  prediction={prediction}
+                  isSubscriber={isSubscriber}
+                  isAdmin={isAdmin}
+                  canViewPredictions={canViewPredictions}
+                  isFavorite={
+                    isFavoriteItem
+                      ? isFavoriteItem(prediction.fixture_id, 'Match Winner', prediction.prediction)
+                      : false
+                  }
+                  onToggleFavorite={onToggleFavoriteItem}
+                  onOpenUpgrade={onOpenSubscription}
+                  onOpenAuth={onOpenAuth}
+                />
+              ))
             )}
           </div>
-        ) : (
-          filteredPredictions.map((prediction) => (
-            <TennisPredictionCard
-              key={prediction.id}
-              prediction={prediction}
-              isSubscriber={isSubscriber}
-              onOpenUpgrade={onOpenSubscription}
-              onOpenAuth={onOpenAuth}
-            />
-          ))
-        )}
+        </div>
+
+        {/* RIGHT SIDEBAR: FAVORITES / WATCHLIST */}
+        <WatchlistSidebar
+          favoriteItems={favoriteItems}
+          onToggleFavoriteItem={onToggleFavoriteItem}
+          onOpenFavoritesDrawer={onOpenFavoritesDrawer}
+        />
       </div>
     </div>
   );

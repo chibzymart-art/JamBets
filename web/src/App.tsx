@@ -614,14 +614,19 @@ export default function App() {
       setPredictions(embeddedPreds);
 
       // Query dynamic tennis counts from Supabase
-      let dynamicTennisCount = 203;
-      let dynamicTennisTournamentCount = 8;
+      let dynamicTennisCount = 0;
+      let dynamicTennisTournamentCount = 0;
       try {
-        const [tfCountRes, ttCountRes] = await Promise.all([
-          supabase.from('tennis_fixtures').select('*', { count: 'exact', head: true }),
+        const [tpCountRes, tfCountRes, ttCountRes] = await Promise.all([
+          supabase.from('tennis_predictions').select('*', { count: 'exact', head: true }),
+          supabase.from('tennis_fixtures').select('*', { count: 'exact', head: true }).in('status', ['scheduled', 'live']),
           supabase.from('tennis_tournaments').select('*', { count: 'exact', head: true })
         ]);
-        if (typeof tfCountRes.count === 'number' && tfCountRes.count > 0) dynamicTennisCount = tfCountRes.count;
+        if (typeof tpCountRes.count === 'number' && tpCountRes.count > 0) {
+          dynamicTennisCount = tpCountRes.count;
+        } else if (typeof tfCountRes.count === 'number') {
+          dynamicTennisCount = tfCountRes.count;
+        }
         if (typeof ttCountRes.count === 'number' && ttCountRes.count > 0) dynamicTennisTournamentCount = ttCountRes.count;
       } catch {
         // Fallback to baseline
@@ -1665,6 +1670,10 @@ export default function App() {
                   userRole={profile?.role}
                   isAdmin={isAdmin}
                   canViewPredictions={canViewPredictions}
+                  favoriteItems={favoriteItems}
+                  onToggleFavoriteItem={toggleFavoriteItem}
+                  isFavoriteItem={isFavoriteItem}
+                  onOpenFavoritesDrawer={() => setIsFavoritesDrawerOpen(true)}
                   onOpenAuth={(mode) => {
                     setAuthModalMode(mode);
                     setIsAuthModalOpen(true);
@@ -1856,6 +1865,10 @@ export default function App() {
             userRole={profile?.role}
             isAdmin={isAdmin}
             canViewPredictions={canViewPredictions}
+            favoriteItems={favoriteItems}
+            onToggleFavoriteItem={toggleFavoriteItem}
+            isFavoriteItem={isFavoriteItem}
+            onOpenFavoritesDrawer={() => setIsFavoritesDrawerOpen(true)}
             onOpenAuth={(mode) => {
               setAuthModalMode(mode);
               setIsAuthModalOpen(true);

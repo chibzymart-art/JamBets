@@ -36,87 +36,184 @@ export interface FetchTennisFeedOptions {
   surface?: TennisSurface | 'all';
   tour?: TennisTour | 'ALL';
   tier?: 'bangers' | 'top_picks' | 'high_confidence' | 'all';
-  token?: string;
   canViewPredictions?: boolean;
   forceRefresh?: boolean;
 }
 
-const CLIENT_CACHE_TTL_MS = 20 * 1000; // 20 seconds client cache
+const CLIENT_CACHE_TTL_MS = 15 * 1000; // 15 seconds memory cache
 let clientCache: { data: TennisFeedResponse; timestamp: number; key: string } | null = null;
 
+const PRED_SELECT = `
+  id,
+  fixture_id,
+  market,
+  prediction,
+  probability,
+  confidence_category,
+  secondary_predictions,
+  metadata,
+  simulations_count,
+  tier_required,
+  publication_status,
+  target_kickoff_at,
+  settlement_status,
+  settlement_notes,
+  settled_at,
+  actual_result,
+  fixture:tennis_fixtures!inner(
+    id,
+    canonical_key,
+    round,
+    best_of_sets,
+    target_kickoff_at,
+    status,
+    score_p1_sets,
+    score_p2_sets,
+    set_scores,
+    current_game_score,
+    server_indicator,
+    tournament:tennis_tournaments!inner(
+      id,
+      name,
+      tour,
+      category,
+      surface,
+      court_pace_index,
+      city,
+      country
+    ),
+    player1:tennis_players!tennis_fixtures_player1_id_fkey(
+      id,
+      display_name,
+      canonical_name,
+      country,
+      current_rank,
+      hard_elo,
+      clay_elo,
+      grass_elo,
+      indoor_elo
+    ),
+    player2:tennis_players!tennis_fixtures_player2_id_fkey(
+      id,
+      display_name,
+      canonical_name,
+      country,
+      current_rank,
+      hard_elo,
+      clay_elo,
+      grass_elo,
+      indoor_elo
+    )
+  )
+`.replace(/\s+/g, ' ').trim();
+
+const SETTLE_SELECT = `
+  id,
+  prediction_id,
+  fixture_id,
+  status,
+  p1_sets,
+  p2_sets,
+  total_games,
+  was_retired,
+  was_walkover,
+  settlement_logic_version,
+  notes,
+  settled_at,
+  created_at,
+  fixture:tennis_fixtures!inner(
+    id,
+    canonical_key,
+    round,
+    status,
+    tournament:tennis_tournaments!inner(
+      id,
+      name,
+      tour,
+      surface,
+      court_pace_index
+    ),
+    player1:tennis_players!tennis_fixtures_player1_id_fkey(display_name),
+    player2:tennis_players!tennis_fixtures_player2_id_fkey(display_name)
+  )
+`.replace(/\s+/g, ' ').trim();
+
+/**
+ * Fetch Tennis predictions, active tournaments, and settlements directly from Cloud Supabase.
+ * Cloud Supabase is the EXCLUSIVE source of truth (zero edge proxy, zero hardcoded fallbacks).
+ */
 export async function fetchTennisFeed(options: FetchTennisFeedOptions = {}): Promise<TennisFeedResponse> {
   const {
     surface = 'all',
     tour = 'ALL',
     tier = 'all',
-    token,
     canViewPredictions = false,
     forceRefresh = false,
   } = options;
 
-  const cacheKey = `${surface}:${tour}:${tier}:${Boolean(token || canViewPredictions)}`;
+  const cacheKey = `${surface}:${tour}:${tier}:${Boolean(canViewPredictions)}`;
 
   if (!forceRefresh && clientCache && clientCache.key === cacheKey && Date.now() - clientCache.timestamp < CLIENT_CACHE_TTL_MS) {
     return clientCache.data;
   }
 
-  // 1. Try Vercel Serverless Edge API route first
   try {
-    const params = new URLSearchParams();
-    if (surface && surface !== 'all') params.set('surface', surface);
-    if (tour && tour !== 'ALL') params.set('tour', tour);
-    if (tier && tier !== 'all') params.set('tier', tier);
+    // 1. Direct Cloud Supabase Query: Choose table based on user entitlement
+    // Subscribed users/Admins query tennis_predictions for full unredacted predictions.
+    // Anonymous/Free visitors query tennis_predictions_paywall for safe masked teasers.
+    let rawPredictions: any[] = [];
+    let isUnlocked = Boolean(canViewPredictions);
 
-    const headers: Record<string, string> = { Accept: 'application/json' };
-    if (token) headers['Authorization'] = `Bearer ${token}`;
-
-    const res = await fetch(`/api/tennis-feed?${params.toString()}`, { headers });
-    if (res.ok) {
-      const contentType = res.headers.get('content-type') || '';
-      if (contentType.includes('application/json')) {
-        const json = await res.json();
-        if (json.success && Array.isArray(json.predictions)) {
-          const response = json as TennisFeedResponse;
-          clientCache = { data: response, timestamp: Date.now(), key: cacheKey };
-          return response;
-        }
-      }
-    }
-  } catch {
-    // Edge fetch failed (e.g. dev server without vercel functions) — proceed to Supabase fallback
-  }
-
-  // 2. Direct Supabase Client Query Fallback
-  try {
-    const predQuery =
-      '*, fixture:tennis_fixtures(id, canonical_key, round, best_of_sets, target_kickoff_at, status, score_p1_sets, score_p2_sets, set_scores, current_game_score, server_indicator, tournament:tennis_tournaments(id, name, tour, category, surface, court_pace_index), player1:tennis_players!tennis_fixtures_player1_id_fkey(id, display_name, canonical_name, country, current_rank, hard_elo, clay_elo, grass_elo, indoor_elo), player2:tennis_players!tennis_fixtures_player2_id_fkey(id, display_name, canonical_name, country, current_rank, hard_elo, clay_elo, grass_elo, indoor_elo))';
-
-    const settleQuery =
-      '*, fixture:tennis_fixtures(id, canonical_key, round, status, score_p1_sets, score_p2_sets, set_scores, tournament:tennis_tournaments(name, tour, surface, court_pace_index), player1:tennis_players!tennis_fixtures_player1_id_fkey(display_name), player2:tennis_players!tennis_fixtures_player2_id_fkey(display_name))';
-
-    const [predsRes, tourneysRes, settleRes] = await Promise.all([
-      supabase
-        .from('tennis_predictions_paywall')
-        .select(predQuery)
+    if (isUnlocked) {
+      const { data, error } = await supabase
+        .from('tennis_predictions')
+        .select(PRED_SELECT)
         .order('target_kickoff_at', { ascending: true })
-        .limit(100),
+        .limit(200);
+
+      if (!error && Array.isArray(data) && data.length > 0) {
+        rawPredictions = data;
+      } else {
+        // Fallback to paywall view if direct query returned empty due to session sync
+        const fallbackRes = await supabase
+          .from('tennis_predictions_paywall')
+          .select(PRED_SELECT)
+          .order('target_kickoff_at', { ascending: true })
+          .limit(200);
+        rawPredictions = fallbackRes.data || [];
+      }
+    } else {
+      const { data, error } = await supabase
+        .from('tennis_predictions_paywall')
+        .select(PRED_SELECT)
+        .order('target_kickoff_at', { ascending: true })
+        .limit(200);
+
+      if (error) {
+        console.warn('Error querying tennis_predictions_paywall:', error.message);
+      }
+      rawPredictions = data || [];
+    }
+
+    // 2. Query Tournaments & Settlements directly from Cloud Supabase
+    const [tourneysRes, settleRes] = await Promise.all([
       supabase
         .from('tennis_tournaments')
         .select('*')
+        .eq('is_active', true)
         .order('name', { ascending: true })
-        .limit(50),
+        .limit(100),
       supabase
         .from('tennis_settlements')
-        .select(settleQuery)
+        .select(SETTLE_SELECT)
         .order('settled_at', { ascending: false })
         .limit(100),
     ]);
 
-    const rawPredictions: any[] = predsRes.data || [];
     const rawTournaments: TennisTournament[] = (tourneysRes.data as TennisTournament[]) || [];
     const rawSettlements: any[] = settleRes.data || [];
 
-    // Filter by options
+    // 3. Filter predictions by options
     const filteredPredictions = rawPredictions.filter((p) => {
       if (surface && surface !== 'all') {
         const s = p.fixture?.tournament?.surface?.toLowerCase();
@@ -130,15 +227,16 @@ export async function fetchTennisFeed(options: FetchTennisFeedOptions = {}): Pro
         const cTier = (p.confidence_category || '').toLowerCase();
         if (tier === 'bangers' && cTier !== 'banger') return false;
         if (tier === 'top_picks' && cTier !== 'top pick') return false;
+        if (tier === 'high_confidence' && cTier !== 'high confidence') return false;
       }
       return true;
     });
 
-    // Process subscriber gating
-    const isSubscriber = canViewPredictions;
+    // 4. Map predictions and enforce proper paywall gating
     const finalPredictions: TennisPrediction[] = filteredPredictions.map((p) => {
-      const isLocked = !isSubscriber || p.is_locked;
-      if (isLocked) {
+      const isRecordLocked = !isUnlocked && (p.is_locked !== false && p.prediction === 'LOCKED');
+
+      if (isRecordLocked) {
         return {
           ...p,
           prediction: '🔒 Subscriber Only',
@@ -154,48 +252,56 @@ export async function fetchTennisFeed(options: FetchTennisFeedOptions = {}): Pro
           is_locked: true,
         };
       }
+
       return {
         ...p,
         is_locked: false,
       };
     });
 
-    // Compute stats
+    // 5. Authentic Scorecard & Telemetry Stats (Strictly Cloud Supabase Derived — Zero Fallbacks)
     let bangers = 0;
     let topPicks = 0;
     let highConf = 0;
+    let settledWon = 0;
+    let settledLost = 0;
+    let settledVoid = 0;
+
     for (const p of rawPredictions) {
-      const c = p.confidence_category;
+      const c = (p.confidence_category || '').toUpperCase();
       if (c === 'BANGER') bangers++;
-      else if (c === 'TOP PICK') topPicks++;
-      else if (c === 'HIGH CONFIDENCE') highConf++;
+      else if (c === 'TOP PICK' || c === 'TOP_PICK') topPicks++;
+      else if (c === 'HIGH CONFIDENCE' || c === 'HIGH_CONFIDENCE') highConf++;
+
+      const st = (p.settlement_status || 'pending').toLowerCase();
+      if (st === 'won') settledWon++;
+      else if (st === 'lost') settledLost++;
+      else if (st === 'void') settledVoid++;
     }
 
-    let won = 0;
-    let lost = 0;
-    let voided = 0;
     for (const s of rawSettlements) {
       const st = (s.status || '').toLowerCase();
-      if (st === 'won') won++;
-      else if (st === 'lost') lost++;
-      else if (st === 'void') voided++;
+      if (st === 'won') settledWon++;
+      else if (st === 'lost') settledLost++;
+      else if (st === 'void') settledVoid++;
     }
-    const decisive = won + lost;
-    const winRate = decisive > 0 ? Math.round((won / decisive) * 100) : 88.5;
+
+    const decisive = settledWon + settledLost;
+    const winRate = decisive > 0 ? Math.round((settledWon / decisive) * 100) : 0;
 
     const response: TennisFeedResponse = {
       success: true,
-      is_subscriber: isSubscriber,
+      is_subscriber: isUnlocked,
       stats: {
         total_matches: rawPredictions.length,
         bangers_count: bangers,
         top_picks_count: topPicks,
         high_confidence_count: highConf,
         tournaments_count: rawTournaments.length,
-        settled_count: rawSettlements.length,
-        settled_won: won,
-        settled_lost: lost,
-        settled_void: voided,
+        settled_count: settledWon + settledLost + settledVoid,
+        settled_won: settledWon,
+        settled_lost: settledLost,
+        settled_void: settledVoid,
         win_rate: winRate,
       },
       tournaments: rawTournaments,
@@ -207,10 +313,10 @@ export async function fetchTennisFeed(options: FetchTennisFeedOptions = {}): Pro
     clientCache = { data: response, timestamp: Date.now(), key: cacheKey };
     return response;
   } catch (err: any) {
-    console.error('Direct Supabase tennis fetch failed:', err);
+    console.error('Direct Cloud Supabase tennis fetch error:', err);
     return {
       success: false,
-      is_subscriber: canViewPredictions,
+      is_subscriber: Boolean(canViewPredictions),
       stats: {
         total_matches: 0,
         bangers_count: 0,
@@ -221,13 +327,13 @@ export async function fetchTennisFeed(options: FetchTennisFeedOptions = {}): Pro
         settled_won: 0,
         settled_lost: 0,
         settled_void: 0,
-        win_rate: 88.5,
+        win_rate: 0,
       },
       tournaments: [],
       settlements: [],
       predictions: [],
       cached_at: new Date().toISOString(),
-      error: err.message || 'Failed to fetch tennis data',
+      error: err.message || 'Failed to fetch tennis data from Cloud Supabase',
     };
   }
 }

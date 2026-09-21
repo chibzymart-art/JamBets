@@ -1801,6 +1801,20 @@ body {
 .compact-kpi-pct.mid-text { color: #2563eb; }
 .compact-kpi-pct.low-text { color: #ca8a04; }
 .compact-kpi-pct.antiloss-text { color: #64748b; }
+.compact-kpi-pct.won-text { color: #16a34a; }
+
+.won-pill {
+  background: #dcfce7;
+  color: #166534;
+}
+.won-seg .compact-kpi-title { color: #15803d; }
+.compact-kpi-segment.won-seg.active-seg {
+  background: #f0fdf4;
+  box-shadow: inset 0 -3px 0 #16a34a;
+}
+.tennis-winrates-kpi-card {
+  grid-template-columns: 0.9fr 1.8fr 1fr 1fr;
+}
 
 .compact-kpi-ratio {
   font-size: 8px;
