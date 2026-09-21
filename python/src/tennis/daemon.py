@@ -41,6 +41,8 @@ class TennisScraperDaemon:
         self.running = True
         self.db = TennisDbClient()
         self.pipeline = TennisIngestionPipeline(db_client=self.db)
+        from .prediction_engine import TennisPredictionEngine
+        self.predictor = TennisPredictionEngine(db_client=self.db)
 
         # Register OS signal handlers for graceful shutdown
         signal.signal(signal.SIGINT, self._handle_exit)
@@ -50,12 +52,12 @@ class TennisScraperDaemon:
         logger.info("Termination signal received. Shutting down Tennis Scraper Daemon...")
         self.running = False
 
-    def run_cycle(self, sync_rankings: bool = True, date_str: Optional[str] = None):
+    def run_cycle(self, sync_rankings: bool = True, date_str: Optional[str] = None, run_predictions: bool = True):
         """
-        Executes a complete synchronization cycle.
+        Executes a complete synchronization and prediction cycle.
         """
         start_t = time.time()
-        logger.info("=== Starting Autonomous Tennis Sync Cycle ===")
+        logger.info("=== Starting Autonomous Tennis Sync & Prediction Cycle ===")
 
         try:
             # 1. Sync Rankings (ATP & WTA)
@@ -69,10 +71,16 @@ class TennisScraperDaemon:
             stats = self.pipeline.sync_live_scoreboard(tours=["atp", "wta"], date_str=date_str)
             logger.info("Scoreboard sync complete: %s", stats)
 
+            # 3. Generate Predictions for Scheduled Fixtures
+            if run_predictions:
+                logger.info("Executing Hierarchical Markov & Monte Carlo Prediction Engine...")
+                pred_stats = self.predictor.generate_all_predictions()
+                logger.info("Prediction generation complete: %s", pred_stats)
+
             duration = round(time.time() - start_t, 2)
-            logger.info("=== Tennis Sync Cycle Finished Successfully in %ss ===", duration)
+            logger.info("=== Tennis Cycle Finished Successfully in %ss ===", duration)
         except Exception as e:
-            logger.error("Exception during Tennis Sync Cycle: %s", e, exc_info=True)
+            logger.error("Exception during Tennis Cycle: %s", e, exc_info=True)
 
     def start(self, sync_rankings_on_start: bool = True):
         """
