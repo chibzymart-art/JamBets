@@ -29,11 +29,11 @@ export const FloatingFavoritesWidget: React.FC<FloatingFavoritesWidgetProps> = (
   const isDragActiveRef = useRef<boolean>(false);
   const widgetRef = useRef<HTMLDivElement>(null);
 
-  // Initialize position to bottom right once mounted
+  // Initialize position to bottom right once mounted (safely suspended above bottom nav & Account tab)
   useEffect(() => {
     if (typeof window !== 'undefined' && position.x === null) {
       const defaultX = window.innerWidth - 72;
-      const defaultY = window.innerHeight - 100;
+      const defaultY = window.innerHeight - 150;
       setPosition({ x: Math.max(16, defaultX), y: Math.max(60, defaultY) });
     }
 
@@ -41,7 +41,7 @@ export const FloatingFavoritesWidget: React.FC<FloatingFavoritesWidgetProps> = (
       setPosition((prev) => {
         if (prev.x === null || prev.y === null) return prev;
         const maxX = window.innerWidth - 65;
-        const maxY = window.innerHeight - 65;
+        const maxY = window.innerHeight - 135;
         return {
           x: Math.min(Math.max(12, prev.x), maxX),
           y: Math.min(Math.max(60, prev.y), maxY),
@@ -58,7 +58,7 @@ export const FloatingFavoritesWidget: React.FC<FloatingFavoritesWidgetProps> = (
     if (e.touches.length !== 1) return;
     const touch = e.touches[0];
     const currentX = position.x ?? (window.innerWidth - 72);
-    const currentY = position.y ?? (window.innerHeight - 100);
+    const currentY = position.y ?? (window.innerHeight - 150);
 
     touchStartTimeRef.current = Date.now();
     dragStartRef.current = {
@@ -85,7 +85,7 @@ export const FloatingFavoritesWidget: React.FC<FloatingFavoritesWidgetProps> = (
       if (!isDragging) setIsDragging(true);
 
       const newX = Math.min(Math.max(12, dragStartRef.current.posX + deltaX), window.innerWidth - 68);
-      const newY = Math.min(Math.max(55, dragStartRef.current.posY + deltaY), window.innerHeight - 75);
+      const newY = Math.min(Math.max(55, dragStartRef.current.posY + deltaY), window.innerHeight - 135);
 
       setPosition({ x: newX, y: newY });
     }
@@ -116,7 +116,7 @@ export const FloatingFavoritesWidget: React.FC<FloatingFavoritesWidgetProps> = (
   const handleMouseDown = (e: React.MouseEvent) => {
     if (e.button !== 0) return; // Only primary mouse button
     const currentX = position.x ?? (window.innerWidth - 72);
-    const currentY = position.y ?? (window.innerHeight - 100);
+    const currentY = position.y ?? (window.innerHeight - 150);
 
     dragStartRef.current = {
       startX: e.clientX,
@@ -133,7 +133,7 @@ export const FloatingFavoritesWidget: React.FC<FloatingFavoritesWidgetProps> = (
         hasMovedRef.current = true;
         setIsDragging(true);
         const nextX = Math.min(Math.max(12, dragStartRef.current.posX + deltaX), window.innerWidth - 68);
-        const nextY = Math.min(Math.max(55, dragStartRef.current.posY + deltaY), window.innerHeight - 75);
+        const nextY = Math.min(Math.max(55, dragStartRef.current.posY + deltaY), window.innerHeight - 135);
         setPosition({ x: nextX, y: nextY });
       }
     };
@@ -171,7 +171,7 @@ export const FloatingFavoritesWidget: React.FC<FloatingFavoritesWidgetProps> = (
     left: position.x !== null ? `${position.x}px` : 'auto',
     top: position.y !== null ? `${position.y}px` : 'auto',
     right: position.x === null ? '18px' : 'auto',
-    bottom: position.y === null ? '85px' : 'auto',
+    bottom: position.y === null ? '140px' : 'auto',
     zIndex: 10001,
     touchAction: 'none',
     cursor: isDragging ? 'grabbing' : 'pointer',

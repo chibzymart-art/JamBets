@@ -816,18 +816,6 @@ export default function App() {
         : 'Coming Soon'
     },
     {
-      id: 'tennis',
-      name: 'Tennis',
-      icon: '🎾',
-      isAvailable: sportsState.tennis?.isAvailable ?? true,
-      fixtureCount: sportsState.tennis?.fixtureCount ?? 203,
-      leagueCount: sportsState.tennis?.leagueCount ?? 8,
-      statusLabel: sportsState.tennis?.isAvailable ? 'Available' : 'Coming Soon',
-      subtext: sportsState.tennis?.isAvailable
-        ? `${sportsState.tennis.leagueCount} Available Tournaments`
-        : 'Coming Soon'
-    },
-    {
       id: 'basketball',
       name: 'Basketball',
       icon: '🏀',
@@ -837,6 +825,18 @@ export default function App() {
       statusLabel: sportsState.basketball?.isAvailable ? 'Available' : 'Coming Soon',
       subtext: sportsState.basketball?.isAvailable
         ? `${sportsState.basketball.leagueCount} Available Leagues`
+        : 'Coming Soon'
+    },
+    {
+      id: 'tennis',
+      name: 'Tennis',
+      icon: '🎾',
+      isAvailable: sportsState.tennis?.isAvailable ?? true,
+      fixtureCount: sportsState.tennis?.fixtureCount ?? 203,
+      leagueCount: sportsState.tennis?.leagueCount ?? 8,
+      statusLabel: sportsState.tennis?.isAvailable ? 'Available' : 'Coming Soon',
+      subtext: sportsState.tennis?.isAvailable
+        ? `${sportsState.tennis.leagueCount} Available Tournaments`
         : 'Coming Soon'
     },
     {
@@ -1272,94 +1272,9 @@ export default function App() {
       {/* 1. TOP HEADER BAR */}
       <header className={`site-header ${location.pathname === '/' ? 'landing-standalone-header' : ''}`}>
         <div className="site-header-inner">
-          <Link to="/" className="header-brand" onClick={() => resetAllFilters()} title="Oddsbanta Home">
-            <img src="/oddsbanta-logo.svg" alt="Oddsbanta Prediction Engine" className="brand-header-logo-img" />
-          </Link>
-
-            {/* Clean Unified Navigation Links: Sport Types Selection */}
-          <div className="header-center-links header-sports-nav">
-            {sportsList.map((sport) => {
-              const isActive =
-                (sport.id === 'tennis' && (location.pathname === '/tennis' || selectedSport === 'tennis')) ||
-                (sport.id === 'football' && selectedSport === 'football' && location.pathname !== '/tennis') ||
-                (sport.id === selectedSport && location.pathname !== '/tennis');
-
-              return (
-                <button
-                  key={sport.id}
-                  type="button"
-                  className={`nav-link-btn nav-sport-btn ${isActive ? 'active' : ''}`}
-                  onClick={() => {
-                    setSelectedSport(sport.id);
-                    if (sport.id === 'tennis') {
-                      navigate('/tennis');
-                    } else if (sport.id === 'football') {
-                      if (location.pathname === '/tennis') {
-                        navigate(targetPredictionsPath);
-                      }
-                    } else {
-                      if (location.pathname === '/tennis') {
-                        navigate(targetPredictionsPath);
-                      }
-                    }
-                  }}
-                  title={`${sport.name} Predictions`}
-                >
-                  <span className="nav-sport-icon">{sport.icon}</span>
-                  <span className="nav-sport-name">{sport.name}</span>
-                  {!sport.isAvailable && (
-                    <span className="nav-sport-soon-badge">Soon</span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-
-          <div className="header-right-actions">
-            {location.pathname === '/' && (
-              <Link to={targetPredictionsPath} className="landing-nav-cta">
-                {currentUser ? '📊 Dashboard →' : '📊 Predictions →'}
-              </Link>
-            )}
-
-            {/* Pricing Action Button in Header */}
-            <button
-              type="button"
-              className="nav-header-pricing-btn"
-              onClick={() => setIsPricingModalOpen(true)}
-              title="View VIP Subscription Plans"
-            >
-              <span className="pricing-title">Pricing</span>
-              <span className="pricing-flat-badge">₦5k Flat</span>
-            </button>
-
-            {!currentUser && (
-              <button
-                type="button"
-                className="login-action-btn"
-                onClick={() => { setAuthModalMode('signin'); setIsAuthModalOpen(true); }}
-              >
-                Sign In
-              </button>
-            )}
-
-            {/* Cart-Like Favorites / Custom Slip Button across all screens */}
-            <button
-              type="button"
-              id="btn-nav-favorites-cart"
-              className="favorites-menu-cart-btn"
-              onClick={() => setIsFavoritesDrawerOpen((prev) => !prev)}
-              title="View Favorites & Custom Slip"
-              aria-label="Favorites & Custom Slip"
-            >
-              <span className="favorites-cart-icon">⭐</span>
-              <span>Acca Slip</span>
-              <span className={`favorites-cart-badge ${favoriteItems.length === 0 ? 'empty' : ''}`}>
-                {favoriteItems.length}
-              </span>
-            </button>
-
-            {/* Modern Hamburger Menu Button */}
+          {/* Header Left Group: Hamburger Menu + Brand Logo */}
+          <div className="header-left-group">
+            {/* Modern Hamburger Menu Button on Far Left */}
             <button
               type="button"
               id="btn-nav-hamburger"
@@ -1383,6 +1298,10 @@ export default function App() {
               )}
             </button>
 
+            <Link to="/" className="header-brand" onClick={() => resetAllFilters()} title="Oddsbanta Home">
+              <img src="/oddsbanta-logo.svg" alt="Oddsbanta Prediction Engine" className="brand-header-logo-img" />
+            </Link>
+
             {/* Hamburger Dropdown Display Panel */}
             {isHamburgerOpen && (
               <>
@@ -1392,7 +1311,7 @@ export default function App() {
                   aria-hidden="true"
                 />
                 <div
-                  className="hamburger-dropdown-panel"
+                  className="hamburger-dropdown-panel header-left-dropdown"
                   role="menu"
                   aria-label="Navigation and user actions menu"
                 >
@@ -1428,70 +1347,61 @@ export default function App() {
                     <div className="hamburger-guest-header">
                       <div className="hamburger-guest-title">Welcome to Oddsbanta</div>
                       <div className="hamburger-guest-sub">Sign in to unlock full VIP odds & simulations</div>
-                      <div className="hamburger-auth-row">
-                        <button
-                          type="button"
-                          className="hamburger-auth-btn signin"
-                          onClick={() => {
-                            setIsHamburgerOpen(false);
-                            setAuthModalMode('signin');
-                            setIsAuthModalOpen(true);
-                          }}
-                        >
-                          Sign In
-                        </button>
-                        <button
-                          type="button"
-                          className="hamburger-auth-btn register"
-                          onClick={() => {
-                            setIsHamburgerOpen(false);
-                            setAuthModalMode('register');
-                            setIsAuthModalOpen(true);
-                          }}
-                        >
-                          Register
-                        </button>
-                      </div>
+                      <button
+                        type="button"
+                        className="hamburger-signin-btn"
+                        onClick={() => {
+                          setIsHamburgerOpen(false);
+                          setAuthModalMode('signin');
+                          setIsAuthModalOpen(true);
+                        }}
+                      >
+                        Sign In / Register
+                      </button>
                     </div>
                   )}
 
-                  <div className="hamburger-divider" />
-
                   <div className="hamburger-menu-list">
-                    {/* High-Visibility Telegram & WhatsApp Bot Hub Feature */}
-                    <button
-                      type="button"
-                      className="hamburger-menu-item hamburger-bot-item"
+                    <Link
+                      to="/"
+                      className={`hamburger-menu-item ${location.pathname === '/' ? 'active' : ''}`}
                       onClick={() => {
                         setIsHamburgerOpen(false);
-                        setIsBotHubModalOpen(true);
-                      }}
-                      style={{
-                        background: 'linear-gradient(135deg, rgba(2, 132, 199, 0.1) 0%, rgba(22, 163, 74, 0.1) 100%)',
-                        border: '1px solid rgba(2, 132, 199, 0.3)',
-                        borderRadius: '10px',
-                        padding: '10px 14px',
-                        margin: '2px 0 8px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '12px',
-                        textAlign: 'left',
-                        cursor: 'pointer',
+                        resetAllFilters();
                       }}
                     >
-                      <span style={{ fontSize: '20px' }}>🤖</span>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontWeight: 800, fontSize: '13px', color: '#0284c7', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <span>Telegram & WhatsApp Bots</span>
-                          <span style={{ background: '#22c55e', color: '#ffffff', fontSize: '9px', fontWeight: 900, padding: '1px 5px', borderRadius: '4px' }}>
-                            SIGNALS
-                          </span>
-                        </div>
-                        <div style={{ fontSize: '11px', color: '#64748b', marginTop: '1px' }}>
-                          {profile?.telegram_chat_id ? '✓ Telegram Connected • Open Bot' : 'Get all predictions on your phone ↗'}
-                        </div>
-                      </div>
-                      <span style={{ fontSize: '14px', color: '#0284c7', fontWeight: 700 }}>→</span>
+                      <span className="hamburger-item-icon">🏠</span>
+                      <span className="hamburger-item-label">Home</span>
+                    </Link>
+
+                    <Link
+                      to={targetPredictionsPath}
+                      className={`hamburger-menu-item ${isPredictionsOrDashboard && location.pathname !== '/other-markets' && location.pathname !== '/tennis' ? 'active' : ''}`}
+                      onClick={() => setIsHamburgerOpen(false)}
+                    >
+                      <span className="hamburger-item-icon">⚽</span>
+                      <span className="hamburger-item-label">Football Predictions</span>
+                    </Link>
+
+                    <Link
+                      to="/other-markets"
+                      className={`hamburger-menu-item ${location.pathname === '/other-markets' || location.pathname === '/goals' ? 'active' : ''}`}
+                      onClick={() => setIsHamburgerOpen(false)}
+                    >
+                      <span className="hamburger-item-icon">🎯</span>
+                      <span className="hamburger-item-label">Other Markets (Specialists)</span>
+                    </Link>
+
+                    <button
+                      type="button"
+                      className="hamburger-menu-item"
+                      onClick={() => {
+                        setIsHamburgerOpen(false);
+                        setIsPricingModalOpen(true);
+                      }}
+                    >
+                      <span className="hamburger-item-icon">⚡</span>
+                      <span className="hamburger-item-label">VIP Subscription Plans</span>
                     </button>
 
                     <button
@@ -1503,7 +1413,7 @@ export default function App() {
                       }}
                     >
                       <span className="hamburger-item-icon">❓</span>
-                      <span className="hamburger-item-label">FAQ & Help Center</span>
+                      <span className="hamburger-item-label">FAQ & Help</span>
                     </button>
 
                     <button
@@ -1511,41 +1421,32 @@ export default function App() {
                       className="hamburger-menu-item"
                       onClick={() => {
                         setIsHamburgerOpen(false);
-                        setIsPricingModalOpen(true);
+                        setIsBotHubModalOpen(true);
                       }}
                     >
-                      <span className="hamburger-item-icon">💳</span>
-                      <span className="hamburger-item-label">Pricing Plans</span>
-                      <span className="pricing-flat-badge" style={{ marginLeft: 'auto' }}>₦5k Flat</span>
+                      <span className="hamburger-item-icon">🤖</span>
+                      <span className="hamburger-item-label">Bot Hub (Telegram / WhatsApp)</span>
                     </button>
 
-                    <Link
-                      to={targetPredictionsPath}
-                      className={`hamburger-menu-item ${location.pathname !== '/tennis' && location.pathname !== '/other-markets' ? 'active' : ''}`}
+
+                    <button
+                      type="button"
+                      className="hamburger-menu-item"
                       onClick={() => {
-                        setSelectedSport('football');
                         setIsHamburgerOpen(false);
+                        setIsAllLeaguesModalOpen(true);
                       }}
                     >
-                      <span className="hamburger-item-icon">⚽</span>
-                      <span className="hamburger-item-label">Football Predictions</span>
-                    </Link>
-
-                    <Link
-                      to="/other-markets"
-                      className={`hamburger-menu-item ${location.pathname === '/other-markets' ? 'active' : ''}`}
-                      onClick={() => setIsHamburgerOpen(false)}
-                    >
-                      <span className="hamburger-item-icon">🎯</span>
-                      <span className="hamburger-item-label">Other Markets (Specialists)</span>
-                    </Link>
+                      <span className="hamburger-item-icon">🏆</span>
+                      <span className="hamburger-item-label">Browse All 40+ Leagues</span>
+                    </button>
 
                     <Link
                       to="/tennis"
                       className={`hamburger-menu-item ${location.pathname === '/tennis' ? 'active' : ''}`}
                       onClick={() => {
-                        setSelectedSport('tennis');
                         setIsHamburgerOpen(false);
+                        setSelectedSport('tennis');
                       }}
                     >
                       <span className="hamburger-item-icon">🎾</span>
@@ -1598,6 +1499,104 @@ export default function App() {
                 </div>
               </>
             )}
+          </div>
+
+            {/* Clean Unified Navigation Links: Sport Types Selection */}
+          <div className="header-center-links header-sports-nav">
+            {sportsList.map((sport) => {
+              const isActive =
+                (sport.id === 'tennis' && (location.pathname === '/tennis' || selectedSport === 'tennis')) ||
+                (sport.id === 'football' && selectedSport === 'football' && location.pathname !== '/tennis') ||
+                (sport.id === selectedSport && location.pathname !== '/tennis');
+
+              return (
+                <button
+                  key={sport.id}
+                  type="button"
+                  className={`nav-link-btn nav-sport-btn ${isActive ? 'active' : ''}`}
+                  onClick={() => {
+                    setSelectedSport(sport.id);
+                    if (sport.id === 'tennis') {
+                      navigate('/tennis');
+                    } else if (sport.id === 'football') {
+                      if (location.pathname === '/tennis') {
+                        navigate(targetPredictionsPath);
+                      }
+                    } else {
+                      if (location.pathname === '/tennis') {
+                        navigate(targetPredictionsPath);
+                      }
+                    }
+                  }}
+                  title={`${sport.name} Predictions`}
+                >
+                  <span className="nav-sport-icon">{sport.icon}</span>
+                  <span className="nav-sport-name">{sport.name}</span>
+                  {!sport.isAvailable && (
+                    <span className="nav-sport-soon-badge">Soon</span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="header-right-actions">
+            {location.pathname === '/' && (
+              <Link to={targetPredictionsPath} className="landing-nav-cta desktop-only">
+                {currentUser ? '📊 Dashboard →' : '📊 Predictions →'}
+              </Link>
+            )}
+
+            {/* Plans Button (Top Menu on Mobile & Desktop) */}
+            <button
+              type="button"
+              className="nav-header-plans-btn"
+              onClick={() => setIsPricingModalOpen(true)}
+              title="View VIP Subscription Plans"
+              aria-label="Plans & Pricing"
+            >
+              <span className="nav-header-btn-icon">⚡</span>
+              <span className="nav-header-btn-label">Plans</span>
+              <span className="pricing-flat-badge desktop-only">₦5k Flat</span>
+            </button>
+
+            {/* FAQs Button (Top Menu on Mobile & Desktop) */}
+            <button
+              type="button"
+              className="nav-header-faq-btn"
+              onClick={() => setIsFaqModalOpen(true)}
+              title="Frequently Asked Questions"
+              aria-label="FAQ"
+            >
+              <span className="nav-header-btn-icon">❓</span>
+              <span className="nav-header-btn-label">FAQs</span>
+            </button>
+
+            {!currentUser && (
+              <button
+                type="button"
+                className="login-action-btn desktop-only"
+                onClick={() => { setAuthModalMode('signin'); setIsAuthModalOpen(true); }}
+              >
+                Sign In
+              </button>
+            )}
+
+            {/* Cart-Like Favorites / Custom Slip Button across all screens */}
+            <button
+              type="button"
+              id="btn-nav-favorites-cart"
+              className="favorites-menu-cart-btn desktop-only"
+              onClick={() => setIsFavoritesDrawerOpen((prev) => !prev)}
+              title="View Favorites & Custom Slip"
+              aria-label="Favorites & Custom Slip"
+            >
+              <span className="favorites-cart-icon">⭐</span>
+              <span>Acca Slip</span>
+              <span className={`favorites-cart-badge ${favoriteItems.length === 0 ? 'empty' : ''}`}>
+                {favoriteItems.length}
+              </span>
+            </button>
           </div>
         </div>
       </header>
@@ -2457,42 +2456,48 @@ export default function App() {
         currentUser={currentUser}
       />
 
-      {/* MOBILE APP BOTTOM TAB BAR (Native App Experience on Mobile Screens <= 768px) */}
-      <nav className="mobile-app-bottom-bar" aria-label="Mobile Navigation Bar">
-        <Link to="/" className={`mobile-tab-item ${location.pathname === '/' ? 'active' : ''}`}>
-          <span className="mobile-tab-icon">🏠</span>
-          <span className="mobile-tab-label">Home</span>
-        </Link>
-        <Link to={targetPredictionsPath} className={`mobile-tab-item ${isPredictionsOrDashboard ? 'active' : ''}`}>
-          <span className="mobile-tab-icon">📊</span>
-          <span className="mobile-tab-label">{currentUser ? 'Dashboard' : 'Predictions'}</span>
-        </Link>
-        <Link
-          to="/other-markets"
-          className={`mobile-tab-item mobile-tab-other-markets ${location.pathname === '/other-markets' || location.pathname === '/goals' ? 'active' : ''}`}
-        >
-          <span className="mobile-tab-icon">🎯</span>
-          <span className="mobile-tab-label">Other Markets</span>
-        </Link>
+      {/* MOBILE APP BOTTOM TAB BAR (Sport Selectors: Logo & Name + Account Settings) */}
+      <nav className="mobile-app-bottom-bar" aria-label="Mobile Sports & Account Navigation">
+        {sportsList.map((sport) => {
+          const isActive =
+            (sport.id === 'tennis' && (location.pathname === '/tennis' || selectedSport === 'tennis')) ||
+            (sport.id === 'football' && selectedSport === 'football' && location.pathname !== '/tennis') ||
+            (sport.id === selectedSport && location.pathname !== '/tennis');
+
+          return (
+            <button
+              key={sport.id}
+              type="button"
+              className={`mobile-tab-item ${isActive ? 'active' : ''}`}
+              onClick={() => {
+                setSelectedSport(sport.id);
+                if (sport.id === 'tennis') {
+                  navigate('/tennis');
+                } else if (sport.id === 'football') {
+                  if (location.pathname === '/tennis') {
+                    navigate(targetPredictionsPath);
+                  }
+                } else {
+                  if (location.pathname === '/tennis') {
+                    navigate(targetPredictionsPath);
+                  }
+                }
+              }}
+              title={`${sport.name} Predictions`}
+            >
+              <span className="mobile-tab-icon">{sport.icon}</span>
+              <span className="mobile-tab-label">
+                {sport.id === 'american_football' ? 'Am. Football' : sport.name}
+              </span>
+            </button>
+          );
+        })}
+
+        {/* Dedicated Account Setting Tab */}
         <button
           type="button"
-          className={`mobile-tab-item ${location.pathname === '/subscription' ? 'active' : ''}`}
-          onClick={() => setIsPricingModalOpen(true)}
-        >
-          <span className="mobile-tab-icon">⚡</span>
-          <span className="mobile-tab-label">Plans</span>
-        </button>
-        <button
-          type="button"
-          className="mobile-tab-item"
-          onClick={() => setIsFaqModalOpen(true)}
-        >
-          <span className="mobile-tab-icon">❓</span>
-          <span className="mobile-tab-label">FAQ</span>
-        </button>
-        <button
-          type="button"
-          className="mobile-tab-item"
+          id="btn-mobile-nav-account"
+          className={`mobile-tab-item ${isProfileModalOpen ? 'active' : ''}`}
           onClick={() => {
             if (currentUser) {
               setIsProfileModalOpen(true);
@@ -2501,9 +2506,11 @@ export default function App() {
               setIsAuthModalOpen(true);
             }
           }}
+          title={currentUser ? 'Account Settings & Profile' : 'Sign In to Account'}
+          aria-label="Account Settings & Profile"
         >
           <span className="mobile-tab-icon">👤</span>
-          <span className="mobile-tab-label">{currentUser ? 'Account' : 'Sign In'}</span>
+          <span className="mobile-tab-label">Account</span>
         </button>
       </nav>
 
