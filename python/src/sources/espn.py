@@ -45,80 +45,85 @@ class ESPNAdapter(BaseSourceAdapter):
         now_utc = datetime.now(timezone.utc)
         seen_event_ids = set()
 
-        start_str = date_from.date().strftime("%Y%m%d")
-        end_str = date_to.date().strftime("%Y%m%d")
-        url = f"{self.base_url}/{league.espn_slug}/scoreboard?dates={start_str}-{end_str}&limit=200"
+        current_day = date_from.date()
+        target_end_day = date_to.date()
 
-        data = self.get_json_with_retry(url)
-        events = data.get("events", []) if data else []
-        season_year = str(data.get("season", {}).get("year", datetime.now().year)) if data else str(datetime.now().year)
+        while current_day <= target_end_day:
+            day_str = current_day.strftime("%Y%m%d")
+            url = f"{self.base_url}/{league.espn_slug}/scoreboard?dates={day_str}&limit=200"
 
-        for event in events:
-            event_id = str(event.get("id"))
-            if event_id in seen_event_ids:
-                continue
-            seen_event_ids.add(event_id)
+            data = self.get_json_with_retry(url)
+            events = data.get("events", []) if data else []
+            season_year = str(data.get("season", {}).get("year", datetime.now().year)) if data else str(datetime.now().year)
 
-            competitions = event.get("competitions", [])
-            if not competitions:
-                continue
-            comp = competitions[0]
-            competitors = comp.get("competitors", [])
-            if len(competitors) < 2:
-                continue
+            for event in events:
+                event_id = str(event.get("id"))
+                if event_id in seen_event_ids:
+                    continue
+                seen_event_ids.add(event_id)
 
-            home_comp = next((c for c in competitors if c.get("homeAway") == "home"), competitors[0])
-            away_comp = next((c for c in competitors if c.get("homeAway") == "away"), competitors[1])
+                competitions = event.get("competitions", [])
+                if not competitions:
+                    continue
+                comp = competitions[0]
+                competitors = comp.get("competitors", [])
+                if len(competitors) < 2:
+                    continue
 
-            home_team_name = home_comp.get("team", {}).get("displayName", home_comp.get("team", {}).get("name", "Unknown"))
-            away_team_name = away_comp.get("team", {}).get("displayName", away_comp.get("team", {}).get("name", "Unknown"))
+                home_comp = next((c for c in competitors if c.get("homeAway") == "home"), competitors[0])
+                away_comp = next((c for c in competitors if c.get("homeAway") == "away"), competitors[1])
 
-            # Parse kickoff time
-            kickoff_str = event.get("date")
-            try:
-                # ESPN formats ISO UTC strings like "2026-09-12T14:00Z"
-                kickoff_dt = datetime.fromisoformat(kickoff_str.replace("Z", "+00:00"))
-            except Exception:
-                continue
+                home_team_name = home_comp.get("team", {}).get("displayName", home_comp.get("team", {}).get("name", "Unknown"))
+                away_team_name = away_comp.get("team", {}).get("displayName", away_comp.get("team", {}).get("name", "Unknown"))
 
-            status_raw = event.get("status", {}).get("type", {}).get("name", "STATUS_SCHEDULED")
-            canonical_status = self._map_espn_status(status_raw)
-
-            # Scores if available
-            home_score = None
-            away_score = None
-            if canonical_status in (FixtureStatus.LIVE, FixtureStatus.FINISHED):
+                # Parse kickoff time
+                kickoff_str = event.get("date")
                 try:
-                    home_score = int(home_comp.get("score"))
-                    away_score = int(away_comp.get("score"))
-                except (ValueError, TypeError):
-                    pass
+                    # ESPN formats ISO UTC strings like "2026-09-12T14:00Z"
+                    kickoff_dt = datetime.fromisoformat(kickoff_str.replace("Z", "+00:00"))
+                except Exception:
+                    continue
 
-            venue_name = comp.get("venue", {}).get("fullName") or comp.get("venue", {}).get("name")
-            if not venue_name:
-                venue_name = home_comp.get("team", {}).get("venue", {}).get("fullName")
+                status_raw = event.get("status", {}).get("type", {}).get("name", "STATUS_SCHEDULED")
+                canonical_status = self._map_espn_status(status_raw)
 
-            payload = RawFixturePayload(
-                source_name=self.name,
-                provider_event_id=event_id,
-                league_code=league.code,
-                season=season_year,
-                home_team_raw=home_team_name,
-                away_team_raw=away_team_name,
-                kickoff_time=kickoff_dt,
-                status=canonical_status,
-                home_score=home_score,
-                away_score=away_score,
-                venue=venue_name,
-                retrieved_at=now_utc,
-                raw_metadata={
-                    "espn_status": status_raw,
-                    "uid": event.get("uid"),
-                    "home_provider_id": home_comp.get("team", {}).get("id"),
-                    "away_provider_id": away_comp.get("team", {}).get("id")
-                }
-            )
-            results.append(payload)
+                # Scores if available
+                home_score = None
+                away_score = None
+                if canonical_status in (FixtureStatus.LIVE, FixtureStatus.FINISHED):
+                    try:
+                        home_score = int(home_comp.get("score"))
+                        away_score = int(away_comp.get("score"))
+                    except (ValueError, TypeError):
+                        pass
+
+                venue_name = comp.get("venue", {}).get("fullName") or comp.get("venue", {}).get("name")
+                if not venue_name:
+                    venue_name = home_comp.get("team", {}).get("venue", {}).get("fullName")
+
+                payload = RawFixturePayload(
+                    source_name=self.name,
+                    provider_event_id=event_id,
+                    league_code=league.code,
+                    season=season_year,
+                    home_team_raw=home_team_name,
+                    away_team_raw=away_team_name,
+                    kickoff_time=kickoff_dt,
+                    status=canonical_status,
+                    home_score=home_score,
+                    away_score=away_score,
+                    venue=venue_name,
+                    retrieved_at=now_utc,
+                    raw_metadata={
+                        "espn_status": status_raw,
+                        "uid": event.get("uid"),
+                        "home_provider_id": home_comp.get("team", {}).get("id"),
+                        "away_provider_id": away_comp.get("team", {}).get("id")
+                    }
+                )
+                results.append(payload)
+
+            current_day += timedelta(days=1)
 
         return results
 

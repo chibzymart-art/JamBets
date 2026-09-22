@@ -50,11 +50,12 @@ class AcquisitionPipeline:
         Executes data acquisition cycle for the specified leagues (or all configured leagues).
         Enforces four-day window, stale data rejection, and multi-source verification.
         """
+        # Grounding in Africa/Lagos WAT (UTC+1) ensures midnight runs (23:00 UTC) capture full 4+ day forward horizon
+        wat_tz = timezone(timedelta(hours=1))
+        now_wat = datetime.now(wat_tz)
         now_utc = datetime.now(timezone.utc)
-        # Start at 00:00:00 UTC of today to capture all matches scheduled for today
-        date_from = now_utc.replace(hour=0, minute=0, second=0, microsecond=0)
-        # Strict 5-day horizon enforcement: Today (Day 0) + 4 days (Days 1, 2, 3, 4)
-        date_to = (now_utc + timedelta(days=MAX_PREDICTION_WINDOW_DAYS)).replace(hour=23, minute=59, second=59)
+        date_from = now_wat.replace(hour=0, minute=0, second=0, microsecond=0).astimezone(timezone.utc)
+        date_to = (now_wat + timedelta(days=MAX_PREDICTION_WINDOW_DAYS)).replace(hour=23, minute=59, second=59).astimezone(timezone.utc)
 
         target_leagues = (
             [LEAGUE_REGISTRY[code] for code in leagues if code in LEAGUE_REGISTRY]
@@ -115,6 +116,7 @@ class AcquisitionPipeline:
                             league_canonical_fixtures[canonical_candidate.canonical_key] = canonical_candidate
 
                 except Exception as exc:
+                    print(f"    [Adapter Error] {adapter.slug}: {exc}", flush=True)
                     self.registry.record_failure(adapter.slug, str(exc))
 
             # 5. Persist Validated Data to Cloud Supabase
@@ -140,6 +142,10 @@ class AcquisitionPipeline:
                 # Use FixtureEngine to compute 4-day prediction queue window & lifecycle metadata
                 from python.src.football.fixture_engine import FixtureEngine
                 engine = FixtureEngine()
+                # Enforce database 4-day check constraint: target_kickoff_at <= now() + interval '4 days'
+                if canonical.kickoff_utc > now_utc + timedelta(days=4):
+                    continue
+
                 queue_res = engine.compute_queue_window(canonical.kickoff_utc, now_utc)
                 in_queue = queue_res.is_eligible and (canonical.status.value == "scheduled")
                 queue_day = queue_res.queue_day if in_queue else None
@@ -202,6 +208,6 @@ class AcquisitionPipeline:
                                     details_b={"source": canonical.conflict_details.get("incoming_source"), "data": canonical.conflict_details}
                                 )
                 except Exception as persist_err:
-                    pass
+                    print(f"    [Persist Error] {canonical.canonical_key}: {persist_err}", flush=True)
 
         return metrics

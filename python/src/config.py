@@ -56,6 +56,38 @@ LEAGUE_REGISTRY: Dict[str, LeagueConfig] = {
         code="EUR_ECL", name="UEFA Conference League", country="Europe", tier=3,
         espn_slug="uefa.europa.conf", livescore_country="europa-conference-league", livescore_stage="main"
     ),
+    "EUR_NL": LeagueConfig(
+        code="EUR_NL", name="UEFA Nations League", country="Europe", tier=1,
+        espn_slug="uefa.nations", livescore_country="uefa-nations-league", livescore_stage="uefa-nations-league"
+    ),
+    "CAF_AFCON_Q": LeagueConfig(
+        code="CAF_AFCON_Q", name="Africa Cup of Nations Qualifying", country="Africa", tier=1,
+        espn_slug="caf.nations_qual", livescore_country="africa-cup-of-nations-qualification", livescore_stage="qualification"
+    ),
+    "CONCACAF_NL": LeagueConfig(
+        code="CONCACAF_NL", name="Concacaf Nations League", country="North America", tier=1,
+        espn_slug="concacaf.nations.league", livescore_country="concacaf-nations-league", livescore_stage="league-a"
+    ),
+    "FIFA_WCQ_CONMEBOL": LeagueConfig(
+        code="FIFA_WCQ_CONMEBOL", name="FIFA World Cup Qualifying - CONMEBOL", country="South America", tier=1,
+        espn_slug="fifa.worldq.conmebol", livescore_country="world-cup-qualification-conmebol", livescore_stage="group-stage"
+    ),
+    "FIFA_WCQ_UEFA": LeagueConfig(
+        code="FIFA_WCQ_UEFA", name="FIFA World Cup Qualifying - UEFA", country="Europe", tier=1,
+        espn_slug="fifa.worldq.uefa", livescore_country="world-cup-qualification-uefa", livescore_stage="group-stage"
+    ),
+    "FIFA_WCQ_CAF": LeagueConfig(
+        code="FIFA_WCQ_CAF", name="FIFA World Cup Qualifying - CAF", country="Africa", tier=1,
+        espn_slug="fifa.worldq.caf", livescore_country="world-cup-qualification-caf", livescore_stage="group-stage"
+    ),
+    "FIFA_WCQ_AFC": LeagueConfig(
+        code="FIFA_WCQ_AFC", name="FIFA World Cup Qualifying - AFC", country="Asia", tier=1,
+        espn_slug="fifa.worldq.afc", livescore_country="world-cup-qualification-afc", livescore_stage="group-stage"
+    ),
+    "FIFA_FRIENDLY": LeagueConfig(
+        code="FIFA_FRIENDLY", name="International Friendly", country="International", tier=1,
+        espn_slug="fifa.friendly", livescore_country="international-friendlies", livescore_stage="friendlies"
+    ),
 
     # --- Secondary & Smaller European Leagues ---
     "ENG_CH": LeagueConfig(
@@ -244,8 +276,8 @@ STALE_THRESHOLD_SCHEDULED_SECONDS = 6 * 3600  # 6 hours
 STALE_THRESHOLD_LIVE_SECONDS = 15 * 60         # 15 minutes
 STALE_THRESHOLD_RESULT_SECONDS = 24 * 3600     # 24 hours
 
-# Four-Day Prediction Window Limit
-MAX_PREDICTION_WINDOW_DAYS = 4
+# Rolling Prediction Window Limit (Today + 4 full calendar days ahead)
+MAX_PREDICTION_WINDOW_DAYS = 5
 
 # Multi-Source Tolerance
 KICKOFF_TOLERANCE_MINUTES = 30

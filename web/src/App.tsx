@@ -84,10 +84,10 @@ export default function App() {
   // Sports Category Selector with Cloud Supabase Dynamic Availability
   const [selectedSport, setSelectedSport] = useState<string>('football');
   const [sportsState, setSportsState] = useState<Record<string, SportAvailability>>({
-    football: { isAvailable: true, fixtureCount: 433, leagueCount: 30 },
+    football: { isAvailable: true, fixtureCount: 0, leagueCount: 0 },
     american_football: { isAvailable: false, fixtureCount: 0, leagueCount: 0 },
     basketball: { isAvailable: false, fixtureCount: 0, leagueCount: 0 },
-    tennis: { isAvailable: true, fixtureCount: 203, leagueCount: 8 },
+    tennis: { isAvailable: true, fixtureCount: 0, leagueCount: 0 },
     cricket: { isAvailable: false, fixtureCount: 0, leagueCount: 0 }
   });
 
@@ -546,7 +546,7 @@ export default function App() {
           .eq('publication_status', 'published')
           .order('target_kickoff_at', { ascending: true })
           .order('id', { ascending: true })
-          .limit(2000);
+          .limit(5000);
 
         const leagueQuery = supabase
           .from('football_leagues')
@@ -668,11 +668,27 @@ export default function App() {
         // Fallback to baseline
       }
 
-      // Fast static sports state avoiding 404 HTTP round-trips
+      // Calculate active current & upcoming fixtures in Africa/Lagos WAT
+      let activeCurrentAndFutureCount = 0;
+      const todayIsoStr = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Africa/Lagos',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      }).format(new Date());
+
+      returnedFixtures.forEach((f) => {
+        const d = getFixtureWatDate(f.target_kickoff_at);
+        if (!d || d >= todayIsoStr) {
+          activeCurrentAndFutureCount++;
+        }
+      });
+
+      // Pure realtime sports state - zero hardcoded figures
       setSportsState({
         football: {
           isAvailable: returnedFixtures.length > 0,
-          fixtureCount: returnedFixtures.length,
+          fixtureCount: activeCurrentAndFutureCount > 0 ? activeCurrentAndFutureCount : returnedFixtures.length,
           leagueCount: returnedLeagues.length
         },
         american_football: { isAvailable: false, fixtureCount: 0, leagueCount: 0 },
@@ -737,6 +753,7 @@ export default function App() {
     const day1 = getDateDetailsByOffset(1);
     const day2 = getDateDetailsByOffset(2);
     const day3 = getDateDetailsByOffset(3);
+    const day4 = getDateDetailsByOffset(4);
 
     // Past dates list (last 30 days plus any fixture dates before today)
     const rawPastDates = getPastDatesList(30, Array.from(fixtureCountByDate.keys()));
@@ -783,6 +800,11 @@ export default function App() {
         ...day3,
         id: day3.iso,
         count: fixtureCountByDate.get(day3.iso) || 0
+      },
+      day4: {
+        ...day4,
+        id: day4.iso,
+        count: fixtureCountByDate.get(day4.iso) || 0
       },
       pastDates,
       todayIso: today.iso,
@@ -844,11 +866,11 @@ export default function App() {
       name: 'Football',
       icon: '⚽',
       isAvailable: sportsState.football?.isAvailable ?? true,
-      fixtureCount: sportsState.football?.fixtureCount ?? (fixtures.length || 433),
-      leagueCount: sportsState.football?.leagueCount ?? (availableLeagues.length || 30),
+      fixtureCount: sportsState.football?.fixtureCount ?? fixtures.length,
+      leagueCount: sportsState.football?.leagueCount ?? availableLeagues.length,
       statusLabel: (sportsState.football?.isAvailable ?? true) ? 'Available' : 'Coming Soon',
       subtext: (sportsState.football?.isAvailable ?? true)
-        ? `${availableLeagues.length || 30} Available Leagues`
+        ? `${sportsState.football?.leagueCount ?? availableLeagues.length} Available Leagues`
         : 'Coming Soon'
     },
     {
@@ -868,8 +890,8 @@ export default function App() {
       name: 'Tennis',
       icon: '🎾',
       isAvailable: sportsState.tennis?.isAvailable ?? true,
-      fixtureCount: sportsState.tennis?.fixtureCount ?? 203,
-      leagueCount: sportsState.tennis?.leagueCount ?? 8,
+      fixtureCount: sportsState.tennis?.fixtureCount ?? 0,
+      leagueCount: sportsState.tennis?.leagueCount ?? 0,
       statusLabel: sportsState.tennis?.isAvailable ? 'Available' : 'Coming Soon',
       subtext: sportsState.tennis?.isAvailable
         ? `${sportsState.tennis.leagueCount} Available Tournaments`
@@ -1910,12 +1932,12 @@ export default function App() {
                 <div className="market-nav-titles">
                   <span className="market-nav-title-text">General</span>
                   <span className="market-nav-sub-text">
-                    Core 1X2, Double Chance & Totals • {availableLeagues.length || 30} Leagues
+                    Core 1X2, Double Chance & Totals • {availableLeagues.length} Leagues
                   </span>
                 </div>
               </div>
               <span className="market-nav-count-pill">
-                {fixtures.length || 495}
+                {selectedDate !== 'all' ? `${filteredFixtures.length} Matches` : `${dynamicDateTabs.all.count} Matches`}
               </span>
             </div>
 
@@ -2040,7 +2062,7 @@ export default function App() {
                 className="coming-soon-back-btn"
                 onClick={() => handleSportSelect('football')}
               >
-                ⚽ Explore Active Football Predictions ({sportsState.football?.fixtureCount || 433}+ Matches Live)
+                ⚽ Explore Active Football Predictions {sportsState.football?.fixtureCount ? `(${sportsState.football.fixtureCount} Matches Live)` : ''}
               </button>
               <button
                 type="button"
@@ -2048,7 +2070,7 @@ export default function App() {
                 style={{ background: '#0284c7' }}
                 onClick={() => handleSportSelect('tennis')}
               >
-                🎾 Explore Active Tennis Predictions ({sportsState.tennis?.fixtureCount || 203}+ Matches Live)
+                🎾 Explore Active Tennis Predictions {sportsState.tennis?.fixtureCount ? `(${sportsState.tennis.fixtureCount} Matches Live)` : ''}
               </button>
             </div>
           </div>
@@ -2198,7 +2220,20 @@ export default function App() {
               <span className="date-pill-sub-label">{dynamicDateTabs.day3.dateFormatted}</span>
             </button>
 
-            {/* Pill 7: All Dates (current date and future dates, no past dates) */}
+            {/* Pill 7: Day (with date) - Day + 4 */}
+            <button
+              type="button"
+              className={`date-pill-btn ${selectedDate === dynamicDateTabs.day4.iso ? 'active' : ''}`}
+              onClick={() => setSelectedDate(dynamicDateTabs.day4.iso)}
+            >
+              <span className="date-pill-main-row">
+                {dynamicDateTabs.day4.shortDay}
+                <span className="date-pill-winloss">{dynamicDateTabs.day4.count} M</span>
+              </span>
+              <span className="date-pill-sub-label">{dynamicDateTabs.day4.dateFormatted}</span>
+            </button>
+
+            {/* Pill 8: All Dates (current date and future dates, no past dates) */}
             <button
               type="button"
               className={`date-pill-btn ${selectedDate === 'all' ? 'active' : ''}`}

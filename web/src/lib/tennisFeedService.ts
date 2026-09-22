@@ -169,7 +169,7 @@ export async function fetchTennisFeed(options: FetchTennisFeedOptions = {}): Pro
         .from('tennis_predictions')
         .select(PRED_SELECT)
         .order('target_kickoff_at', { ascending: true })
-        .limit(200);
+        .limit(2000);
 
       if (!error && Array.isArray(data) && data.length > 0) {
         rawPredictions = data;
@@ -179,7 +179,7 @@ export async function fetchTennisFeed(options: FetchTennisFeedOptions = {}): Pro
           .from('tennis_predictions_paywall')
           .select(PRED_SELECT)
           .order('target_kickoff_at', { ascending: true })
-          .limit(200);
+          .limit(2000);
         rawPredictions = fallbackRes.data || [];
       }
     } else {
@@ -187,7 +187,7 @@ export async function fetchTennisFeed(options: FetchTennisFeedOptions = {}): Pro
         .from('tennis_predictions_paywall')
         .select(PRED_SELECT)
         .order('target_kickoff_at', { ascending: true })
-        .limit(200);
+        .limit(2000);
 
       if (error) {
         console.warn('Error querying tennis_predictions_paywall:', error.message);
@@ -202,12 +202,12 @@ export async function fetchTennisFeed(options: FetchTennisFeedOptions = {}): Pro
         .select('*')
         .eq('is_active', true)
         .order('name', { ascending: true })
-        .limit(100),
+        .limit(500),
       supabase
         .from('tennis_settlements')
         .select(SETTLE_SELECT)
         .order('settled_at', { ascending: false })
-        .limit(100),
+        .limit(500),
     ]);
 
     const rawTournaments: TennisTournament[] = (tourneysRes.data as TennisTournament[]) || [];

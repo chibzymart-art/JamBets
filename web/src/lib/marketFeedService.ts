@@ -353,7 +353,7 @@ export async function fetchMarketFeed(
     market,
     date = 'all',
     page = 1,
-    limit = 200,
+    limit = 2000,
     token,
     isAdmin = false,
     canViewPredictions = false,
@@ -427,28 +427,28 @@ export async function fetchMarketFeed(
         .neq('settlement_status', 'void')
         .neq('publication_status', 'archived')
         .order('probability', { ascending: false })
-        .limit(200),
+        .limit(2000),
       supabase
         .from(SELECTS.draw.table)
         .select(SELECTS.draw.select)
         .neq('settlement_status', 'void')
         .neq('publication_status', 'archived')
         .order('probability', { ascending: false })
-        .limit(200),
+        .limit(2000),
       supabase
         .from(SELECTS.corners.table)
         .select(SELECTS.corners.select)
         .neq('settlement_status', 'void')
         .neq('publication_status', 'archived')
         .order('probability', { ascending: false })
-        .limit(200),
+        .limit(2000),
       supabase
         .from(SELECTS.goals.table)
         .select(SELECTS.goals.select)
         .neq('settlement_status', 'void')
         .neq('publication_status', 'archived')
         .order('probability', { ascending: false })
-        .limit(200),
+        .limit(2000),
     ]);
 
     const normalizeList = (data: any[], cat: any, forced?: MarketType) =>

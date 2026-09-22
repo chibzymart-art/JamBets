@@ -62,9 +62,10 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
     const day1 = getDateDetailsByOffset(1);
     const day2 = getDateDetailsByOffset(2);
     const day3 = getDateDetailsByOffset(3);
+    const day4 = getDateDetailsByOffset(4);
     const pastDates = getPastDatesList(30);
 
-    return { yesterday, today, day1, day2, day3, pastDates };
+    return { yesterday, today, day1, day2, day3, day4, pastDates };
   }, []);
 
   // 1. Resolve initial active market: URL query (?market=...) > sessionStorage > prop initialMarket > 'over_2.5_goals'
@@ -174,7 +175,7 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
         market: activeMarket,
         date: dateFilter,
         page: 1,
-        limit: 200,
+        limit: 2000,
         token,
         isAdmin,
         canViewPredictions: isPaidUser,
@@ -432,7 +433,17 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
               <span className="cal-pill-text-mobile">{dateTabs.day3.shortDay} {dateTabs.day3.iso.slice(8)}</span>
             </button>
 
-            {/* 7. All Dates (current and future dates only) */}
+            {/* 7. Day (with date) - Day + 4 */}
+            <button
+              type="button"
+              className={`cal-pill ${dateFilter === dateTabs.day4.iso ? 'active' : ''}`}
+              onClick={() => { handleSelectDate(dateTabs.day4.iso); }}
+            >
+              <span className="cal-pill-text-desktop">{dateTabs.day4.fullLabel}</span>
+              <span className="cal-pill-text-mobile">{dateTabs.day4.shortDay} {dateTabs.day4.iso.slice(8)}</span>
+            </button>
+
+            {/* 8. All Dates (current and future dates only) */}
             <button
               type="button"
               className={`cal-pill ${dateFilter === 'all' ? 'active' : ''}`}

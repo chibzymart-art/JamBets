@@ -159,9 +159,12 @@ def run():
         print("\n[STEP 3.5] Skipping scraper synchronization (--skip-scrape active).", flush=True)
 
     # 5. Fetch Forward 5-Day Horizon Fixtures (Today + 4 Days Ahead)
+    wat_tz = timezone(timedelta(hours=1))
+    now_wat = datetime.now(wat_tz)
     now_utc = datetime.now(timezone.utc)
-    max_utc = (now_utc + timedelta(days=4)).replace(hour=23, minute=59, second=59)
-    print(f"\n[STEP 4] Fetching forward-looking fixtures ({now_utc.strftime('%Y-%m-%d %H:%M')} to {max_utc.strftime('%Y-%m-%d %H:%M')} UTC)...", flush=True)
+    today_start_utc = now_wat.replace(hour=0, minute=0, second=0, microsecond=0).astimezone(timezone.utc)
+    max_utc = (now_wat + timedelta(days=5)).replace(hour=23, minute=59, second=59).astimezone(timezone.utc)
+    print(f"\n[STEP 4] Fetching forward-looking fixtures ({today_start_utc.strftime('%Y-%m-%d %H:%M')} to {max_utc.strftime('%Y-%m-%d %H:%M')} UTC / WAT Grounded)...", flush=True)
 
     # Reset any previously failed 'data_unavailable' fixtures back to 'scheduled'
     print("  • Resetting previously failed data_unavailable fixtures in Cloud Supabase...", flush=True)
@@ -171,14 +174,13 @@ def run():
     except Exception as reset_err:
         print(f"  [NOTE] Reset fixtures notice: {reset_err}", flush=True)
 
-    # Cutoff date is strictly TODAY onwards (rolling 4-day window)
-    today_start_utc = datetime(now_utc.year, now_utc.month, now_utc.day, 0, 0, 0, tzinfo=timezone.utc)
+    # Cutoff date is strictly TODAY onwards (rolling window grounded in Africa/Lagos)
     forward_fixtures = supabase.get_forward_prediction_queue(
         ref_time_utc=today_start_utc,
-        max_days=4,
-        limit=1000
+        max_days=5,
+        limit=2000
     )
-    print(f"  • Retrieved {len(forward_fixtures)} fixtures from cutoff {today_start_utc.strftime('%Y-%m-%d')} across the 4-day window from Cloud Supabase", flush=True)
+    print(f"  • Retrieved {len(forward_fixtures)} fixtures from cutoff {today_start_utc.strftime('%Y-%m-%d')} across the 5-day horizon from Cloud Supabase", flush=True)
 
     # Load existing predictions for smart change-detection and 48-hour immutability lock
     lock_window_iso = (now_utc + timedelta(hours=48)).isoformat()
@@ -344,14 +346,14 @@ def run():
     print("==================================================================")
 
     # Query Cloud Supabase to verify that zero pending fixtures remain in the forward window
-    forward_check = supabase.get_forward_prediction_queue(ref_time_utc=now_utc, max_days=4, limit=1000)
+    forward_check = supabase.get_forward_prediction_queue(ref_time_utc=today_start_utc, max_days=5, limit=2000)
     pending_count = sum(1 for f in forward_check if f.get("status") == "pending")
 
     print(f" Total forward fixtures evaluated: {len(fixtures_to_process)}")
     print(f" Published predictions: {published_count}")
     print(f" Primary Consensus Bankers (P_sim>=82% AND P_market>=80%): {consensus_banker_count}")
     print(f" DATA_UNAVAILABLE fixtures (real data absent): {data_unavailable_count}")
-    print(f" Pending fixtures in 4-day window: {pending_count} (Must be EXACTLY 0)")
+    print(f" Pending fixtures in forward window: {pending_count} (Must be EXACTLY 0)")
 
     if pending_count == 0:
         print(" ✅ SUCCESS: Exhaustive queue drain complete with EXACTLY ZERO pending orphans.")

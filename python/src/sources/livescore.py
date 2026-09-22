@@ -58,7 +58,18 @@ class LiveScoreAdapter(BaseSourceAdapter):
         "ARG_PD": ["liga-profesional-clausura", "primera-division"],
         "MEX_LMX": ["liga-mx-apertura", "liga-mx-clausura", "liga-mx"],
         "SAU_SPL": ["saudi-professional-league", "pro-league"],
-        "JPN_J1": ["j-league-2025", "j1-league"]
+        "JPN_J1": ["j-league-2025", "j1-league"],
+        "EUR_CL": ["champions-league", "uefa-champions-league"],
+        "EUR_EL": ["europa-league", "uefa-europa-league"],
+        "EUR_ECL": ["europa-conference-league", "conference-league"],
+        "EUR_NL": ["uefa-nations-league", "nations-league"],
+        "CAF_AFCON_Q": ["africa-cup-of-nations-qualification", "africa-cup-of-nations", "afcon-qualification"],
+        "CONCACAF_NL": ["concacaf-nations-league", "nations-league"],
+        "FIFA_WCQ_CONMEBOL": ["world-cup-qualification-conmebol", "world-cup-qualification"],
+        "FIFA_WCQ_UEFA": ["world-cup-qualification-uefa", "world-cup-qualification"],
+        "FIFA_WCQ_CAF": ["world-cup-qualification-caf", "world-cup-qualification"],
+        "FIFA_WCQ_AFC": ["world-cup-qualification-afc", "world-cup-qualification"],
+        "FIFA_FRIENDLY": ["international-friendlies", "friendlies"]
     }
 
     def _map_livescore_status(self, eps: str) -> FixtureStatus:
