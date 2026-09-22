@@ -630,7 +630,13 @@ body {
 .header-center-links {
   display: flex;
   align-items: center;
-  gap: 24px;
+  gap: 6px;
+}
+
+.header-sports-nav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .nav-link-btn {
@@ -661,9 +667,87 @@ body {
   background: rgba(5, 150, 105, 0.06);
 }
 
-/* Move Other Markets slightly to the right so it doesn't cluster with Dashboard on desktop */
-.nav-link-btn.nav-link-other-markets {
-  margin-left: 14px;
+/* Dedicated Sport Type Nav Buttons */
+.nav-sport-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 9999px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #475569;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  cursor: pointer;
+  transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+  white-space: nowrap;
+}
+
+.nav-sport-btn:hover {
+  color: #065f46 !important;
+  background: #f0fdf4 !important;
+  border-color: #a7f3d0 !important;
+  transform: translateY(-1px);
+}
+
+.nav-sport-btn.active {
+  color: #ffffff !important;
+  background: linear-gradient(135deg, #065f46 0%, #047857 100%) !important;
+  border-color: #047857 !important;
+  font-weight: 700 !important;
+  box-shadow: 0 2px 6px rgba(4, 120, 87, 0.25);
+}
+
+.nav-sport-icon {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.nav-sport-name {
+  font-size: 13px;
+  line-height: 1;
+}
+
+.nav-sport-soon-badge {
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  color: #64748b;
+  background: #e2e8f0;
+  padding: 1px 5px;
+  border-radius: 9999px;
+  line-height: 1.2;
+}
+
+.nav-sport-btn.active .nav-sport-soon-badge {
+  background: rgba(255, 255, 255, 0.25);
+  color: #ffffff;
+}
+
+/* Pricing Header Action Button */
+.nav-header-pricing-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  padding: 5px 11px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #15803d;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  white-space: nowrap;
+}
+
+.nav-header-pricing-btn:hover {
+  background: #dcfce7;
+  border-color: #86efac;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(22, 163, 74, 0.15);
 }
 
 .pricing-flat-badge {
@@ -1048,6 +1132,131 @@ body {
 .hamburger-logout-item:hover {
   color: #dc2626 !important;
   background: #fef2f2 !important;
+}
+
+/* =====================================================================
+   PREDICTION MARKETS SELECTOR BAR (General vs Other Markets)
+   ===================================================================== */
+.prediction-markets-bar {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+  margin: 10px auto 14px;
+  width: 100%;
+  max-width: 680px;
+}
+
+.market-nav-card {
+  background: #ffffff;
+  border: 1.5px solid var(--border-subtle, #cbd5e1);
+  border-radius: 10px;
+  padding: 8px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: var(--shadow-xs, 0 1px 2px rgba(0, 0, 0, 0.04));
+  flex: 1 1 0;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.market-nav-card:hover {
+  border-color: #10b981;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.12);
+  transform: translateY(-1px);
+}
+
+.market-nav-card.active {
+  background: linear-gradient(135deg, #064e3b 0%, #065f46 100%);
+  border-color: #047857;
+  color: #ffffff;
+  box-shadow: 0 4px 14px rgba(6, 78, 59, 0.25);
+}
+
+.market-nav-card-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.market-nav-icon-circle {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #f1f5f9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.market-nav-card.active .market-nav-icon-circle {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.market-nav-titles {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.market-nav-title-text {
+  font-family: var(--font-heading, inherit);
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--text-primary, #0f172a);
+  line-height: 1.15;
+  white-space: nowrap;
+}
+
+.market-nav-card.active .market-nav-title-text {
+  color: #ffffff;
+}
+
+.market-nav-sub-text {
+  font-size: 10px;
+  color: var(--text-muted, #64748b);
+  line-height: 1.15;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 2px;
+}
+
+.market-nav-card.active .market-nav-sub-text {
+  color: #a7f3d0;
+}
+
+.market-nav-count-pill {
+  padding: 2px 8px;
+  border-radius: 9999px;
+  font-size: 10px;
+  font-weight: 800;
+  font-family: var(--font-mono, monospace);
+  background: #f1f5f9;
+  color: var(--text-secondary, #334155);
+  border: 1px solid var(--border-subtle, #cbd5e1);
+  margin-left: 8px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.market-nav-card.active .market-nav-count-pill {
+  background: #022c22;
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.market-nav-count-pill.specialist-pill {
+  font-family: var(--font-body, inherit);
+  letter-spacing: 0.2px;
 }
 
 /* =====================================================================
@@ -11661,6 +11870,47 @@ body {
     justify-content: center !important;
   }
 
+  /* Prediction Markets Bar on mobile: side-by-side 50% grid, no horizontal scroll needed */
+  .prediction-markets-bar {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 8px !important;
+    padding: 0 4px !important;
+    margin: 6px 0 10px !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  .market-nav-card {
+    padding: 6px 8px !important;
+    border-radius: 8px !important;
+  }
+
+  .market-nav-card-left {
+    gap: 6px !important;
+  }
+
+  .market-nav-icon-circle {
+    width: 22px !important;
+    height: 22px !important;
+    font-size: 12px !important;
+  }
+
+  .market-nav-title-text {
+    font-size: 11px !important;
+  }
+
+  .market-nav-sub-text {
+    font-size: 8px !important;
+  }
+
+  .market-nav-count-pill {
+    font-size: 8px !important;
+    padding: 1px 5px !important;
+    margin-left: 4px !important;
+  }
+
   /* Sport categories strictly single-line horizontal scroll on mobile */
   .sport-categories-bar {
     display: flex !important;
@@ -11794,16 +12044,27 @@ body {
     border-radius: 8px !important;
   }
 
+  /* Mobile Win Rates Deck: Contain ALL cards within 100% screen width without scrolling */
   .winrates-kpi-card {
-    display: flex !important;
-    overflow-x: auto !important;
-    -webkit-overflow-scrolling: touch !important;
-    scrollbar-width: none !important;
+    display: grid !important;
+    grid-template-columns: 0.85fr 1.35fr 1.35fr 1.45fr !important;
     width: 100% !important;
     max-width: 100% !important;
+    overflow-x: hidden !important;
+    box-sizing: border-box !important;
   }
 
-  .winrates-kpi-card::-webkit-scrollbar {
+  .tennis-winrates-kpi-card {
+    display: grid !important;
+    grid-template-columns: 0.85fr 1.4fr 0.85fr 0.9fr !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow-x: hidden !important;
+    box-sizing: border-box !important;
+  }
+
+  .winrates-kpi-card::-webkit-scrollbar,
+  .tennis-winrates-kpi-card::-webkit-scrollbar {
     display: none !important;
   }
 
@@ -11813,58 +12074,76 @@ body {
   }
 
   .compact-kpi-segment {
-    padding: 2px 4px !important;
+    padding: 1px 2px !important;
     flex-direction: column !important;
     justify-content: center !important;
-    border-right-width: 1.5px !important;
+    border-right-width: 1px !important;
+    min-width: 0 !important;
+    overflow: hidden !important;
   }
 
   .compact-kpi-segment.all-preds-seg {
-    flex-shrink: 0 !important;
-    min-width: 82px !important;
+    flex-shrink: 1 !important;
+    min-width: 0 !important;
   }
 
   .compact-kpi-grouped-tab {
     display: flex !important;
     flex-direction: row !important;
-    flex-shrink: 0 !important;
-    min-width: 165px !important;
-    border-right-width: 1.5px !important;
+    flex-shrink: 1 !important;
+    min-width: 0 !important;
+    border-right-width: 1px !important;
   }
 
   .compact-kpi-subsegment {
     flex: 1 !important;
-    padding: 2px 4px !important;
+    padding: 1px 2px !important;
     flex-direction: column !important;
     justify-content: center !important;
-    gap: 1px !important;
+    gap: 0 !important;
     min-width: 0 !important;
+    overflow: hidden !important;
   }
 
   .compact-kpi-header {
-    gap: 2px !important;
+    gap: 1px !important;
     margin-bottom: 0 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
   }
 
   .compact-kpi-title {
-    font-size: 8px !important;
+    font-size: 7px !important;
+    line-height: 1 !important;
+    white-space: nowrap !important;
   }
 
   .compact-kpi-pill {
-    font-size: 6.5px !important;
-    padding: 0 2px !important;
+    font-size: 5.5px !important;
+    padding: 0 1.5px !important;
+    line-height: 1 !important;
   }
 
   .compact-kpi-val-row {
-    gap: 2px !important;
+    gap: 1.5px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    line-height: 1.1 !important;
   }
 
   .compact-kpi-pct {
-    font-size: 11px !important;
+    font-size: 9px !important;
+    font-weight: 800 !important;
+    line-height: 1 !important;
   }
 
   .compact-kpi-ratio {
-    font-size: 7px !important;
+    font-size: 6px !important;
+    font-weight: 600 !important;
+    line-height: 1 !important;
+    white-space: nowrap !important;
   }
 
   .compact-act-segment {

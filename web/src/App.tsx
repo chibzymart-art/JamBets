@@ -816,15 +816,15 @@ export default function App() {
         : 'Coming Soon'
     },
     {
-      id: 'american_football',
-      name: 'American Football',
-      icon: '🏈',
-      isAvailable: sportsState.american_football?.isAvailable ?? false,
-      fixtureCount: sportsState.american_football?.fixtureCount ?? 0,
-      leagueCount: sportsState.american_football?.leagueCount ?? 0,
-      statusLabel: sportsState.american_football?.isAvailable ? 'Available' : 'Coming Soon',
-      subtext: sportsState.american_football?.isAvailable
-        ? `${sportsState.american_football.leagueCount} Available Leagues`
+      id: 'tennis',
+      name: 'Tennis',
+      icon: '🎾',
+      isAvailable: sportsState.tennis?.isAvailable ?? true,
+      fixtureCount: sportsState.tennis?.fixtureCount ?? 203,
+      leagueCount: sportsState.tennis?.leagueCount ?? 8,
+      statusLabel: sportsState.tennis?.isAvailable ? 'Available' : 'Coming Soon',
+      subtext: sportsState.tennis?.isAvailable
+        ? `${sportsState.tennis.leagueCount} Available Tournaments`
         : 'Coming Soon'
     },
     {
@@ -840,15 +840,15 @@ export default function App() {
         : 'Coming Soon'
     },
     {
-      id: 'tennis',
-      name: 'Tennis',
-      icon: '🎾',
-      isAvailable: sportsState.tennis?.isAvailable ?? true,
-      fixtureCount: sportsState.tennis?.fixtureCount ?? 203,
-      leagueCount: sportsState.tennis?.leagueCount ?? 8,
-      statusLabel: sportsState.tennis?.isAvailable ? 'Available' : 'Coming Soon',
-      subtext: sportsState.tennis?.isAvailable
-        ? `${sportsState.tennis.leagueCount} Available Tournaments`
+      id: 'american_football',
+      name: 'American Football',
+      icon: '🏈',
+      isAvailable: sportsState.american_football?.isAvailable ?? false,
+      fixtureCount: sportsState.american_football?.fixtureCount ?? 0,
+      leagueCount: sportsState.american_football?.leagueCount ?? 0,
+      statusLabel: sportsState.american_football?.isAvailable ? 'Available' : 'Coming Soon',
+      subtext: sportsState.american_football?.isAvailable
+        ? `${sportsState.american_football.leagueCount} Available Leagues`
         : 'Coming Soon'
     },
     {
@@ -1276,27 +1276,43 @@ export default function App() {
             <img src="/oddsbanta-logo.svg" alt="Oddsbanta Prediction Engine" className="brand-header-logo-img" />
           </Link>
 
-            {/* Clean Unified Navigation Links */}
-          <div className="header-center-links">
-            <Link
-              to={targetPredictionsPath}
-              className={`nav-link-btn ${isPredictionsOrDashboard ? 'active' : ''}`}
-            >
-              {currentUser ? 'Dashboard' : 'Predictions'}
-            </Link>
-            <Link
-              to="/other-markets"
-              className={`nav-link-btn nav-link-other-markets ${location.pathname === '/other-markets' || location.pathname === '/goals' ? 'active' : ''}`}
-            >
-              Other Markets
-            </Link>
-            <button
-              type="button"
-              className={`nav-link-btn ${location.pathname === '/subscription' ? 'active' : ''}`}
-              onClick={() => setIsPricingModalOpen(true)}
-            >
-              Pricing <span className="pricing-flat-badge">₦5k Flat</span>
-            </button>
+            {/* Clean Unified Navigation Links: Sport Types Selection */}
+          <div className="header-center-links header-sports-nav">
+            {sportsList.map((sport) => {
+              const isActive =
+                (sport.id === 'tennis' && (location.pathname === '/tennis' || selectedSport === 'tennis')) ||
+                (sport.id === 'football' && selectedSport === 'football' && location.pathname !== '/tennis') ||
+                (sport.id === selectedSport && location.pathname !== '/tennis');
+
+              return (
+                <button
+                  key={sport.id}
+                  type="button"
+                  className={`nav-link-btn nav-sport-btn ${isActive ? 'active' : ''}`}
+                  onClick={() => {
+                    setSelectedSport(sport.id);
+                    if (sport.id === 'tennis') {
+                      navigate('/tennis');
+                    } else if (sport.id === 'football') {
+                      if (location.pathname === '/tennis') {
+                        navigate(targetPredictionsPath);
+                      }
+                    } else {
+                      if (location.pathname === '/tennis') {
+                        navigate(targetPredictionsPath);
+                      }
+                    }
+                  }}
+                  title={`${sport.name} Predictions`}
+                >
+                  <span className="nav-sport-icon">{sport.icon}</span>
+                  <span className="nav-sport-name">{sport.name}</span>
+                  {!sport.isAvailable && (
+                    <span className="nav-sport-soon-badge">Soon</span>
+                  )}
+                </button>
+              );
+            })}
           </div>
 
           <div className="header-right-actions">
@@ -1306,7 +1322,16 @@ export default function App() {
               </Link>
             )}
 
-
+            {/* Pricing Action Button in Header */}
+            <button
+              type="button"
+              className="nav-header-pricing-btn"
+              onClick={() => setIsPricingModalOpen(true)}
+              title="View VIP Subscription Plans"
+            >
+              <span className="pricing-title">Pricing</span>
+              <span className="pricing-flat-badge">₦5k Flat</span>
+            </button>
 
             {!currentUser && (
               <button
@@ -1495,21 +1520,36 @@ export default function App() {
                     </button>
 
                     <Link
-                      to="/other-markets"
-                      className="hamburger-menu-item"
-                      onClick={() => setIsHamburgerOpen(false)}
+                      to={targetPredictionsPath}
+                      className={`hamburger-menu-item ${location.pathname !== '/tennis' && location.pathname !== '/other-markets' ? 'active' : ''}`}
+                      onClick={() => {
+                        setSelectedSport('football');
+                        setIsHamburgerOpen(false);
+                      }}
                     >
-                      <span className="hamburger-item-icon">🎯</span>
-                      <span className="hamburger-item-label">Other Markets</span>
+                      <span className="hamburger-item-icon">⚽</span>
+                      <span className="hamburger-item-label">Football Predictions</span>
                     </Link>
 
                     <Link
-                      to={targetPredictionsPath}
-                      className="hamburger-menu-item"
+                      to="/other-markets"
+                      className={`hamburger-menu-item ${location.pathname === '/other-markets' ? 'active' : ''}`}
                       onClick={() => setIsHamburgerOpen(false)}
                     >
-                      <span className="hamburger-item-icon">📊</span>
-                      <span className="hamburger-item-label">{currentUser ? 'Predictions Dashboard' : 'Predictions'}</span>
+                      <span className="hamburger-item-icon">🎯</span>
+                      <span className="hamburger-item-label">Other Markets (Specialists)</span>
+                    </Link>
+
+                    <Link
+                      to="/tennis"
+                      className={`hamburger-menu-item ${location.pathname === '/tennis' ? 'active' : ''}`}
+                      onClick={() => {
+                        setSelectedSport('tennis');
+                        setIsHamburgerOpen(false);
+                      }}
+                    >
+                      <span className="hamburger-item-icon">🎾</span>
+                      <span className="hamburger-item-label">Tennis Predictions (250k MC)</span>
                     </Link>
 
                     {isAdmin && (
@@ -1740,27 +1780,59 @@ export default function App() {
                   <Navigate to="/dashboard" replace />
                 ) : (
                   <div id="fixtures-view-section">
-        {/* 2. TOP SPORT CATEGORIES HORIZONTAL SELECTOR BAR */}
-        <div className="sport-categories-bar">
-          {sportsList.map((sp) => (
+        {/* 2. FOOTBALL PREDICTION MARKETS SELECTOR BAR (General & Other Markets) */}
+        {selectedSport === 'football' && (
+          <div className="prediction-markets-bar" role="tablist" aria-label="Football Prediction Markets">
+            {/* Market 1: General Market */}
             <div
-              key={sp.id}
-              className={`sport-card ${selectedSport === sp.id ? 'active' : ''} ${!sp.isAvailable ? 'coming-soon' : ''}`}
-              onClick={() => setSelectedSport(sp.id)}
+              className={`market-nav-card ${location.pathname !== '/other-markets' && location.pathname !== '/goals' ? 'active' : ''}`}
+              onClick={() => {
+                setSelectedSport('football');
+                navigate(targetPredictionsPath);
+              }}
+              role="tab"
+              aria-selected={location.pathname !== '/other-markets' && location.pathname !== '/goals'}
+              tabIndex={0}
             >
-              <div className="sport-card-left">
-                <div className="sport-icon-circle">{sp.icon}</div>
-                <div className="sport-info-titles">
-                  <span className="sport-title-text">{sp.name}</span>
-                  <span className="sport-sub-text">{sp.subtext}</span>
+              <div className="market-nav-card-left">
+                <div className="market-nav-icon-circle">⚽</div>
+                <div className="market-nav-titles">
+                  <span className="market-nav-title-text">General</span>
+                  <span className="market-nav-sub-text">
+                    Core 1X2, Double Chance & Totals • {availableLeagues.length || 30} Leagues
+                  </span>
                 </div>
               </div>
-              <span className={`sport-count-pill ${!sp.isAvailable ? 'coming-soon-pill' : ''}`}>
-                {sp.isAvailable ? sp.fixtureCount : 0}
+              <span className="market-nav-count-pill">
+                {fixtures.length || 495}
               </span>
             </div>
-          ))}
-        </div>
+
+            {/* Market 2: Other Markets */}
+            <div
+              className={`market-nav-card ${location.pathname === '/other-markets' || location.pathname === '/goals' ? 'active' : ''}`}
+              onClick={() => {
+                navigate('/other-markets');
+              }}
+              role="tab"
+              aria-selected={location.pathname === '/other-markets' || location.pathname === '/goals'}
+              tabIndex={0}
+            >
+              <div className="market-nav-card-left">
+                <div className="market-nav-icon-circle">🎯</div>
+                <div className="market-nav-titles">
+                  <span className="market-nav-title-text">Other Markets</span>
+                  <span className="market-nav-sub-text">
+                    Goals, 1X2 Specialist, Corners & Draw Hunter
+                  </span>
+                </div>
+              </div>
+              <span className="market-nav-count-pill specialist-pill">
+                5 Specialist Models
+              </span>
+            </div>
+          </div>
+        )}
 
 
 

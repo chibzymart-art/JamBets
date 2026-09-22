@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { MarketSwitchboardNav } from '../components/MarketSwitchboardNav';
 import { SpecialistMarketCard } from '../components/SpecialistMarketCard';
@@ -53,6 +53,7 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
   initialMarket = 'over_2.5_goals',
 }) => {
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
 
   // Dynamic deterministic relative dates: Yesterday, Today, Day+1, Day+2, Day+3, Past Dates
   const dateTabs = useMemo(() => {
@@ -277,6 +278,48 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
       onOpenFavoritesDrawer={onOpenFavoritesDrawer}
     >
       <div className="goals-page-container" id="other-markets-top" style={{ maxWidth: '100%', padding: '0 0 80px 0' }}>
+        {/* TOP PREDICTION MARKETS SELECTOR BAR (General vs Other Markets) */}
+        <div className="prediction-markets-bar" role="tablist" aria-label="Football Prediction Markets" style={{ marginTop: 0, marginBottom: '14px' }}>
+          <div
+            className="market-nav-card"
+            onClick={() => {
+              navigate('/dashboard');
+            }}
+            role="tab"
+            aria-selected={false}
+            tabIndex={0}
+          >
+            <div className="market-nav-card-left">
+              <div className="market-nav-icon-circle">⚽</div>
+              <div className="market-nav-titles">
+                <span className="market-nav-title-text">General</span>
+                <span className="market-nav-sub-text">Core 1X2, Double Chance & Totals</span>
+              </div>
+            </div>
+            <span className="market-nav-count-pill">
+              View Schedule →
+            </span>
+          </div>
+
+          <div
+            className="market-nav-card active"
+            role="tab"
+            aria-selected={true}
+            tabIndex={0}
+          >
+            <div className="market-nav-card-left">
+              <div className="market-nav-icon-circle">🎯</div>
+              <div className="market-nav-titles">
+                <span className="market-nav-title-text">Other Markets</span>
+                <span className="market-nav-sub-text">Goals, 1X2 Specialist, Corners & Draw Hunter</span>
+              </div>
+            </div>
+            <span className="market-nav-count-pill specialist-pill">
+              5 Specialist Models
+            </span>
+          </div>
+        </div>
+
         {/* 1. SPECIALIST MARKET SWITCHBOARD (Positioned First directly below Header/Ad Banner) */}
       <MarketSwitchboardNav
         activeMarket={activeMarket}
