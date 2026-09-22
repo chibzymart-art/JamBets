@@ -24,9 +24,10 @@ import sys
 import logging
 import argparse
 from typing import Dict, Any, List, Optional, Tuple
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 from .db import TennisDbClient
+from .scraper.espn_feed import EspnTennisFeedScraper, TennisFixtureMatcher
 
 logger = logging.getLogger("tennis.settlement")
 
@@ -229,85 +230,282 @@ class TennisSettlementEngine:
         # Fallback default
         return "void", "Unsettled or unknown market configuration.", actual_res
 
-    def run_settlement_cycle(self) -> Dict[str, int]:
+    def run_precision_settlement_cycle(
+        self,
+        lookback_hours: int = 48,
+        lookahead_minutes: int = 30,
+        scraper: Optional[EspnTennisFeedScraper] = None,
+        dry_run: bool = False
+    ) -> Dict[str, Any]:
         """
-        Scans all pending tennis predictions and audits finished/retired/walkover fixtures.
+        Autonomous Precision Tennis Settlement Engine.
+        Scrapes and settles ONLY current fixtures within [now - lookback_hours, now + lookahead_minutes].
+        Guarantees:
+        1. Never scrapes or settles old historical fixtures from past weeks or months.
+        2. Uses multi-factor precision matcher (Exact ESPN competition ID + Date/Time Proximity + Player Canonical slugs + Tournament).
+        3. Updates live in-play states in tennis_fixtures.
+        4. Accurately evaluates completed/retired/walkover match outcomes against all betting rules.
+        5. Atomically persists settlement statuses in tennis_predictions and immutable audit entries in tennis_settlements.
         """
-        stats = {"checked": 0, "settled": 0, "won": 0, "lost": 0, "void": 0}
+        stats = {
+            "inspected": 0,
+            "matched": 0,
+            "live_updated": 0,
+            "settled": 0,
+            "won": 0,
+            "lost": 0,
+            "void": 0,
+            "unsettled_pending": 0
+        }
 
-        # 1. Fetch pending predictions with linked fixture details
-        resp = self.db.client.get(
-            "/tennis_predictions",
-            params={
-                "settlement_status": "eq.pending",
-                "select": "id,fixture_id,market,prediction,fixture:tennis_fixtures(*,player1:tennis_players!tennis_fixtures_player1_id_fkey(*),player2:tennis_players!tennis_fixtures_player2_id_fkey(*))"
-            }
+        now_utc = datetime.now(timezone.utc)
+        min_kickoff = (now_utc - timedelta(hours=lookback_hours)).isoformat()
+        max_kickoff = (now_utc + timedelta(minutes=lookahead_minutes)).isoformat()
+
+        logger.info(
+            "Starting Precision Tennis Settlement Cycle for current active window: %s to %s (Lookback: %dh)",
+            min_kickoff, max_kickoff, lookback_hours
         )
-        resp.raise_for_status()
-        pending_preds = resp.json()
 
-        stats["checked"] = len(pending_preds)
-        logger.info("Found %d pending tennis predictions to audit", len(pending_preds))
+        # 1. Fetch pending predictions within current kickoff window
+        try:
+            resp = self.db.client.get(
+                "/tennis_predictions",
+                params={
+                    "settlement_status": "eq.pending",
+                    "target_kickoff_at": f"gte.{min_kickoff}",
+                    "and": f"(target_kickoff_at.lte.{max_kickoff})",
+                    "select": "id,fixture_id,market,prediction,target_kickoff_at,fixture:tennis_fixtures(*,tournament:tennis_tournaments(*),player1:tennis_players!tennis_fixtures_player1_id_fkey(*),player2:tennis_players!tennis_fixtures_player2_id_fkey(*))",
+                    "order": "target_kickoff_at.asc"
+                }
+            )
+            resp.raise_for_status()
+            pending_items = resp.json()
+        except Exception as e:
+            logger.error("Failed to query pending tennis predictions: %s", e, exc_info=True)
+            return stats
 
-        for item in pending_preds:
-            fix = item.get("fixture")
-            if not fix:
-                continue
+        stats["inspected"] = len(pending_items)
+        if not pending_items:
+            logger.info("Zero pending tennis predictions found in current settlement window.")
+            return stats
 
-            fix_status = fix.get("status")
-            if fix_status not in ("finished", "retired", "walkover"):
-                continue  # Match still scheduled or in play
+        logger.info("Auditing %d pending predictions for current fixtures...", len(pending_items))
 
+        # 2. Extract distinct target dates (YYYYMMDD) and tours (ATP / WTA)
+        target_dates = set()
+        tours = set()
+        for item in pending_items:
+            fix = item.get("fixture") or {}
+            k = item.get("target_kickoff_at") or fix.get("target_kickoff_at")
+            if k:
+                target_dates.add(k[:10].replace("-", ""))
+            tour_val = (fix.get("tournament") or {}).get("tour") or ""
+            if not tour_val and fix.get("canonical_key"):
+                tour_val = fix["canonical_key"].split(":")[0]
+            if tour_val.upper() in ("ATP", "GRAND_SLAM", "CHALLENGER"):
+                tours.add("atp")
+            elif tour_val.upper() in ("WTA", "ITF"):
+                tours.add("wta")
+            else:
+                tours.add("atp")
+                tours.add("wta")
+
+        # Always include today and yesterday as active tournament days
+        target_dates.add(now_utc.strftime("%Y%m%d"))
+        target_dates.add((now_utc - timedelta(days=1)).strftime("%Y%m%d"))
+        target_tours = list(tours) if tours else ["atp", "wta"]
+
+        logger.info(
+            "Scraping ESPN scoreboards across %d dates %s for tours %s",
+            len(target_dates), sorted(target_dates), target_tours
+        )
+
+        # 3. Scrape ESPN scoreboards for these target dates
+        feed_scraper = scraper or EspnTennisFeedScraper()
+        espn_comps: List[Dict[str, Any]] = []
+
+        for d in sorted(target_dates):
+            for tour in target_tours:
+                try:
+                    raw_data = feed_scraper.fetch_scoreboard(tour=tour, date_str=d)
+                    if raw_data:
+                        comps = feed_scraper.parse_settlement_results_from_scoreboard(raw_data, tour=tour)
+                        espn_comps.extend(comps)
+                except Exception as e:
+                    logger.warning("Error fetching ESPN %s scoreboard for %s: %s", tour.upper(), d, e)
+
+        logger.info("Acquired %d singles competitions from ESPN live feed for matching.", len(espn_comps))
+
+        # 4. Precision Match & Settle
+        for item in pending_items:
             pred_id = item["id"]
             fixture_id = item["fixture_id"]
             market = item["market"]
             prediction_text = item["prediction"]
+            fix = item.get("fixture")
 
-            settlement_status, notes, actual_result = self.evaluate_prediction(
-                market=market,
-                prediction_text=prediction_text,
-                fixture=fix
-            )
+            if not fix:
+                continue
 
-            p1_sets = int(fix.get("score_p1_sets") or 0)
-            p2_sets = int(fix.get("score_p2_sets") or 0)
-            _, _, total_games = self.parse_total_games(fix.get("set_scores") or [])
+            # Check if fixture was already marked finished/retired/walkover in Supabase
+            if fix.get("status") in ("finished", "retired", "walkover"):
+                settlement_status, notes, actual_result = self.evaluate_prediction(
+                    market=market,
+                    prediction_text=prediction_text,
+                    fixture=fix
+                )
+                p1_sets = int(fix.get("score_p1_sets") or 0)
+                p2_sets = int(fix.get("score_p2_sets") or 0)
+                _, _, total_games = self.parse_total_games(fix.get("set_scores") or [])
 
-            try:
-                # Settle in predictions table and insert settlement audit record
-                self.db.settle_prediction(
-                    prediction_id=pred_id,
-                    fixture_id=fixture_id,
-                    status=settlement_status,
-                    notes=notes,
-                    p1_sets=p1_sets,
-                    p2_sets=p2_sets,
-                    total_games=total_games,
-                    was_retired=(fix_status == "retired"),
-                    was_walkover=(fix_status == "walkover"),
-                    actual_result=actual_result
+                if not dry_run:
+                    try:
+                        self.db.settle_prediction(
+                            prediction_id=pred_id,
+                            fixture_id=fixture_id,
+                            status=settlement_status,
+                            notes=notes,
+                            p1_sets=p1_sets,
+                            p2_sets=p2_sets,
+                            total_games=total_games,
+                            was_retired=(fix.get("status") == "retired"),
+                            was_walkover=(fix.get("status") == "walkover"),
+                            actual_result=actual_result
+                        )
+                        stats["settled"] += 1
+                        if settlement_status == "won":
+                            stats["won"] += 1
+                        elif settlement_status == "lost":
+                            stats["lost"] += 1
+                        elif settlement_status == "void":
+                            stats["void"] += 1
+                        logger.info("Settled existing finished fixture prediction %s -> %s (%s)", pred_id, settlement_status.upper(), actual_result)
+                    except Exception as e:
+                        logger.error("Failed settling fixture %s: %s", fixture_id, e)
+                continue
+
+            # Find matching live/completed ESPN competition
+            matched_comp = None
+            for c in espn_comps:
+                if TennisFixtureMatcher.match(fix, c):
+                    matched_comp = c
+                    break
+
+            if not matched_comp:
+                stats["unsettled_pending"] += 1
+                logger.debug("Fixture %s (%s) has no matching live/completed score yet.", fixture_id, fix.get("canonical_key"))
+                continue
+
+            stats["matched"] += 1
+            aligned = TennisFixtureMatcher.align_scores(fix, matched_comp)
+            comp_status = aligned["status"]
+
+            # Handle LIVE match in-play state
+            if comp_status == "live":
+                stats["live_updated"] += 1
+                if not dry_run:
+                    try:
+                        self.db.update_fixture_score(fixture_id, {
+                            "status": "live",
+                            "score_p1_sets": aligned["score_p1_sets"],
+                            "score_p2_sets": aligned["score_p2_sets"],
+                            "set_scores": aligned["set_scores"]
+                        })
+                        logger.info("Updated live in-play fixture %s (%s): %d-%d Sets", fixture_id, fix.get("canonical_key"), aligned["score_p1_sets"], aligned["score_p2_sets"])
+                    except Exception as e:
+                        logger.warning("Failed to update live fixture %s: %s", fixture_id, e)
+                continue
+
+            # Handle COMPLETED matches (finished, retired, walkover)
+            if comp_status in ("finished", "retired", "walkover"):
+                fixture_updates = {
+                    "status": comp_status,
+                    "score_p1_sets": aligned["score_p1_sets"],
+                    "score_p2_sets": aligned["score_p2_sets"],
+                    "set_scores": aligned["set_scores"],
+                    "winner_id": aligned["winner_id"],
+                    "retired_player_id": aligned["retired_player_id"]
+                }
+                meta = fix.get("metadata") or {}
+                if aligned.get("espn_competition_id"):
+                    meta["espn_competition_id"] = aligned["espn_competition_id"]
+                meta["was_retired"] = aligned["was_retired"]
+                meta["was_walkover"] = aligned["was_walkover"]
+                meta["settlement_synced_at"] = now_utc.isoformat()
+                fixture_updates["metadata"] = meta
+
+                if not dry_run:
+                    try:
+                        self.db.update_fixture_score(fixture_id, fixture_updates)
+                    except Exception as e:
+                        logger.error("Failed to update completed fixture %s: %s", fixture_id, e)
+
+                eval_fixture = dict(fix)
+                eval_fixture.update(fixture_updates)
+
+                settlement_status, notes, actual_result = self.evaluate_prediction(
+                    market=market,
+                    prediction_text=prediction_text,
+                    fixture=eval_fixture
                 )
 
-                stats["settled"] += 1
-                if settlement_status == "won":
-                    stats["won"] += 1
-                elif settlement_status == "lost":
-                    stats["lost"] += 1
-                elif settlement_status == "void":
-                    stats["void"] += 1
+                p1_sets = aligned["score_p1_sets"]
+                p2_sets = aligned["score_p2_sets"]
+                _, _, total_games = self.parse_total_games(aligned["set_scores"])
 
-                logger.info("Settled prediction %s -> %s (%s)", pred_id, settlement_status.upper(), actual_result)
+                if not dry_run:
+                    try:
+                        self.db.settle_prediction(
+                            prediction_id=pred_id,
+                            fixture_id=fixture_id,
+                            status=settlement_status,
+                            notes=notes,
+                            p1_sets=p1_sets,
+                            p2_sets=p2_sets,
+                            total_games=total_games,
+                            was_retired=aligned["was_retired"],
+                            was_walkover=aligned["was_walkover"],
+                            actual_result=actual_result
+                        )
+                        stats["settled"] += 1
+                        if settlement_status == "won":
+                            stats["won"] += 1
+                        elif settlement_status == "lost":
+                            stats["lost"] += 1
+                        elif settlement_status == "void":
+                            stats["void"] += 1
+                        logger.info("Settled prediction %s -> %s (%s)", pred_id, settlement_status.upper(), actual_result)
+                    except Exception as e:
+                        logger.error("Failed to settle prediction %s: %s", pred_id, e, exc_info=True)
+                else:
+                    stats["settled"] += 1
+                    logger.info("[DRY RUN] Would settle %s -> %s (%s)", pred_id, settlement_status.upper(), actual_result)
+            else:
+                stats["unsettled_pending"] += 1
 
-            except Exception as e:
-                logger.error("Failed to settle prediction %s: %s", pred_id, e, exc_info=True)
-
-        logger.info("Settlement cycle finished: %s", stats)
+        logger.info("Precision Tennis Settlement cycle complete: %s", stats)
         return stats
+
+    def run_settlement_cycle(self) -> Dict[str, int]:
+        """
+        Backward-compatible settlement entrypoint used by daemon.
+        Defaults to precision 48-hour active settlement cycle.
+        """
+        res = self.run_precision_settlement_cycle(lookback_hours=48)
+        return {
+            "checked": res.get("inspected", 0),
+            "settled": res.get("settled", 0),
+            "won": res.get("won", 0),
+            "lost": res.get("lost", 0),
+            "void": res.get("void", 0)
+        }
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Oddsbanta Autonomous Tennis Settlement Daemon")
-    parser.add_argument("--settle-all", action="store_true", help="Audit and settle all completed tennis predictions")
+    parser = argparse.ArgumentParser(description="Oddsbanta Autonomous Tennis Precision Settlement Daemon")
+    parser.add_argument("--lookback-hours", type=int, default=48, help="Lookback window in hours (default: 48)")
+    parser.add_argument("--dry-run", action="store_true", help="Inspect and evaluate without mutating database")
     args = parser.parse_args()
 
     logging.basicConfig(
@@ -316,10 +514,10 @@ def main():
         handlers=[logging.StreamHandler(sys.stdout)]
     )
 
-    logger.info("Starting Tennis Settlement & Audit Daemon...")
+    logger.info("Starting Autonomous Tennis Precision Settlement Engine...")
     engine = TennisSettlementEngine()
-    stats = engine.run_settlement_cycle()
-    logger.info("Settlement daemon run complete: %s", stats)
+    stats = engine.run_precision_settlement_cycle(lookback_hours=args.lookback_hours, dry_run=args.dry_run)
+    logger.info("Execution complete: %s", stats)
 
 
 if __name__ == "__main__":

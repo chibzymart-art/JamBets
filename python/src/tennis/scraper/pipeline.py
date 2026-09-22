@@ -236,6 +236,7 @@ class TennisIngestionPipeline:
                             "retired_player_id": retired_player_id,
                             "metadata": {
                                 "venue": f.get("venue_name"),
+                                "espn_competition_id": f.get("espn_competition_id"),
                                 "was_walkover": f.get("was_walkover"),
                                 "was_retired": f.get("was_retired"),
                                 "last_synced_at": datetime.now(timezone.utc).isoformat()
