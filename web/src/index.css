@@ -805,6 +805,74 @@ body {
   letter-spacing: 0.3px;
 }
 
+/* Catalogue / Acca Slip Header Action Button */
+.nav-header-catalogue-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  padding: 5px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f172a;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  white-space: nowrap;
+  position: relative;
+  touch-action: manipulation;
+}
+
+.nav-header-catalogue-btn:hover {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+}
+
+.nav-catalogue-icon-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.nav-catalogue-svg {
+  width: 17px;
+  height: 17px;
+  stroke: #2563eb;
+  color: #2563eb;
+  display: block;
+}
+
+.nav-catalogue-badge {
+  position: absolute;
+  top: -8px;
+  right: -9px;
+  background: #ef4444;
+  color: #ffffff;
+  font-size: 9.5px;
+  font-weight: 900;
+  padding: 1px 4.5px;
+  border-radius: 9999px;
+  min-width: 15px;
+  text-align: center;
+  line-height: 1.2;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.nav-catalogue-badge.empty {
+  background: #64748b;
+  color: #f1f5f9;
+}
+
+.nav-catalogue-label {
+  font-size: 12.5px;
+  font-weight: 700;
+  line-height: 1;
+}
+
 /* Header Right Actions */
 .header-right-actions {
   display: flex;
@@ -4138,7 +4206,7 @@ body {
   background: rgba(15, 23, 42, 0.7);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
-  z-index: 9999;
+  z-index: 100100 !important;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -11582,11 +11650,31 @@ body {
     font-size: 19px !important;
   }
 
+  .nav-header-catalogue-btn {
+    padding: 4px 8px !important;
+    font-size: 11.5px !important;
+    gap: 4px !important;
+  }
+
+  .nav-catalogue-svg {
+    width: 14.5px !important;
+    height: 14.5px !important;
+  }
+
+  .nav-catalogue-label {
+    font-size: 11px !important;
+  }
+
   .header-right-actions {
     display: flex !important;
     align-items: center !important;
-    gap: 6px !important;
+    gap: 4px !important;
     flex-shrink: 0 !important;
+  }
+
+  /* Hide floating favorites widget completely on mobile viewports */
+  .floating-favorites-chatbot-widget {
+    display: none !important;
   }
 
   .login-action-btn {
@@ -12515,7 +12603,8 @@ body {
     backdrop-filter: blur(16px) !important;
     -webkit-backdrop-filter: blur(16px) !important;
     border-top: 1px solid #e2e8f0 !important;
-    z-index: 9999 !important;
+    z-index: 10050 !important;
+    pointer-events: auto !important;
     align-items: center !important;
     justify-content: space-around !important;
     box-sizing: border-box !important;
@@ -12541,6 +12630,10 @@ body {
     padding: 2px 1px !important;
     transition: color 0.15s ease !important;
     overflow: hidden !important;
+    pointer-events: auto !important;
+    touch-action: manipulation !important;
+    user-select: none !important;
+    -webkit-tap-highlight-color: transparent !important;
   }
 
   .mobile-tab-item.active,

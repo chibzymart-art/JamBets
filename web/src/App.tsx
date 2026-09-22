@@ -44,7 +44,6 @@ export default function App() {
   const [entitlement, setEntitlement] = useState<UserEntitlement | null>(null);
   const [isAuthChecking, setIsAuthChecking] = useState<boolean>(true);
   const targetPredictionsPath = currentUser ? '/dashboard' : '/predictions';
-  const isPredictionsOrDashboard = location.pathname.startsWith('/dashboard') || location.pathname.startsWith('/predictions');
 
   // Modals
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
@@ -111,7 +110,37 @@ export default function App() {
 
   useEffect(() => {
     setIsHamburgerOpen(false);
-    if (location.pathname === '/goals') {
+    if (location.pathname === '/tennis') {
+      setSelectedSport('tennis');
+      updatePageSeo({
+        title: 'Tennis Predictions & 250k Monte Carlo Hub | Oddsbanta AI',
+        description: 'Autonomous tennis prediction engine featuring 250,000 Monte Carlo simulations, Court Pace Index (CPI) calibration, and surface ELO models.',
+      });
+    } else if (location.pathname === '/basketball') {
+      setSelectedSport('basketball');
+      updatePageSeo({
+        title: 'Basketball AI Predictions (Coming Soon) | Oddsbanta',
+        description: 'Basketball quantitative modeling lab and 250k simulations coming soon to Oddsbanta.',
+      });
+    } else if (location.pathname === '/american-football') {
+      setSelectedSport('american_football');
+      updatePageSeo({
+        title: 'American Football Predictions (Coming Soon) | Oddsbanta',
+        description: 'NFL & American football quantitative prediction engine coming soon to Oddsbanta.',
+      });
+    } else if (location.pathname === '/cricket') {
+      setSelectedSport('cricket');
+      updatePageSeo({
+        title: 'Cricket AI Predictions (Coming Soon) | Oddsbanta',
+        description: 'Cricket quantitative modeling lab and match simulations coming soon to Oddsbanta.',
+      });
+    } else if (location.pathname === '/football') {
+      setSelectedSport('football');
+      updatePageSeo({
+        title: 'Football Predictions & Smart Sport Analysis | Oddsbanta AI',
+        description: 'Authoritative football predictions, verified mathematical simulations, and AI tactical analysis.',
+      });
+    } else if (location.pathname === '/goals') {
       updatePageSeo({
         title: 'Over 2.5 Goals & 1st Half Specialist | Oddsbanta AI',
         description: 'Calibrated mathematical predictions for Over 2.5 and First Half Over 0.5 goals.',
@@ -125,11 +154,6 @@ export default function App() {
       updatePageSeo({
         title: 'Admin Command Deck | Oddsbanta',
         description: 'Internal operations, prediction queue management, and model telemetry.',
-      });
-    } else if (location.pathname === '/tennis') {
-      updatePageSeo({
-        title: 'Tennis Predictions & 250k Monte Carlo Hub | Oddsbanta AI',
-        description: 'Autonomous tennis prediction engine featuring 250,000 Monte Carlo simulations, Court Pace Index (CPI) calibration, and surface ELO models.',
       });
     } else {
       updatePageSeo({
@@ -277,6 +301,18 @@ export default function App() {
           return;
         }
         setProfile(userRes.data as UserProfile);
+      } else {
+        // Fallback user profile so modals and settings never render null
+        setProfile({
+          id: userId,
+          email: '',
+          display_name: 'Member',
+          role: 'free',
+          disclaimer_age_accepted: true,
+          disclaimer_financial_accepted: true,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        });
       }
       if (subRes.data && subRes.data.length > 0) {
         setSubscription(subRes.data[0] as UserSubscription);
@@ -869,6 +905,43 @@ export default function App() {
     return sportsList.find((s) => s.id === selectedSport) || sportsList[0];
   }, [sportsList, selectedSport]);
 
+  const sportPaths: Record<string, string> = useMemo(() => ({
+    football: '/football',
+    basketball: '/basketball',
+    tennis: '/tennis',
+    american_football: '/american-football',
+    cricket: '/cricket'
+  }), []);
+
+  const handleSportSelect = (sportId: string) => {
+    setSelectedSport(sportId);
+    const targetPath = sportPaths[sportId] || '/football';
+    navigate(targetPath);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const isSportActive = (sportId: string) => {
+    if (sportId === 'tennis') {
+      return location.pathname === '/tennis' || (selectedSport === 'tennis' && (location.pathname.startsWith('/dashboard') || location.pathname.startsWith('/predictions')));
+    }
+    if (sportId === 'football') {
+      return (
+        location.pathname === '/football' ||
+        ((location.pathname === '/dashboard' || location.pathname === '/predictions') && selectedSport === 'football')
+      );
+    }
+    if (sportId === 'basketball') {
+      return location.pathname === '/basketball' || (selectedSport === 'basketball' && (location.pathname.startsWith('/dashboard') || location.pathname.startsWith('/predictions')));
+    }
+    if (sportId === 'american_football') {
+      return location.pathname === '/american-football' || (selectedSport === 'american_football' && (location.pathname.startsWith('/dashboard') || location.pathname.startsWith('/predictions')));
+    }
+    if (sportId === 'cricket') {
+      return location.pathname === '/cricket' || (selectedSport === 'cricket' && (location.pathname.startsWith('/dashboard') || location.pathname.startsWith('/predictions')));
+    }
+    return false;
+  };
+
   // Comprehensive Metrics Calculations (Strictly Cloud Supabase Derived — Zero Fallbacks)
   const scorecardStats = useMemo(() => {
     let allWon = 0;
@@ -1375,9 +1448,12 @@ export default function App() {
                     </Link>
 
                     <Link
-                      to={targetPredictionsPath}
-                      className={`hamburger-menu-item ${isPredictionsOrDashboard && location.pathname !== '/other-markets' && location.pathname !== '/tennis' ? 'active' : ''}`}
-                      onClick={() => setIsHamburgerOpen(false)}
+                      to="/football"
+                      className={`hamburger-menu-item ${isSportActive('football') ? 'active' : ''}`}
+                      onClick={() => {
+                        setIsHamburgerOpen(false);
+                        handleSportSelect('football');
+                      }}
                     >
                       <span className="hamburger-item-icon">⚽</span>
                       <span className="hamburger-item-label">Football Predictions</span>
@@ -1443,14 +1519,50 @@ export default function App() {
 
                     <Link
                       to="/tennis"
-                      className={`hamburger-menu-item ${location.pathname === '/tennis' ? 'active' : ''}`}
+                      className={`hamburger-menu-item ${isSportActive('tennis') ? 'active' : ''}`}
                       onClick={() => {
                         setIsHamburgerOpen(false);
-                        setSelectedSport('tennis');
+                        handleSportSelect('tennis');
                       }}
                     >
                       <span className="hamburger-item-icon">🎾</span>
                       <span className="hamburger-item-label">Tennis Predictions (250k MC)</span>
+                    </Link>
+
+                    <Link
+                      to="/basketball"
+                      className={`hamburger-menu-item ${isSportActive('basketball') ? 'active' : ''}`}
+                      onClick={() => {
+                        setIsHamburgerOpen(false);
+                        handleSportSelect('basketball');
+                      }}
+                    >
+                      <span className="hamburger-item-icon">🏀</span>
+                      <span className="hamburger-item-label">Basketball (Coming Soon)</span>
+                    </Link>
+
+                    <Link
+                      to="/american-football"
+                      className={`hamburger-menu-item ${isSportActive('american_football') ? 'active' : ''}`}
+                      onClick={() => {
+                        setIsHamburgerOpen(false);
+                        handleSportSelect('american_football');
+                      }}
+                    >
+                      <span className="hamburger-item-icon">🏈</span>
+                      <span className="hamburger-item-label">American Football (Coming Soon)</span>
+                    </Link>
+
+                    <Link
+                      to="/cricket"
+                      className={`hamburger-menu-item ${isSportActive('cricket') ? 'active' : ''}`}
+                      onClick={() => {
+                        setIsHamburgerOpen(false);
+                        handleSportSelect('cricket');
+                      }}
+                    >
+                      <span className="hamburger-item-icon">🏏</span>
+                      <span className="hamburger-item-label">Cricket (Coming Soon)</span>
                     </Link>
 
                     {isAdmin && (
@@ -1504,30 +1616,14 @@ export default function App() {
             {/* Clean Unified Navigation Links: Sport Types Selection */}
           <div className="header-center-links header-sports-nav">
             {sportsList.map((sport) => {
-              const isActive =
-                (sport.id === 'tennis' && (location.pathname === '/tennis' || selectedSport === 'tennis')) ||
-                (sport.id === 'football' && selectedSport === 'football' && location.pathname !== '/tennis') ||
-                (sport.id === selectedSport && location.pathname !== '/tennis');
+              const isActive = isSportActive(sport.id);
 
               return (
                 <button
                   key={sport.id}
                   type="button"
                   className={`nav-link-btn nav-sport-btn ${isActive ? 'active' : ''}`}
-                  onClick={() => {
-                    setSelectedSport(sport.id);
-                    if (sport.id === 'tennis') {
-                      navigate('/tennis');
-                    } else if (sport.id === 'football') {
-                      if (location.pathname === '/tennis') {
-                        navigate(targetPredictionsPath);
-                      }
-                    } else {
-                      if (location.pathname === '/tennis') {
-                        navigate(targetPredictionsPath);
-                      }
-                    }
-                  }}
+                  onClick={() => handleSportSelect(sport.id)}
                   title={`${sport.name} Predictions`}
                 >
                   <span className="nav-sport-icon">{sport.icon}</span>
@@ -1582,20 +1678,37 @@ export default function App() {
               </button>
             )}
 
-            {/* Cart-Like Favorites / Custom Slip Button across all screens */}
+            {/* Catalogue Acca Slip Button across all screens (Mobile & Desktop) */}
             <button
               type="button"
               id="btn-nav-favorites-cart"
-              className="favorites-menu-cart-btn desktop-only"
+              className="nav-header-catalogue-btn"
               onClick={() => setIsFavoritesDrawerOpen((prev) => !prev)}
-              title="View Favorites & Custom Slip"
-              aria-label="Favorites & Custom Slip"
+              title="View Acca Slip / Saved Predictions Catalogue"
+              aria-label="Acca Slip Catalogue"
             >
-              <span className="favorites-cart-icon">⭐</span>
-              <span>Acca Slip</span>
-              <span className={`favorites-cart-badge ${favoriteItems.length === 0 ? 'empty' : ''}`}>
-                {favoriteItems.length}
+              <span className="nav-catalogue-icon-wrap">
+                <svg
+                  width="17"
+                  height="17"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="nav-catalogue-svg"
+                >
+                  <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+                  <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+                  <line x1="8.5" y1="7" x2="15.5" y2="7" />
+                  <line x1="8.5" y1="11" x2="15.5" y2="11" />
+                </svg>
+                <span className={`nav-catalogue-badge ${favoriteItems.length === 0 ? 'empty' : 'active'}`}>
+                  {favoriteItems.length}
+                </span>
               </span>
+              <span className="nav-catalogue-label">Slip</span>
             </button>
           </div>
         </div>
@@ -1767,8 +1880,8 @@ export default function App() {
               )
             }
           />
-          {/* ROUTE 5 & 6: PREDICTIONS (VISITORS) & DASHBOARD (AUTHENTICATED MEMBERS) */}
-          {['/dashboard', '/predictions'].map((pathName) => (
+          {/* ROUTE 5 & 6: PREDICTIONS & DASHBOARD + DECOUPLED SPORT ROUTES */}
+          {['/dashboard', '/predictions', '/football', '/basketball', '/american-football', '/cricket'].map((pathName) => (
             <Route
               key={pathName}
               path={pathName}
@@ -1786,8 +1899,7 @@ export default function App() {
             <div
               className={`market-nav-card ${location.pathname !== '/other-markets' && location.pathname !== '/goals' ? 'active' : ''}`}
               onClick={() => {
-                setSelectedSport('football');
-                navigate(targetPredictionsPath);
+                handleSportSelect('football');
               }}
               role="tab"
               aria-selected={location.pathname !== '/other-markets' && location.pathname !== '/goals'}
@@ -1922,13 +2034,23 @@ export default function App() {
                 <span className="cs-stat-lbl">Deployment Phase</span>
               </div>
             </div>
-            <button
-              type="button"
-              className="coming-soon-back-btn"
-              onClick={() => setSelectedSport('football')}
-            >
-              ⚽ Explore Active Football Predictions ({sportsState.football?.fixtureCount || 433}+ Matches Live)
-            </button>
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                className="coming-soon-back-btn"
+                onClick={() => handleSportSelect('football')}
+              >
+                ⚽ Explore Active Football Predictions ({sportsState.football?.fixtureCount || 433}+ Matches Live)
+              </button>
+              <button
+                type="button"
+                className="coming-soon-back-btn"
+                style={{ background: '#0284c7' }}
+                onClick={() => handleSportSelect('tennis')}
+              >
+                🎾 Explore Active Tennis Predictions ({sportsState.tennis?.fixtureCount || 203}+ Matches Live)
+              </button>
+            </div>
           </div>
         ) : selectedSport === 'tennis' ? (
           <TennisHubView
@@ -2459,30 +2581,14 @@ export default function App() {
       {/* MOBILE APP BOTTOM TAB BAR (Sport Selectors: Logo & Name + Account Settings) */}
       <nav className="mobile-app-bottom-bar" aria-label="Mobile Sports & Account Navigation">
         {sportsList.map((sport) => {
-          const isActive =
-            (sport.id === 'tennis' && (location.pathname === '/tennis' || selectedSport === 'tennis')) ||
-            (sport.id === 'football' && selectedSport === 'football' && location.pathname !== '/tennis') ||
-            (sport.id === selectedSport && location.pathname !== '/tennis');
+          const isActive = isSportActive(sport.id);
 
           return (
             <button
               key={sport.id}
               type="button"
               className={`mobile-tab-item ${isActive ? 'active' : ''}`}
-              onClick={() => {
-                setSelectedSport(sport.id);
-                if (sport.id === 'tennis') {
-                  navigate('/tennis');
-                } else if (sport.id === 'football') {
-                  if (location.pathname === '/tennis') {
-                    navigate(targetPredictionsPath);
-                  }
-                } else {
-                  if (location.pathname === '/tennis') {
-                    navigate(targetPredictionsPath);
-                  }
-                }
-              }}
+              onClick={() => handleSportSelect(sport.id)}
               title={`${sport.name} Predictions`}
             >
               <span className="mobile-tab-icon">{sport.icon}</span>
@@ -2543,6 +2649,7 @@ export default function App() {
       <ProfileModal
         isOpen={isProfileModalOpen}
         onClose={() => setIsProfileModalOpen(false)}
+        currentUser={currentUser}
         profile={profile}
         subscription={subscription}
         entitlement={entitlement}

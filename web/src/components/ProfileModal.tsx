@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { UserProfile, UserSubscription, UserEntitlement } from '../types';
 
 interface ProfileModalProps {
   isOpen: boolean;
   onClose: () => void;
+  currentUser?: any | null;
   profile: UserProfile | null;
   subscription: UserSubscription | null;
   entitlement: UserEntitlement | null;
@@ -14,11 +15,38 @@ interface ProfileModalProps {
 export const ProfileModal: React.FC<ProfileModalProps> = ({
   isOpen,
   onClose,
+  currentUser,
   profile,
   subscription,
   entitlement,
   onProfileUpdated
 }) => {
+  // Derive robust effective profile ensuring modal NEVER fails to render for authenticated users
+  const effectiveProfile: UserProfile | null = profile || (currentUser ? {
+    id: currentUser.id,
+    email: currentUser.email || '',
+    display_name: currentUser.user_metadata?.full_name || currentUser.user_metadata?.display_name || currentUser.email?.split('@')[0] || 'Member',
+    role: (currentUser.user_metadata?.role as any) || 'free',
+    disclaimer_age_accepted: true,
+    disclaimer_financial_accepted: true,
+    created_at: currentUser.created_at || new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  } : null);
+
+  // Username / Display Name state
+  const [displayName, setDisplayName] = useState(
+    effectiveProfile?.display_name || currentUser?.user_metadata?.display_name || ''
+  );
+  const [nameLoading, setNameLoading] = useState(false);
+  const [nameSuccess, setNameSuccess] = useState<string | null>(null);
+  const [nameError, setNameError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (effectiveProfile?.display_name) {
+      setDisplayName(effectiveProfile.display_name);
+    }
+  }, [effectiveProfile?.display_name]);
+
   // Subscription upgrade state
   const [upgrading, setUpgrading] = useState(false);
   const [upgradeSuccess, setUpgradeSuccess] = useState<string | null>(null);
@@ -42,8 +70,54 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
   const [telegramDeepLink, setTelegramDeepLink] = useState<string | null>(null);
   const [telegramLoading, setTelegramLoading] = useState<boolean>(false);
 
+  const handleUpdateDisplayName = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!effectiveProfile) return;
+    if (!displayName.trim()) {
+      setNameError('Username / Display name cannot be blank.');
+      return;
+    }
+    setNameLoading(true);
+    setNameError(null);
+    setNameSuccess(null);
+
+    try {
+      // 1. Update public.users table
+      const { error: dbErr } = await supabase
+        .from('users')
+        .update({
+          display_name: displayName.trim(),
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', effectiveProfile.id);
+
+      if (dbErr) {
+        console.warn('Direct users table update returned error, attempting auth metadata update:', dbErr);
+      }
+
+      // 2. Update Supabase Auth user metadata
+      const { error: authErr } = await supabase.auth.updateUser({
+        data: {
+          display_name: displayName.trim(),
+          full_name: displayName.trim()
+        }
+      });
+
+      if (authErr) throw authErr;
+
+      setNameSuccess('Username updated successfully!');
+      onProfileUpdated();
+      setTimeout(() => setNameSuccess(null), 3500);
+    } catch (err: any) {
+      console.error('Username update error:', err);
+      setNameError(err.message || 'Failed to update username.');
+    } finally {
+      setNameLoading(false);
+    }
+  };
+
   const handleGenerateTelegramToken = async () => {
-    if (!profile) return;
+    if (!effectiveProfile) return;
     setTelegramLoading(true);
     try {
       const { data: sessionData } = await supabase.auth.getSession();
@@ -74,9 +148,9 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
     }
   };
 
-  if (!isOpen || !profile) return null;
+  if (!isOpen || !effectiveProfile) return null;
 
-  const currentTier = (profile.role || subscription?.tier || 'free').toLowerCase();
+  const currentTier = (effectiveProfile.role || subscription?.tier || 'free').toLowerCase();
 
   const handleTierChange = async (targetTier: 'free' | 'standard' | 'bigbang') => {
     if (targetTier === currentTier) return;
@@ -150,7 +224,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
           status: 'disabled',
           deleted_at: new Date().toISOString()
         })
-        .eq('id', profile.id);
+        .eq('id', effectiveProfile.id);
 
       if (dbErr) {
         console.warn('Direct users table update returned error, attempting metadata update:', dbErr);
@@ -200,11 +274,11 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
         <div className="modal-header">
           <div className="modal-brand">
             <div className="profile-avatar-large">
-              {profile.display_name ? profile.display_name.charAt(0).toUpperCase() : profile.email.charAt(0).toUpperCase()}
+              {effectiveProfile.display_name ? effectiveProfile.display_name.charAt(0).toUpperCase() : effectiveProfile.email.charAt(0).toUpperCase()}
             </div>
             <div>
               <h2 className="modal-title">Account Settings & Profile</h2>
-              <p className="modal-subtitle">{profile.email}</p>
+              <p className="modal-subtitle">{effectiveProfile.email}</p>
             </div>
           </div>
           <button className="modal-close-btn" onClick={onClose} aria-label="Close modal">
@@ -229,8 +303,8 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
         {/* Account Details & Status Grid */}
         <div className="profile-details-grid">
           <div className="profile-detail-card">
-            <span className="detail-label">Display Name</span>
-            <span className="detail-value">{profile.display_name || 'Oddsbanta Member'}</span>
+            <span className="detail-label">Display Name / User</span>
+            <span className="detail-value">{effectiveProfile.display_name || 'Oddsbanta Member'}</span>
           </div>
           <div className="profile-detail-card">
             <span className="detail-label">Current Role / Tier</span>
@@ -246,8 +320,61 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
           </div>
           <div className="profile-detail-card">
             <span className="detail-label">Member Since</span>
-            <span className="detail-value">{formatLagosDate(profile.created_at)}</span>
+            <span className="detail-value">{formatLagosDate(effectiveProfile.created_at)}</span>
           </div>
+        </div>
+
+        {/* Section 0: Username & Public Profile Setting */}
+        <div className="settings-section">
+          <div className="settings-section-header">
+            <span className="settings-section-icon">👤</span>
+            <div>
+              <h3 className="settings-section-title">Username & Display Name</h3>
+              <p className="settings-section-sub">Update your username handle and nickname across Oddsbanta</p>
+            </div>
+          </div>
+
+          {nameSuccess && (
+            <div className="auth-alert alert-success" role="alert">
+              <span className="alert-icon">✓</span>
+              <span>{nameSuccess}</span>
+            </div>
+          )}
+          {nameError && (
+            <div className="auth-alert alert-error" role="alert">
+              <span className="alert-icon">⚠️</span>
+              <span>{nameError}</span>
+            </div>
+          )}
+
+          <form onSubmit={handleUpdateDisplayName} className="security-password-form">
+            <div className="security-form-row">
+              <div className="form-group" style={{ flex: '1 1 100%' }}>
+                <label htmlFor="settings-username" className="form-label">Username</label>
+                <input
+                  id="settings-username"
+                  type="text"
+                  required
+                  placeholder="Enter your username or nickname"
+                  value={displayName}
+                  onChange={(e) => setDisplayName(e.target.value)}
+                  className="form-input"
+                />
+              </div>
+            </div>
+
+            <div className="security-form-actions">
+              <button
+                type="submit"
+                id="btn-update-username"
+                disabled={nameLoading || !displayName.trim() || displayName.trim() === effectiveProfile.display_name}
+                className="btn-update-password"
+                style={{ background: '#059669' }}
+              >
+                {nameLoading ? 'Saving Username...' : 'Save Username'}
+              </button>
+            </div>
+          </form>
         </div>
 
         {/* VIP Telegram Bot & WhatsApp Channel Hub */}
@@ -268,7 +395,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
                   <span style={{ fontSize: '15px', fontWeight: 700, color: '#38bdf8', display: 'flex', alignItems: 'center', gap: '6px' }}>
                     ✈️ Telegram VIP Bot
                   </span>
-                  {profile.telegram_chat_id ? (
+                  {effectiveProfile.telegram_chat_id ? (
                     <span style={{ background: '#166534', color: '#86efac', padding: '2px 8px', borderRadius: '9999px', fontSize: '11px', fontWeight: 700 }}>
                       CONNECTED 🟢
                     </span>
@@ -282,10 +409,10 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
                   Pull real-time predictions on demand via Telegram commands (<code>/today</code>, <code>/bangers</code>, <code>/goals</code>).
                 </p>
 
-                {profile.telegram_chat_id ? (
+                {effectiveProfile.telegram_chat_id ? (
                   <div style={{ background: '#1e293b', padding: '10px 12px', borderRadius: '6px', fontSize: '12px', color: '#cbd5e1', marginBottom: '12px' }}>
-                    <div>Chat ID: <code>{profile.telegram_chat_id}</code></div>
-                    {profile.telegram_username && <div>Username: <code>@{profile.telegram_username}</code></div>}
+                    <div>Chat ID: <code>{effectiveProfile.telegram_chat_id}</code></div>
+                    {effectiveProfile.telegram_username && <div>Username: <code>@{effectiveProfile.telegram_username}</code></div>}
                   </div>
                 ) : null}
 
@@ -317,7 +444,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
                     className="btn-update-password"
                     style={{ background: '#0284c7', padding: '10px' }}
                   >
-                    {telegramLoading ? 'Generating Link...' : (profile.telegram_chat_id ? 'Re-link Telegram Account' : 'Connect Telegram VIP Bot ⚡')}
+                    {telegramLoading ? 'Generating Link...' : (effectiveProfile.telegram_chat_id ? 'Re-link Telegram Account' : 'Connect Telegram VIP Bot ⚡')}
                   </button>
                 )}
               </div>
@@ -464,7 +591,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
               <div>
                 <strong>Age Verification (18+):</strong> Confirmed and legally acknowledged.
                 <div className="compliance-timestamp">
-                  Recorded: {formatLagosDate(profile.disclaimer_age_accepted_at)}
+                  Recorded: {formatLagosDate(effectiveProfile.disclaimer_age_accepted_at)}
                 </div>
               </div>
             </div>
@@ -474,7 +601,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
               <div>
                 <strong>Financial Indemnity & Educational Notice:</strong> Confirmed. Oddsbanta held harmless from financial wagering loss.
                 <div className="compliance-timestamp">
-                  Recorded: {formatLagosDate(profile.disclaimer_financial_accepted_at)}
+                  Recorded: {formatLagosDate(effectiveProfile.disclaimer_financial_accepted_at)}
                 </div>
               </div>
             </div>
@@ -482,7 +609,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
             <div className="compliance-item">
               <span className="compliance-check">ℹ️</span>
               <div>
-                <strong>Policy Terms Version:</strong> {profile.disclaimer_version || 'v1.0'}
+                <strong>Policy Terms Version:</strong> {effectiveProfile.disclaimer_version || 'v1.0'}
               </div>
             </div>
           </div>
