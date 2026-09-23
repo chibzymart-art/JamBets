@@ -1,27 +1,43 @@
 /**
  * Oddsbanta — Autonomous Basketball Design System & UI Styles
- * Phase 5: Basketball Hub View & Precision Prediction Cards
+ * Bright Vibrant Theme: Luminous Warm Basketball Aesthetic
+ * Scoped strictly to Basketball UI components — Zero cross-sport contamination
  */
 
 :root {
-  --bball-orange: #f97316;
-  --bball-orange-glow: rgba(249, 115, 22, 0.35);
-  --bball-orange-light: #ffedd5;
-  --bball-court: #ea580c;
-  --bball-dark-card: #0f172a;
-  --bball-border: rgba(249, 115, 22, 0.2);
+  --bball-orange: #ea580c;
+  --bball-orange-vibrant: #f97316;
+  --bball-orange-gradient: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+  --bball-orange-glow: rgba(249, 115, 22, 0.25);
+  --bball-orange-light: #fff7ed;
+  --bball-orange-border: #fed7aa;
+  --bball-card-bg: #ffffff;
+  --bball-text-main: #0f172a;
+  --bball-text-muted: #64748b;
+  --bball-border: #e2e8f0;
 }
 
 /* -------------------------------------------------------------
-   1. HERO BANNER & SCORECARD TELEMETRY
+   0. ROOT PAGE WRAPPER
+   ------------------------------------------------------------- */
+.bball-page-root {
+  width: 100%;
+  max-width: 1480px;
+  margin: 0 auto;
+  padding: 0 16px 40px;
+  min-height: 80vh;
+}
+
+/* -------------------------------------------------------------
+   1. HERO BANNER & COMPACT SCORECARD TELEMETRY
    ------------------------------------------------------------- */
 .bball-hero-banner {
-  background: linear-gradient(135deg, rgba(15, 23, 42, 0.95) 0%, rgba(30, 41, 59, 0.92) 50%, rgba(67, 20, 7, 0.85) 100%);
-  border: 1px solid rgba(249, 115, 22, 0.25);
+  background: linear-gradient(135deg, #ffffff 0%, #fff7ed 60%, #ffedd5 100%);
+  border: 1px solid #fed7aa;
   border-radius: 16px;
-  padding: 24px;
-  margin-bottom: 20px;
-  box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5), 0 0 25px -5px var(--bball-orange-glow);
+  padding: 16px 20px;
+  margin-bottom: 16px;
+  box-shadow: 0 4px 20px rgba(234, 88, 12, 0.08), 0 1px 3px rgba(0, 0, 0, 0.03);
   position: relative;
   overflow: hidden;
 }
@@ -29,11 +45,11 @@
 .bball-hero-banner::after {
   content: '';
   position: absolute;
-  top: -50px;
-  right: -50px;
-  width: 200px;
-  height: 200px;
-  background: radial-gradient(circle, var(--bball-orange-glow) 0%, transparent 70%);
+  top: -40px;
+  right: -40px;
+  width: 180px;
+  height: 180px;
+  background: radial-gradient(circle, rgba(249, 115, 22, 0.15) 0%, transparent 70%);
   pointer-events: none;
 }
 
@@ -42,97 +58,122 @@
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
-  gap: 16px;
-  margin-bottom: 18px;
+  gap: 12px;
+  margin-bottom: 12px;
 }
 
 .bball-hero-title-group {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
 }
 
 .bball-hero-icon-ring {
-  width: 52px;
-  height: 52px;
-  border-radius: 14px;
-  background: linear-gradient(135deg, #f97316 0%, #c2410c 100%);
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 26px;
-  box-shadow: 0 4px 15px rgba(249, 115, 22, 0.4);
+  font-size: 22px;
+  box-shadow: 0 4px 12px rgba(249, 115, 22, 0.35);
+  color: #ffffff;
 }
 
 .bball-hero-title {
-  font-size: 22px;
+  font-size: 19px;
   font-weight: 800;
-  color: #ffffff;
-  margin: 0 0 4px 0;
+  color: #0f172a;
+  margin: 0 0 2px 0;
   letter-spacing: -0.02em;
 }
 
 .bball-hero-subtitle {
-  font-size: 13px;
-  color: #94a3b8;
+  font-size: 12px;
+  color: #475569;
   margin: 0;
+  font-weight: 500;
 }
 
 .bball-sim-badge {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  background: rgba(249, 115, 22, 0.15);
-  border: 1px solid rgba(249, 115, 22, 0.35);
-  color: #fed7aa;
-  padding: 6px 12px;
+  background: #ffffff;
+  border: 1px solid #fed7aa;
+  color: #c2410c;
+  padding: 5px 11px;
   border-radius: 20px;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.02em;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
 }
 
 .bball-stats-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-  gap: 12px;
+  gap: 10px;
+  margin-bottom: 12px;
 }
 
 .bball-stat-card {
-  background: rgba(15, 23, 42, 0.6);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 12px;
-  padding: 12px 14px;
+  background: #ffffff;
+  border: 1px solid #fed7aa;
+  border-radius: 10px;
+  padding: 9px 12px;
   display: flex;
   flex-direction: column;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.03);
+  transition: all 0.2s ease;
+}
+
+.bball-stat-card:hover {
+  border-color: #f97316;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(234, 88, 12, 0.12);
+}
+
+.bball-stat-card.active {
+  background: #fff7ed;
+  border-color: #ea580c;
+  box-shadow: 0 0 0 2px rgba(234, 88, 12, 0.2);
 }
 
 .bball-stat-val {
-  font-size: 20px;
+  font-size: 19px;
   font-weight: 800;
-  color: #f8fafc;
-  line-height: 1.2;
+  color: #0f172a;
+  line-height: 1.15;
 }
 
 .bball-stat-val.accent {
-  color: #fb923c;
+  color: #ea580c;
 }
 
 .bball-stat-val.gold {
-  color: #fbbf24;
+  color: #d97706;
 }
 
 .bball-stat-val.green {
-  color: #34d399;
+  color: #16a34a;
 }
 
 .bball-stat-lbl {
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 700;
   text-transform: uppercase;
   color: #64748b;
+  margin-top: 3px;
+  letter-spacing: 0.03em;
+}
+
+/* Integrated Date Ribbon Row inside Hero Banner */
+.bball-hero-date-row {
+  border-top: 1px solid #fed7aa;
+  padding-top: 12px;
   margin-top: 4px;
-  letter-spacing: 0.04em;
 }
 
 /* -------------------------------------------------------------
@@ -143,8 +184,7 @@
   align-items: center;
   gap: 8px;
   overflow-x: auto;
-  padding-bottom: 8px;
-  margin-bottom: 16px;
+  padding-bottom: 4px;
   scrollbar-width: thin;
 }
 
@@ -153,26 +193,28 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 8px 14px;
-  border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: #0f172a;
-  color: #94a3b8;
+  padding: 6px 12px;
+  border-radius: 9px;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  color: #334155;
   cursor: pointer;
-  transition: all 0.2s ease;
-  min-width: 82px;
+  transition: all 0.18s ease;
+  min-width: 80px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
 }
 
 .bball-date-pill:hover {
-  border-color: rgba(249, 115, 22, 0.4);
-  color: #ffffff;
+  border-color: #f97316;
+  color: #ea580c;
+  background: #fff7ed;
 }
 
 .bball-date-pill.active {
-  background: linear-gradient(135deg, rgba(249, 115, 22, 0.2) 0%, rgba(194, 65, 12, 0.2) 100%);
-  border-color: #f97316;
+  background: linear-gradient(135deg, #ea580c 0%, #f97316 100%);
+  border-color: #ea580c;
   color: #ffffff;
-  box-shadow: 0 0 12px rgba(249, 115, 22, 0.3);
+  box-shadow: 0 3px 10px rgba(234, 88, 12, 0.35);
 }
 
 .bball-date-day {
@@ -182,16 +224,23 @@
 }
 
 .bball-date-num {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 800;
 }
 
 .bball-date-count {
   font-size: 10px;
-  background: rgba(255, 255, 255, 0.1);
+  background: #f1f5f9;
+  color: #475569;
   padding: 1px 6px;
   border-radius: 10px;
   margin-top: 2px;
+  font-weight: 600;
+}
+
+.bball-date-pill.active .bball-date-count {
+  background: rgba(255, 255, 255, 0.25);
+  color: #ffffff;
 }
 
 /* Filter controls bar */
@@ -200,8 +249,8 @@
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
-  gap: 12px;
-  margin-bottom: 20px;
+  gap: 10px;
+  margin-bottom: 16px;
 }
 
 .bball-league-pills {
@@ -211,77 +260,82 @@
 }
 
 .bball-league-btn {
-  padding: 6px 12px;
+  padding: 6px 13px;
   border-radius: 20px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: #1e293b;
-  color: #cbd5e1;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #334155;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 700;
   cursor: pointer;
   transition: all 0.18s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
 }
 
 .bball-league-btn:hover {
-  border-color: rgba(249, 115, 22, 0.5);
-  color: #ffffff;
+  border-color: #f97316;
+  color: #ea580c;
+  background: #fff7ed;
 }
 
 .bball-league-btn.active {
-  background: #f97316;
-  border-color: #ea580c;
+  background: #ea580c;
+  border-color: #c2410c;
   color: #ffffff;
-  font-weight: 700;
-  box-shadow: 0 2px 8px rgba(249, 115, 22, 0.4);
+  font-weight: 800;
+  box-shadow: 0 2px 8px rgba(234, 88, 12, 0.3);
 }
 
 .bball-search-input {
-  background: #0f172a;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
   border-radius: 8px;
   padding: 7px 12px;
-  color: #ffffff;
+  color: #0f172a;
   font-size: 13px;
+  font-weight: 500;
   width: 220px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  transition: all 0.18s ease;
 }
 
 .bball-search-input:focus {
   outline: none;
-  border-color: #f97316;
-  box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.2);
+  border-color: #ea580c;
+  box-shadow: 0 0 0 2px rgba(234, 88, 12, 0.15);
 }
 
 /* -------------------------------------------------------------
-   3. BASKETBALL PREDICTION CARD
+   3. BASKETBALL PREDICTION CARD (BRIGHT THEME)
    ------------------------------------------------------------- */
 .bball-card {
-  background: #0f172a;
-  border: 1px solid rgba(255, 255, 255, 0.09);
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
   border-radius: 14px;
   padding: 18px;
   margin-bottom: 16px;
   position: relative;
   transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.05), 0 1px 3px rgba(15, 23, 42, 0.03);
   cursor: pointer;
 }
 
 .bball-card:hover {
-  border-color: rgba(249, 115, 22, 0.4);
+  border-color: #fdba74;
   transform: translateY(-2px);
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4), 0 0 15px rgba(249, 115, 22, 0.15);
+  box-shadow: 0 8px 24px rgba(234, 88, 12, 0.12), 0 2px 6px rgba(0, 0, 0, 0.04);
 }
 
 .bball-card.card-won {
-  border-left: 4px solid #10b981;
+  border-left: 5px solid #10b981;
 }
 
 .bball-card.card-lost {
-  border-left: 4px solid #ef4444;
+  border-left: 5px solid #ef4444;
 }
 
 .bball-card.card-void {
-  border-left: 4px solid #f59e0b;
+  border-left: 5px solid #f59e0b;
 }
 
 /* Top Meta Row */
@@ -295,30 +349,30 @@
 }
 
 .bball-card-league-badge {
-  background: rgba(249, 115, 22, 0.12);
-  border: 1px solid rgba(249, 115, 22, 0.3);
-  color: #fb923c;
+  background: #ffedd5;
+  border: 1px solid #fed7aa;
+  color: #c2410c;
   font-size: 11px;
   font-weight: 800;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.04em;
   padding: 3px 8px;
   border-radius: 6px;
 }
 
 .bball-card-time {
   font-size: 12px;
-  color: #94a3b8;
-  font-weight: 500;
+  color: #64748b;
+  font-weight: 600;
 }
 
 .bball-altitude-badge {
-  background: rgba(14, 165, 233, 0.15);
-  border: 1px solid rgba(14, 165, 233, 0.35);
-  color: #7dd3fc;
+  background: #e0f2fe;
+  border: 1px solid #bae6fd;
+  color: #0284c7;
   font-size: 11px;
   font-weight: 700;
-  padding: 2px 7px;
+  padding: 2px 8px;
   border-radius: 6px;
 }
 
@@ -328,9 +382,9 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 16px;
+  margin-bottom: 14px;
   padding-bottom: 14px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid #f1f5f9;
 }
 
 .bball-team-col {
@@ -346,10 +400,10 @@
 }
 
 .bball-team-logo {
-  width: 38px;
-  height: 38px;
+  width: 40px;
+  height: 40px;
   object-fit: contain;
-  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.4));
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.15));
 }
 
 .bball-team-info {
@@ -360,7 +414,7 @@
 .bball-team-name {
   font-size: 15px;
   font-weight: 800;
-  color: #ffffff;
+  color: #0f172a;
   line-height: 1.2;
 }
 
@@ -379,19 +433,19 @@
 .bball-rest-tag {
   font-size: 10px;
   font-weight: 600;
-  color: #94a3b8;
-  background: rgba(255, 255, 255, 0.06);
-  padding: 1px 5px;
+  color: #475569;
+  background: #f1f5f9;
+  padding: 2px 6px;
   border-radius: 4px;
 }
 
 .bball-b2b-tag {
   font-size: 10px;
   font-weight: 800;
-  color: #fca5a5;
-  background: rgba(239, 68, 68, 0.2);
-  border: 1px solid rgba(239, 68, 68, 0.4);
-  padding: 1px 5px;
+  color: #b91c1c;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  padding: 2px 6px;
   border-radius: 4px;
 }
 
@@ -403,13 +457,14 @@
   letter-spacing: 0.05em;
   padding: 4px 8px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.04);
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
 }
 
 /* Primary Banker Box */
 .bball-banker-box {
-  background: linear-gradient(135deg, rgba(30, 41, 59, 0.7) 0%, rgba(15, 23, 42, 0.9) 100%);
-  border: 1px solid rgba(249, 115, 22, 0.25);
+  background: linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%);
+  border: 1px solid #fdba74;
   border-radius: 10px;
   padding: 12px 14px;
   display: flex;
@@ -418,6 +473,7 @@
   flex-wrap: wrap;
   gap: 12px;
   margin-bottom: 12px;
+  box-shadow: 0 2px 8px rgba(234, 88, 12, 0.08);
 }
 
 .bball-banker-left {
@@ -428,16 +484,16 @@
 
 .bball-market-label {
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 800;
   text-transform: uppercase;
-  color: #fb923c;
+  color: #9a3412;
   letter-spacing: 0.04em;
 }
 
 .bball-prediction-text {
   font-size: 16px;
   font-weight: 800;
-  color: #ffffff;
+  color: #0f172a;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -450,9 +506,9 @@
 }
 
 .bball-prob-pill {
-  background: rgba(16, 185, 129, 0.15);
-  border: 1px solid rgba(16, 185, 129, 0.4);
-  color: #6ee7b7;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  color: #065f46;
   font-size: 14px;
   font-weight: 800;
   padding: 4px 10px;
@@ -464,59 +520,105 @@
 
 .bball-prob-sub {
   font-size: 9px;
-  font-weight: 600;
+  font-weight: 700;
   text-transform: uppercase;
-  opacity: 0.8;
+  opacity: 0.85;
 }
 
 .bball-edge-pill {
-  background: rgba(249, 115, 22, 0.18);
-  border: 1px solid rgba(249, 115, 22, 0.4);
-  color: #fed7aa;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1d4ed8;
   font-size: 12px;
   font-weight: 800;
-  padding: 4px 8px;
+  padding: 5px 9px;
   border-radius: 6px;
 }
 
 .bball-add-slip-btn {
-  background: #f97316;
+  background: linear-gradient(135deg, #ea580c 0%, #f97316 100%);
   color: #ffffff;
   border: none;
   border-radius: 8px;
   font-size: 12px;
-  font-weight: 700;
-  padding: 8px 12px;
+  font-weight: 800;
+  padding: 8px 14px;
   cursor: pointer;
   transition: all 0.18s ease;
   display: inline-flex;
   align-items: center;
   gap: 5px;
+  box-shadow: 0 2px 6px rgba(234, 88, 12, 0.3);
 }
 
 .bball-add-slip-btn:hover {
-  background: #ea580c;
-  box-shadow: 0 0 10px rgba(249, 115, 22, 0.5);
+  background: linear-gradient(135deg, #c2410c 0%, #ea580c 100%);
+  box-shadow: 0 4px 10px rgba(234, 88, 12, 0.4);
+  transform: translateY(-1px);
 }
 
 .bball-add-slip-btn.in-slip {
   background: #10b981;
+  box-shadow: 0 2px 6px rgba(16, 185, 129, 0.3);
 }
 
-/* Four Factors Comparison Grid */
+/* -------------------------------------------------------------
+   4. BOLD & EYE-CATCHING "CLICK TO VIEW MORE" BUTTON
+   ------------------------------------------------------------- */
+.bball-view-more-btn {
+  background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+  color: #ffffff;
+  border: none;
+  border-radius: 9999px;
+  padding: 8px 22px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0 4px 14px rgba(234, 88, 12, 0.4), 0 0 10px rgba(249, 115, 22, 0.25);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.bball-view-more-btn:hover {
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: 0 6px 18px rgba(234, 88, 12, 0.5), 0 0 14px rgba(249, 115, 22, 0.35);
+  background: linear-gradient(135deg, #c2410c 0%, #ea580c 100%);
+}
+
+.bball-view-more-btn.expanded {
+  background: #f1f5f9;
+  color: #0f172a;
+  border: 1px solid #cbd5e1;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+}
+
+.bball-view-more-btn.expanded:hover {
+  background: #e2e8f0;
+  color: #0f172a;
+  transform: translateY(-1px);
+}
+
+/* -------------------------------------------------------------
+   5. FOUR FACTORS COMPARISON GRID & BREAKDOWN (BRIGHT THEME)
+   ------------------------------------------------------------- */
 .bball-four-factors-wrap {
-  background: rgba(15, 23, 42, 0.8);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 10px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
   padding: 14px;
   margin-top: 14px;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.02);
 }
 
 .bball-ff-header {
   font-size: 12px;
   font-weight: 800;
   text-transform: uppercase;
-  color: #fb923c;
+  color: #9a3412;
   margin-bottom: 12px;
   display: flex;
   justify-content: space-between;
@@ -535,14 +637,14 @@
   grid-column: 1 / -1;
   font-size: 11px;
   font-weight: 700;
-  color: #94a3b8;
+  color: #334155;
   margin-top: 4px;
 }
 
 .bball-ff-bar-wrap {
   display: flex;
   height: 8px;
-  background: rgba(255, 255, 255, 0.05);
+  background: #e2e8f0;
   border-radius: 4px;
   overflow: hidden;
   gap: 2px;
@@ -550,33 +652,35 @@
 
 .bball-ff-bar-home {
   height: 100%;
-  background: #f97316;
+  background: #ea580c;
   border-radius: 4px 0 0 4px;
   transition: width 0.3s ease;
 }
 
 .bball-ff-bar-away {
   height: 100%;
-  background: #38bdf8;
+  background: #0284c7;
   border-radius: 0 4px 4px 0;
   transition: width 0.3s ease;
 }
 
 /* AI Tactical Analysis Box */
 .bball-tactical-box {
-  background: rgba(249, 115, 22, 0.08);
-  border-left: 3px solid #f97316;
+  background: #ffffff;
+  border: 1px solid #fed7aa;
+  border-left: 4px solid #ea580c;
   border-radius: 0 8px 8px 0;
   padding: 10px 12px;
   margin-top: 12px;
   font-size: 12px;
-  color: #cbd5e1;
+  color: #334155;
   line-height: 1.5;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
 }
 
 .bball-tactical-title {
   font-weight: 800;
-  color: #fb923c;
+  color: #c2410c;
   margin-bottom: 4px;
   display: flex;
   align-items: center;
@@ -596,19 +700,59 @@
 }
 
 .bball-settled-bar.won {
-  background: rgba(16, 185, 129, 0.15);
-  color: #34d399;
-  border: 1px solid rgba(16, 185, 129, 0.3);
+  background: #ecfdf5;
+  color: #065f46;
+  border: 1px solid #a7f3d0;
 }
 
 .bball-settled-bar.lost {
-  background: rgba(239, 68, 68, 0.15);
-  color: #f87171;
-  border: 1px solid rgba(239, 68, 68, 0.3);
+  background: #fef2f2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
 }
 
 .bball-settled-bar.void {
-  background: rgba(245, 158, 11, 0.15);
-  color: #fbbf24;
-  border: 1px solid rgba(245, 158, 11, 0.3);
+  background: #fffbeb;
+  color: #92400e;
+  border: 1px solid #fde68a;
+}
+
+/* -------------------------------------------------------------
+   6. RESPONSIVE MEDIA QUERIES
+   ------------------------------------------------------------- */
+@media (max-width: 900px) {
+  .bball-hero-banner {
+    padding: 14px 16px;
+  }
+
+  .bball-hero-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .bball-stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .bball-card {
+    padding: 14px;
+  }
+
+  .bball-team-name {
+    font-size: 14px;
+  }
+
+  .bball-banker-box {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .bball-banker-right {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .bball-search-input {
+    width: 100%;
+  }
 }

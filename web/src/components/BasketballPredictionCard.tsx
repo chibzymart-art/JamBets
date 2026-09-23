@@ -204,7 +204,7 @@ export const BasketballPredictionCard: React.FC<BasketballPredictionCardProps> =
 
           <div className="bball-prediction-text">
             {isLocked ? (
-              <span style={{ color: '#94a3b8' }}>🔒 VIP Locked Prediction</span>
+              <span style={{ color: '#64748b' }}>🔒 VIP Locked Prediction</span>
             ) : (
               <span>{prediction.prediction}</span>
             )}
@@ -265,7 +265,7 @@ export const BasketballPredictionCard: React.FC<BasketballPredictionCardProps> =
 
       {/* 5. IN-PLAY SCORE (IF LIVE) */}
       {isLive && (
-        <div style={{ background: '#7f1d1d', color: '#fecaca', padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 700, display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10 }}>
+        <div style={{ background: '#fef2f2', color: '#991b1b', border: '1px solid #fecaca', padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 700, display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10 }}>
           <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: '#ef4444', animation: 'pulse 1.5s infinite' }} />
             LIVE IN-PLAY: {homeName} {fixture?.home_score} - {fixture?.away_score} {awayName}
@@ -279,7 +279,7 @@ export const BasketballPredictionCard: React.FC<BasketballPredictionCardProps> =
         <div className="bball-four-factors-wrap" onClick={(e) => e.stopPropagation()}>
           <div className="bball-ff-header">
             <span>Dean Oliver Four Factors Breakdown</span>
-            <span style={{ color: '#94a3b8' }}>250k Monte Carlo Simulated Pace</span>
+            <span style={{ color: '#64748b' }}>250k Monte Carlo Simulated Pace</span>
           </div>
 
           {/* eFG% */}
@@ -328,20 +328,20 @@ export const BasketballPredictionCard: React.FC<BasketballPredictionCardProps> =
 
           {/* Projected Score & Percentiles */}
           {prediction.simulated_home_score != null && prediction.simulated_away_score != null && (
-            <div style={{ display: 'flex', justifyContent: 'space-around', background: 'rgba(255,255,255,0.04)', padding: '10px', borderRadius: '8px', marginTop: '12px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-around', background: '#ffffff', border: '1px solid #e2e8f0', padding: '10px', borderRadius: '8px', marginTop: '12px', boxShadow: '0 2px 6px rgba(0,0,0,0.03)' }}>
               <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: 11, color: '#94a3b8' }}>250k Sim Home Score</div>
-                <div style={{ fontSize: 16, fontWeight: 800, color: '#f97316' }}>{prediction.simulated_home_score.toFixed(1)}</div>
+                <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>250k Sim Home Score</div>
+                <div style={{ fontSize: 16, fontWeight: 800, color: '#ea580c' }}>{prediction.simulated_home_score.toFixed(1)}</div>
               </div>
               <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: 11, color: '#94a3b8' }}>Projected Total</div>
-                <div style={{ fontSize: 16, fontWeight: 800, color: '#f8fafc' }}>
+                <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>Projected Total</div>
+                <div style={{ fontSize: 16, fontWeight: 800, color: '#0f172a' }}>
                   {(prediction.simulated_home_score + prediction.simulated_away_score).toFixed(1)}
                 </div>
               </div>
               <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: 11, color: '#94a3b8' }}>250k Sim Away Score</div>
-                <div style={{ fontSize: 16, fontWeight: 800, color: '#38bdf8' }}>{prediction.simulated_away_score.toFixed(1)}</div>
+                <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>250k Sim Away Score</div>
+                <div style={{ fontSize: 16, fontWeight: 800, color: '#0284c7' }}>{prediction.simulated_away_score.toFixed(1)}</div>
               </div>
             </div>
           )}
@@ -359,7 +359,7 @@ export const BasketballPredictionCard: React.FC<BasketballPredictionCardProps> =
           {/* Secondary Predictions Grid */}
           {prediction.secondary_predictions && prediction.secondary_predictions.length > 0 && (
             <div style={{ marginTop: '14px' }}>
-              <div style={{ fontSize: 11, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', marginBottom: 6 }}>
+              <div style={{ fontSize: 11, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', marginBottom: 6 }}>
                 Secondary Market Leans
               </div>
               <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
@@ -367,18 +367,19 @@ export const BasketballPredictionCard: React.FC<BasketballPredictionCardProps> =
                   <div
                     key={idx}
                     style={{
-                      background: 'rgba(255, 255, 255, 0.05)',
-                      border: '1px solid rgba(255, 255, 255, 0.1)',
+                      background: '#ffffff',
+                      border: '1px solid #e2e8f0',
                       borderRadius: '6px',
                       padding: '4px 8px',
                       fontSize: '11px',
                       display: 'flex',
                       alignItems: 'center',
                       gap: '6px',
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
                     }}
                   >
-                    <span style={{ color: '#f8fafc', fontWeight: 600 }}>{sp.pick}</span>
-                    <span style={{ color: '#10b981', fontWeight: 700 }}>{(sp.probability * 100).toFixed(0)}%</span>
+                    <span style={{ color: '#0f172a', fontWeight: 700 }}>{sp.pick}</span>
+                    <span style={{ color: '#16a34a', fontWeight: 800 }}>{(sp.probability * 100).toFixed(0)}%</span>
                   </div>
                 ))}
               </div>
@@ -387,11 +388,30 @@ export const BasketballPredictionCard: React.FC<BasketballPredictionCardProps> =
         </div>
       )}
 
-      {/* Accordion toggle prompt */}
-      <div style={{ display: 'flex', justifyContent: 'center', marginTop: 8 }}>
-        <span style={{ fontSize: '11px', color: '#64748b', fontWeight: 600 }}>
-          {isExpanded ? '▲ Hide Four Factors Breakdown' : '▼ View 250k Monte Carlo & Four Factors Breakdown'}
-        </span>
+      {/* Accordion toggle prompt - BOLD & EYE CATCHING CLICK TO VIEW MORE */}
+      <div style={{ display: 'flex', justifyContent: 'center', marginTop: 12 }}>
+        <button
+          type="button"
+          className={`bball-view-more-btn ${isExpanded ? 'expanded' : ''}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            setIsExpanded(!isExpanded);
+          }}
+          aria-expanded={isExpanded}
+          title={isExpanded ? 'Click to collapse breakdown' : 'Click to view 250k Monte Carlo & Four Factors Breakdown'}
+        >
+          {isExpanded ? (
+            <>
+              <span>▲ CLICK TO COLLAPSE</span>
+            </>
+          ) : (
+            <>
+              <span style={{ fontSize: '14px' }}>🔥</span>
+              <span>CLICK TO VIEW MORE</span>
+              <span style={{ fontSize: '11px' }}>▼</span>
+            </>
+          )}
+        </button>
       </div>
     </div>
   );

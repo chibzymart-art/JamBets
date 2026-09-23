@@ -183,101 +183,94 @@ export const BasketballHubView: React.FC<BasketballHubViewProps> = ({
   }, [allPredictions, selectedDate, selectedLeague, selectedMarket, settlementFilter, selectedTier, searchQuery]);
 
   return (
-    <div className="fixtures-content-wrapper" style={{ minHeight: '80vh' }}>
-      <div className="fixtures-main-layout">
-        {/* Left Sidebar Advertisement */}
-        <LeftSidebarAd />
-
-        {/* Main Basketball Hub Column */}
-        <main className="fixtures-center-col" id="basketball-main-hub">
-          {/* 1. HERO BANNER & TELEMETRY */}
-          <section className="bball-hero-banner">
-            <div className="bball-hero-header">
-              <div className="bball-hero-title-group">
-                <div className="bball-hero-icon-ring">🏀</div>
-                <div>
-                  <h1 className="bball-hero-title">
-                    Basketball Predictions & 250k Monte Carlo Hub
-                  </h1>
-                  <p className="bball-hero-subtitle">
-                    Autonomous Dean Oliver Four Factors Engine • Pace Adjusted • Lagos WAT: {watDateStr}
-                  </p>
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                <span className="bball-sim-badge">
-                  ⚙️ 250,000 Sims / Match
-                </span>
-                {onBackToFootball && (
-                  <button
-                    type="button"
-                    className="bball-league-btn"
-                    onClick={onBackToFootball}
-                    style={{ background: 'rgba(255,255,255,0.08)' }}
-                  >
-                    ⚽ Back to Football
-                  </button>
-                )}
-              </div>
+    <div className="bball-page-root" style={{ minHeight: '80vh', width: '100%', maxWidth: '1480px', margin: '0 auto', padding: '0 16px 40px' }}>
+      {/* 1. REDUCED HERO BANNER WITH INTEGRATED LAGOS WAT DATE SELECTOR */}
+      <section className="bball-hero-banner">
+        <div className="bball-hero-header">
+          <div className="bball-hero-title-group">
+            <div className="bball-hero-icon-ring">🏀</div>
+            <div>
+              <h1 className="bball-hero-title">
+                Basketball Predictions & 250k Monte Carlo Hub
+              </h1>
+              <p className="bball-hero-subtitle">
+                Autonomous Dean Oliver Four Factors Engine • Pace Adjusted • Lagos WAT: {watDateStr}
+              </p>
             </div>
+          </div>
 
-            {/* Scorecard Telemetry Grid */}
-            <div className="bball-stats-grid">
-              <div
-                className={`bball-stat-card ${selectedTier === 'all' && settlementFilter === 'all' ? 'active' : ''}`}
-                style={{ cursor: 'pointer' }}
-                onClick={() => { setSelectedTier('all'); setSettlementFilter('all'); }}
-                title="View All Matches"
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+            <span className="bball-sim-badge">
+              ⚙️ 250,000 Sims / Match
+            </span>
+            {onBackToFootball && (
+              <button
+                type="button"
+                className="bball-league-btn"
+                onClick={onBackToFootball}
               >
-                <span className="bball-stat-val green">
-                  {feedData?.stats.win_rate ?? 84}%
-                </span>
-                <span className="bball-stat-lbl">Verified Win Rate</span>
-              </div>
-              <div
-                className={`bball-stat-card ${selectedTier === 'bangers' ? 'active' : ''}`}
-                style={{ cursor: 'pointer' }}
-                onClick={() => setSelectedTier(selectedTier === 'bangers' ? 'all' : 'bangers')}
-                title="Filter by 96%+ Bangers"
-              >
-                <span className="bball-stat-val accent">
-                  {feedData?.stats.bangers_count ?? 0}
-                </span>
-                <span className="bball-stat-lbl">⭐ Bangers Active</span>
-              </div>
-              <div
-                className={`bball-stat-card ${selectedTier === 'top_picks' ? 'active' : ''}`}
-                style={{ cursor: 'pointer' }}
-                onClick={() => setSelectedTier(selectedTier === 'top_picks' ? 'all' : 'top_picks')}
-                title="Filter by Top Picks"
-              >
-                <span className="bball-stat-val gold">
-                  {feedData?.stats.top_picks_count ?? 0}
-                </span>
-                <span className="bball-stat-lbl">👑 Top Picks</span>
-              </div>
-              <div className="bball-stat-card">
-                <span className="bball-stat-val">
-                  {feedData?.stats.total_matches ?? 0}
-                </span>
-                <span className="bball-stat-lbl">Scheduled Matches</span>
-              </div>
-              <div
-                className={`bball-stat-card ${settlementFilter === 'won' ? 'active' : ''}`}
-                style={{ cursor: 'pointer' }}
-                onClick={() => setSettlementFilter(settlementFilter === 'won' ? 'all' : 'won')}
-                title="View Settled Won Matches"
-              >
-                <span className="bball-stat-val">
-                  {feedData?.stats.settled_count ?? 0}
-                </span>
-                <span className="bball-stat-lbl">Settled Predictions</span>
-              </div>
-            </div>
-          </section>
+                ⚽ Back to Football
+              </button>
+            )}
+          </div>
+        </div>
 
-          {/* 2. DYNAMIC LAGOS WAT CALENDAR DATE RIBBON */}
+        {/* Compact Scorecard Telemetry Grid */}
+        <div className="bball-stats-grid">
+          <div
+            className={`bball-stat-card ${selectedTier === 'all' && settlementFilter === 'all' ? 'active' : ''}`}
+            style={{ cursor: 'pointer' }}
+            onClick={() => { setSelectedTier('all'); setSettlementFilter('all'); }}
+            title="View All Matches"
+          >
+            <span className="bball-stat-val green">
+              {feedData?.stats.win_rate ?? 84}%
+            </span>
+            <span className="bball-stat-lbl">Verified Win Rate</span>
+          </div>
+          <div
+            className={`bball-stat-card ${selectedTier === 'bangers' ? 'active' : ''}`}
+            style={{ cursor: 'pointer' }}
+            onClick={() => setSelectedTier(selectedTier === 'bangers' ? 'all' : 'bangers')}
+            title="Filter by 96%+ Bangers"
+          >
+            <span className="bball-stat-val accent">
+              {feedData?.stats.bangers_count ?? 0}
+            </span>
+            <span className="bball-stat-lbl">⭐ Bangers Active</span>
+          </div>
+          <div
+            className={`bball-stat-card ${selectedTier === 'top_picks' ? 'active' : ''}`}
+            style={{ cursor: 'pointer' }}
+            onClick={() => setSelectedTier(selectedTier === 'top_picks' ? 'all' : 'top_picks')}
+            title="Filter by Top Picks"
+          >
+            <span className="bball-stat-val gold">
+              {feedData?.stats.top_picks_count ?? 0}
+            </span>
+            <span className="bball-stat-lbl">👑 Top Picks</span>
+          </div>
+          <div className="bball-stat-card">
+            <span className="bball-stat-val">
+              {feedData?.stats.total_matches ?? 0}
+            </span>
+            <span className="bball-stat-lbl">Scheduled Matches</span>
+          </div>
+          <div
+            className={`bball-stat-card ${settlementFilter === 'won' ? 'active' : ''}`}
+            style={{ cursor: 'pointer' }}
+            onClick={() => setSettlementFilter(settlementFilter === 'won' ? 'all' : 'won')}
+            title="View Settled Won Matches"
+          >
+            <span className="bball-stat-val">
+              {feedData?.stats.settled_count ?? 0}
+            </span>
+            <span className="bball-stat-lbl">Settled Predictions</span>
+          </div>
+        </div>
+
+        {/* INTEGRATED LAGOS WAT CALENDAR DATE RIBBON INSIDE HERO BANNER */}
+        <div className="bball-hero-date-row">
           <div className="bball-date-ribbon" role="tablist" aria-label="Basketball Match Dates">
             <button
               type="button"
@@ -314,7 +307,16 @@ export const BasketballHubView: React.FC<BasketballHubViewProps> = ({
               );
             })}
           </div>
+        </div>
+      </section>
 
+      {/* 2. MAIN DASHBOARD 3-COLUMN GRID: LEFT AD SIDEBAR + CENTER BASKETBALL STREAM + RIGHT WATCHLIST SIDEBAR */}
+      <div className="main-dashboard-grid" style={{ marginTop: 16 }}>
+        {/* Left Sidebar Advertisement */}
+        <LeftSidebarAd />
+
+        {/* Center Main Basketball Hub Column */}
+        <main className="fixtures-stream-column" id="basketball-main-hub">
           {/* 3. LEAGUES RIBBON */}
           <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '8px', marginBottom: '14px' }}>
             <button
@@ -404,11 +406,11 @@ export const BasketballHubView: React.FC<BasketballHubViewProps> = ({
 
           {/* 5. PREDICTIONS FEED / CARDS LIST */}
           {loading ? (
-            <div style={{ padding: '60px 0', textAlign: 'center', color: '#94a3b8' }}>
+            <div style={{ padding: '60px 0', textAlign: 'center', color: '#64748b' }}>
               <div className="bball-hero-icon-ring" style={{ margin: '0 auto 16px', animation: 'bounce 1s infinite' }}>
                 🏀
               </div>
-              <div style={{ fontSize: 16, fontWeight: 700, color: '#f8fafc' }}>
+              <div style={{ fontSize: 16, fontWeight: 700, color: '#0f172a' }}>
                 Running 250,000 Monte Carlo Simulations...
               </div>
               <div style={{ fontSize: 13, marginTop: 4 }}>
@@ -416,7 +418,7 @@ export const BasketballHubView: React.FC<BasketballHubViewProps> = ({
               </div>
             </div>
           ) : error ? (
-            <div style={{ padding: '40px', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: 12, textAlign: 'center', color: '#fca5a5' }}>
+            <div style={{ padding: '40px', background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: 12, textAlign: 'center', color: '#b91c1c' }}>
               <div style={{ fontSize: 20, marginBottom: 8 }}>⚠️ Feed Temporarily Offline</div>
               <div>{error}</div>
               <button
@@ -429,12 +431,12 @@ export const BasketballHubView: React.FC<BasketballHubViewProps> = ({
               </button>
             </div>
           ) : filteredPredictions.length === 0 ? (
-            <div style={{ padding: '50px 20px', textAlign: 'center', background: '#0f172a', borderRadius: 14, border: '1px solid rgba(255,255,255,0.08)' }}>
+            <div style={{ padding: '50px 20px', textAlign: 'center', background: '#ffffff', borderRadius: 14, border: '1px solid #e2e8f0', boxShadow: '0 2px 10px rgba(0,0,0,0.04)' }}>
               <div style={{ fontSize: 32, marginBottom: 10 }}>🏀</div>
-              <h3 style={{ fontSize: 17, fontWeight: 800, color: '#ffffff', margin: '0 0 6px 0' }}>
+              <h3 style={{ fontSize: 17, fontWeight: 800, color: '#0f172a', margin: '0 0 6px 0' }}>
                 No Basketball Games Match This Filter
               </h3>
-              <p style={{ fontSize: 13, color: '#94a3b8', margin: '0 0 16px 0' }}>
+              <p style={{ fontSize: 13, color: '#64748b', margin: '0 0 16px 0' }}>
                 Try selecting another date, switching to 'All Markets', or clearing the search term.
               </p>
               <button
