@@ -45,30 +45,34 @@ def run():
     dataset = HistoricalDatasetBuilder()
 
     # 1. Acquire genuine historical football dataset from ESPN API
-    print("\n[STEP 1] Acquiring verified historical football records from ESPN API...", flush=True)
-    hist_configs = [
-        ("ENG_PL", ["20240519", "20240513", "20240504", "20240427", "20240421", "20240414", "20240406", "20240403", "20240330", "20240317", "20240310", "20240302"]),
-        ("BEL_PL", ["20240526", "20240519", "20240513", "20240505", "20240428", "20240424", "20240421", "20240414", "20240407", "20240401", "20240317", "20240310"]),
-        ("NED_ED", ["20240519", "20240512", "20240505", "20240428", "20240414", "20240407", "20240330", "20240317", "20240310", "20240303", "20240225", "20240218"]),
-        ("ESP_LL", ["20240526", "20240519", "20240515", "20240512", "20240505", "20240428", "20240421", "20240414"]),
-        ("ITA_SA", ["20240526", "20240519", "20240512", "20240505", "20240428", "20240421", "20240414"]),
-        ("GER_BL", ["20240518", "20240511", "20240504", "20240427", "20240420", "20240413"]),
-        ("FRA_L1", ["20240519", "20240512", "20240503", "20240428", "20240424", "20240421"]),
-        ("EUR_CL", ["20240601", "20240508", "20240501", "20240417", "20240416", "20240410", "20240409", "20240313", "20240312"]),
-        ("ENG_CH", ["20240504", "20240427", "20240420", "20240413", "20240406", "20240401", "20240329", "20240316", "20240309", "20240305", "20240302"])
-    ]
+    skip_hist = "--skip-hist" in sys.argv or "--skip-historical" in sys.argv
+    if not skip_hist:
+        print("\n[STEP 1] Acquiring verified historical football records from ESPN API...", flush=True)
+        hist_configs = [
+            ("ENG_PL", ["20240519", "20240513", "20240504", "20240427", "20240421", "20240414", "20240406", "20240403", "20240330", "20240317", "20240310", "20240302"]),
+            ("BEL_PL", ["20240526", "20240519", "20240513", "20240505", "20240428", "20240424", "20240421", "20240414", "20240407", "20240401", "20240317", "20240310"]),
+            ("NED_ED", ["20240519", "20240512", "20240505", "20240428", "20240414", "20240407", "20240330", "20240317", "20240310", "20240303", "20240225", "20240218"]),
+            ("ESP_LL", ["20240526", "20240519", "20240515", "20240512", "20240505", "20240428", "20240421", "20240414"]),
+            ("ITA_SA", ["20240526", "20240519", "20240512", "20240505", "20240428", "20240421", "20240414"]),
+            ("GER_BL", ["20240518", "20240511", "20240504", "20240427", "20240420", "20240413"]),
+            ("FRA_L1", ["20240519", "20240512", "20240503", "20240428", "20240424", "20240421"]),
+            ("EUR_CL", ["20240601", "20240508", "20240501", "20240417", "20240416", "20240410", "20240409", "20240313", "20240312"]),
+            ("ENG_CH", ["20240504", "20240427", "20240420", "20240413", "20240406", "20240401", "20240329", "20240316", "20240309", "20240305", "20240302"])
+        ]
 
-    total_historical = 0
-    for l_code, dates in hist_configs:
-        count = dataset.fetch_historical_from_espn(l_code, dates)
-        total_historical += count
-        print(f"  • [{l_code}] Ingested {count} verified matches", flush=True)
+        total_historical = 0
+        for l_code, dates in hist_configs:
+            count = dataset.fetch_historical_from_espn(l_code, dates)
+            total_historical += count
+            print(f"  • [{l_code}] Ingested {count} verified matches", flush=True)
 
-    print("\n[STEP 1.1] Ingesting verified completed matches from LiveScore across all domestic & international tiers...", flush=True)
-    past_dates = [(datetime.now(timezone.utc) - timedelta(days=i)).strftime("%Y%m%d") for i in range(1, 11)]
-    ls_hist_count = dataset.fetch_historical_from_livescore(past_dates)
-    total_historical += ls_hist_count
-    print(f"  [OK] Ingested {ls_hist_count} verified multi-tier completed matches from LiveScore", flush=True)
+        print("\n[STEP 1.1] Ingesting verified completed matches from LiveScore across all domestic & international tiers...", flush=True)
+        past_dates = [(datetime.now(timezone.utc) - timedelta(days=i)).strftime("%Y%m%d") for i in range(1, 11)]
+        ls_hist_count = dataset.fetch_historical_from_livescore(past_dates)
+        total_historical += ls_hist_count
+        print(f"  [OK] Ingested {ls_hist_count} verified multi-tier completed matches from LiveScore", flush=True)
+    else:
+        print("\n[STEP 1] Fast-mode active: using local cached historical dataset (--skip-hist active).", flush=True)
 
     print(f"[INFO] Total verified historical matches in dataset: {len(dataset.matches)}", flush=True)
 

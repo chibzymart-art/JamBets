@@ -68,6 +68,12 @@ WHITELISTED_LEAGUE_CODES: Set[str] = {
     "EUR_CL",    # UEFA Champions League
     "EUR_EL",    # UEFA Europa League
     "EUR_ECL",   # UEFA Conference League
+    "EUR_NL",    # UEFA Nations League
+    "CAF_AFCON_Q", # Africa Cup of Nations Qualifying
+    "CONCACAF_NL", # Concacaf Nations League
+    "FIFA_FRIENDLY", # International Friendlies
+    "ENG_EFL_CUP", # EFL Cup / Carabao Cup
+    "SA_CL",     # Copa Libertadores
 }
 
 LEAGUE_BASELINES: Dict[str, Dict[str, float]] = {

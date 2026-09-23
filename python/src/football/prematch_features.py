@@ -299,8 +299,15 @@ class PreMatchFeatureEngine:
                 away_matches = self._fetch_matches_from_universal_store(away_norm, prediction_cutoff)
 
             # Strict Zero-Hallucination Gate:
-            # If a team has strictly zero verified historical matches, we MUST ABSTAIN.
-            # No synthetic hashing! No fake ratings!
+            # If a team has strictly zero verified historical matches in club domestic leagues, we MUST ABSTAIN.
+            # However, for authorized international tournaments (UEFA Nations League, AFCON Qualifiers, Concacaf, Friendlies),
+            # national teams do not play in domestic club leagues; we apply Bayesian tournament competition baselines.
+            is_international = league_code in {
+                "EUR_NL", "CAF_AFCON_Q", "CONCACAF_NL",
+                "FIFA_WCQ_CONMEBOL", "FIFA_WCQ_UEFA", "FIFA_WCQ_CAF", "FIFA_WCQ_AFC",
+                "FIFA_FRIENDLY"
+            } or any((canonical_key or "").startswith(pfx) for pfx in ("EUR_NL:", "CAF_AFCON_Q:", "CONCACAF_NL:", "FIFA_"))
+
             missing = []
             if len(home_matches) == 0:
                 missing.append(f"home_team_history({home_norm})")
@@ -308,7 +315,10 @@ class PreMatchFeatureEngine:
                 missing.append(f"away_team_history({away_norm})")
 
             if missing:
-                raise MissingDataException(fixture_id, canonical_key, missing_fields=missing)
+                if not is_international:
+                    raise MissingDataException(fixture_id, canonical_key, missing_fields=missing)
+                else:
+                    data_tier_used = "TIER_2_INTERNATIONAL_BASELINE"
 
             # Combine all historical pools for team strength estimation
             all_known_matches = self.dataset.matches + home_matches + away_matches

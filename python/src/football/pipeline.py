@@ -142,8 +142,9 @@ class AcquisitionPipeline:
                 # Use FixtureEngine to compute 4-day prediction queue window & lifecycle metadata
                 from python.src.football.fixture_engine import FixtureEngine
                 engine = FixtureEngine()
-                # Enforce database 4-day check constraint: target_kickoff_at <= now() + interval '4 days'
-                if canonical.kickoff_utc > now_utc + timedelta(days=4):
+                # Enforce database 4-day check constraint (target_kickoff_at <= now() + interval '4 days 2 hours')
+                # Fixtures further out will be captured on subsequent daily cycles as the rolling window advances.
+                if canonical.kickoff_utc > now_utc + timedelta(days=4, hours=2):
                     continue
 
                 queue_res = engine.compute_queue_window(canonical.kickoff_utc, now_utc)

@@ -143,17 +143,8 @@ class PredictionPipeline:
                     fixture_id=fixture_id,
                 )
             except MissingDataException as mde:
-                print(f"[ZERO-HALLUCINATION] {canonical_key} missing real data: {mde.missing_fields}")
-                if persist_to_supabase and fixture_id:
-                    try:
-                        self.supabase.update_fixture_status(
-                            fixture_id,
-                            "data_unavailable",
-                            reason=f"ZERO_HALLUCINATION: {', '.join(mde.missing_fields)}"
-                        )
-                    except Exception as patch_err:
-                        print(f"[WARN] Failed to update fixture status in Supabase: {patch_err}")
-
+                print(f"[ZERO-HALLUCINATION] {canonical_key} missing real data for primary model: {mde.missing_fields}")
+                # Note: Canonical fixture remains 'scheduled' so other specialist engines (Draw, Corners, Goals) can process it.
                 return FixturePredictionResult(
                     fixture_id=fixture_id,
                     canonical_key=canonical_key,
@@ -162,17 +153,8 @@ class PredictionPipeline:
                 )
 
         if not features.is_ready:
-            print(f"[DATA INTEGRITY GATE] Fixture not ready: {features.not_ready_reason}")
-            if persist_to_supabase and fixture_id:
-                try:
-                    self.supabase.update_fixture_status(
-                        fixture_id,
-                        "data_unavailable",
-                        reason=f"GATE_NOT_READY: {features.not_ready_reason}"
-                    )
-                except Exception as patch_err:
-                    print(f"[WARN] Failed to update fixture status: {patch_err}")
-
+            print(f"[DATA INTEGRITY GATE] Fixture not ready for primary model: {features.not_ready_reason}")
+            # Note: Canonical fixture remains 'scheduled'.
             return FixturePredictionResult(
                 fixture_id=fixture_id,
                 canonical_key=canonical_key,

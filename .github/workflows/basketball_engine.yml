@@ -1,0 +1,110 @@
+name: JamBets Autonomous Basketball Engine (Predictions & Settlement)
+
+on:
+  schedule:
+    # Run every 2 hours for automated settlement and prediction maintenance
+    - cron: '0 */2 * * *'
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Engine action to execute'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - predict-only
+          - settle-only
+          - scrape-only
+      lookback_hours:
+        description: 'Settlement temporal lookback horizon in hours'
+        required: false
+        default: '48'
+      dry_run:
+        description: 'Simulate without mutating Cloud Supabase'
+        type: boolean
+        required: false
+        default: false
+
+concurrency:
+  group: basketball-engine
+  cancel-in-progress: false
+
+jobs:
+  basketball-cycle:
+    name: Autonomous Basketball Ingestion, Simulation & Settlement
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: 'python/requirements.txt'
+
+      - name: Install Python Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r python/requirements.txt
+
+      - name: Execute Scoreboard Ingestion & Score Refresh
+        if: ${{ github.event_name == 'schedule' || inputs.action == 'all' || inputs.action == 'scrape-only' || inputs.action == 'settle-only' }}
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          echo "=== RUNNING BASKETBALL SCOREBOARD & SCHEDULE INGESTION ==="
+          python -m python.src.basketball.daemon --run-once --days-back 2 --days-forward 3
+
+      - name: Execute 250,000 Monte Carlo Basketball Prediction Engine
+        if: ${{ github.event_name == 'schedule' || inputs.action == 'all' || inputs.action == 'predict-only' }}
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          echo "=== RUNNING BASKETBALL 250K MONTE CARLO PREDICTION ENGINE ==="
+          python -m python.src.basketball.run_predictions --days-forward 3
+
+      - name: Execute Autonomous Basketball Settlement Engine
+        if: ${{ github.event_name == 'schedule' || inputs.action == 'all' || inputs.action == 'settle-only' }}
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          ALERT_EMAIL_SENDER: ${{ secrets.ALERT_EMAIL_SENDER }}
+          ALERT_EMAIL_PASSWORD: ${{ secrets.ALERT_EMAIL_PASSWORD }}
+          ALERT_EMAIL_RECIPIENTS: ${{ secrets.ALERT_EMAIL_RECIPIENTS }}
+        run: |
+          echo "=== RUNNING AUTONOMOUS BASKETBALL SETTLEMENT ENGINE ==="
+          LOOKBACK="${{ github.event.inputs.lookback_hours || '48' }}"
+          DRY_RUN_FLAG=""
+          if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
+            DRY_RUN_FLAG="--dry-run"
+          fi
+          python -m python.src.basketball.run_settlement --lookback-hours $LOOKBACK $DRY_RUN_FLAG
+
+      - name: Dispatch Basketball Failure Email Alert
+        if: failure()
+        env:
+          ALERT_EMAIL_SENDER: ${{ secrets.ALERT_EMAIL_SENDER }}
+          ALERT_EMAIL_PASSWORD: ${{ secrets.ALERT_EMAIL_PASSWORD }}
+          ALERT_EMAIL_RECIPIENTS: ${{ secrets.ALERT_EMAIL_RECIPIENTS }}
+        run: |
+          python -c "
+          try:
+              from python.src.alerts.email_notifier import send_pipeline_failure_alert
+              send_pipeline_failure_alert(
+                  'Basketball Engine (GitHub Actions)',
+                  Exception('GitHub Actions Basketball workflow step failed'),
+                  {'run_id': '${{ github.run_id }}', 'run_url': 'https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}'}
+              )
+          except Exception as e:
+              print(f'Failed to dispatch email alert: {e}')
+          "

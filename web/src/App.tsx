@@ -32,6 +32,8 @@ import { LeftSidebarAd } from './components/LeftSidebarAd';
 import { getDateDetailsByOffset, getPastDatesList } from './lib/dateUtils';
 import './tennis.css';
 import { TennisHubView } from './components/TennisHubView';
+import './basketball.css';
+import { BasketballHubView } from './components/BasketballHubView';
 
 
 export default function App() {
@@ -86,7 +88,7 @@ export default function App() {
   const [sportsState, setSportsState] = useState<Record<string, SportAvailability>>({
     football: { isAvailable: true, fixtureCount: 0, leagueCount: 0 },
     american_football: { isAvailable: false, fixtureCount: 0, leagueCount: 0 },
-    basketball: { isAvailable: false, fixtureCount: 0, leagueCount: 0 },
+    basketball: { isAvailable: true, fixtureCount: 0, leagueCount: 6 },
     tennis: { isAvailable: true, fixtureCount: 0, leagueCount: 0 },
     cricket: { isAvailable: false, fixtureCount: 0, leagueCount: 0 }
   });
@@ -119,8 +121,8 @@ export default function App() {
     } else if (location.pathname === '/basketball') {
       setSelectedSport('basketball');
       updatePageSeo({
-        title: 'Basketball AI Predictions (Coming Soon) | Oddsbanta',
-        description: 'Basketball quantitative modeling lab and 250k simulations coming soon to Oddsbanta.',
+        title: 'Basketball Predictions & 250k Monte Carlo Hub | Oddsbanta AI',
+        description: 'Autonomous basketball prediction engine featuring 250,000 Monte Carlo simulations, Dean Oliver Four Factors analysis, and schedule fatigue modeling.',
       });
     } else if (location.pathname === '/american-football') {
       setSelectedSport('american_football');
@@ -449,6 +451,8 @@ export default function App() {
       const sportParam = searchParams.get('sport');
       if (sportParam === 'tennis') {
         setSelectedSport('tennis');
+      } else if (sportParam === 'basketball') {
+        setSelectedSport('basketball');
       }
     } catch {}
   }, [location.search, location.pathname, navigate]);
@@ -877,12 +881,12 @@ export default function App() {
       id: 'basketball',
       name: 'Basketball',
       icon: '🏀',
-      isAvailable: sportsState.basketball?.isAvailable ?? false,
+      isAvailable: sportsState.basketball?.isAvailable ?? true,
       fixtureCount: sportsState.basketball?.fixtureCount ?? 0,
-      leagueCount: sportsState.basketball?.leagueCount ?? 0,
-      statusLabel: sportsState.basketball?.isAvailable ? 'Available' : 'Coming Soon',
-      subtext: sportsState.basketball?.isAvailable
-        ? `${sportsState.basketball.leagueCount} Available Leagues`
+      leagueCount: sportsState.basketball?.leagueCount ?? 6,
+      statusLabel: (sportsState.basketball?.isAvailable ?? true) ? 'Available' : 'Coming Soon',
+      subtext: (sportsState.basketball?.isAvailable ?? true)
+        ? `${sportsState.basketball?.leagueCount ?? 6} Available Leagues`
         : 'Coming Soon'
     },
     {
@@ -1560,7 +1564,7 @@ export default function App() {
                       }}
                     >
                       <span className="hamburger-item-icon">🏀</span>
-                      <span className="hamburger-item-label">Basketball (Coming Soon)</span>
+                      <span className="hamburger-item-label">Basketball Predictions (250k MC)</span>
                     </Link>
 
                     <Link
@@ -1862,6 +1866,34 @@ export default function App() {
             }
           />
 
+          {/* ROUTE: BASKETBALL PREDICTIONS & MONTE CARLO HUB */}
+          <Route
+            path="/basketball"
+            element={
+              <div id="fixtures-view-section" style={{ paddingTop: '8px' }}>
+                <BasketballHubView
+                  currentUser={currentUser}
+                  userRole={profile?.role}
+                  isAdmin={isAdmin}
+                  canViewPredictions={canViewPredictions}
+                  favoriteItems={favoriteItems}
+                  onToggleFavoriteItem={toggleFavoriteItem}
+                  isFavoriteItem={isFavoriteItem}
+                  onOpenFavoritesDrawer={() => setIsFavoritesDrawerOpen(true)}
+                  onOpenAuth={(mode) => {
+                    setAuthModalMode(mode);
+                    setIsAuthModalOpen(true);
+                  }}
+                  onOpenSubscription={() => setIsPricingModalOpen(true)}
+                  onBackToFootball={() => {
+                    setSelectedSport('football');
+                    navigate('/dashboard');
+                  }}
+                />
+              </div>
+            }
+          />
+
           {/* ROUTE 4: ADMIN COMMAND DECK (STRICTLY GATED) */}
           <Route
             path="/admin"
@@ -2076,6 +2108,23 @@ export default function App() {
           </div>
         ) : selectedSport === 'tennis' ? (
           <TennisHubView
+            currentUser={currentUser}
+            userRole={profile?.role}
+            isAdmin={isAdmin}
+            canViewPredictions={canViewPredictions}
+            favoriteItems={favoriteItems}
+            onToggleFavoriteItem={toggleFavoriteItem}
+            isFavoriteItem={isFavoriteItem}
+            onOpenFavoritesDrawer={() => setIsFavoritesDrawerOpen(true)}
+            onOpenAuth={(mode) => {
+              setAuthModalMode(mode);
+              setIsAuthModalOpen(true);
+            }}
+            onOpenSubscription={() => setIsPricingModalOpen(true)}
+            onBackToFootball={() => setSelectedSport('football')}
+          />
+        ) : selectedSport === 'basketball' ? (
+          <BasketballHubView
             currentUser={currentUser}
             userRole={profile?.role}
             isAdmin={isAdmin}

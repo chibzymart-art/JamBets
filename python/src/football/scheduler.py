@@ -376,24 +376,16 @@ class PredictionCycleScheduler:
                     telemetry.fixtures_failed += 1
                     telemetry.errors.append({"fixture_id": f_id, "error": f"FEATURE_EXTRACTION_ERROR: {exc}"})
                     print(f"      [FAILED] Feature extraction exception: {exc}", flush=True)
-                    try:
-                        self.supabase.update_fixture_status(f_id, "data_unavailable", reason=f"FEATURE_EXTRACTION_ERROR: {exc}")
-                        print(f"      [DATA_UNAVAILABLE] Fixture {f_id} status marked as 'data_unavailable'", flush=True)
-                    except Exception as patch_exc:
-                        print(f"      [WARN] Could not update status: {patch_exc}", flush=True)
-                    time.sleep(2.5)
+                    # Preserve fixture status as scheduled
+                    time.sleep(1.0)
                     continue
 
                 # Step C: Check Feature Gate
                 if not features.is_ready:
                     telemetry.fixtures_skipped += 1
                     print(f"      [GATE] NOT_READY: {features.not_ready_reason} (0 Sims, 0 Predictions)", flush=True)
-                    try:
-                        self.supabase.update_fixture_status(f_id, "data_unavailable", reason=f"NOT_READY: {features.not_ready_reason}")
-                        print(f"      [DATA_UNAVAILABLE] Fixture {f_id} status marked as 'data_unavailable'", flush=True)
-                    except Exception as patch_exc:
-                        print(f"      [WARN] Could not update status: {patch_exc}", flush=True)
-                    time.sleep(2.5)
+                    # Preserve fixture status as scheduled
+                    time.sleep(1.0)
                     continue
 
                 # Step D, E & F: Phase 5 Simulation & Publication Pipeline with Transient Retry
@@ -422,12 +414,8 @@ class PredictionCycleScheduler:
                     telemetry.fixtures_failed += 1
                     telemetry.errors.append({"fixture_id": f_id, "error": f"PIPELINE_RETRY_EXHAUSTED: {last_err}"})
                     print(f"      [FAILED] Retries exhausted for {canonical_key}", flush=True)
-                    try:
-                        self.supabase.update_fixture_status(f_id, "data_unavailable", reason=f"PIPELINE_RETRY_EXHAUSTED: {last_err}")
-                        print(f"      [DATA_UNAVAILABLE] Fixture {f_id} status marked as 'data_unavailable'", flush=True)
-                    except Exception as patch_exc:
-                        print(f"      [WARN] Could not update status: {patch_exc}", flush=True)
-                    time.sleep(2.5)
+                    # Preserve fixture status as scheduled
+                    time.sleep(1.0)
                     continue
 
                 # Check Pipeline Result
@@ -458,11 +446,7 @@ class PredictionCycleScheduler:
                     telemetry.fixtures_failed += 1
                     telemetry.errors.append({"fixture_id": f_id, "error": res.not_ready_reason})
                     print(f"      [GATE] SIMULATION FAILED: {res.not_ready_reason}", flush=True)
-                    try:
-                        self.supabase.update_fixture_status(f_id, "data_unavailable", reason=f"SIMULATION_FAILED: {res.not_ready_reason}")
-                        print(f"      [DATA_UNAVAILABLE] Fixture {f_id} status marked as 'data_unavailable'", flush=True)
-                    except Exception as patch_exc:
-                        print(f"      [WARN] Could not update status: {patch_exc}", flush=True)
+                    # Preserve fixture status as scheduled
                 else:
                     telemetry.fixtures_skipped += 1
                     print(f"      [STATUS] {res.status}", flush=True)

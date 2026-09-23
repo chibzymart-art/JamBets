@@ -1,0 +1,614 @@
+/**
+ * Oddsbanta — Autonomous Basketball Design System & UI Styles
+ * Phase 5: Basketball Hub View & Precision Prediction Cards
+ */
+
+:root {
+  --bball-orange: #f97316;
+  --bball-orange-glow: rgba(249, 115, 22, 0.35);
+  --bball-orange-light: #ffedd5;
+  --bball-court: #ea580c;
+  --bball-dark-card: #0f172a;
+  --bball-border: rgba(249, 115, 22, 0.2);
+}
+
+/* -------------------------------------------------------------
+   1. HERO BANNER & SCORECARD TELEMETRY
+   ------------------------------------------------------------- */
+.bball-hero-banner {
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.95) 0%, rgba(30, 41, 59, 0.92) 50%, rgba(67, 20, 7, 0.85) 100%);
+  border: 1px solid rgba(249, 115, 22, 0.25);
+  border-radius: 16px;
+  padding: 24px;
+  margin-bottom: 20px;
+  box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5), 0 0 25px -5px var(--bball-orange-glow);
+  position: relative;
+  overflow: hidden;
+}
+
+.bball-hero-banner::after {
+  content: '';
+  position: absolute;
+  top: -50px;
+  right: -50px;
+  width: 200px;
+  height: 200px;
+  background: radial-gradient(circle, var(--bball-orange-glow) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.bball-hero-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.bball-hero-title-group {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.bball-hero-icon-ring {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #f97316 0%, #c2410c 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 26px;
+  box-shadow: 0 4px 15px rgba(249, 115, 22, 0.4);
+}
+
+.bball-hero-title {
+  font-size: 22px;
+  font-weight: 800;
+  color: #ffffff;
+  margin: 0 0 4px 0;
+  letter-spacing: -0.02em;
+}
+
+.bball-hero-subtitle {
+  font-size: 13px;
+  color: #94a3b8;
+  margin: 0;
+}
+
+.bball-sim-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(249, 115, 22, 0.15);
+  border: 1px solid rgba(249, 115, 22, 0.35);
+  color: #fed7aa;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+.bball-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 12px;
+}
+
+.bball-stat-card {
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+}
+
+.bball-stat-val {
+  font-size: 20px;
+  font-weight: 800;
+  color: #f8fafc;
+  line-height: 1.2;
+}
+
+.bball-stat-val.accent {
+  color: #fb923c;
+}
+
+.bball-stat-val.gold {
+  color: #fbbf24;
+}
+
+.bball-stat-val.green {
+  color: #34d399;
+}
+
+.bball-stat-lbl {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: #64748b;
+  margin-top: 4px;
+  letter-spacing: 0.04em;
+}
+
+/* -------------------------------------------------------------
+   2. LAGOS WAT CALENDAR DATE RIBBON & FILTERS
+   ------------------------------------------------------------- */
+.bball-date-ribbon {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+  margin-bottom: 16px;
+  scrollbar-width: thin;
+}
+
+.bball-date-pill {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: #0f172a;
+  color: #94a3b8;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  min-width: 82px;
+}
+
+.bball-date-pill:hover {
+  border-color: rgba(249, 115, 22, 0.4);
+  color: #ffffff;
+}
+
+.bball-date-pill.active {
+  background: linear-gradient(135deg, rgba(249, 115, 22, 0.2) 0%, rgba(194, 65, 12, 0.2) 100%);
+  border-color: #f97316;
+  color: #ffffff;
+  box-shadow: 0 0 12px rgba(249, 115, 22, 0.3);
+}
+
+.bball-date-day {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.bball-date-num {
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.bball-date-count {
+  font-size: 10px;
+  background: rgba(255, 255, 255, 0.1);
+  padding: 1px 6px;
+  border-radius: 10px;
+  margin-top: 2px;
+}
+
+/* Filter controls bar */
+.bball-controls-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.bball-league-pills {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.bball-league-btn {
+  padding: 6px 12px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: #1e293b;
+  color: #cbd5e1;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.bball-league-btn:hover {
+  border-color: rgba(249, 115, 22, 0.5);
+  color: #ffffff;
+}
+
+.bball-league-btn.active {
+  background: #f97316;
+  border-color: #ea580c;
+  color: #ffffff;
+  font-weight: 700;
+  box-shadow: 0 2px 8px rgba(249, 115, 22, 0.4);
+}
+
+.bball-search-input {
+  background: #0f172a;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  padding: 7px 12px;
+  color: #ffffff;
+  font-size: 13px;
+  width: 220px;
+}
+
+.bball-search-input:focus {
+  outline: none;
+  border-color: #f97316;
+  box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.2);
+}
+
+/* -------------------------------------------------------------
+   3. BASKETBALL PREDICTION CARD
+   ------------------------------------------------------------- */
+.bball-card {
+  background: #0f172a;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 14px;
+  padding: 18px;
+  margin-bottom: 16px;
+  position: relative;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+  cursor: pointer;
+}
+
+.bball-card:hover {
+  border-color: rgba(249, 115, 22, 0.4);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4), 0 0 15px rgba(249, 115, 22, 0.15);
+}
+
+.bball-card.card-won {
+  border-left: 4px solid #10b981;
+}
+
+.bball-card.card-lost {
+  border-left: 4px solid #ef4444;
+}
+
+.bball-card.card-void {
+  border-left: 4px solid #f59e0b;
+}
+
+/* Top Meta Row */
+.bball-card-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.bball-card-league-badge {
+  background: rgba(249, 115, 22, 0.12);
+  border: 1px solid rgba(249, 115, 22, 0.3);
+  color: #fb923c;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 3px 8px;
+  border-radius: 6px;
+}
+
+.bball-card-time {
+  font-size: 12px;
+  color: #94a3b8;
+  font-weight: 500;
+}
+
+.bball-altitude-badge {
+  background: rgba(14, 165, 233, 0.15);
+  border: 1px solid rgba(14, 165, 233, 0.35);
+  color: #7dd3fc;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 6px;
+}
+
+/* Matchup Row */
+.bball-matchup-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.bball-team-col {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+}
+
+.bball-team-col.away {
+  justify-content: flex-end;
+  text-align: right;
+}
+
+.bball-team-logo {
+  width: 38px;
+  height: 38px;
+  object-fit: contain;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.4));
+}
+
+.bball-team-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.bball-team-name {
+  font-size: 15px;
+  font-weight: 800;
+  color: #ffffff;
+  line-height: 1.2;
+}
+
+.bball-team-tags {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-top: 3px;
+  flex-wrap: wrap;
+}
+
+.bball-team-tags.away {
+  justify-content: flex-end;
+}
+
+.bball-rest-tag {
+  font-size: 10px;
+  font-weight: 600;
+  color: #94a3b8;
+  background: rgba(255, 255, 255, 0.06);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+.bball-b2b-tag {
+  font-size: 10px;
+  font-weight: 800;
+  color: #fca5a5;
+  background: rgba(239, 68, 68, 0.2);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+.bball-vs-badge {
+  font-size: 11px;
+  font-weight: 800;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 4px 8px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+/* Primary Banker Box */
+.bball-banker-box {
+  background: linear-gradient(135deg, rgba(30, 41, 59, 0.7) 0%, rgba(15, 23, 42, 0.9) 100%);
+  border: 1px solid rgba(249, 115, 22, 0.25);
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.bball-banker-left {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.bball-market-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #fb923c;
+  letter-spacing: 0.04em;
+}
+
+.bball-prediction-text {
+  font-size: 16px;
+  font-weight: 800;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.bball-banker-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.bball-prob-pill {
+  background: rgba(16, 185, 129, 0.15);
+  border: 1px solid rgba(16, 185, 129, 0.4);
+  color: #6ee7b7;
+  font-size: 14px;
+  font-weight: 800;
+  padding: 4px 10px;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.bball-prob-sub {
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  opacity: 0.8;
+}
+
+.bball-edge-pill {
+  background: rgba(249, 115, 22, 0.18);
+  border: 1px solid rgba(249, 115, 22, 0.4);
+  color: #fed7aa;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 4px 8px;
+  border-radius: 6px;
+}
+
+.bball-add-slip-btn {
+  background: #f97316;
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.bball-add-slip-btn:hover {
+  background: #ea580c;
+  box-shadow: 0 0 10px rgba(249, 115, 22, 0.5);
+}
+
+.bball-add-slip-btn.in-slip {
+  background: #10b981;
+}
+
+/* Four Factors Comparison Grid */
+.bball-four-factors-wrap {
+  background: rgba(15, 23, 42, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 14px;
+  margin-top: 14px;
+}
+
+.bball-ff-header {
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  color: #fb923c;
+  margin-bottom: 12px;
+  display: flex;
+  justify-content: space-between;
+}
+
+.bball-ff-row {
+  display: grid;
+  grid-template-columns: 70px 1fr 70px;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 12px;
+}
+
+.bball-ff-label {
+  grid-column: 1 / -1;
+  font-size: 11px;
+  font-weight: 700;
+  color: #94a3b8;
+  margin-top: 4px;
+}
+
+.bball-ff-bar-wrap {
+  display: flex;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 4px;
+  overflow: hidden;
+  gap: 2px;
+}
+
+.bball-ff-bar-home {
+  height: 100%;
+  background: #f97316;
+  border-radius: 4px 0 0 4px;
+  transition: width 0.3s ease;
+}
+
+.bball-ff-bar-away {
+  height: 100%;
+  background: #38bdf8;
+  border-radius: 0 4px 4px 0;
+  transition: width 0.3s ease;
+}
+
+/* AI Tactical Analysis Box */
+.bball-tactical-box {
+  background: rgba(249, 115, 22, 0.08);
+  border-left: 3px solid #f97316;
+  border-radius: 0 8px 8px 0;
+  padding: 10px 12px;
+  margin-top: 12px;
+  font-size: 12px;
+  color: #cbd5e1;
+  line-height: 1.5;
+}
+
+.bball-tactical-title {
+  font-weight: 800;
+  color: #fb923c;
+  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+/* Settlement Status Bar */
+.bball-settled-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  margin-top: 10px;
+}
+
+.bball-settled-bar.won {
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.bball-settled-bar.lost {
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.bball-settled-bar.void {
+  background: rgba(245, 158, 11, 0.15);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
