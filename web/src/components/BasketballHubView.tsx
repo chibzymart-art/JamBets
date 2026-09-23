@@ -54,20 +54,7 @@ export const BasketballHubView: React.FC<BasketballHubViewProps> = ({
 
   const isSubscriber = isAdmin || canViewPredictions;
 
-  // Format today's date in Lagos WAT (UTC+1)
-  const watDateStr = useMemo(() => {
-    try {
-      return new Intl.DateTimeFormat('en-US', {
-        timeZone: 'Africa/Lagos',
-        weekday: 'long',
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric',
-      }).format(new Date());
-    } catch {
-      return 'Today';
-    }
-  }, []);
+
 
   const loadFeed = async (force = false) => {
     setLoading(true);
@@ -175,14 +162,9 @@ export const BasketballHubView: React.FC<BasketballHubViewProps> = ({
         <div className="bball-hero-header">
           <div className="bball-hero-title-group">
             <div className="bball-hero-icon-ring">🏀</div>
-            <div>
-              <h1 className="bball-hero-title">
-                Basketball Predictions & 250k Monte Carlo Hub
-              </h1>
-              <p className="bball-hero-subtitle">
-                Autonomous Dean Oliver Four Factors Engine • Pace Adjusted • Lagos WAT: {watDateStr}
-              </p>
-            </div>
+            <h1 className="bball-hero-title">
+              Basketball Predictions
+            </h1>
           </div>
 
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
