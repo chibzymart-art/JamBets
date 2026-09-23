@@ -43,15 +43,14 @@ export const BasketballHubView: React.FC<BasketballHubViewProps> = ({
   onOpenSubscription,
   onBackToFootball,
 }) => {
-  const [selectedLeague, setSelectedLeague] = useState<string>('all');
   const [selectedDate, setSelectedDate] = useState<string>(() => getDateDetailsByOffset(0).iso);
-  const [selectedMarket, setSelectedMarket] = useState<BasketballMarket | 'all'>('all');
   const [selectedTier, setSelectedTier] = useState<string>('all');
   const [settlementFilter, setSettlementFilter] = useState<'all' | 'pending' | 'won' | 'lost' | 'void'>('all');
-  const [searchQuery, setSearchQuery] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(true);
   const [feedData, setFeedData] = useState<BasketballFeedResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const selectedLeague: string = 'all';
+  const selectedMarket: BasketballMarket | 'all' = 'all';
 
   const isSubscriber = isAdmin || canViewPredictions;
 
@@ -94,7 +93,6 @@ export const BasketballHubView: React.FC<BasketballHubViewProps> = ({
   }, [isSubscriber]);
 
   const allPredictions = feedData?.predictions || [];
-  const leagues = feedData?.leagues || [];
 
   // Dynamic Lagos (WAT / UTC+1) relative calendar dates
   const dynamicDateTabs = useMemo(() => {
@@ -166,21 +164,9 @@ export const BasketballHubView: React.FC<BasketballHubViewProps> = ({
         if (selectedTier === 'high_confidence' && cat !== 'HIGH CONFIDENCE') return false;
       }
 
-      // 6. Search Query
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
-        const home = p.fixture?.home_team?.canonical_name?.toLowerCase() || '';
-        const away = p.fixture?.away_team?.canonical_name?.toLowerCase() || '';
-        const arena = p.fixture?.home_team?.arena_name?.toLowerCase() || '';
-        const lName = p.fixture?.league?.name?.toLowerCase() || '';
-        if (!home.includes(q) && !away.includes(q) && !arena.includes(q) && !lName.includes(q)) {
-          return false;
-        }
-      }
-
       return true;
     });
-  }, [allPredictions, selectedDate, selectedLeague, selectedMarket, settlementFilter, selectedTier, searchQuery]);
+  }, [allPredictions, selectedDate, selectedLeague, selectedMarket, settlementFilter, selectedTier]);
 
   return (
     <div className="bball-page-root" style={{ minHeight: '80vh', width: '100%', maxWidth: '1480px', margin: '0 auto', padding: '0 16px 40px' }}>
@@ -317,92 +303,6 @@ export const BasketballHubView: React.FC<BasketballHubViewProps> = ({
 
         {/* Center Main Basketball Hub Column */}
         <main className="fixtures-stream-column" id="basketball-main-hub">
-          {/* 3. LEAGUES RIBBON */}
-          <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '8px', marginBottom: '14px' }}>
-            <button
-              type="button"
-              className={`bball-league-btn ${selectedLeague === 'all' ? 'active' : ''}`}
-              onClick={() => setSelectedLeague('all')}
-            >
-              All Leagues ({allPredictions.length})
-            </button>
-            {leagues.map((l) => {
-              const count = allPredictions.filter((p) => p.fixture?.league?.code === l.code).length;
-              return (
-                <button
-                  key={l.id}
-                  type="button"
-                  className={`bball-league-btn ${selectedLeague === l.code ? 'active' : ''}`}
-                  onClick={() => setSelectedLeague(l.code)}
-                >
-                  {l.name} {count > 0 ? `(${count})` : ''}
-                </button>
-              );
-            })}
-          </div>
-
-          {/* 4. CONTROLS & MARKETS SWITCHBOARD */}
-          <div className="bball-controls-bar">
-            {/* Market Switcher */}
-            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-              <button
-                type="button"
-                className={`bball-league-btn ${selectedMarket === 'all' && settlementFilter === 'all' ? 'active' : ''}`}
-                onClick={() => {
-                  setSelectedMarket('all');
-                  setSettlementFilter('all');
-                }}
-              >
-                All Markets
-              </button>
-              <button
-                type="button"
-                className={`bball-league-btn ${selectedMarket === 'point_spread' ? 'active' : ''}`}
-                onClick={() => {
-                  setSelectedMarket('point_spread');
-                  setSettlementFilter('all');
-                }}
-              >
-                Point Spread
-              </button>
-              <button
-                type="button"
-                className={`bball-league-btn ${selectedMarket === 'game_total_over_under' ? 'active' : ''}`}
-                onClick={() => {
-                  setSelectedMarket('game_total_over_under');
-                  setSettlementFilter('all');
-                }}
-              >
-                Totals (O/U)
-              </button>
-              <button
-                type="button"
-                className={`bball-league-btn ${selectedMarket === 'moneyline' ? 'active' : ''}`}
-                onClick={() => {
-                  setSelectedMarket('moneyline');
-                  setSettlementFilter('all');
-                }}
-              >
-                Moneyline
-              </button>
-              <button
-                type="button"
-                className={`bball-league-btn ${settlementFilter === 'won' ? 'active' : ''}`}
-                onClick={() => setSettlementFilter('won')}
-              >
-                🏆 Past Wins
-              </button>
-            </div>
-
-            {/* Search Input */}
-            <input
-              type="text"
-              placeholder="Search team, arena, city..."
-              className="bball-search-input"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-          </div>
 
           {/* 5. PREDICTIONS FEED / CARDS LIST */}
           {loading ? (
@@ -437,16 +337,15 @@ export const BasketballHubView: React.FC<BasketballHubViewProps> = ({
                 No Basketball Games Match This Filter
               </h3>
               <p style={{ fontSize: 13, color: '#64748b', margin: '0 0 16px 0' }}>
-                Try selecting another date, switching to 'All Markets', or clearing the search term.
+                Try selecting another date from the calendar ribbon above or reset all active filters.
               </p>
               <button
                 type="button"
                 className="bball-league-btn active"
                 onClick={() => {
-                  setSelectedLeague('all');
-                  setSelectedMarket('all');
+                  setSelectedTier('all');
                   setSettlementFilter('all');
-                  setSearchQuery('');
+                  setSelectedDate('all');
                 }}
               >
                 Reset All Filters
