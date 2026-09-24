@@ -85,7 +85,7 @@ class BasketballScraperDaemon:
 
 def main():
     parser = argparse.ArgumentParser(description="Oddsbanta Autonomous Basketball Scraper Daemon")
-    parser.add_argument("--once", action="store_true", help="Run a single acquisition cycle and exit")
+    parser.add_argument("--once", "--run-once", dest="once", action="store_true", help="Run a single acquisition cycle and exit")
     parser.add_argument("--days-back", type=int, default=1, help="Number of past days to check for scores")
     parser.add_argument("--days-forward", type=int, default=3, help="Number of forward days to schedule")
     parser.add_argument("--leagues", nargs="+", help="Specific league codes to ingest (e.g. NBA WNBA)")

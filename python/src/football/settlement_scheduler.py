@@ -214,14 +214,21 @@ class SettlementScheduler:
 
             # B. Fixtures with unsettled predictions whose kickoff has arrived or passed (or arriving in next 15m)
             cutoff_15m = (now_utc + timedelta(minutes=15)).strftime("%Y-%m-%dT%H:%M:%SZ")
-            for f_id, preds in unsettled_by_fix_id.items():
-                if f_id not in seen_fix_ids:
-                    p_ko = preds[0].get("target_kickoff_at", "")
-                    if p_ko and p_ko <= cutoff_15m:
-                        m_fixes = self.supabase.get("football_fixtures", {"id": f"eq.{f_id}", "limit": "1"})
-                        if m_fixes:
-                            candidate_fixtures_raw.append(m_fixes[0])
-                            seen_fix_ids.add(f_id)
+            needed_ids = [
+                f_id for f_id, preds in unsettled_by_fix_id.items()
+                if f_id not in seen_fix_ids and (preds[0].get("target_kickoff_at") or "") <= cutoff_15m
+            ]
+            batch_size = 50
+            for i in range(0, len(needed_ids), batch_size):
+                batch = needed_ids[i:i + batch_size]
+                try:
+                    m_fixes = self.supabase.get("football_fixtures", {"id": f"in.({','.join(batch)})"})
+                    for fix in m_fixes:
+                        if fix.get("id") not in seen_fix_ids:
+                            candidate_fixtures_raw.append(fix)
+                            seen_fix_ids.add(fix.get("id"))
+                except Exception as batch_err:
+                    print(f"  [WARN] Batch fixture query error: {batch_err}")
 
             # C. Scheduled fixtures in the window whose kickoff has arrived or passed (kickoff <= now + 15m)
             try:

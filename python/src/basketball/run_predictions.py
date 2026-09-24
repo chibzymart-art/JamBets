@@ -92,7 +92,7 @@ def run_basketball_predictions(days_forward: int = 3, num_sims: int = 250000) ->
             home_ml = fix.get("home_moneyline_odds")
             away_ml = fix.get("away_moneyline_odds")
 
-            target_dt = datetime.fromisoformat(fix["target_kickoff_at"])
+            target_dt = datetime.fromisoformat(fix["target_kickoff_at"].replace("Z", "+00:00"))
 
             # Run 250k Monte Carlo Simulation
             pred = engine.generate_prediction(
@@ -170,8 +170,8 @@ def run_basketball_predictions(days_forward: int = 3, num_sims: int = 250000) ->
 
 def main():
     parser = argparse.ArgumentParser(description="Oddsbanta Autonomous Basketball Prediction Runner")
-    parser.add_argument("--days", type=int, default=3, help="Days forward to simulate")
-    parser.add_argument("--sims", type=int, default=250000, help="Number of Monte Carlo iterations per fixture")
+    parser.add_argument("--days", "--days-forward", dest="days", type=int, default=3, help="Days forward to simulate")
+    parser.add_argument("--sims", "--num-sims", dest="sims", type=int, default=250000, help="Number of Monte Carlo iterations per fixture")
     args = parser.parse_args()
 
     run_basketball_predictions(days_forward=args.days, num_sims=args.sims)
