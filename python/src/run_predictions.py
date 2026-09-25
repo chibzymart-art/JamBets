@@ -44,10 +44,10 @@ def run():
     supabase = CloudSupabaseClient()
     dataset = HistoricalDatasetBuilder()
 
-    # 1. Acquire genuine historical football dataset from ESPN API
+    # 1. Acquire genuine historical football dataset (ESPN baseline + dynamic LiveScore)
     skip_hist = "--skip-hist" in sys.argv or "--skip-historical" in sys.argv
     if not skip_hist:
-        print("\n[STEP 1] Acquiring verified historical football records from ESPN API...", flush=True)
+        print("\n[STEP 1] Acquiring verified historical football records (ESPN baseline + dynamic LiveScore)...", flush=True)
         hist_configs = [
             ("ENG_PL", ["20240519", "20240513", "20240504", "20240427", "20240421", "20240414", "20240406", "20240403", "20240330", "20240317", "20240310", "20240302"]),
             ("BEL_PL", ["20240526", "20240519", "20240513", "20240505", "20240428", "20240424", "20240421", "20240414", "20240407", "20240401", "20240317", "20240310"]),
@@ -60,11 +60,7 @@ def run():
             ("ENG_CH", ["20240504", "20240427", "20240420", "20240413", "20240406", "20240401", "20240329", "20240316", "20240309", "20240305", "20240302"])
         ]
 
-        total_historical = 0
-        for l_code, dates in hist_configs:
-            count = dataset.fetch_historical_from_espn(l_code, dates)
-            total_historical += count
-            print(f"  • [{l_code}] Ingested {count} verified matches", flush=True)
+        total_historical = dataset.load_or_fetch_espn_historical(hist_configs)
 
         print("\n[STEP 1.1] Ingesting verified completed matches from LiveScore across all domestic & international tiers...", flush=True)
         past_dates = [(datetime.now(timezone.utc) - timedelta(days=i)).strftime("%Y%m%d") for i in range(1, 11)]

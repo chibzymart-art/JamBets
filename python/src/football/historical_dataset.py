@@ -247,6 +247,75 @@ class HistoricalDatasetBuilder:
 
         return added_count
 
+    def load_or_fetch_espn_historical(
+        self,
+        hist_configs: List[Tuple[str, List[str]]],
+        cache_path: Optional[str] = None
+    ) -> int:
+        """
+        Loads baseline historical matches from disk cache if present;
+        otherwise queries ESPN API and saves to cache for lightning-fast subsequent runs.
+        """
+        import json
+        import os
+        from pathlib import Path
+
+        if cache_path is None:
+            cache_path = str(Path(__file__).resolve().parent / "data" / "historical_espn_baseline.json")
+
+        if os.path.exists(cache_path):
+            try:
+                with open(cache_path, "r", encoding="utf-8") as f:
+                    cached_records = json.load(f)
+                added = 0
+                for record in cached_records:
+                    ok, _ = self.validate_and_add_match(record)
+                    if ok:
+                        added += 1
+                if added > 0:
+                    print(f"  [CACHE HIT] Loaded {added} historical baseline matches from {os.path.basename(cache_path)}", flush=True)
+                    return added
+            except Exception as e:
+                print(f"  [WARN] Cache read failed ({e}), falling back to ESPN live API fetch...", flush=True)
+
+        # Cache miss or invalid cache: fetch from ESPN
+        added = 0
+        for l_code, dates in hist_configs:
+            count = self.fetch_historical_from_espn(l_code, dates)
+            added += count
+            print(f"  • [{l_code}] Ingested {count} verified matches", flush=True)
+
+        # Save to disk cache for future executions
+        try:
+            os.makedirs(os.path.dirname(cache_path), exist_ok=True)
+            espn_matches = [
+                {
+                    "provider_event_id": m.provider_event_id,
+                    "source": m.source,
+                    "league_code": m.league_code,
+                    "season": m.season,
+                    "match_date": m.match_date.isoformat() if hasattr(m.match_date, "isoformat") else str(m.match_date),
+                    "scheduled_kickoff": m.scheduled_kickoff.isoformat() if hasattr(m.scheduled_kickoff, "isoformat") else str(m.scheduled_kickoff),
+                    "home_team_raw": m.home_team_raw,
+                    "away_team_raw": m.away_team_raw,
+                    "home_score": m.home_score,
+                    "away_score": m.away_score,
+                    "final_status": m.final_status,
+                    "venue": m.venue,
+                    "competition_stage": m.competition_stage,
+                    "stats": m.stats or {}
+                }
+                for m in self.matches
+                if m.source == "espn"
+            ]
+            with open(cache_path, "w", encoding="utf-8") as f:
+                json.dump(espn_matches, f, indent=2)
+            print(f"  [CACHE SAVED] Persisted {len(espn_matches)} historical baseline matches to {os.path.basename(cache_path)}", flush=True)
+        except Exception as e:
+            print(f"  [WARN] Failed to write historical cache: {e}", flush=True)
+
+        return added
+
     def fetch_historical_from_livescore(self, date_strings: List[str]) -> int:
         """
         Fetches genuine historical completed results from LiveScore API for date strings (YYYYMMDD).
