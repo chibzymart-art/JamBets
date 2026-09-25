@@ -190,7 +190,10 @@ function prunePrediction(p: any): any {
     if (meta.home_attack != null) prunedMeta.home_attack = meta.home_attack;
     if (meta.away_attack != null) prunedMeta.away_attack = meta.away_attack;
     if (meta.home_defense != null) prunedMeta.home_defense = meta.home_defense;
-    if (meta.away_defense != null) prunedMeta.away_defense = meta.away_defense;
+    if (meta.has_change != null) prunedMeta.has_change = meta.has_change;
+    if (meta.previous_prediction) prunedMeta.previous_prediction = meta.previous_prediction;
+    if (meta.change_reason) prunedMeta.change_reason = meta.change_reason;
+    if (meta.change_detected_at) prunedMeta.change_detected_at = meta.change_detected_at;
   }
 
   const fix = p.fixture || {};

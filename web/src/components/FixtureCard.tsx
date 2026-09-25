@@ -571,6 +571,24 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
 
   const tierConfig = getTierConfig(effectiveCategory);
 
+  // Parse Prediction Metadata for Change Tracking & Simulation Outlines
+  const meta: Record<string, any> = React.useMemo(() => {
+    if (!prediction?.metadata) return {};
+    if (typeof prediction.metadata === 'object' && prediction.metadata !== null) return prediction.metadata;
+    if (typeof prediction.metadata === 'string') {
+      try {
+        return JSON.parse(prediction.metadata);
+      } catch {
+        return {};
+      }
+    }
+    return {};
+  }, [prediction?.metadata]);
+
+  const hasNewChange = Boolean(meta.has_change);
+  const previousPrediction = meta.previous_prediction;
+  const changeReason = meta.change_reason;
+
   // Parse Secondary Predictions
   const secondaryList: SecondaryPrediction[] = React.useMemo(() => {
     if (!prediction?.secondary_predictions) return [];
@@ -926,6 +944,28 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
               <div className="key-pick-badge">
                 <span className="key-pick-spark">✨</span>
                 <span>KEY 250,000 SIM PICK</span>
+                {hasNewChange && (
+                  <span
+                    className="badge-new-change"
+                    style={{
+                      marginLeft: 6,
+                      padding: '2px 8px',
+                      background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+                      color: '#ffffff',
+                      borderRadius: 4,
+                      fontSize: 10,
+                      fontWeight: 900,
+                      letterSpacing: '0.04em',
+                      boxShadow: '0 2px 5px rgba(217, 119, 6, 0.4)',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 3
+                    }}
+                    title="Model recalibrated this pick with fresh squad news and live market drift"
+                  >
+                    ⚡ NEW CHANGE
+                  </span>
+                )}
                 {!isNoBanker && (
                   <button
                     type="button"
@@ -1036,6 +1076,59 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
                   className="sniper-primary-card"
                   style={{ borderColor: 'var(--tier-no-banker-border)', background: 'var(--tier-no-banker-bg)' }}
                 >
+                  {hasNewChange && previousPrediction && (
+                    <div
+                      className="recalibration-transparency-box"
+                      style={{
+                        margin: '-4px -4px 14px -4px',
+                        padding: '12px 14px',
+                        background: 'linear-gradient(135deg, rgba(254, 243, 199, 0.75), rgba(253, 230, 138, 0.45))',
+                        border: '1px solid #fcd34d',
+                        borderRadius: 8
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 900, color: '#b45309', letterSpacing: '0.04em' }}>
+                          ⚡ NEW CHANGE • RECALIBRATED FOR FULL TRANSPARENCY
+                        </span>
+                        <span style={{ fontSize: 10, color: '#92400e', fontWeight: 700 }}>
+                          Fresh Simulation Update
+                        </span>
+                      </div>
+                      {changeReason && (
+                        <div style={{ fontSize: 11, color: '#78350f', marginBottom: 10, lineHeight: 1.45, fontWeight: 500 }}>
+                          <strong>Update Rationale:</strong> {changeReason}
+                        </div>
+                      )}
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                        {/* Old / Previous Prediction */}
+                        <div style={{ padding: '8px 12px', background: '#ffffff', borderRadius: 6, border: '1px dashed #cbd5e1' }}>
+                          <div style={{ fontSize: 10, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
+                            Previous Prediction
+                          </div>
+                          <div style={{ fontSize: 13, fontWeight: 800, color: '#334155' }}>
+                            {formatMarketName(previousPrediction.market)} • {formatPredictionOutcome(previousPrediction.prediction)}
+                          </div>
+                          <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', marginTop: 2 }}>
+                            {(previousPrediction.probability * 100).toFixed(1)}% Probability
+                          </div>
+                        </div>
+                        {/* New / Current Recalibrated Prediction */}
+                        <div style={{ padding: '8px 12px', background: '#fef2f2', borderRadius: 6, border: '1px solid #fca5a5' }}>
+                          <div style={{ fontSize: 10, fontWeight: 800, color: '#b91c1c', textTransform: 'uppercase', marginBottom: 3 }}>
+                            Current Status (Active)
+                          </div>
+                          <div style={{ fontSize: 13, fontWeight: 900, color: '#991b1b' }}>
+                            🛡 VOLATILE TOSS-UP (PASS)
+                          </div>
+                          <div style={{ fontSize: 11, fontWeight: 800, color: '#b91c1c', marginTop: 2 }}>
+                            Anti-Loss Guard
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   <div className="sniper-primary-badge-row">
                     <span className="sniper-primary-title" style={{ color: 'var(--tier-no-banker-text)' }}>
                       🛡 VOLATILE TOSS-UP — ANTI-LOSS PROTECTION
@@ -1071,6 +1164,59 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
                 </div>
               ) : (
                 <div className="sniper-primary-card">
+                  {hasNewChange && previousPrediction && (
+                    <div
+                      className="recalibration-transparency-box"
+                      style={{
+                        margin: '-4px -4px 14px -4px',
+                        padding: '12px 14px',
+                        background: 'linear-gradient(135deg, rgba(254, 243, 199, 0.75), rgba(253, 230, 138, 0.45))',
+                        border: '1px solid #fcd34d',
+                        borderRadius: 8
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 900, color: '#b45309', letterSpacing: '0.04em' }}>
+                          ⚡ NEW CHANGE • RECALIBRATED FOR FULL TRANSPARENCY
+                        </span>
+                        <span style={{ fontSize: 10, color: '#92400e', fontWeight: 700 }}>
+                          Fresh Simulation Update
+                        </span>
+                      </div>
+                      {changeReason && (
+                        <div style={{ fontSize: 11, color: '#78350f', marginBottom: 10, lineHeight: 1.45, fontWeight: 500 }}>
+                          <strong>Update Rationale:</strong> {changeReason}
+                        </div>
+                      )}
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                        {/* Old / Previous Prediction */}
+                        <div style={{ padding: '8px 12px', background: '#ffffff', borderRadius: 6, border: '1px dashed #cbd5e1' }}>
+                          <div style={{ fontSize: 10, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 3 }}>
+                            Previous Prediction
+                          </div>
+                          <div style={{ fontSize: 13, fontWeight: 800, color: '#334155' }}>
+                            {formatMarketName(previousPrediction.market)} • {formatPredictionOutcome(previousPrediction.prediction)}
+                          </div>
+                          <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', marginTop: 2 }}>
+                            {(previousPrediction.probability * 100).toFixed(1)}% Probability
+                          </div>
+                        </div>
+                        {/* New / Current Recalibrated Prediction */}
+                        <div style={{ padding: '8px 12px', background: '#ecfdf5', borderRadius: 6, border: '1px solid #10b981' }}>
+                          <div style={{ fontSize: 10, fontWeight: 800, color: '#059669', textTransform: 'uppercase', marginBottom: 3 }}>
+                            Current Prediction (Active)
+                          </div>
+                          <div style={{ fontSize: 13, fontWeight: 900, color: '#065f46' }}>
+                            {formatMarketName(prediction.market)} • {formatPredictionOutcome(prediction.prediction)}
+                          </div>
+                          <div style={{ fontSize: 11, fontWeight: 800, color: '#059669', marginTop: 2 }}>
+                            {probPct}% Probability
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   <div className="sniper-primary-badge-row">
                     <span className="sniper-primary-title">
                       🎯 PRIMARY PREDICTION (TOP BANKER)

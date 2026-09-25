@@ -186,7 +186,10 @@ def run():
     lock_window_iso = (now_utc + timedelta(hours=48)).isoformat()
     locked_fixture_ids = set()
     try:
-        existing_preds_raw = supabase.get("football_predictions", {"select": "fixture_id,market,prediction,settlement_status,target_kickoff_at", "limit": "2000"})
+        existing_preds_raw = supabase.get("football_predictions", {
+            "select": "fixture_id,market,prediction,probability,confidence_category,created_at,updated_at,metadata,settlement_status,target_kickoff_at",
+            "limit": "2000"
+        })
         existing_preds_map = {p["fixture_id"]: p for p in existing_preds_raw if "fixture_id" in p}
         for p in existing_preds_raw:
             if p.get("settlement_status") in ("won", "lost", "void"):
@@ -208,15 +211,12 @@ def run():
 
     forward_fixtures = sorted(forward_fixtures, key=fixture_priority)
 
-    # Publication Lock: strictly filter for unpredicted fixtures unless --force or --force-repredict-all is passed
-    force_run = "--force" in sys.argv or "--force-repredict-all" in sys.argv
-    if not force_run:
-        unpredicted_fixtures = [f for f in forward_fixtures if f.get("id") not in existing_preds_map]
-        print(f"  • Publication Lock Active: {len(forward_fixtures) - len(unpredicted_fixtures)} already published fixtures locked. {len(unpredicted_fixtures)} unpredicted fixtures to process.", flush=True)
-        fixtures_to_process = unpredicted_fixtures
-    else:
-        fixtures_to_process = [f for f in forward_fixtures if f.get("id") not in locked_fixture_ids]
-        print(f"  • Force repredict active: evaluating {len(fixtures_to_process)} forward fixtures (strictly preserving {len(locked_fixture_ids)} locked 48h/settled predictions)", flush=True)
+    # 48-Hour Immutability Lock & Forward Window Change-Tracking:
+    # 1. Matches with kickoff <= now + 48h (or settled) are strictly immutable.
+    # 2. Forward matches beyond 48h (Days 2, 3, 4) are evaluated for new data (squad news, odds drift).
+    fixtures_to_process = [f for f in forward_fixtures if f.get("id") not in locked_fixture_ids]
+    print(f"  • Immutability Lock Active: {len(locked_fixture_ids)} fixtures within 48h/settled strictly locked.", flush=True)
+    print(f"  • Evaluating {len(fixtures_to_process)} forward fixtures across rolling 5-day horizon for initial prediction or change re-calibration.", flush=True)
 
     # If argument provided, allow limiting for tests, otherwise drain the eligible forward window
     drain_all = True

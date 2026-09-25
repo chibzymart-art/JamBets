@@ -106,28 +106,34 @@ class PredictionPipeline:
             kickoff_utc = kickoff_utc.replace(tzinfo=timezone.utc)
 
         # -------------------------------------------------------------
-        # 0. Publication Lock: Freeze already published predictions
+        # 0. 48-Hour Immutability Lock (Current Day + 1 Day strictly immutable)
         # -------------------------------------------------------------
-        if not force_repredict and fixture_id:
+        now_utc = datetime.now(timezone.utc)
+        lock_window_utc = now_utc + timedelta(hours=48)
+        is_within_48h_lock = (kickoff_utc <= lock_window_utc)
+
+        existing_p = None
+        if fixture_id:
             try:
                 existing_p = self.supabase.get("football_predictions", {
                     "fixture_id": f"eq.{fixture_id}",
                     "publication_status": "eq.published",
-                    "select": "id,market,prediction,probability,confidence_category,secondary_predictions,publication_status"
+                    "select": "id,market,prediction,probability,confidence_category,secondary_predictions,publication_status,metadata,created_at,updated_at"
                 })
-                if existing_p:
-                    print(f"    [PUBLICATION LOCKED] Fixture {canonical_key} ({fixture_id}) already published. Preserving immutable record.")
-                    p = existing_p[0]
-                    return FixturePredictionResult(
-                        fixture_id=fixture_id,
-                        canonical_key=canonical_key,
-                        status="PUBLISHED",
-                        primary_prediction=None,
-                        secondary_predictions=p.get("secondary_predictions") or [],
-                        persisted_predictions_count=0
-                    )
-            except Exception as e_lock:
-                pass
+            except Exception:
+                existing_p = None
+
+        if not force_repredict and is_within_48h_lock and existing_p:
+            print(f"    [48H IMMUTABLE LOCK] Fixture {canonical_key} ({fixture_id}) within 48h ({kickoff_utc.isoformat()}). Preserving locked prediction.")
+            p = existing_p[0]
+            return FixturePredictionResult(
+                fixture_id=fixture_id,
+                canonical_key=canonical_key,
+                status="PUBLISHED",
+                primary_prediction=None,
+                secondary_predictions=p.get("secondary_predictions") or [],
+                persisted_predictions_count=0
+            )
 
         # -------------------------------------------------------------
         # 1. Feature Engineering with Zero-Hallucination Gate
@@ -430,6 +436,54 @@ class PredictionPipeline:
 
                 # Upsert single authoritative prediction row
                 final_prob = float(primary.combined_probability if primary.combined_probability is not None else primary.raw_probability)
+
+                # Smart Change Detection for Non-Locked Horizon Days (Days 2, 3, 4)
+                has_change = False
+                previous_pred_data = None
+                change_reason = None
+
+                if existing_p and len(existing_p) > 0:
+                    prev_row = existing_p[0]
+                    prev_market = prev_row.get("market")
+                    prev_outcome = prev_row.get("prediction")
+                    prev_prob = float(prev_row.get("probability") or 0.0)
+                    prev_conf = prev_row.get("confidence_category")
+                    prev_meta = prev_row.get("metadata") or {}
+                    if isinstance(prev_meta, str):
+                        try:
+                            import json
+                            prev_meta = json.loads(prev_meta)
+                        except Exception:
+                            prev_meta = {}
+
+                    market_diff = (prev_market != primary.market_name)
+                    outcome_diff = (prev_outcome != primary.outcome)
+                    prob_delta = abs(final_prob - prev_prob)
+                    prob_diff = (prob_delta >= 0.05)  # 5% probability swing
+
+                    if market_diff or outcome_diff or prob_diff:
+                        has_change = True
+                        reasons = []
+                        if market_diff or outcome_diff:
+                            reasons.append(f"Model selection recalibrated from {prev_market} ({prev_outcome}) to {primary.market_name} ({primary.outcome})")
+                        if prob_diff:
+                            direction = "+" if final_prob > prev_prob else ""
+                            reasons.append(f"Probability shifted from {prev_prob*100:.1f}% to {final_prob*100:.1f}% ({direction}{(final_prob - prev_prob)*100:.1f}%) based on fresh squad and market odds")
+                        change_reason = " • ".join(reasons)
+                        previous_pred_data = {
+                            "market": prev_market,
+                            "prediction": prev_outcome,
+                            "probability": prev_prob,
+                            "confidence_category": prev_conf,
+                            "recorded_at": prev_row.get("created_at") or prev_row.get("updated_at") or now_utc.isoformat()
+                        }
+                        print(f"    ⚡ [NEW CHANGE DETECTED] {change_reason}", flush=True)
+                    elif prev_meta.get("has_change"):
+                        # Preserve existing change flag and previous prediction record if already flagged
+                        has_change = True
+                        previous_pred_data = prev_meta.get("previous_prediction")
+                        change_reason = prev_meta.get("change_reason")
+
                 pred_payload = {
                     "fixture_id": fixture_id,
                     "simulation_id": sim_id,
@@ -477,13 +531,16 @@ class PredictionPipeline:
                         "calibrated_probability": market_decision.calibrated_probability,
                         "rejection_reason": market_decision.rejection_reason,
                         "feature_signature": getattr(features, "feature_signature", ""),
+                        "has_change": has_change,
+                        "previous_prediction": previous_pred_data,
+                        "change_reason": change_reason,
+                        "change_detected_at": now_utc.isoformat() if has_change else None,
                         "poisson_parameters": sim_res.poisson_parameters,
                         "simulation_outlines": sim_res.simulation_outlines,
                         "ai_summary": ai_summary_text
                     }
                 }
                 # Check if prediction already exists for this fixture_id
-                existing_p = self.supabase.get("football_predictions", {"fixture_id": f"eq.{fixture_id}", "select": "id"})
                 if existing_p:
                     self.supabase.patch("football_predictions", pred_payload, {"fixture_id": f"eq.{fixture_id}"})
                 else:
