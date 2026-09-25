@@ -1,9 +1,9 @@
-name: JamBets Automated Prediction Engine (Daily)
+name: JamBets Automated Prediction Engine (Every 2 Days)
 
 on:
   schedule:
-    # Daily at Midnight WAT (23:00 UTC)
-    - cron: '0 23 * * *'
+    # Run every 2 days at Midnight WAT (23:00 UTC)
+    - cron: '0 23 */2 * *'
   workflow_dispatch:
 
 concurrency:
@@ -12,9 +12,19 @@ concurrency:
 
 jobs:
   predict:
-    name: Run Daily Prediction Pipelines
+    name: ${{ matrix.engine.name }}
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        engine:
+          - name: "Core Football Prediction Engine"
+            command: "python -m python.src.run_predictions"
+          - name: "Goals Specialist Engine"
+            command: "python -m python.src.goals.run_goals_cycle --predict-only"
+          - name: "Decoupled Specialists Engine"
+            command: "python -m python.src.engines.run_all_specialists --predict-only"
 
     steps:
       - name: Checkout Repository
@@ -32,19 +42,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r python/requirements.txt
 
-      - name: Execute Core Football Prediction Pipeline
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-          ALERT_EMAIL_SENDER: ${{ secrets.ALERT_EMAIL_SENDER }}
-          ALERT_EMAIL_PASSWORD: ${{ secrets.ALERT_EMAIL_PASSWORD }}
-          ALERT_EMAIL_RECIPIENTS: ${{ secrets.ALERT_EMAIL_RECIPIENTS }}
-        run: |
-          echo "=== RUNNING CORE FOOTBALL PREDICTION PIPELINE (250K SIMS) ==="
-          python -m python.src.run_predictions
-
-      - name: Execute Goals Specialist Prediction Pipeline
+      - name: Execute Prediction Engine
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
@@ -54,20 +52,8 @@ jobs:
           ALERT_EMAIL_PASSWORD: ${{ secrets.ALERT_EMAIL_PASSWORD }}
           ALERT_EMAIL_RECIPIENTS: ${{ secrets.ALERT_EMAIL_RECIPIENTS }}
         run: |
-          echo "=== RUNNING GOALS SPECIALIST PREDICTION ENGINE ==="
-          python -m python.src.goals.run_goals_cycle --predict-only
-
-      - name: Execute Decoupled Specialist Prediction Engines
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-          ALERT_EMAIL_SENDER: ${{ secrets.ALERT_EMAIL_SENDER }}
-          ALERT_EMAIL_PASSWORD: ${{ secrets.ALERT_EMAIL_PASSWORD }}
-          ALERT_EMAIL_RECIPIENTS: ${{ secrets.ALERT_EMAIL_RECIPIENTS }}
-        run: |
-          echo "=== RUNNING DECOUPLED SPECIALIST PREDICTION ENGINES (Home, Away, Draw, Corners) ==="
-          python -m python.src.engines.run_all_specialists --predict-only
+          echo "=== RUNNING ${{ matrix.engine.name }} ==="
+          ${{ matrix.engine.command }}
 
       - name: Dispatch Prediction Failure Email Alert
         if: failure()
@@ -76,4 +62,5 @@ jobs:
           ALERT_EMAIL_PASSWORD: ${{ secrets.ALERT_EMAIL_PASSWORD }}
           ALERT_EMAIL_RECIPIENTS: ${{ secrets.ALERT_EMAIL_RECIPIENTS }}
         run: |
-          python -c "from python.src.alerts.email_notifier import send_pipeline_failure_alert; send_pipeline_failure_alert('Prediction Engine (GitHub Actions)', Exception('GitHub Actions workflow step failed'), {'run_id': '${{ github.run_id }}', 'run_url': 'https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}'})"
+          python -c "from python.src.alerts.email_notifier import send_pipeline_failure_alert; send_pipeline_failure_alert('${{ matrix.engine.name }} (GitHub Actions)', Exception('Workflow matrix job failed'), {'run_id': '${{ github.run_id }}', 'run_url': 'https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}'})"
+
