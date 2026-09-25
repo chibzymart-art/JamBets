@@ -14,7 +14,7 @@ Invariant: 100% isolated tennis engine. Persists exclusively to public.tennis_pr
 import math
 import logging
 from typing import Dict, Any, List, Optional, Tuple
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 from .db import TennisDbClient
 from .cpi_registry import CpiRegistry
@@ -104,22 +104,22 @@ class TennisPredictionEngine:
             {
                 "market": "match_winner",
                 "prediction": f"{player1['display_name']} Win",
-                "probability": sim_res.p1_win_prob
+                "probability": round(float(sim_res.p1_win_prob), 4)
             },
             {
                 "market": "first_set_winner",
                 "prediction": f"{player1['display_name']} 1st Set",
-                "probability": sim_res.first_set_p1_prob
+                "probability": round(float(sim_res.first_set_p1_prob), 4)
             },
             {
                 "market": "set_handicap",
                 "prediction": f"{player1['display_name']} -1.5 Sets",
-                "probability": sim_res.set_handicap_p1_minus_1_5
+                "probability": round(float(sim_res.set_handicap_p1_minus_1_5), 4)
             },
             {
                 "market": "total_games_over_under",
                 "prediction": f"Over 21.5 Games",
-                "probability": sim_res.total_games_over.get("21.5", 0.50)
+                "probability": round(float(sim_res.total_games_over.get("21.5", 0.50)), 4)
             }
         ]
 
@@ -269,26 +269,42 @@ class TennisPredictionEngine:
             f"Expected game margin of {abs(sim_res.expected_game_margin)} games across {sim_res.expected_total_games} total games."
         )
 
-    def generate_all_predictions(self, limit: int = 200) -> Dict[str, int]:
+    def generate_all_predictions(
+        self,
+        limit: int = 500,
+        fixtures: Optional[List[Dict[str, Any]]] = None,
+        dry_run: bool = False
+    ) -> Dict[str, Any]:
         """
-        Queries upcoming scheduled fixtures from Supabase and publishes fresh predictions.
+        Queries upcoming scheduled fixtures from Supabase (or uses provided fixtures)
+        and publishes fresh predictions.
         """
-        now_iso = datetime.now(timezone.utc).isoformat()
-        # Query scheduled fixtures
-        resp = self.db.client.get(
-            "/tennis_fixtures",
-            params={
-                "status": "eq.scheduled",
-                "select": "*,tournament:tennis_tournaments(*),player1:tennis_players!tennis_fixtures_player1_id_fkey(*),player2:tennis_players!tennis_fixtures_player2_id_fkey(*)",
-                "order": "target_kickoff_at.asc",
-                "limit": str(limit)
-            }
-        )
-        resp.raise_for_status()
-        fixtures = resp.json()
+        if fixtures is None:
+            # Query upcoming scheduled fixtures (exclude fixtures older than 30 minutes)
+            min_kickoff = (datetime.now(timezone.utc) - timedelta(minutes=30)).isoformat()
+            resp = self.db.client.get(
+                "/tennis_fixtures",
+                params={
+                    "status": "eq.scheduled",
+                    "target_kickoff_at": f"gte.{min_kickoff}",
+                    "select": "*,tournament:tennis_tournaments(*),player1:tennis_players!tennis_fixtures_player1_id_fkey(*),player2:tennis_players!tennis_fixtures_player2_id_fkey(*)",
+                    "order": "target_kickoff_at.asc",
+                    "limit": str(limit)
+                }
+            )
+            resp.raise_for_status()
+            fixtures = resp.json()
 
-        logger.info("Found %d scheduled tennis fixtures for prediction analysis", len(fixtures))
-        stats = {"evaluated": 0, "published": 0, "bangers": 0, "top_picks": 0, "no_safe_bankers": 0}
+        logger.info("Found %d scheduled tennis fixtures for prediction analysis (dry_run=%s)", len(fixtures), dry_run)
+        stats = {
+            "evaluated": 0,
+            "published": 0,
+            "bangers": 0,
+            "top_picks": 0,
+            "no_safe_bankers": 0,
+            "dry_run": dry_run,
+            "predictions": []
+        }
 
         for fix in fixtures:
             try:
@@ -305,9 +321,14 @@ class TennisPredictionEngine:
                 elif cat == "NO_SAFE_BANKER":
                     stats["no_safe_bankers"] += 1
 
-                # Save directly into public.tennis_predictions table
-                self.db.save_prediction(pred)
-                stats["published"] += 1
+                stats["predictions"].append(pred)
+
+                if not dry_run:
+                    # Save directly into public.tennis_predictions table
+                    self.db.save_prediction(pred)
+                    stats["published"] += 1
+                else:
+                    stats["published"] += 1
 
             except Exception as e:
                 logger.error("Failed to generate prediction for fixture %s: %s", fix.get("id"), e, exc_info=True)

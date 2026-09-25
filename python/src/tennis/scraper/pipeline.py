@@ -37,7 +37,7 @@ class TennisIngestionPipeline:
         self._tournament_cache: Dict[str, str] = {}  # name -> id
         self._player_cache: Dict[str, str] = {}  # canonical_name -> id
 
-    def sync_player_rankings(self, tours: List[str] = ["atp", "wta"]) -> int:
+    def sync_player_rankings(self, tours: List[str] = ["atp", "wta"], dry_run: bool = False) -> int:
         """
         Fetches live rankings and populates tennis_players with surface-specific ELOs.
         """
@@ -71,15 +71,19 @@ class TennisIngestionPipeline:
                     }
                 }
 
-                try:
-                    res = self.db.upsert_player(player_record)
-                    if res and "id" in res:
-                        self._player_cache[canonical] = res["id"]
-                        total_synced += 1
-                except Exception as e:
-                    logger.warning("Failed to upsert player %s: %s", canonical, e)
+                if not dry_run:
+                    try:
+                        res = self.db.upsert_player(player_record)
+                        if res and "id" in res:
+                            self._player_cache[canonical] = res["id"]
+                            total_synced += 1
+                    except Exception as e:
+                        logger.warning("Failed to upsert player %s: %s", canonical, e)
+                else:
+                    self._player_cache[canonical] = f"mock_{canonical}"
+                    total_synced += 1
 
-        logger.info("Successfully synchronized %d tennis players across ATP/WTA", total_synced)
+        logger.info("Successfully synchronized %d tennis players across ATP/WTA (dry_run=%s)", total_synced, dry_run)
         return total_synced
 
     def get_or_create_tournament(self, raw_name: str, tour: str = "ATP") -> str:
@@ -163,15 +167,22 @@ class TennisIngestionPipeline:
         self,
         tours: List[str] = ["atp", "wta"],
         date_str: Optional[str] = None,
-        days_ahead: int = 3,
-        strict_upcoming_only: bool = True
-    ) -> Dict[str, int]:
+        days_ahead: int = 4,
+        strict_upcoming_only: bool = True,
+        dry_run: bool = False
+    ) -> Dict[str, Any]:
         """
-        Pulls scoreboards strictly for current time to the next 3 days,
+        Pulls scoreboards strictly for current time to the next N days (default: 4 days),
         extracts matches, registers players and tournaments, and upserts fixtures into Supabase.
         Past concluded fixtures are strictly discarded.
         """
-        stats = {"fixtures_synced": 0, "completed_updated": 0, "tournaments_indexed": 0}
+        stats = {
+            "fixtures_synced": 0,
+            "completed_updated": 0,
+            "tournaments_indexed": 0,
+            "dry_run": dry_run,
+            "fixtures": []
+        }
 
         now_utc = datetime.now(timezone.utc)
         min_kickoff = now_utc - timedelta(minutes=30) if strict_upcoming_only else None
@@ -197,14 +208,55 @@ class TennisIngestionPipeline:
                 for f in fixtures:
                     try:
                         # 1. Resolve Tournament
-                        tournament_id = self.get_or_create_tournament(
-                            raw_name=f["raw_tournament_name"],
-                            tour=f["tour"]
-                        )
+                        profile = CpiRegistry.resolve_tournament(f["raw_tournament_name"], tour=f["tour"])
+                        tournament_record = {
+                            "name": profile.name,
+                            "tour": profile.tour,
+                            "category": profile.category,
+                            "surface": profile.surface,
+                            "court_pace_index": profile.court_pace_index,
+                            "city": profile.city,
+                            "country": profile.country,
+                        }
+                        if not dry_run:
+                            tournament_id = self.get_or_create_tournament(
+                                raw_name=f["raw_tournament_name"],
+                                tour=f["tour"]
+                            )
+                        else:
+                            tournament_id = f"mock_{self.scraper.slugify(profile.name)}"
 
                         # 2. Resolve Players
-                        p1_id = self.get_or_create_player(f["player1"])
-                        p2_id = self.get_or_create_player(f["player2"])
+                        p1_canonical = f["player1"]["canonical_name"]
+                        p2_canonical = f["player2"]["canonical_name"]
+                        p1_elos = TennisEloEngine.get_surface_elos(p1_canonical, f["player1"].get("rank"))
+                        p2_elos = TennisEloEngine.get_surface_elos(p2_canonical, f["player2"].get("rank"))
+
+                        player1_record = {
+                            "canonical_name": p1_canonical,
+                            "display_name": f["player1"]["display_name"],
+                            "country": f["player1"].get("country"),
+                            "hard_elo": p1_elos["hard_elo"],
+                            "clay_elo": p1_elos["clay_elo"],
+                            "grass_elo": p1_elos["grass_elo"],
+                            "indoor_elo": p1_elos["indoor_elo"],
+                        }
+                        player2_record = {
+                            "canonical_name": p2_canonical,
+                            "display_name": f["player2"]["display_name"],
+                            "country": f["player2"].get("country"),
+                            "hard_elo": p2_elos["hard_elo"],
+                            "clay_elo": p2_elos["clay_elo"],
+                            "grass_elo": p2_elos["grass_elo"],
+                            "indoor_elo": p2_elos["indoor_elo"],
+                        }
+
+                        if not dry_run:
+                            p1_id = self.get_or_create_player(f["player1"])
+                            p2_id = self.get_or_create_player(f["player2"])
+                        else:
+                            p1_id = f"mock_{p1_canonical}"
+                            p2_id = f"mock_{p2_canonical}"
 
                         winner_id = None
                         if f.get("winner_canonical") == f["player1"]["canonical_name"]:
@@ -214,13 +266,13 @@ class TennisIngestionPipeline:
 
                         retired_player_id = None
                         if f.get("was_retired"):
-                            # In retired matches, the loser is the retired player
                             if winner_id == p1_id:
                                 retired_player_id = p2_id
                             elif winner_id == p2_id:
                                 retired_player_id = p1_id
 
                         fixture_record = {
+                            "id": f.get("canonical_key"),
                             "canonical_key": f["canonical_key"],
                             "tournament_id": tournament_id,
                             "round": f["round"],
@@ -234,6 +286,9 @@ class TennisIngestionPipeline:
                             "set_scores": f["set_scores"],
                             "winner_id": winner_id,
                             "retired_player_id": retired_player_id,
+                            "tournament": tournament_record,
+                            "player1": player1_record,
+                            "player2": player2_record,
                             "metadata": {
                                 "venue": f.get("venue_name"),
                                 "espn_competition_id": f.get("espn_competition_id"),
@@ -243,7 +298,29 @@ class TennisIngestionPipeline:
                             }
                         }
 
-                        res = self.db.upsert_fixture(fixture_record)
+                        db_payload = {
+                            "canonical_key": f["canonical_key"],
+                            "tournament_id": tournament_id,
+                            "round": f["round"],
+                            "player1_id": p1_id,
+                            "player2_id": p2_id,
+                            "best_of_sets": f["best_of_sets"],
+                            "target_kickoff_at": f["target_kickoff_at"],
+                            "status": f["status"],
+                            "score_p1_sets": f["score_p1_sets"],
+                            "score_p2_sets": f["score_p2_sets"],
+                            "set_scores": f["set_scores"],
+                            "winner_id": winner_id,
+                            "retired_player_id": retired_player_id,
+                            "metadata": fixture_record["metadata"]
+                        }
+
+                        if not dry_run:
+                            res = self.db.upsert_fixture(db_payload)
+                            if res and "id" in res:
+                                fixture_record["id"] = res["id"]
+
+                        stats["fixtures"].append(fixture_record)
                         stats["fixtures_synced"] += 1
                         if f["status"] in ("finished", "retired", "walkover"):
                             stats["completed_updated"] += 1
@@ -251,7 +328,7 @@ class TennisIngestionPipeline:
                     except Exception as e:
                         logger.error("Failed to sync fixture %s: %s", f.get("canonical_key"), e)
 
-        logger.info("Pipeline sync complete: %s", stats)
+        logger.info("Pipeline sync complete: synced=%d, completed=%d (dry_run=%s)", stats["fixtures_synced"], stats["completed_updated"], dry_run)
         return stats
 
     def close(self):
