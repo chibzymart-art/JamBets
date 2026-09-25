@@ -7,6 +7,7 @@ Features:
 - Multi-source cross-validation of start times, quarter scores, and match lifecycle
 """
 
+import re
 import logging
 import httpx
 from datetime import datetime, timezone
@@ -49,8 +50,19 @@ class LivescoreBasketballScraper:
 
     def _match_league_code(self, stage_name: str, comp_name: str) -> Optional[str]:
         combined = f"{stage_name} {comp_name}".lower()
-        for code, cfg in LEAGUE_REGISTRY.items():
-            if cfg.livescore_keyword and cfg.livescore_keyword in combined:
+        # Sort leagues by keyword length descending so more specific keywords (e.g. "wnba") match before "nba"
+        sorted_leagues = sorted(
+            [(c, cfg) for c, cfg in LEAGUE_REGISTRY.items() if cfg.livescore_keyword],
+            key=lambda x: len(x[1].livescore_keyword or ""),
+            reverse=True,
+        )
+        for code, cfg in sorted_leagues:
+            kw = (cfg.livescore_keyword or "").lower()
+            if not kw:
+                continue
+            # Match using word boundaries so "nba" does not match within "wnba"
+            pattern = r'\b' + re.escape(kw) + r'\b'
+            if re.search(pattern, combined):
                 return code
         return None
 
@@ -79,6 +91,9 @@ class LivescoreBasketballScraper:
 
                     home_team = normalize_team_name(home_raw_name)
                     away_team = normalize_team_name(away_raw_name)
+
+                    if home_team.lower() in ("tbd", "to be decided", "unknown team") or away_team.lower() in ("tbd", "to be decided", "unknown team"):
+                        continue
 
                     # Scheduled datetime
                     esd = str(ev.get("Esd", ""))

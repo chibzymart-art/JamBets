@@ -209,6 +209,12 @@ class BasketballIngestionPipeline:
         finished_count = 0
 
         for key, fix in raw_fixtures.items():
+            home_raw = fix.get("home_team_name", "").strip().lower()
+            away_raw = fix.get("away_team_name", "").strip().lower()
+            if home_raw in ("tbd", "to be decided", "unknown team", "") or away_raw in ("tbd", "to be decided", "unknown team", ""):
+                logger.debug("Skipping placeholder/TBD fixture: %s vs %s", fix.get("home_team_name"), fix.get("away_team_name"))
+                continue
+
             l_code = fix["league_code"]
             league_id = self._league_cache.get(l_code)
             if not league_id:

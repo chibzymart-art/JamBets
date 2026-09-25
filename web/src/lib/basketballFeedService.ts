@@ -207,6 +207,58 @@ export async function fetchBasketballFeed(
       }
     }
 
+    // 1b. Cleanse & Deduplicate predictions (Filter TBD placeholders and collapse duplicate match entries)
+    const validPredictions = rawPredictions.filter((p) => {
+      const homeName = (p.fixture?.home_team?.canonical_name || '').toLowerCase().trim();
+      const awayName = (p.fixture?.away_team?.canonical_name || '').toLowerCase().trim();
+      const predText = (p.prediction || '').toLowerCase().trim();
+
+      // Filter placeholder / TBD fixtures
+      if (homeName === 'tbd' || awayName === 'tbd' || homeName === 'unknown team' || awayName === 'unknown team') {
+        return false;
+      }
+      if (predText.startsWith('tbd') || predText.includes('tbd to win')) {
+        return false;
+      }
+      return true;
+    });
+
+    // Deduplicate multiple cards for the exact same physical matchup (defense in depth)
+    const matchDedupeMap = new Map<string, BasketballPrediction>();
+    for (const p of validPredictions) {
+      const homeName = (p.fixture?.home_team?.canonical_name || '').toLowerCase().trim();
+      const awayName = (p.fixture?.away_team?.canonical_name || '').toLowerCase().trim();
+      const kickoffDate = (p.target_kickoff_at || p.fixture?.target_kickoff_at || '').substring(0, 10);
+      const matchKey = `${homeName}_vs_${awayName}_${kickoffDate}`;
+
+      if (!matchDedupeMap.has(matchKey)) {
+        matchDedupeMap.set(matchKey, p);
+      } else {
+        const existing = matchDedupeMap.get(matchKey)!;
+        const pSettled = (p.settlement_status || '').toLowerCase();
+        const exSettled = (existing.settlement_status || '').toLowerCase();
+        const pIsSettled = pSettled === 'won' || pSettled === 'lost' || p.fixture?.status === 'finished';
+        const exIsSettled = exSettled === 'won' || exSettled === 'lost' || existing.fixture?.status === 'finished';
+
+        // Prefer settled / finished fixture over pending / scheduled fixture
+        if (pIsSettled && !exIsSettled) {
+          matchDedupeMap.set(matchKey, p);
+        } else if (!pIsSettled && exIsSettled) {
+          // keep existing settled match
+        } else {
+          // If both have same settlement state, prefer WNBA league over NBA mistag, or higher probability
+          const pLeague = (p.fixture?.league?.code || '').toUpperCase();
+          const exLeague = (existing.fixture?.league?.code || '').toUpperCase();
+          if (pLeague === 'WNBA' && exLeague === 'NBA') {
+            matchDedupeMap.set(matchKey, p);
+          } else if ((p.probability || 0) > (existing.probability || 0)) {
+            matchDedupeMap.set(matchKey, p);
+          }
+        }
+      }
+    }
+    rawPredictions = Array.from(matchDedupeMap.values());
+
     // 2. Filter predictions by options
     const filteredPredictions = rawPredictions.filter((p) => {
       if (league && league !== 'all') {
@@ -251,13 +303,14 @@ export async function fetchBasketballFeed(
       };
     });
 
-    // 4. Calculate Scorecard & Telemetry Stats
+    // 4. Calculate Scorecard & Telemetry Stats (Single source of truth, avoiding double-counting)
     let bangers = 0;
     let topPicks = 0;
     let highConf = 0;
     let settledWon = 0;
     let settledLost = 0;
     let settledVoid = 0;
+    const accountedPredIds = new Set<string>();
 
     for (const p of rawPredictions) {
       const c = (p.confidence_category || '').toUpperCase();
@@ -266,16 +319,22 @@ export async function fetchBasketballFeed(
       else if (c === 'HIGH CONFIDENCE' || c === 'HIGH_CONFIDENCE') highConf++;
 
       const st = (p.settlement_status || 'pending').toLowerCase();
-      if (st === 'won') settledWon++;
-      else if (st === 'lost') settledLost++;
-      else if (st === 'void') settledVoid++;
+      if (st === 'won' || st === 'lost' || st === 'void') {
+        accountedPredIds.add(p.id);
+        if (st === 'won') settledWon++;
+        else if (st === 'lost') settledLost++;
+        else if (st === 'void') settledVoid++;
+      }
     }
 
     for (const s of rawSettlements) {
-      const st = (s.status || '').toLowerCase();
-      if (st === 'won') settledWon++;
-      else if (st === 'lost') settledLost++;
-      else if (st === 'void') settledVoid++;
+      if (s.prediction_id && !accountedPredIds.has(s.prediction_id)) {
+        accountedPredIds.add(s.prediction_id);
+        const st = (s.status || '').toLowerCase();
+        if (st === 'won') settledWon++;
+        else if (st === 'lost') settledLost++;
+        else if (st === 'void') settledVoid++;
+      }
     }
 
     const decisive = settledWon + settledLost;

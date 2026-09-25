@@ -96,6 +96,10 @@ class EspnBasketballScraper:
                 home_team = normalize_team_name(home_raw_name)
                 away_team = normalize_team_name(away_raw_name)
 
+                # Skip TBD / placeholder fixtures
+                if home_team.lower() in ("tbd", "to be decided", "unknown team") or away_team.lower() in ("tbd", "to be decided", "unknown team"):
+                    continue
+
                 canonical_key = generate_canonical_key(league_code, home_team, away_team, kickoff_dt)
 
                 # Status mapping
