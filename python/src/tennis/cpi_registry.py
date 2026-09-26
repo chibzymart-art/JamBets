@@ -173,6 +173,102 @@ KNOWN_TOURNAMENT_PROFILES = {
     "wta finals": TournamentProfile(
         name="WTA Finals", tour="WTA", category="1000", surface="hard_indoor",
         court_pace_index=39.0, altitude_m=612, city="Riyadh", country="Saudi Arabia"
+    ),
+
+    # Team Cups & International Competitions
+    "laver cup": TournamentProfile(
+        name="Laver Cup", tour="TEAM", category="CUP", surface="hard_indoor",
+        court_pace_index=41.0, altitude_m=200, city="Berlin", country="Germany"
+    ),
+    "davis cup": TournamentProfile(
+        name="Davis Cup", tour="TEAM", category="CUP", surface="hard_indoor",
+        court_pace_index=40.0, altitude_m=100
+    ),
+    "billie jean king": TournamentProfile(
+        name="Billie Jean King Cup", tour="TEAM", category="CUP", surface="hard_indoor",
+        court_pace_index=39.0, altitude_m=100
+    ),
+
+    # ATP Challenger Tour & WTA 125s
+    "buenos aires": TournamentProfile(
+        name="Buenos Aires Challenger", tour="ATP", category="CH", surface="clay",
+        court_pace_index=23.5, altitude_m=25, city="Buenos Aires", country="Argentina"
+    ),
+    "san diego": TournamentProfile(
+        name="San Diego Open", tour="ATP", category="CH", surface="hard_outdoor",
+        court_pace_index=36.5, altitude_m=20, city="San Diego", country="USA"
+    ),
+    "st. tropez": TournamentProfile(
+        name="Saint-Tropez Open", tour="ATP", category="CH", surface="hard_outdoor",
+        court_pace_index=37.0, altitude_m=15, city="Saint-Tropez", country="France"
+    ),
+    "saint-tropez": TournamentProfile(
+        name="Saint-Tropez Open", tour="ATP", category="CH", surface="hard_outdoor",
+        court_pace_index=37.0, altitude_m=15, city="Saint-Tropez", country="France"
+    ),
+    "genoa": TournamentProfile(
+        name="Genoa Open Challenger", tour="ATP", category="CH", surface="clay",
+        court_pace_index=24.0, altitude_m=19, city="Genoa", country="Italy"
+    ),
+    "plovdiv": TournamentProfile(
+        name="Plovdiv Open", tour="ATP", category="CH", surface="clay",
+        court_pace_index=25.0, altitude_m=160, city="Plovdiv", country="Bulgaria"
+    ),
+    "sibiu": TournamentProfile(
+        name="Sibiu Open", tour="ATP", category="CH", surface="clay",
+        court_pace_index=24.5, altitude_m=430, city="Sibiu", country="Romania"
+    ),
+    "bad waltersdorf": TournamentProfile(
+        name="Bad Waltersdorf Trophy", tour="ATP", category="CH", surface="clay",
+        court_pace_index=25.0, altitude_m=290, city="Bad Waltersdorf", country="Austria"
+    ),
+    "tiburon": TournamentProfile(
+        name="Tiburon Challenger", tour="ATP", category="CH", surface="hard_outdoor",
+        court_pace_index=37.5, altitude_m=5, city="Tiburon", country="USA"
+    ),
+    "alicante": TournamentProfile(
+        name="Alicante Ferrero Challenger", tour="ATP", category="CH", surface="hard_outdoor",
+        court_pace_index=38.0, altitude_m=80, city="Alicante", country="Spain"
+    ),
+    "almaty": TournamentProfile(
+        name="Almaty Open", tour="ATP", category="250", surface="hard_indoor",
+        court_pace_index=41.5, altitude_m=780, city="Almaty", country="Kazakhstan"
+    ),
+    "stockholm": TournamentProfile(
+        name="BNP Paribas Nordic Open", tour="ATP", category="250", surface="hard_indoor",
+        court_pace_index=42.0, altitude_m=28, city="Stockholm", country="Sweden"
+    ),
+    "antwerp": TournamentProfile(
+        name="European Open", tour="ATP", category="250", surface="hard_indoor",
+        court_pace_index=41.5, altitude_m=10, city="Antwerp", country="Belgium"
+    ),
+    "basel": TournamentProfile(
+        name="Swiss Indoors Basel", tour="ATP", category="500", surface="hard_indoor",
+        court_pace_index=43.0, altitude_m=260, city="Basel", country="Switzerland"
+    ),
+    "vienna": TournamentProfile(
+        name="Erste Bank Open", tour="ATP", category="500", surface="hard_indoor",
+        court_pace_index=42.5, altitude_m=170, city="Vienna", country="Austria"
+    ),
+    "wuhan": TournamentProfile(
+        name="Wuhan Open", tour="WTA", category="1000", surface="hard_outdoor",
+        court_pace_index=38.5, altitude_m=30, city="Wuhan", country="China"
+    ),
+    "ningbo": TournamentProfile(
+        name="Ningbo Open", tour="WTA", category="500", surface="hard_outdoor",
+        court_pace_index=37.5, altitude_m=20, city="Ningbo", country="China"
+    ),
+    "guangzhou": TournamentProfile(
+        name="Guangzhou Open", tour="WTA", category="250", surface="hard_outdoor",
+        court_pace_index=38.0, altitude_m=21, city="Guangzhou", country="China"
+    ),
+    "jiujiang": TournamentProfile(
+        name="Jiangxi Open", tour="WTA", category="250", surface="hard_outdoor",
+        court_pace_index=37.5, altitude_m=32, city="Jiujiang", country="China"
+    ),
+    "hong kong": TournamentProfile(
+        name="Hong Kong Tennis Open", tour="WTA", category="250", surface="hard_outdoor",
+        court_pace_index=38.5, altitude_m=10, city="Hong Kong", country="Hong Kong"
     )
 }
 
@@ -183,18 +279,19 @@ class CpiRegistry:
     """
 
     @classmethod
-    def resolve_tournament(cls, raw_name: str, tour: str = "ATP") -> TournamentProfile:
+    def resolve_tournament(cls, raw_name: str, tour: str = "ATP", category: Optional[str] = None) -> TournamentProfile:
         norm = raw_name.lower().strip()
 
         # 1. Exact or substring match in profile database
         for key, profile in KNOWN_TOURNAMENT_PROFILES.items():
             if key in norm or norm in key:
                 # Override tour if explicitly provided and not Grand Slam
-                effective_tour = profile.tour if profile.tour == "GRAND_SLAM" else tour
+                effective_tour = profile.tour if profile.tour in ("GRAND_SLAM", "TEAM") else tour
+                effective_category = category or profile.category
                 return TournamentProfile(
                     name=profile.name,
                     tour=effective_tour,
-                    category=profile.category,
+                    category=effective_category,
                     surface=profile.surface,
                     court_pace_index=profile.court_pace_index,
                     altitude_m=profile.altitude_m,
@@ -218,19 +315,21 @@ class CpiRegistry:
             cpi = 41.0
 
         # Heuristic Category
-        category = "250"
-        if "1000" in norm or "masters" in norm:
-            category = "1000"
-        elif "500" in norm:
-            category = "500"
-        elif "challenger" in norm or "open" in norm and ("ch" in norm or "itf" in norm):
-            category = "CH"
+        resolved_category = category or "250"
+        if not category:
+            if "1000" in norm or "masters" in norm:
+                resolved_category = "1000"
+            elif "500" in norm:
+                resolved_category = "500"
+            elif "challenger" in norm or ("ch" in norm or "itf" in norm):
+                resolved_category = "CH"
 
         return TournamentProfile(
             name=raw_name.strip(),
             tour=tour,
-            category=category,
+            category=resolved_category,
             surface=surface,
             court_pace_index=cpi,
             altitude_m=altitude
         )
+

@@ -28,6 +28,7 @@ from datetime import datetime, timezone, timedelta
 
 from .db import TennisDbClient
 from .scraper.espn_feed import EspnTennisFeedScraper, TennisFixtureMatcher
+from .scraper.livescore_tennis import LiveScoreTennisScraper
 
 logger = logging.getLogger("tennis.settlement")
 
@@ -317,15 +318,17 @@ class TennisSettlementEngine:
         target_tours = list(tours) if tours else ["atp", "wta"]
 
         logger.info(
-            "Scraping ESPN scoreboards across %d dates %s for tours %s",
+            "Scraping multi-source scoreboards across %d dates %s for tours %s",
             len(target_dates), sorted(target_dates), target_tours
         )
 
-        # 3. Scrape ESPN scoreboards for these target dates
+        # 3. Scrape ESPN & LiveScore scoreboards for these target dates
         feed_scraper = scraper or EspnTennisFeedScraper()
+        ls_scraper = LiveScoreTennisScraper()
         espn_comps: List[Dict[str, Any]] = []
 
         for d in sorted(target_dates):
+            # ESPN competitions
             for tour in target_tours:
                 try:
                     raw_data = feed_scraper.fetch_scoreboard(tour=tour, date_str=d)
@@ -335,7 +338,21 @@ class TennisSettlementEngine:
                 except Exception as e:
                     logger.warning("Error fetching ESPN %s scoreboard for %s: %s", tour.upper(), d, e)
 
-        logger.info("Acquired %d singles competitions from ESPN live feed for matching.", len(espn_comps))
+            # LiveScore competitions (Challengers, Cups, WTA 125, etc.)
+            try:
+                raw_ls = ls_scraper.fetch_scoreboard(tour="all", date_str=d)
+                if raw_ls:
+                    ls_comps = ls_scraper.parse_settlement_results_from_scoreboard(raw_ls, tour="all")
+                    espn_comps.extend(ls_comps)
+            except Exception as e:
+                logger.warning("Error fetching LiveScore scoreboard for %s: %s", d, e)
+
+        try:
+            ls_scraper.close()
+        except Exception:
+            pass
+
+        logger.info("Acquired %d singles competitions from live feeds for matching.", len(espn_comps))
 
         # 4. Precision Match & Settle
         for item in pending_items:

@@ -150,7 +150,7 @@ class TennisPredictionEngine:
             "fixture_id": fixture_id,
             "market": primary_market,
             "prediction": prediction_label,
-            "probability": round(probability, 4),
+            "probability": round(float(probability), 4),
             "confidence_category": conf_tier,
             "secondary_predictions": secondary_predictions,
             "simulations_count": self.simulations_count,
