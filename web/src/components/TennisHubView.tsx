@@ -38,6 +38,7 @@ export const TennisHubView: React.FC<TennisHubViewProps> = ({
   onBackToFootball,
 }) => {
   const [selectedTournament, setSelectedTournament] = useState<string>('all');
+  const [selectedTour, setSelectedTour] = useState<'all' | 'ATP' | 'WTA' | 'CH' | 'CUP'>('all');
   const [selectedDate, setSelectedDate] = useState<string>(() => getDateDetailsByOffset(0).iso);
   const [selectedTier, setSelectedTier] = useState<string>('all');
   const [settlementFilter, setSettlementFilter] = useState<'all' | 'pending' | 'won' | 'lost' | 'void'>('all');
@@ -88,7 +89,6 @@ export const TennisHubView: React.FC<TennisHubViewProps> = ({
 
   // Dynamic filter options & predictions list
   const allPredictions = feedData?.predictions || [];
-  const tournaments = feedData?.tournaments || [];
 
   // Dynamic Lagos (WAT / UTC+1) relative calendar dates
   const dynamicDateTabs = useMemo(() => {
@@ -187,8 +187,84 @@ export const TennisHubView: React.FC<TennisHubViewProps> = ({
     });
   }, [allPredictions, selectedDate, dynamicDateTabs.todayIso]);
 
+  // Dynamic competition category match counts for selected date horizon
+  const competitionCounts = useMemo(() => {
+    let atp = 0;
+    let wta = 0;
+    let ch = 0;
+    let cup = 0;
+
+    dateScopedPredictions.forEach((p) => {
+      const t = p.fixture?.tournament;
+      const cat = (t?.category || '').toUpperCase();
+      const tour = (t?.tour || '').toUpperCase();
+      if (cat === 'CH' || tour === 'CHALLENGER') {
+        ch++;
+      } else if (cat === 'CUP' || tour === 'TEAM') {
+        cup++;
+      } else if (tour === 'ATP' || tour === 'GRAND_SLAM') {
+        atp++;
+      } else if (tour === 'WTA') {
+        wta++;
+      }
+    });
+
+    return { all: dateScopedPredictions.length, atp, wta, ch, cup };
+  }, [dateScopedPredictions]);
+
+  // Available tournaments with match counts on the currently scoped date & tour category
+  const availableTournaments = useMemo(() => {
+    const tourneyMap = new Map<string, { id: string; name: string; tour: string; count: number }>();
+    dateScopedPredictions.forEach((p) => {
+      const t = p.fixture?.tournament;
+      if (!t?.id) return;
+      const cat = (t?.category || '').toUpperCase();
+      const tour = (t?.tour || '').toUpperCase();
+
+      if (selectedTour === 'CH' && !(cat === 'CH' || tour === 'CHALLENGER')) return;
+      if (selectedTour === 'CUP' && !(cat === 'CUP' || tour === 'TEAM')) return;
+      if (selectedTour === 'ATP' && !((tour === 'ATP' || tour === 'GRAND_SLAM') && cat !== 'CH')) return;
+      if (selectedTour === 'WTA' && !((tour === 'WTA' || tour === 'GRAND_SLAM') && cat !== 'CH')) return;
+
+      if (!tourneyMap.has(t.id)) {
+        tourneyMap.set(t.id, { id: t.id, name: t.name, tour: t.tour, count: 0 });
+      }
+      tourneyMap.get(t.id)!.count++;
+    });
+    return Array.from(tourneyMap.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [dateScopedPredictions, selectedTour]);
+
+  // Reset selected tournament to 'all' if it is no longer in the scoped available tournaments
+  useEffect(() => {
+    if (selectedTournament !== 'all' && !availableTournaments.some((t) => t.id === selectedTournament)) {
+      setSelectedTournament('all');
+    }
+  }, [availableTournaments, selectedTournament]);
+
   const filteredPredictions = useMemo(() => {
     let list = dateScopedPredictions;
+
+    // Filter by competition tour / category
+    if (selectedTour !== 'all') {
+      list = list.filter((p) => {
+        const t = p.fixture?.tournament;
+        const cat = (t?.category || '').toUpperCase();
+        const tour = (t?.tour || '').toUpperCase();
+        if (selectedTour === 'CH') {
+          return cat === 'CH' || tour === 'CHALLENGER';
+        }
+        if (selectedTour === 'CUP') {
+          return cat === 'CUP' || tour === 'TEAM';
+        }
+        if (selectedTour === 'ATP') {
+          return (tour === 'ATP' || tour === 'GRAND_SLAM') && cat !== 'CH';
+        }
+        if (selectedTour === 'WTA') {
+          return (tour === 'WTA' || tour === 'GRAND_SLAM') && cat !== 'CH';
+        }
+        return true;
+      });
+    }
 
     // Filter by tournament dropdown
     if (selectedTournament !== 'all') {
@@ -268,7 +344,7 @@ export const TennisHubView: React.FC<TennisHubViewProps> = ({
       const timeB = new Date(b.target_kickoff_at || b.fixture?.target_kickoff_at || 0).getTime();
       return timeA - timeB;
     });
-  }, [dateScopedPredictions, selectedTournament, selectedTier, settlementFilter, searchQuery]);
+  }, [dateScopedPredictions, selectedTour, selectedTournament, selectedTier, settlementFilter, searchQuery]);
 
   // Compute live scorecard KPI statistics from date-scoped predictions
   const scorecardStats = useMemo(() => {
@@ -368,10 +444,10 @@ export const TennisHubView: React.FC<TennisHubViewProps> = ({
                 onChange={(e) => setSelectedTournament(e.target.value)}
                 aria-label="Filter by Tournament"
               >
-                <option value="all">All Tournaments ({dateScopedPredictions.length})</option>
-                {tournaments.map((t) => (
+                <option value="all">All Tournaments ({availableTournaments.reduce((sum, t) => sum + t.count, 0)})</option>
+                {availableTournaments.map((t) => (
                   <option key={t.id} value={t.id}>
-                    {t.tour} • {t.name}
+                    {t.tour} • {t.name} ({t.count})
                   </option>
                 ))}
               </select>
@@ -593,8 +669,47 @@ export const TennisHubView: React.FC<TennisHubViewProps> = ({
 
         {/* CENTER MAIN STREAM: TENNIS PREDICTIONS STREAM */}
         <div className="fixtures-stream-column">
+          {/* COMPETITION CATEGORY PILLS BAR */}
+          <div className="tennis-competition-pills-bar">
+            <button
+              type="button"
+              className={`competition-pill-btn ${selectedTour === 'all' ? 'active' : ''}`}
+              onClick={() => setSelectedTour('all')}
+            >
+              🌐 All Tours ({competitionCounts.all})
+            </button>
+            <button
+              type="button"
+              className={`competition-pill-btn atp-pill ${selectedTour === 'ATP' ? 'active' : ''}`}
+              onClick={() => setSelectedTour(selectedTour === 'ATP' ? 'all' : 'ATP')}
+            >
+              🔵 ATP Tour ({competitionCounts.atp})
+            </button>
+            <button
+              type="button"
+              className={`competition-pill-btn wta-pill ${selectedTour === 'WTA' ? 'active' : ''}`}
+              onClick={() => setSelectedTour(selectedTour === 'WTA' ? 'all' : 'WTA')}
+            >
+              🟣 WTA Tour ({competitionCounts.wta})
+            </button>
+            <button
+              type="button"
+              className={`competition-pill-btn ch-pill ${selectedTour === 'CH' ? 'active' : ''}`}
+              onClick={() => setSelectedTour(selectedTour === 'CH' ? 'all' : 'CH')}
+            >
+              ⚡ Challengers ({competitionCounts.ch})
+            </button>
+            <button
+              type="button"
+              className={`competition-pill-btn cup-pill ${selectedTour === 'CUP' ? 'active' : ''}`}
+              onClick={() => setSelectedTour(selectedTour === 'CUP' ? 'all' : 'CUP')}
+            >
+              🏆 Team Cups ({competitionCounts.cup})
+            </button>
+          </div>
+
           {/* SEARCH BAR ROW */}
-          <div className="search-filter-row" style={{ marginTop: 0 }}>
+          <div className="search-filter-row" style={{ marginTop: 10 }}>
             <div className="search-input-wrapper">
               <span className="search-icon">🔍</span>
               <input

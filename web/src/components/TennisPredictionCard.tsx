@@ -101,7 +101,48 @@ export const TennisPredictionCard: React.FC<TennisPredictionCardProps> = ({
     : null;
   const scoreRating = probNum != null ? (probNum / 10).toFixed(1) : null;
 
-  const tournamentDisplay = `${tour} • ${tournament?.name || 'World Tour'}`;
+  const category = (tournament?.category || '250').toUpperCase();
+  const round = fixture?.round;
+
+  const roundName = (() => {
+    switch (round) {
+      case 'F': return 'Final';
+      case 'SF': return 'Semifinal';
+      case 'QF': return 'Quarterfinal';
+      case 'R16': return 'Round of 16';
+      case 'R32': return 'Round of 32';
+      case 'R64': return 'Round of 64';
+      case 'R128': return 'Round of 128';
+      case 'QUAL': return 'Qualifying';
+      default: return null;
+    }
+  })();
+
+  const tourTag = (() => {
+    if (category === 'CH' || tour === 'CHALLENGER') return '⚡ CHALLENGER';
+    if (tour === 'TEAM' || category === 'CUP') return '🏆 TEAM CUP';
+    if (category === 'GS') return '👑 GRAND SLAM';
+    if (tour === 'WTA') return '🟣 WTA';
+    return '🔵 ATP';
+  })();
+
+  const tourPillStyle = (() => {
+    if (category === 'CH' || tour === 'CHALLENGER') {
+      return { background: '#ecfdf5', borderColor: '#a7f3d0', color: '#065f46' };
+    }
+    if (tour === 'TEAM' || category === 'CUP') {
+      return { background: '#fff1f2', borderColor: '#fecdd3', color: '#9f1239' };
+    }
+    if (category === 'GS') {
+      return { background: '#fefce8', borderColor: '#fde047', color: '#854d0e' };
+    }
+    if (tour === 'WTA') {
+      return { background: '#faf5ff', borderColor: '#e9d5ff', color: '#6b21a8' };
+    }
+    return { background: '#eff6ff', borderColor: '#bfdbfe', color: '#1e40af' };
+  })();
+
+  const tournamentDisplay = `${tourTag} • ${tournament?.name || 'World Tour'}`;
   const locationText = `${tournament?.city || tournament?.country || 'Official Court'}`;
   const eloDiffText = absDiff > 0 ? `Δ +${absDiff} ELO (${leaderName.split(' ').pop()})` : 'Even Matchup';
 
@@ -139,9 +180,15 @@ export const TennisPredictionCard: React.FC<TennisPredictionCardProps> = ({
     >
       {/* 1. TOP META ROW: TOURNAMENT, TIME, SURFACE & CPI */}
       <div className="glance-top-row">
-        <span className="glance-league-pill" title={tournamentDisplay}>
+        <span className="glance-league-pill" title={tournamentDisplay} style={tourPillStyle}>
           {tournamentDisplay}
         </span>
+
+        {roundName && (
+          <span className="glance-round-pill">
+            🎯 {roundName}
+          </span>
+        )}
 
         <span className="glance-time-pill">
           📅 {formattedDateTime}
