@@ -10,7 +10,7 @@ Executes the full per-fixture prediction pipeline in complete isolation:
 - Idempotent Cloud Supabase Persistence (1 Fixture = 1 Row)
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Dict, Any, List, Optional, Tuple
 from pydantic import BaseModel
 

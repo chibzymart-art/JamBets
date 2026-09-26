@@ -265,6 +265,7 @@ def run():
         # SMART REPREDICTION: Check if already predicted and game data unchanged
         existing_pred = existing_preds_map.get(f_id)
         features = None
+        force_repredict = "--force" in sys.argv
         try:
             features = pipeline.feature_engine.compute_features(
                 canonical_key=canonical_key,
@@ -288,7 +289,7 @@ def run():
             prev_sig = prev_meta.get("feature_signature")
             prev_market = existing_pred.get("market")
 
-            force_repredict = "--force" in sys.argv or not prev_meta.get("selection_stage")
+            force_repredict = force_repredict or not prev_meta.get("selection_stage")
             # Condition to skip: Feature signature identical AND not an eliminated market (0.5/3.5) AND already evaluated under Option A+ hierarchy
             if not force_repredict and prev_market not in ("over_under_0.5", "over_under_3.5") and prev_sig and prev_sig == features.feature_signature and prev_meta.get("selection_stage"):
                 skipped_unchanged_count += 1
@@ -311,7 +312,7 @@ def run():
             kickoff_utc=kickoff,
             persist_to_supabase=True,
             features=features,
-            force_repredict=force_run
+            force_repredict=force_repredict
         )
 
         if res.status == "PUBLISHED":
