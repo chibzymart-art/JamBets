@@ -96,25 +96,32 @@ class TennisPredictionEngine:
             player1=player1,
             player2=player2,
             sim_res=sim_res,
-            elo_diff=elo_diff
+            elo_diff=elo_diff,
+            tournament=tournament
         )
 
-        # Secondary predictions payload
+        # Secondary predictions payload (aligned with dominant match favorite)
+        fav_is_p1 = sim_res.p1_win_prob >= 0.50
+        fav_name = player1["display_name"] if fav_is_p1 else player2["display_name"]
+        fav_win_prob = sim_res.p1_win_prob if fav_is_p1 else sim_res.p2_win_prob
+        fav_first_set = sim_res.first_set_p1_prob if fav_is_p1 else sim_res.first_set_p2_prob
+        fav_hcap = sim_res.set_handicap_p1_minus_1_5 if fav_is_p1 else sim_res.correct_scores.get("0-2", 0.0)
+
         secondary_predictions = [
             {
                 "market": "match_winner",
-                "prediction": f"{player1['display_name']} Win",
-                "probability": round(float(sim_res.p1_win_prob), 4)
+                "prediction": f"{fav_name} Win",
+                "probability": round(float(fav_win_prob), 4)
             },
             {
                 "market": "first_set_winner",
-                "prediction": f"{player1['display_name']} 1st Set",
-                "probability": round(float(sim_res.first_set_p1_prob), 4)
+                "prediction": f"{fav_name} 1st Set",
+                "probability": round(float(fav_first_set), 4)
             },
             {
                 "market": "set_handicap",
-                "prediction": f"{player1['display_name']} -1.5 Sets",
-                "probability": round(float(sim_res.set_handicap_p1_minus_1_5), 4)
+                "prediction": f"{fav_name} -1.5 Sets",
+                "probability": round(float(fav_hcap), 4)
             },
             {
                 "market": "total_games_over_under",
@@ -168,12 +175,15 @@ class TennisPredictionEngine:
         player1: Dict[str, Any],
         player2: Dict[str, Any],
         sim_res: SimulationResults,
-        elo_diff: float
+        elo_diff: float,
+        tournament: Optional[Dict[str, Any]] = None
     ) -> Tuple[str, str, float, str]:
         """
         Determines the safest high-conviction betting market and confidence tier.
-        Applies Zero-Hallucination rule:
-        If match is volatile or probability < 0.60, classifies as NO_SAFE_BANKER.
+        Applies Zero-Hallucination & Unranked Wildcard Quarantine:
+        1. If match is volatile or probability < 0.60, classifies as NO_SAFE_BANKER.
+        2. If either competitor is unranked (wildcard/qualifier), caps tier at MID CONFIDENCE or NO_SAFE_BANKER.
+        3. Capped at TOP PICK for ATP Challenger tournaments due to higher baseline variance.
         """
         p1_name = player1["display_name"]
         p2_name = player2["display_name"]
@@ -197,17 +207,38 @@ class TennisPredictionEngine:
                 "NO_SAFE_BANKER"
             )
 
-        # 2. Check for BANGER Tier (Elite Confidence >= 82% & strong ELO gap >= 175)
-        if fav_prob >= 0.82 and abs(elo_diff) >= 175.0:
-            # If favorite has dominant straight set probability (> 58%), set handicap is also high value
-            straight_set_prob = sim_res.set_handicap_p1_minus_1_5 if fav_is_p1 else sim_res.correct_scores.get("0-2", 0.0)
-            if straight_set_prob >= 0.68:
+        # 2. Unranked Player Safety Quarantine
+        # When either competitor lacks an official verified ATP/WTA ranking,
+        # true baseline skill is ungrounded (artificial 1450 ELO floor causes false banker delusions).
+        p1_rank = player1.get("current_rank")
+        p2_rank = player2.get("current_rank")
+        has_unranked = (p1_rank is None or p1_rank <= 0) or (p2_rank is None or p2_rank <= 0)
+
+        if has_unranked:
+            if fav_prob < 0.72:
                 return (
-                    "set_handicap",
-                    f"{fav_name} -1.5 Sets",
-                    straight_set_prob,
-                    "BANGER"
+                    "NO_SAFE_BANKER",
+                    "NO SAFE BANKER (Unranked Opponent / High Volatility)",
+                    0.5000,
+                    "NO_SAFE_BANKER"
                 )
+            # Maximum allowed tier for an unranked opponent is strictly MID CONFIDENCE
+            return (
+                "match_winner",
+                f"{fav_name} Win",
+                fav_prob,
+                "MID CONFIDENCE"
+            )
+
+        # Tournament Context
+        tour_str = (tournament.get("tour") or "").upper() if tournament else ""
+        cat_str = (tournament.get("category") or "").upper() if tournament else ""
+        is_challenger = cat_str in ("CH", "125") or tour_str == "CHALLENGER"
+
+        # 3. BANGER Tier (Elite Confidence >= 82% & strong verified ELO gap >= 175)
+        # Strictly reserved for verified ATP/WTA Tour & Grand Slam matches.
+        # Challengers are excluded from BANGER tier due to higher baseline variance.
+        if fav_prob >= 0.82 and abs(elo_diff) >= 175.0 and not is_challenger:
             return (
                 "match_winner",
                 f"{fav_name} Win",
@@ -215,7 +246,7 @@ class TennisPredictionEngine:
                 "BANGER"
             )
 
-        # 3. TOP PICK Tier (74.0% - 81.9%)
+        # 4. TOP PICK Tier (74.0% - 81.9%, or >=82% in Challengers)
         if fav_prob >= 0.74:
             return (
                 "match_winner",
@@ -224,7 +255,7 @@ class TennisPredictionEngine:
                 "TOP PICK"
             )
 
-        # 4. HIGH CONFIDENCE Tier (68.0% - 73.9%)
+        # 5. HIGH CONFIDENCE Tier (68.0% - 73.9%)
         if fav_prob >= 0.68:
             return (
                 "match_winner",
@@ -233,7 +264,7 @@ class TennisPredictionEngine:
                 "HIGH CONFIDENCE"
             )
 
-        # 5. MID CONFIDENCE Tier (60.0% - 67.9%)
+        # 6. MID CONFIDENCE Tier (60.0% - 67.9%)
         return (
             "match_winner",
             f"{fav_name} Win",
@@ -262,11 +293,15 @@ class TennisPredictionEngine:
         hold_dog = sim_res.p2_hold_rate if elo_diff >= 0 else sim_res.p1_hold_rate
 
         speed_desc = "fast" if cpi >= 40 else ("slow" if cpi <= 29 else "medium-paced")
+        p1_rank = p1.get("current_rank")
+        p2_rank = p2.get("current_rank")
+        has_unranked = (p1_rank is None or p1_rank <= 0) or (p2_rank is None or p2_rank <= 0)
+        unranked_note = " Match features unranked competitor with unverified professional baseline; confidence capped to manage wildcard variance." if has_unranked else ""
 
         return (
             f"250,000 Monte Carlo iterations confirm {fav_name} as dominant on {surface_clean} courts (CPI {cpi} - {speed_desc}). "
             f"Projected service hold rate of {round(hold_fav * 100, 1)}% vs {dog_name}'s {round(hold_dog * 100, 1)}% provides a substantial break-differential advantage. "
-            f"Expected game margin of {abs(sim_res.expected_game_margin)} games across {sim_res.expected_total_games} total games."
+            f"Expected game margin of {abs(sim_res.expected_game_margin)} games across {sim_res.expected_total_games} total games.{unranked_note}"
         )
 
     def generate_all_predictions(

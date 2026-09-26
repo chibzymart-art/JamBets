@@ -222,10 +222,10 @@ class HomeAndAwayEngine:
 
         # A. Qualifying Home Win (Host Fortress Dominance)
         if p_home >= 0.50 and diff_h >= 0.12 and xg_diff_h >= 0.15:
-            if p_home >= 0.70 and xg_diff_h >= 0.75:
+            if p_home >= 0.76 and xg_diff_h >= 0.80 and diff_h >= 0.25:
                 tier = "FORTRESS_LOCK"
                 conf_cat = "BANGER"
-            elif p_home >= 0.60:
+            elif p_home >= 0.64:
                 tier = "HIGH_DOMINANCE"
                 conf_cat = "TOP PICK"
             else:
@@ -255,10 +255,10 @@ class HomeAndAwayEngine:
 
         # B. Qualifying Away Win (Road Titan / Lethal Road Supremacy)
         elif p_away >= 0.44 and diff_a >= 0.08 and xg_diff_a >= 0.10:
-            if p_away >= 0.58 and xg_diff_a >= 0.50:
+            if p_away >= 0.72 and xg_diff_a >= 0.75 and diff_a >= 0.25:
                 tier = "ROAD_TITAN"
                 conf_cat = "BANGER"
-            elif p_away >= 0.50:
+            elif p_away >= 0.58 and xg_diff_a >= 0.40:
                 tier = "COUNTER_AMBUSH"
                 conf_cat = "TOP PICK"
             else:

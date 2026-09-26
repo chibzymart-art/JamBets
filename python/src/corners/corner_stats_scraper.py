@@ -27,12 +27,14 @@ class CornerStatsScraper:
     """
 
     ESPN_BASE_URL = "https://site.api.espn.com/apis/site/v2/sports/soccer"
+    LIVESCORE_BASE_URL = "https://prod-public-api.livescore.com/v1/api/app"
     FOTMOB_BASE_URL = "https://www.fotmob.com/api"
 
     def __init__(self, timeout: float = 12.0):
         self.timeout = timeout
         self.client = httpx.Client(timeout=timeout, follow_redirects=True)
         self._scoreboard_cache: Dict[str, List[Dict[str, Any]]] = {}
+        self._livescore_cache: Dict[str, List[Dict[str, Any]]] = {}
 
     @staticmethod
     def normalize_name(name: str) -> str:
@@ -48,8 +50,9 @@ class CornerStatsScraper:
         clean = re.sub(r"[^\w\s]", "", clean)
         return " ".join(clean.split()).strip()
 
-    def _get_headers(self) -> Optional[Dict[str, str]]:
-        return None
+    def _get_headers(self) -> Dict[str, str]:
+        ua = random.choice(USER_AGENT_POOL) if USER_AGENT_POOL else "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        return {"User-Agent": ua}
 
     def fetch_match_corners(
         self,
@@ -59,18 +62,101 @@ class CornerStatsScraper:
         league_code: Optional[str] = None
     ) -> Optional[Tuple[int, int]]:
         """
-        Attempts to scrape official match corner statistics.
+        Attempts to scrape official match corner statistics across multi-platform sources.
         Returns (corners_home, corners_away) or None if unverified/unavailable.
+        Strictly zero synthetic or fabricated corner counts.
         """
         # 1. Primary: Try ESPN Official Boxscore
         corners = self._fetch_espn_corners(home_name, away_name, kickoff_time, league_code)
-        if corners is not None:
+        if corners is not None and (corners[0] > 0 or corners[1] > 0):
             return corners
 
-        # 2. Secondary: Try FotMob Match Details
-        corners = self._fetch_fotmob_corners(home_name, away_name, kickoff_time, league_code)
-        if corners is not None:
+        # 2. Secondary: Try LiveScore Public Soccer API
+        corners = self._fetch_livescore_corners(home_name, away_name, kickoff_time, league_code)
+        if corners is not None and (corners[0] > 0 or corners[1] > 0):
             return corners
+
+        # 3. Tertiary: Try FotMob Match Details
+        corners = self._fetch_fotmob_corners(home_name, away_name, kickoff_time, league_code)
+        if corners is not None and (corners[0] > 0 or corners[1] > 0):
+            return corners
+
+        return None
+
+    def _fetch_livescore_corners(
+        self,
+        home_name: str,
+        away_name: str,
+        kickoff_time: datetime,
+        league_code: Optional[str]
+    ) -> Optional[Tuple[int, int]]:
+        """Queries LiveScore official public soccer API for verified corner kick counts."""
+        norm_h = self.normalize_name(home_name)
+        norm_a = self.normalize_name(away_name)
+        if not norm_h or not norm_a:
+            return None
+
+        # Check kickoff date and adjacent windows for timezone offsets
+        date_candidates = [
+            kickoff_time.strftime("%Y%m%d"),
+            (kickoff_time - timedelta(hours=12)).strftime("%Y%m%d"),
+            (kickoff_time + timedelta(hours=12)).strftime("%Y%m%d")
+        ]
+        date_candidates = list(dict.fromkeys(date_candidates))
+
+        h_tokens = [t for t in norm_h.split() if len(t) >= 3]
+        a_tokens = [t for t in norm_a.split() if len(t) >= 3]
+
+        matched_eid = None
+        for d_str in date_candidates:
+            if d_str in self._livescore_cache:
+                stages = self._livescore_cache[d_str]
+            else:
+                url = f"{self.LIVESCORE_BASE_URL}/date/soccer/{d_str}/0?locale=en"
+                try:
+                    resp = self.client.get(url, headers=self._get_headers())
+                    if resp.status_code == 200:
+                        stages = resp.json().get("Stages", [])
+                        self._livescore_cache[d_str] = stages
+                    else:
+                        stages = []
+                except Exception:
+                    stages = []
+
+            for s in stages:
+                for ev in s.get("Events", []):
+                    ev_h = self.normalize_name(ev.get("T1", [{}])[0].get("Nm", ""))
+                    ev_a = self.normalize_name(ev.get("T2", [{}])[0].get("Nm", ""))
+
+                    h_match = any(t in ev_h or ev_h in t for t in h_tokens) if h_tokens else norm_h in ev_h
+                    a_match = any(t in ev_a or ev_a in t for t in a_tokens) if a_tokens else norm_a in ev_a
+
+                    if h_match and a_match:
+                        matched_eid = ev.get("Eid")
+                        break
+                if matched_eid:
+                    break
+            if matched_eid:
+                break
+
+        if not matched_eid:
+            return None
+
+        try:
+            stat_url = f"{self.LIVESCORE_BASE_URL}/statistics/soccer/{matched_eid}?locale=en"
+            stat_resp = self.client.get(stat_url, headers=self._get_headers())
+            if stat_resp.status_code != 200:
+                return None
+            stats = stat_resp.json().get("Stat", [])
+            if not stats:
+                return None
+
+            ch = next((s.get("Cos") for s in stats if s.get("Tnb") == 1), None)
+            ca = next((s.get("Cos") for s in stats if s.get("Tnb") == 2), None)
+            if ch is not None and ca is not None and (int(ch) > 0 or int(ca) > 0):
+                return int(ch), int(ca)
+        except Exception:
+            return None
 
         return None
 
@@ -245,10 +331,10 @@ class CornerStatsScraper:
         Enriches a completed fixture with official corner counts.
         Updates football_fixtures in Supabase if scraped.
         """
-        # 1. If fixture already has verified corners, return directly
+        # 1. If fixture already has verified authentic corners (>0), return directly
         ch = fixture.get("corners_home")
         ca = fixture.get("corners_away")
-        if ch is not None and ca is not None:
+        if ch is not None and ca is not None and (int(ch) > 0 or int(ca) > 0):
             return int(ch), int(ca)
 
         fid = fixture["id"]

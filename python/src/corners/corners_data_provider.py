@@ -22,7 +22,7 @@ from python.src.football.league_filter import is_fixture_eligible
 # Whitelist of verified Tier 1 & Tier 2 professional leagues
 # Amateur (7th/8th-tier non-league) and youth (U18/U21) divisions are excluded.
 PROFESSIONAL_LEAGUE_CODES: Set[str] = {
-    "ENG_PL", "ENG_CH", "ENG_L1", "ENG_L2", "ENG_NL",
+    "ENG_PL", "ENG_CH", "ENG_L1", "ENG_L2",
     "ESP_LL", "ESP_LL2",
     "GER_BL", "GER_2BL", "GER_3L",
     "ITA_SA", "ITA_SB",
@@ -31,7 +31,7 @@ PROFESSIONAL_LEAGUE_CODES: Set[str] = {
     "POR_PL", "POR_L2",
     "BEL_PL",
     "TUR_SL",
-    "SCO_PL", "SCO_CH",
+    "SCO_PL",
     "AUT_BL",
     "SUI_SL",
     "NOR_EL",

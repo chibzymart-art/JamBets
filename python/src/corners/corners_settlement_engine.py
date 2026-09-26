@@ -118,18 +118,57 @@ class CornersSettlementEngine:
             ch = fixture.get("corners_home")
             ca = fixture.get("corners_away")
 
-            # If missing, scrape official boxscores via dedicated CornerStatsScraper
-            if ch is None or ca is None:
+            # If missing or 0-0 unrecorded telemetry default, scrape official boxscores via dedicated CornerStatsScraper
+            has_telemetry = (ch is not None and ca is not None and (int(ch) > 0 or int(ca) > 0))
+            if not has_telemetry:
                 scraped_corners = self.scraper.enrich_fixture_corners(fixture, self.db)
-                if scraped_corners:
+                if scraped_corners and (scraped_corners[0] > 0 or scraped_corners[1] > 0):
                     ch, ca = scraped_corners
                     # Update local cache
                     fixture["corners_home"] = ch
                     fixture["corners_away"] = ca
+                    has_telemetry = True
 
-            # If still missing official corner counts after scraping, hold in pending
-            if ch is None or ca is None:
-                awaiting_stats_count += 1
+            # If telemetry is STILL missing after querying all providers (ESPN, LiveScore, FotMob):
+            if not has_telemetry:
+                # Check match kickoff age to determine whether to await or void
+                kickoff_str = fixture.get("target_kickoff_at")
+                hours_since_kickoff = 999.0
+                if kickoff_str:
+                    try:
+                        k_dt = datetime.fromisoformat(kickoff_str.replace("Z", "+00:00"))
+                        hours_since_kickoff = (datetime.now(timezone.utc) - k_dt).total_seconds() / 3600.0
+                    except Exception:
+                        pass
+
+                # If the match finished very recently (< 3 hours since kickoff), provider feeds might still be compiling stats
+                if hours_since_kickoff < 3.0:
+                    awaiting_stats_count += 1
+                    continue
+
+                # Match concluded hours ago and corner telemetry is unrecorded by official providers for this competition.
+                # In sports betting rules, unrecorded statistical sub-markets are VOIDED (never marked as 0-corner losses).
+                void_notes = "Official match corner telemetry unrecorded by data providers (ESPN/LiveScore) — protected void settlement."
+                self.db.patch("corner_predictions", {
+                    "settlement_status": "void",
+                    "actual_corners": "Unrecorded",
+                    "settled_at": now_iso,
+                    "settlement_notes": void_notes
+                }, {"id": f"eq.{pid}"})
+                self.db.post("corner_settlements", {
+                    "prediction_id": pid,
+                    "fixture_id": fid,
+                    "market": market,
+                    "status": "void",
+                    "total_corners": None,
+                    "home_corners": None,
+                    "away_corners": None,
+                    "settled_at": now_iso,
+                    "notes": void_notes
+                }, on_conflict="prediction_id")
+                void_count += 1
+                settled_count += 1
+                print(f"  🛡️ [CornersSettlementEngine] Voided unrecorded telemetry for {prediction_text} on fixture {fid}")
                 continue
 
             # Standard line threshold evaluation:

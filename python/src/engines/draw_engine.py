@@ -242,13 +242,13 @@ class DrawModel:
         consensus_prob = (0.50 * p_sim) + (0.50 * inflated_prob)
         final_prob = round(max(0.18, min(0.48, consensus_prob)), 4)
 
-        # Tiers & Confidence
+        # Tiers & Confidence: Draws are high-value equilibrium picks and strictly NEVER categorized as BANGER
         if final_prob >= 0.35:
             stalemate_tier = "STALEMATE_LOCK"
-            confidence_category = "BANGER"
+            confidence_category = "TOP PICK"
         elif final_prob >= 0.31:
             stalemate_tier = "DEADLOCK_VALUE"
-            confidence_category = "TOP PICK"
+            confidence_category = "MID_CONFIDENCE"
         elif final_prob >= 0.28:
             stalemate_tier = "MUTUAL_POINT"
             confidence_category = "MID_CONFIDENCE"

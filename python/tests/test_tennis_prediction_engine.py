@@ -65,6 +65,51 @@ class TestTennisPredictionEngine(unittest.TestCase):
         self.assertEqual(market, "NO_SAFE_BANKER")
         self.assertEqual(prob, 0.5000)
 
+    def test_banger_tier_strictly_match_winner(self):
+        # BANGER tier must strictly select match_winner instead of fragile set_handicap (-1.5 sets)
+        engine = TennisPredictionEngine()
+        sim_res = engine.simulator.simulate_match(p1_serve_pt=0.74, p2_serve_pt=0.55, num_simulations=5000)
+        p1 = {"display_name": "Hubert Hurkacz", "current_rank": 8}
+        p2 = {"display_name": "Martin Damm", "current_rank": 175}
+
+        market, label, prob, tier = engine._select_best_market_and_tier(
+            player1=p1, player2=p2, sim_res=sim_res, elo_diff=250.0
+        )
+        self.assertEqual(tier, "BANGER")
+        self.assertEqual(market, "match_winner")
+        self.assertEqual(label, "Hubert Hurkacz Win")
+        self.assertGreaterEqual(prob, 0.82)
+        self.assertNotEqual(market, "set_handicap")
+
+
+    def test_unranked_player_quarantine(self):
+        # When an opponent is unranked (wildcard/junior), never issue BANGER or TOP PICK
+        engine = TennisPredictionEngine()
+        sim_res = engine.simulator.simulate_match(p1_serve_pt=0.74, p2_serve_pt=0.55, num_simulations=5000)
+        p1 = {"display_name": "Sinja Kraus", "current_rank": 95}
+        p2 = {"display_name": "Reese Brantmeier", "current_rank": None}  # Unranked
+
+        market, label, prob, tier = engine._select_best_market_and_tier(
+            player1=p1, player2=p2, sim_res=sim_res, elo_diff=192.5
+        )
+        self.assertEqual(tier, "MID CONFIDENCE")
+        self.assertNotEqual(tier, "BANGER")
+        self.assertNotEqual(tier, "TOP PICK")
+
+    def test_challenger_tier_cap(self):
+        # Challenger tournaments must cap maximum confidence at TOP PICK, never BANGER
+        engine = TennisPredictionEngine()
+        sim_res = engine.simulator.simulate_match(p1_serve_pt=0.74, p2_serve_pt=0.55, num_simulations=5000)
+        p1 = {"display_name": "Player A", "current_rank": 70}
+        p2 = {"display_name": "Player B", "current_rank": 190}
+        tourney = {"tour": "CHALLENGER", "category": "CH"}
+
+        market, label, prob, tier = engine._select_best_market_and_tier(
+            player1=p1, player2=p2, sim_res=sim_res, elo_diff=220.0, tournament=tourney
+        )
+        self.assertEqual(tier, "TOP PICK")
+        self.assertNotEqual(tier, "BANGER")
+
 
 if __name__ == "__main__":
     unittest.main()

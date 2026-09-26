@@ -170,9 +170,8 @@ class NegativeBinomialCornersModel:
             market = "over_9.5_corners"
             prediction = "Over 9.5 Corners"
             primary_prob = p_over95
-            if primary_prob >= 0.64:
-                confidence_category = "BANGER"
-            elif primary_prob >= 0.56:
+            # Over 9.5 high total lines carry late-game stoppage variance; strictly capped at TOP PICK maximum
+            if primary_prob >= 0.70:
                 confidence_category = "TOP PICK"
             else:
                 confidence_category = "MID_CONFIDENCE"
@@ -180,9 +179,9 @@ class NegativeBinomialCornersModel:
             market = "over_8.5_corners"
             prediction = "Over 8.5 Corners"
             primary_prob = p_over85
-            if primary_prob >= 0.68:
+            if primary_prob >= 0.78 and mu_total >= 9.60:
                 confidence_category = "BANGER"
-            elif primary_prob >= 0.62:
+            elif primary_prob >= 0.68:
                 confidence_category = "TOP PICK"
             else:
                 confidence_category = "MID_CONFIDENCE"
@@ -190,9 +189,9 @@ class NegativeBinomialCornersModel:
             market = "over_7.5_corners"
             prediction = "Over 7.5 Corners"
             primary_prob = p_over75
-            if primary_prob >= 0.78:
+            if primary_prob >= 0.82 and mu_total >= 8.50:
                 confidence_category = "BANGER"
-            elif primary_prob >= 0.73:
+            elif primary_prob >= 0.74:
                 confidence_category = "TOP PICK"
             else:
                 confidence_category = "MID_CONFIDENCE"
