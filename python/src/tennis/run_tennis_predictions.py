@@ -64,7 +64,7 @@ def run_prediction_cycle(
     print(" Oddsbanta — Autonomous Tennis Prediction & Simulation Engine")
     print(f" Timestamp:        {datetime.now(timezone.utc).isoformat()}")
     print(f" Mode:             {mode_str}")
-    print(f" Forward Horizon:  {days_ahead} Days (Covers 48-hour off-day)")
+    print(f" Forward Horizon:  {days_ahead} Days (Rolling Multi-Day Horizon)")
     print(f" MC Simulations:   {simulations_count:,} per match")
     print(f" Sync Rankings:    {sync_rankings}")
     print("==================================================================\n")

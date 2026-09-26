@@ -5,8 +5,8 @@
  * Invariant: Never import from or modify football types in index.ts.
  */
 
-export type TennisTour = 'ATP' | 'WTA' | 'GRAND_SLAM' | 'CHALLENGER' | 'ITF';
-export type TennisTournamentCategory = 'GS' | '1000' | '500' | '250' | 'CH' | 'ITF';
+export type TennisTour = 'ATP' | 'WTA' | 'GRAND_SLAM' | 'CHALLENGER' | 'ITF' | 'TEAM';
+export type TennisTournamentCategory = 'GS' | '1000' | '500' | '250' | 'CH' | 'ITF' | 'CUP';
 export type TennisSurface = 'hard_outdoor' | 'hard_indoor' | 'clay' | 'grass' | 'carpet';
 export type TennisRound = 'F' | 'SF' | 'QF' | 'R16' | 'R32' | 'R64' | 'R128' | 'QUAL';
 export type TennisHandedness = 'R' | 'L' | 'U';

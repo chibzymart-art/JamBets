@@ -1,13 +1,13 @@
-name: JamBets Autonomous Tennis Prediction Engine (Every 2 Days)
+name: JamBets Autonomous Tennis Prediction Engine (Daily Cadence)
 
 on:
   schedule:
-    # Run every 2 days at 23:00 UTC to analyze the 4-day forward slate
-    - cron: '0 23 */2 * *'
+    # Run daily at 23:00 UTC to ingest newly scheduled knockout rounds and 4-day forward slate
+    - cron: '0 23 * * *'
   workflow_dispatch:
     inputs:
       days_ahead:
-        description: 'Forward horizon window in days (default: 4 to cover 48h off-day)'
+        description: 'Forward horizon window in days (default: 4)'
         required: false
         default: '4'
       simulations:
@@ -61,8 +61,10 @@ jobs:
           ALERT_EMAIL_RECIPIENTS: ${{ secrets.ALERT_EMAIL_RECIPIENTS }}
         run: |
           echo "=== RUNNING AUTONOMOUS TENNIS PREDICTION & SIMULATION ENGINE ==="
-          DAYS_AHEAD="${{ github.event.inputs.days_ahead || '4' }}"
-          SIMULATIONS="${{ github.event.inputs.simulations || '250000' }}"
+          DAYS_AHEAD="${{ github.event.inputs.days_ahead }}"
+          DAYS_AHEAD="${DAYS_AHEAD:-4}"
+          SIMULATIONS="${{ github.event.inputs.simulations }}"
+          SIMULATIONS="${SIMULATIONS:-250000}"
           
           DRY_RUN_FLAG=""
           if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
@@ -92,7 +94,7 @@ jobs:
               from python.src.alerts.email_notifier import send_pipeline_failure_alert
               send_pipeline_failure_alert(
                   'Tennis Prediction Engine (GitHub Actions)',
-                  Exception('GitHub Actions 48-hour Tennis prediction engine workflow step failed'),
+                  Exception('GitHub Actions Daily Tennis prediction engine workflow step failed'),
                   {
                       'run_id': '${{ github.run_id }}',
                       'run_url': 'https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}',
