@@ -1095,3 +1095,37 @@
   letter-spacing: 0.02em;
 }
 
+/* Bold Prominent Tennis Add to Slip Button */
+.tennis-add-slip-btn {
+  background: #f0f9ff;
+  border: 1.5px solid #0284c7;
+  color: #0284c7;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 6px 12px;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  box-shadow: 0 1px 3px rgba(2, 132, 199, 0.15);
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
+.tennis-add-slip-btn:hover {
+  background: #0284c7;
+  color: #ffffff;
+  transform: translateY(-1px);
+  box-shadow: 0 3px 8px rgba(2, 132, 199, 0.3);
+}
+
+.tennis-add-slip-btn.in-slip {
+  background: #10b981;
+  border-color: #059669;
+  color: #ffffff;
+  box-shadow: 0 2px 6px rgba(16, 185, 129, 0.3);
+}
+
+

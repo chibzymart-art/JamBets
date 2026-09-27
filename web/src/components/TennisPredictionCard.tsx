@@ -180,6 +180,20 @@ export const TennisPredictionCard: React.FC<TennisPredictionCardProps> = ({
     >
       {/* 1. TOP META ROW: TOURNAMENT, TIME, SURFACE & CPI */}
       <div className="glance-top-row">
+        {onToggleFavorite && (
+          <button
+            type="button"
+            className={`glance-favorite-btn ${isFavorite ? 'starred' : ''}`}
+            title={isFavorite ? 'Remove from Acca Slip' : 'Add to Acca Slip'}
+            onClick={(e) => {
+              e.stopPropagation();
+              handleFavoriteClick(e);
+            }}
+          >
+            {isFavorite ? '✓ IN SLIP' : '+ ADD TO SLIP'}
+          </button>
+        )}
+
         <span className="glance-league-pill" title={tournamentDisplay} style={tourPillStyle}>
           {tournamentDisplay}
         </span>
@@ -282,25 +296,12 @@ export const TennisPredictionCard: React.FC<TennisPredictionCardProps> = ({
           {onToggleFavorite && (
             <button
               type="button"
-              className="tennis-fav-btn"
+              className={`tennis-add-slip-btn ${isFavorite ? 'in-slip' : ''}`}
               onClick={handleFavoriteClick}
-              title={isFavorite ? 'Remove from Watchlist' : 'Add to Watchlist'}
-              aria-label={isFavorite ? 'Remove from Watchlist' : 'Add to Watchlist'}
-              style={{
-                background: 'transparent',
-                border: 'none',
-                cursor: 'pointer',
-                fontSize: '1.15rem',
-                color: isFavorite ? '#f59e0b' : '#94a3b8',
-                padding: '4px',
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                lineHeight: 1,
-                transition: 'color 0.2s ease, transform 0.15s ease',
-              }}
+              title={isFavorite ? 'Remove from Acca Slip' : 'Add to Acca Slip'}
+              aria-label={isFavorite ? 'Remove from Acca Slip' : 'Add to Acca Slip'}
             >
-              {isFavorite ? '★' : '☆'}
+              {isFavorite ? '✓ IN SLIP' : '+ ADD TO SLIP'}
             </button>
           )}
 
@@ -378,7 +379,7 @@ export const TennisPredictionCard: React.FC<TennisPredictionCardProps> = ({
               <div className="paywall-blurred-backdrop">
                 <div className="sniper-primary-card dummy-placeholder">
                   <div className="sniper-primary-badge-row">
-                    <span className="sniper-primary-title">⭐ TOP PICK (RESTRICTED)</span>
+                    <span className="sniper-primary-title">🎯 TOP PICK (RESTRICTED)</span>
                   </div>
                   <div className="sniper-primary-main">
                     <div className="sniper-market-outcome">

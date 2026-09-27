@@ -10135,31 +10135,34 @@ body {
 }
 
 .glance-favorite-btn {
-  background: #ffffff;
-  border: 1px solid #e2e8f0;
+  background: #f0f9ff;
+  border: 1.5px solid #0284c7;
   border-radius: 9999px;
-  padding: 3px 12px;
+  padding: 4px 12px;
   font-size: 11px;
-  font-weight: 700;
-  color: #475569;
+  font-weight: 800;
+  color: #0284c7;
   cursor: pointer;
   transition: all 0.15s ease;
-  letter-spacing: 0.3px;
+  letter-spacing: 0.03em;
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  box-shadow: 0 1px 3px rgba(2, 132, 199, 0.12);
 }
 
 .glance-favorite-btn:hover {
-  background: #f8fafc;
-  border-color: #cbd5e1;
-  color: #0f172a;
+  background: #0284c7;
+  color: #ffffff;
+  transform: translateY(-1px);
+  box-shadow: 0 3px 8px rgba(2, 132, 199, 0.3);
 }
 
 .glance-favorite-btn.starred {
-  background: #fefce8;
-  border-color: #facc15;
-  color: #b45309;
+  background: #10b981;
+  border-color: #059669;
+  color: #ffffff;
+  box-shadow: 0 2px 6px rgba(16, 185, 129, 0.25);
 }
 
 .glance-live-badge {
@@ -13206,96 +13209,125 @@ body {
 
 /* Secondary prediction card inline add button */
 .secondary-card-fav-btn {
-  background: #ffffff;
-  border: 1px solid #cbd5e1;
-  color: #64748b;
-  font-size: 11px;
-  font-weight: 700;
-  border-radius: 6px;
-  padding: 2px 7px;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  transition: all 0.15s ease;
-}
-
-.secondary-card-fav-btn:hover,
-.secondary-card-fav-btn.active {
-  background: #fef3c7;
-  border-color: #fbbf24;
-  color: #b45309;
-}
-
-/* Simulation outline prediction card add button */
-.outline-card-fav-btn {
-  background: #ffffff;
-  border: 1px solid #cbd5e1;
-  color: #64748b;
+  background: #f0f9ff;
+  border: 1.5px solid #0284c7;
+  color: #0284c7;
   font-size: 10px;
-  font-weight: 700;
-  border-radius: 5px;
-  padding: 2px 6px;
+  font-weight: 800;
+  border-radius: 6px;
+  padding: 3px 8px;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   gap: 3px;
   transition: all 0.15s ease;
   line-height: 1.2;
+  letter-spacing: 0.02em;
 }
 
-.outline-card-fav-btn:hover,
+.secondary-card-fav-btn:hover {
+  background: #0284c7;
+  color: #ffffff;
+  transform: translateY(-1px);
+}
+
+.secondary-card-fav-btn.active {
+  background: #10b981;
+  border-color: #059669;
+  color: #ffffff;
+  box-shadow: 0 2px 6px rgba(16, 185, 129, 0.25);
+}
+
+/* Simulation outline prediction card add button */
+.outline-card-fav-btn {
+  background: #f0f9ff;
+  border: 1.5px solid #0284c7;
+  color: #0284c7;
+  font-size: 10px;
+  font-weight: 800;
+  border-radius: 6px;
+  padding: 3px 8px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  transition: all 0.15s ease;
+  line-height: 1.2;
+  letter-spacing: 0.02em;
+}
+
+.outline-card-fav-btn:hover {
+  background: #0284c7;
+  color: #ffffff;
+  transform: translateY(-1px);
+}
+
 .outline-card-fav-btn.active {
-  background: #fef3c7;
-  border-color: #fbbf24;
-  color: #b45309;
+  background: #10b981;
+  border-color: #059669;
+  color: #ffffff;
+  box-shadow: 0 2px 6px rgba(16, 185, 129, 0.25);
 }
 
 /* Glance header key pick slip button */
 .glance-slip-add-btn {
-  background: rgba(255, 255, 255, 0.95);
-  border: 1px solid #cbd5e1;
-  color: #475569;
-  font-size: 10px;
-  font-weight: 700;
-  border-radius: 5px;
-  padding: 2px 6px;
+  background: #f0f9ff;
+  border: 1.5px solid #0284c7;
+  color: #0284c7;
+  font-size: 11px;
+  font-weight: 800;
+  border-radius: 6px;
+  padding: 3px 9px;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   margin-left: 6px;
   transition: all 0.15s ease;
   line-height: 1.2;
+  letter-spacing: 0.02em;
 }
 
-.glance-slip-add-btn:hover,
+.glance-slip-add-btn:hover {
+  background: #0284c7;
+  color: #ffffff;
+  transform: translateY(-1px);
+}
+
 .glance-slip-add-btn.active {
-  background: #fef3c7;
-  border-color: #fbbf24;
-  color: #b45309;
+  background: #10b981;
+  border-color: #059669;
+  color: #ffffff;
+  box-shadow: 0 2px 6px rgba(16, 185, 129, 0.25);
 }
 
 /* Primary prediction card add button */
 .primary-card-fav-btn {
-  background: #ffffff;
-  border: 1px solid #cbd5e1;
-  color: #475569;
-  font-size: 12px;
-  font-weight: 700;
+  background: #f0f9ff;
+  border: 1.5px solid #0284c7;
+  color: #0284c7;
+  font-size: 11px;
+  font-weight: 800;
   border-radius: 8px;
-  padding: 5px 10px;
+  padding: 5px 12px;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   gap: 5px;
   transition: all 0.15s ease;
+  letter-spacing: 0.02em;
 }
 
-.primary-card-fav-btn:hover,
+.primary-card-fav-btn:hover {
+  background: #0284c7;
+  color: #ffffff;
+  transform: translateY(-1px);
+}
+
 .primary-card-fav-btn.active {
-  background: #fef3c7;
-  border-color: #fbbf24;
-  color: #b45309;
+  background: #10b981;
+  border-color: #059669;
+  color: #ffffff;
+  box-shadow: 0 2px 6px rgba(16, 185, 129, 0.25);
 }
 
 /* =====================================================================

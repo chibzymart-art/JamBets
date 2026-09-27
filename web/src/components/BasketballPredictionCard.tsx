@@ -117,6 +117,19 @@ export const BasketballPredictionCard: React.FC<BasketballPredictionCardProps> =
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          {onToggleFavorite && (
+            <button
+              type="button"
+              className={`glance-favorite-btn ${isFavorite ? 'starred' : ''}`}
+              title={isFavorite ? 'Remove from Acca Slip' : 'Add to Acca Slip'}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleFavoriteClick(e);
+              }}
+            >
+              {isFavorite ? '✓ IN SLIP' : '+ ADD TO SLIP'}
+            </button>
+          )}
           {altitudeBonus && (
             <span className="bball-altitude-badge" title="Mile-High Altitude Advantage">
               🏔️ {homeTeam.city} (+{(simulation?.altitude_hca_bonus || 4.15).toFixed(1)} HCA)
@@ -183,10 +196,10 @@ export const BasketballPredictionCard: React.FC<BasketballPredictionCardProps> =
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span className="bball-market-label">
               {prediction.market === 'point_spread'
-                ? '⭐ Primary Point Spread Banker'
+                ? '🎯 Primary Point Spread Banker'
                 : prediction.market === 'game_total_over_under'
-                ? '⭐ Primary Total Points Pick'
-                : '⭐ Primary Moneyline Banker'}
+                ? '🎯 Primary Total Points Pick'
+                : '🎯 Primary Moneyline Banker'}
             </span>
             <span
               style={{
@@ -244,7 +257,7 @@ export const BasketballPredictionCard: React.FC<BasketballPredictionCardProps> =
                 onClick={handleFavoriteClick}
                 title={isFavorite ? 'In Accumulator Slip' : 'Add to Accumulator Slip'}
               >
-                {isFavorite ? '✓ In Slip' : '+ Add Slip'}
+                {isFavorite ? '✓ IN SLIP' : '+ ADD TO SLIP'}
               </button>
             </>
           )}

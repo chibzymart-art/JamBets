@@ -812,10 +812,13 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
         <button
           type="button"
           className={`glance-favorite-btn ${isPrimaryFav ? 'starred' : ''}`}
-          title={isPrimaryFav ? 'Remove from Favorites' : 'Add to Favorites'}
-          onClick={handleTogglePrimaryFav}
+          title={isPrimaryFav ? 'Remove from Acca Slip' : 'Add to Acca Slip'}
+          onClick={(e) => {
+            e.stopPropagation();
+            handleTogglePrimaryFav(e);
+          }}
         >
-          {isPrimaryFav ? '★ FAVORITE' : '☆ FAVORITE'}
+          {isPrimaryFav ? '✓ IN SLIP' : '+ ADD TO SLIP'}
         </button>
 
         {isLive && (
@@ -976,7 +979,7 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
                     }}
                     title={isPrimaryFav ? 'Remove from Acca Slip' : 'Add to Acca Slip'}
                   >
-                    {isPrimaryFav ? '★ In Slip' : '+ Add to Slip'}
+                    {isPrimaryFav ? '✓ IN SLIP' : '+ ADD TO SLIP'}
                   </button>
                 )}
                 {isWon && (
@@ -1225,10 +1228,13 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
                       <button
                         type="button"
                         className={`primary-card-fav-btn ${isPrimaryFav ? 'active' : ''}`}
-                        onClick={handleTogglePrimaryFav}
-                        title={isPrimaryFav ? 'Remove Banker from Favorites Slip' : 'Save Banker to Favorites Slip'}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleTogglePrimaryFav(e);
+                        }}
+                        title={isPrimaryFav ? 'Remove Banker from Acca Slip' : 'Add Banker to Acca Slip'}
                       >
-                        {isPrimaryFav ? '★ In Slip' : '+ Add to Slip'}
+                        {isPrimaryFav ? '✓ IN SLIP' : '+ ADD TO SLIP'}
                       </button>
                       {isWon && <span className="badge-settled-won">✓ WON {isLive ? '(IN-PLAY)' : ''}</span>}
                       {isLost && <span className="badge-settled-lost">✗ LOST</span>}
@@ -1340,7 +1346,7 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
                             onClick={handleToggleGoalsFav}
                             title={isGoalsFav ? 'Remove Goals pick from slip' : 'Add Goals pick to Acca slip'}
                           >
-                            {isGoalsFav ? '★ In Slip' : '+ Add'}
+                            {isGoalsFav ? '✓ IN SLIP' : '+ ADD TO SLIP'}
                           </button>
                           <span className="sim-outline-prob-tag">{poissonData.outlines.goals.top_prob.toFixed(1)}% Prob</span>
                         </div>
@@ -1364,7 +1370,7 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
                             onClick={handleToggleMoneylineFav}
                             title={isMoneylineFav ? 'Remove 1X2 pick from slip' : 'Add 1X2 pick to Acca slip'}
                           >
-                            {isMoneylineFav ? '★ In Slip' : '+ Add'}
+                            {isMoneylineFav ? '✓ IN SLIP' : '+ ADD TO SLIP'}
                           </button>
                           <span className="sim-outline-prob-tag">{poissonData.outlines.moneyline.top_prob.toFixed(1)}% Prob</span>
                         </div>
@@ -1388,7 +1394,7 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
                             onClick={handleToggleCornersFav}
                             title={isCornersFav ? 'Remove Corners pick from slip' : 'Add Corners pick to Acca slip'}
                           >
-                            {isCornersFav ? '★ In Slip' : '+ Add'}
+                            {isCornersFav ? '✓ IN SLIP' : '+ ADD TO SLIP'}
                           </button>
                           <span className="sim-outline-prob-tag">{poissonData.outlines.corners.top_prob.toFixed(1)}% Prob</span>
                         </div>
@@ -1412,7 +1418,7 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
                             onClick={handleToggleBttsFav}
                             title={isBttsFav ? 'Remove BTTS pick from slip' : 'Add BTTS pick to Acca slip'}
                           >
-                            {isBttsFav ? '★ In Slip' : '+ Add'}
+                            {isBttsFav ? '✓ IN SLIP' : '+ ADD TO SLIP'}
                           </button>
                           <span className="sim-outline-prob-tag">{poissonData.outlines.btts.top_prob.toFixed(1)}% Prob</span>
                         </div>
@@ -1436,7 +1442,7 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
                             onClick={handleToggleScorerFav}
                             title={isScorerFav ? 'Remove Scorer pick from slip' : 'Add Scorer pick to Acca slip'}
                           >
-                            {isScorerFav ? '★ In Slip' : '+ Add'}
+                            {isScorerFav ? '✓ IN SLIP' : '+ ADD TO SLIP'}
                           </button>
                           <span className="sim-outline-prob-tag">{poissonData.outlines.anytime_scorer.home_scorer_prob.toFixed(1)}% Probability</span>
                         </div>
@@ -1512,7 +1518,7 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
                                 onClick={handleToggleSecFav}
                                 title={isSecFav ? 'Remove prediction from slip' : 'Add prediction to favorites slip'}
                               >
-                                {isSecFav ? '★ Slip' : '+ Add'}
+                                {isSecFav ? '✓ IN SLIP' : '+ ADD TO SLIP'}
                               </button>
                               <span
                                 className={`tier-badge ${secTier.badgeClass}`}

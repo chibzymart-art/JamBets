@@ -205,7 +205,7 @@ export const FloatingFavoritesWidget: React.FC<FloatingFavoritesWidgetProps> = (
         {/* Glow Radar Aura */}
         <div className="floating-widget-aura" />
         {/* Main Icon */}
-        <div className="floating-widget-icon">{isOpen ? '✕' : '⭐'}</div>
+        <div className="floating-widget-icon">{isOpen ? '✕' : '🎟️'}</div>
         {/* Badge Count */}
         {!isOpen && (
           <span className={`floating-widget-badge ${count > 0 ? 'active' : ''}`}>

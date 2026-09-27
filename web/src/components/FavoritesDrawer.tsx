@@ -90,9 +90,9 @@ export const FavoritesDrawer: React.FC<FavoritesDrawerProps> = ({
         {/* Drawer Header (Fixed) */}
         <div className="favorites-drawer-header">
           <div className="favorites-drawer-title-group">
-            <div className="favorites-drawer-icon-box">⭐</div>
+            <div className="favorites-drawer-icon-box">🎟️</div>
             <div>
-              <h3 className="favorites-drawer-heading">Favorites & Custom Slip</h3>
+              <h3 className="favorites-drawer-heading">Custom Acca Slip</h3>
               <p className="favorites-drawer-subheading">
                 {favorites.length} saved prediction{favorites.length === 1 ? '' : 's'}
                 {favorites.length > 0 && ` • Avg certainty: ${avgProb}%`}
@@ -178,13 +178,13 @@ export const FavoritesDrawer: React.FC<FavoritesDrawerProps> = ({
           <div className="favorites-drawer-body">
           {favorites.length === 0 ? (
             <div className="favorites-empty-state">
-              <div className="favorites-empty-icon">⭐</div>
+              <div className="favorites-empty-icon">🎟️</div>
               <h4>No Predictions Saved Yet</h4>
               <p>
                 You can add any <strong>Primary Banker</strong> or <strong>Secondary Lean</strong> (Over 1.5, Both Teams to Score, Double Chance) directly to this custom slip.
               </p>
               <div className="favorites-empty-tip">
-                💡 Look for the <strong>★ FAVORITE</strong> or <strong>+ Add</strong> button on any match card in the dashboard.
+                💡 Look for the <strong>+ ADD TO SLIP</strong> button on any match card in the dashboard.
               </div>
             </div>
           ) : (

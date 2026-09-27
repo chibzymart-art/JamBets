@@ -485,7 +485,7 @@ export const SpecialistMarketCard: React.FC<SpecialistMarketCardProps> = ({
             title={isFavorite ? 'Remove from Acca Slip' : 'Add to Acca Slip'}
           >
             <span className="btn-icon">{isFavorite ? '✓' : '+'}</span>
-            <span className="btn-label">{isFavorite ? 'In Acca Slip' : 'Add to Acca Slip'}</span>
+            <span className="btn-label">{isFavorite ? 'IN SLIP' : 'ADD TO SLIP'}</span>
           </button>
         )}
       </div>

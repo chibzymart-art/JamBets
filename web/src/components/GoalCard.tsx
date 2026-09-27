@@ -452,10 +452,10 @@ export const GoalCard: React.FC<GoalMatchRowProps> = ({
                 <button
                   type="button"
                   className={`subcard-fav-btn ${isOver25Fav ? 'starred' : ''}`}
-                  title={isOver25Fav ? 'Remove Over 2.5 from Favorites' : 'Add Over 2.5 to Favorites'}
+                  title={isOver25Fav ? 'Remove Over 2.5 from Acca Slip' : 'Add Over 2.5 to Acca Slip'}
                   onClick={handleToggleOver25Fav}
                 >
-                  {isOver25Fav ? '★' : '☆'}
+                  {isOver25Fav ? '✓ IN SLIP' : '+ ADD TO SLIP'}
                 </button>
                 <span className="subcard-market-icon">🎯</span>
                 <span className="subcard-market-title">Over 2.5 Goals</span>
@@ -543,10 +543,10 @@ export const GoalCard: React.FC<GoalMatchRowProps> = ({
                 <button
                   type="button"
                   className={`subcard-fav-btn ${isHt05Fav ? 'starred' : ''}`}
-                  title={isHt05Fav ? 'Remove 1H Over 0.5 from Favorites' : 'Add 1H Over 0.5 to Favorites'}
+                  title={isHt05Fav ? 'Remove 1H Over 0.5 from Acca Slip' : 'Add 1H Over 0.5 to Acca Slip'}
                   onClick={handleToggleHt05Fav}
                 >
-                  {isHt05Fav ? '★' : '☆'}
+                  {isHt05Fav ? '✓ IN SLIP' : '+ ADD TO SLIP'}
                 </button>
                 <span className="subcard-market-icon">⏱️</span>
                 <span className="subcard-market-title">1st Half Over 0.5</span>
@@ -774,7 +774,7 @@ export const StandaloneGoalCard: React.FC<StandaloneGoalCardProps> = ({
             title={isFav ? 'Remove from Slip' : 'Add to Acca Slip'}
             onClick={handleToggleFav}
           >
-            {isFav ? '★' : '☆'}
+            {isFav ? '✓ IN SLIP' : '+ ADD TO SLIP'}
           </button>
         </div>
       </div>

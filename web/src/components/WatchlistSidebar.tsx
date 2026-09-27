@@ -22,7 +22,7 @@ export const WatchlistSidebar: React.FC<WatchlistSidebarProps> = ({
         {/* Watchlist Header: Permanently at top of card */}
         <div className="watchlist-sidebar-header">
           <span className="watchlist-header-title">
-            <span>★</span> FAVORITES / WATCHLIST
+            <span>🎟️</span> ACCA SLIP / WATCHLIST
           </span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <span className="watchlist-count-badge">
@@ -54,10 +54,10 @@ export const WatchlistSidebar: React.FC<WatchlistSidebarProps> = ({
         <div className="watchlist-content-box">
           {favoriteItems.length === 0 ? (
             <div className="watchlist-empty-wrap">
-              <div className="watchlist-empty-icon">★</div>
+              <div className="watchlist-empty-icon">🎟️</div>
               <div className="watchlist-empty-title">Slip Empty</div>
               <p className="watchlist-empty-sub">
-                Click the star icon (☆) or "+ Add" on any match card to pin predictions here or build your custom slip.
+                Click <strong>"+ ADD TO SLIP"</strong> on any match card to pin predictions here or build your custom slip.
               </p>
             </div>
           ) : (

@@ -112,7 +112,7 @@ export const SportsPushAlert: React.FC<SportsPushAlertProps> = ({
           className={`push-add-slip-btn ${isFav ? 'starred' : ''}`}
           onClick={handleAdd}
         >
-          {isFav ? '✓ In Acca Slip' : '+ Add to Slip'}
+          {isFav ? '✓ IN SLIP' : '+ ADD TO SLIP'}
         </button>
 
         <button
