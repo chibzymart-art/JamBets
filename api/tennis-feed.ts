@@ -98,21 +98,23 @@ async function checkIsPaidOrAdmin(authToken: string | null): Promise<boolean> {
 
     const [subRes, entRes] = await Promise.all([
       fetch(`${SUPABASE_URL}/rest/v1/subscriptions?user_id=eq.${userId}&status=eq.active&select=tier&limit=1`, { headers }),
-      fetch(`${SUPABASE_URL}/rest/v1/entitlements?user_id=eq.${userId}&select=tier,valid_until,can_view_predictions&limit=1`, { headers }),
+      fetch(`${SUPABASE_URL}/rest/v1/entitlements?user_id=eq.${userId}&select=tier,valid_until,can_view_predictions,features&limit=1`, { headers }),
     ]);
 
     let isPaid = false;
 
+    // Subscriptions: Only BigBang VIP & Admin have access to multi-sport (Tennis)
     if (subRes.ok) {
       const subData = await subRes.json();
       if (Array.isArray(subData) && subData.length > 0) {
         const tier = (subData[0].tier || '').toLowerCase();
-        if (['standard', 'bigbang', 'vip', 'pro', 'admin'].includes(tier)) {
+        if (['bigbang', 'vip', 'admin'].includes(tier)) {
           isPaid = true;
         }
       }
     }
 
+    // Entitlements: Must be BigBang, VIP, Admin, or have multi-sport/tennis features
     if (!isPaid && entRes.ok) {
       const entData = await entRes.json();
       if (Array.isArray(entData) && entData.length > 0) {
@@ -120,7 +122,15 @@ async function checkIsPaidOrAdmin(authToken: string | null): Promise<boolean> {
         const validUntil = ent.valid_until ? new Date(ent.valid_until).getTime() : Infinity;
         if (validUntil > Date.now()) {
           const tier = (ent.tier || '').toLowerCase();
-          if (ent.can_view_predictions === true || ['standard', 'bigbang', 'vip', 'pro', 'admin'].includes(tier)) {
+          const hasVipFeatures = Boolean(
+            ent.features && (
+              ent.features.bigbang === true ||
+              ent.features.all_sports === true ||
+              ent.features.multi_sport === true ||
+              ent.features.tennis === true
+            )
+          );
+          if (['bigbang', 'vip', 'admin'].includes(tier) || hasVipFeatures) {
             isPaid = true;
           }
         }

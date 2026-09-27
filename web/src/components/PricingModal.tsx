@@ -44,6 +44,7 @@ export const PricingModal: React.FC<PricingModalProps> = ({ isOpen, onClose, onU
             </div>
 
             <ul className="plan-features">
+              <li>✓ Full Football access (General & Specialist markets)</li>
               <li>✓ Unlocks all 4-Day Horizon predictions</li>
               <li>✓ Top Picks & High Confidence edges (≥83%)</li>
               <li>✓ Mid & Low confidence value markets</li>
@@ -77,7 +78,8 @@ export const PricingModal: React.FC<PricingModalProps> = ({ isOpen, onClose, onU
             </div>
 
             <ul className="plan-features">
-              <li>✓ <strong>Everything in Standard</strong></li>
+              <li>✓ <strong>Everything in Standard (All Football)</strong></li>
+              <li>✓ <strong>Multi-Sport VIP: Basketball, Tennis & Cricket models</strong></li>
               <li>✓ <strong>Exclusive 🔥 BANGER signals (96%–100%)</strong></li>
               <li>✓ Full Poisson & Dixon-Coles parameter export</li>
               <li>✓ Priority settlement & zero-quarantine access</li>

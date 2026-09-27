@@ -20,6 +20,7 @@ export interface OtherMarketsPageProps {
   currentUser: any;
   userRole?: string;
   isAdmin: boolean;
+  canViewPredictions?: boolean;
   onOpenAuth: (mode: 'signin' | 'register') => void;
   onOpenSubscription: () => void;
   favoriteItems?: FavoritePredictionItem[];
@@ -41,6 +42,7 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
   currentUser: _currentUser,
   userRole,
   isAdmin,
+  canViewPredictions,
   onOpenAuth: _onOpenAuth,
   onOpenSubscription,
   favoriteItems = [],
@@ -163,12 +165,13 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Determine paid user status
+  // Determine paid user status (Standard + BigBang VIP + Admin have full access to Football)
   const isPaidUser = useMemo(() => {
     if (isAdmin) return true;
+    if (canViewPredictions) return true;
     if (userRole === 'admin' || userRole === 'standard' || userRole === 'bigbang') return true;
     return false;
-  }, [isAdmin, userRole]);
+  }, [isAdmin, userRole, canViewPredictions]);
 
   // Load predictions for current market and filters (Continuous scroll: limit 200)
   const loadMarketData = async () => {

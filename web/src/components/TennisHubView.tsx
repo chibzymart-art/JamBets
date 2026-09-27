@@ -27,6 +27,7 @@ export interface TennisHubViewProps {
 
 export const TennisHubView: React.FC<TennisHubViewProps> = ({
   currentUser: _currentUser = null,
+  userRole,
   isAdmin = false,
   canViewPredictions = false,
   favoriteItems = [],
@@ -768,6 +769,57 @@ export const TennisHubView: React.FC<TennisHubViewProps> = ({
               )}
             </div>
           </div>
+
+          {/* NON-SUBSCRIBER TENNIS VIP NOTICE */}
+          {!isSubscriber && (
+            <div
+              style={{
+                marginTop: 14,
+                marginBottom: 4,
+                padding: '14px 18px',
+                borderRadius: '12px',
+                background: 'linear-gradient(135deg, #1e1b4b 0%, #312e81 100%)',
+                color: '#ffffff',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '16px',
+                boxShadow: '0 4px 14px rgba(49, 46, 129, 0.18)',
+                flexWrap: 'wrap',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: '260px', flex: 1 }}>
+                <span style={{ fontSize: '24px' }}>🎾</span>
+                <div>
+                  <div style={{ fontWeight: 800, fontSize: '13px', letterSpacing: '-0.01em', color: '#fbbf24' }}>
+                    {userRole === 'standard' ? 'Standard Plan Active — Upgrade to BigBang VIP' : 'BigBang VIP Tennis Match Radar'}
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#c7d2fe', marginTop: '2px', lineHeight: 1.4 }}>
+                    {userRole === 'standard'
+                      ? 'Your Standard Plan includes full Football coverage. Tennis predictions and Markov chain models are unlocked with BigBang VIP (₦10,000/mo).'
+                      : 'Live & upcoming tennis predictions require BigBang VIP (₦10,000/mo). Free visitors see verified won proofs only.'}
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={onOpenSubscription}
+                style={{
+                  background: '#f59e0b',
+                  color: '#0f172a',
+                  border: 'none',
+                  borderRadius: '8px',
+                  padding: '8px 16px',
+                  fontWeight: 800,
+                  fontSize: '12px',
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                Upgrade to BigBang VIP (₦10,000/mo) →
+              </button>
+            </div>
+          )}
 
           {/* PREDICTIONS FIXTURES LIST */}
           <div style={{ marginTop: 14 }}>

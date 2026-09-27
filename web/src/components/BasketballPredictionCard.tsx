@@ -241,7 +241,7 @@ export const BasketballPredictionCard: React.FC<BasketballPredictionCardProps> =
                 onOpenUpgrade ? onOpenUpgrade() : onOpenAuth ? onOpenAuth('signin') : null;
               }}
             >
-              👑 Unlock Pick
+              👑 Unlock BigBang VIP (₦10,000/mo) →
             </button>
           ) : (
             <>

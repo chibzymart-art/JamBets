@@ -419,8 +419,8 @@ export default function App() {
     );
   }, [currentUser, profile, subscription, entitlement]);
 
-  // Entitlement Permission
-  const canViewPredictions = useMemo(() => {
+  // Permissions: Football (Standard + BigBang VIP + Admin)
+  const canViewFootball = useMemo(() => {
     if (!currentUser) return false;
     if (isAdmin) return true;
     if (profile?.role === 'admin') return true;
@@ -433,6 +433,28 @@ export default function App() {
     if ((entitlement?.features as any)?.vip === true || (entitlement?.features as any)?.football_predictions === true) return true;
     return false;
   }, [currentUser, isAdmin, profile, subscription, entitlement]);
+
+  // Permissions: Multi-Sport (Tennis, Basketball, Cricket - BigBang VIP + Admin only)
+  const canViewMultiSport = useMemo(() => {
+    if (!currentUser) return false;
+    if (isAdmin) return true;
+    if (profile?.role === 'admin' || profile?.role === 'bigbang') return true;
+    const subTier = subscription?.tier?.toLowerCase();
+    if (subscription?.status === 'active' && subTier && ['bigbang', 'admin', 'vip'].includes(subTier)) return true;
+    const entTier = entitlement?.tier?.toLowerCase();
+    if (entTier && ['bigbang', 'admin', 'vip'].includes(entTier)) return true;
+    if (
+      (entitlement?.features as any)?.bigbang === true ||
+      (entitlement?.features as any)?.all_sports === true ||
+      (entitlement?.features as any)?.multi_sport === true ||
+      (entitlement?.features as any)?.tennis === true ||
+      (entitlement?.features as any)?.basketball === true
+    ) return true;
+    return false;
+  }, [currentUser, isAdmin, profile, subscription, entitlement]);
+
+  // Backward compatibility alias for football predictions
+  const canViewPredictions = canViewFootball;
 
   const handleAuthSuccess = async () => {
     setIsAuthModalOpen(false);
@@ -1872,6 +1894,7 @@ export default function App() {
                 currentUser={currentUser}
                 userRole={profile?.role}
                 isAdmin={isAdmin}
+                canViewPredictions={canViewFootball}
                 onOpenAuth={(mode) => {
                   setAuthModalMode(mode);
                   setIsAuthModalOpen(true);
@@ -1891,6 +1914,7 @@ export default function App() {
                 currentUser={currentUser}
                 userRole={profile?.role}
                 isAdmin={isAdmin}
+                canViewPredictions={canViewFootball}
                 onOpenAuth={(mode) => {
                   setAuthModalMode(mode);
                   setIsAuthModalOpen(true);
@@ -1905,7 +1929,7 @@ export default function App() {
           />
           <Route path="/over-2-5" element={<Navigate to="/other-markets" replace />} />
 
-          {/* ROUTE: TENNIS PREDICTIONS & MONTE CARLO HUB */}
+          {/* ROUTE: TENNIS PREDICTIONS & MONTE CARLO HUB (Gated strictly to BigBang VIP + Admin) */}
           <Route
             path="/tennis"
             element={
@@ -1914,7 +1938,7 @@ export default function App() {
                   currentUser={currentUser}
                   userRole={profile?.role}
                   isAdmin={isAdmin}
-                  canViewPredictions={canViewPredictions}
+                  canViewPredictions={canViewMultiSport}
                   favoriteItems={favoriteItems}
                   onToggleFavoriteItem={toggleFavoriteItem}
                   isFavoriteItem={isFavoriteItem}
@@ -1933,7 +1957,7 @@ export default function App() {
             }
           />
 
-          {/* ROUTE: BASKETBALL PREDICTIONS & MONTE CARLO HUB */}
+          {/* ROUTE: BASKETBALL PREDICTIONS & MONTE CARLO HUB (Gated strictly to BigBang VIP + Admin) */}
           <Route
             path="/basketball"
             element={
@@ -1942,7 +1966,7 @@ export default function App() {
                   currentUser={currentUser}
                   userRole={profile?.role}
                   isAdmin={isAdmin}
-                  canViewPredictions={canViewPredictions}
+                  canViewPredictions={canViewMultiSport}
                   favoriteItems={favoriteItems}
                   onToggleFavoriteItem={toggleFavoriteItem}
                   isFavoriteItem={isFavoriteItem}
@@ -2178,7 +2202,7 @@ export default function App() {
             currentUser={currentUser}
             userRole={profile?.role}
             isAdmin={isAdmin}
-            canViewPredictions={canViewPredictions}
+            canViewPredictions={canViewMultiSport}
             favoriteItems={favoriteItems}
             onToggleFavoriteItem={toggleFavoriteItem}
             isFavoriteItem={isFavoriteItem}
@@ -2195,7 +2219,7 @@ export default function App() {
             currentUser={currentUser}
             userRole={profile?.role}
             isAdmin={isAdmin}
-            canViewPredictions={canViewPredictions}
+            canViewPredictions={canViewMultiSport}
             favoriteItems={favoriteItems}
             onToggleFavoriteItem={toggleFavoriteItem}
             isFavoriteItem={isFavoriteItem}

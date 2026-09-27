@@ -331,7 +331,7 @@ export const TennisPredictionCard: React.FC<TennisPredictionCardProps> = ({
                   else if (onOpenAuth) onOpenAuth('register');
                 }}
               >
-                Unlock (₦5,000/mo) →
+                Unlock BigBang VIP (₦10,000/mo) →
               </button>
             </div>
           ) : (
@@ -416,7 +416,7 @@ export const TennisPredictionCard: React.FC<TennisPredictionCardProps> = ({
                     else if (onOpenAuth) onOpenAuth('register');
                   }}
                 >
-                  ⚡ Unlock with Standard Plan (₦5,000/mo) →
+                  ⚡ Unlock with BigBang VIP (₦10,000/mo) →
                 </button>
               </div>
             </div>
