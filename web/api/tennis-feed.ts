@@ -320,10 +320,29 @@ export default async function handler(req: Request): Promise<Response> {
           const st = (p.fixture?.status || '').toLowerCase();
           if (st !== statusFilter) return false;
         }
+
+        // Strict Paywall: Non-paid users ONLY see won games for finished fixtures (never lost, void, or un-won)
+        if (!isPaidOrAdmin) {
+          const status = (p.settlement_status || '').toLowerCase();
+          const isFinished = p.fixture?.status === 'finished' || p.fixture?.status === 'retired' || Boolean(p.settled_at);
+          if (status === 'lost' || status === 'void' || status === 'voided' || (isFinished && status !== 'won')) {
+            return false;
+          }
+        }
+
         return true;
       })
       .map((p) => {
         if (isPaidOrAdmin) {
+          return {
+            ...p,
+            is_locked: false,
+          };
+        }
+
+        // Free users & visitors see WON matches unlocked as proof
+        const isWon = (p.settlement_status || '').toLowerCase() === 'won';
+        if (isWon) {
           return {
             ...p,
             is_locked: false,
@@ -346,13 +365,21 @@ export default async function handler(req: Request): Promise<Response> {
         };
       });
 
+    const sanitizedStats = isPaidOrAdmin ? feedData.stats : {
+      ...feedData.stats,
+      settled_count: feedData.stats.settled_won,
+      settled_lost: 0,
+      settled_void: 0,
+      win_rate: feedData.stats.settled_won > 0 ? 100 : 0,
+    };
+
     return new Response(
       JSON.stringify({
         success: true,
         is_subscriber: isPaidOrAdmin,
-        stats: feedData.stats,
+        stats: sanitizedStats,
         tournaments: feedData.tournaments,
-        settlements: feedData.settlements,
+        settlements: isPaidOrAdmin ? feedData.settlements : feedData.settlements.filter((s: any) => (s.status || '').toLowerCase() === 'won'),
         predictions: processedPredictions,
         cached_at: feedData.cached_at,
       }),

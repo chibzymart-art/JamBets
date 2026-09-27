@@ -95,6 +95,14 @@ export const TennisHubView: React.FC<TennisHubViewProps> = ({
     // Map prediction counts by WAT kickoff date
     const fixtureCountByDate = new Map<string, number>();
     allPredictions.forEach((p) => {
+      // Free users & visitors strictly see only won fixtures (never lost, void, or un-won finished fixtures)
+      if (!isSubscriber) {
+        const isWon = p.settlement_status === 'won' || p.settlement_status === 'half_won';
+        const isLost = p.settlement_status === 'lost' || p.settlement_status === 'half_lost';
+        const isVoid = (p.settlement_status as string) === 'void' || (p.settlement_status as string) === 'voided';
+        const isFinished = p.fixture?.status === 'finished' || p.fixture?.status === 'retired' || Boolean(p.settled_at);
+        if (isLost || isVoid || (isFinished && !isWon)) return;
+      }
       const kickoff = p.target_kickoff_at || p.fixture?.target_kickoff_at;
       const d = getFixtureWatDate(kickoff);
       if (d) {
@@ -118,6 +126,13 @@ export const TennisHubView: React.FC<TennisHubViewProps> = ({
     // Count fixtures for current date and future dates (strictly no past dates)
     let currentAndFutureCount = 0;
     allPredictions.forEach((p) => {
+      if (!isSubscriber) {
+        const isWon = p.settlement_status === 'won' || p.settlement_status === 'half_won';
+        const isLost = p.settlement_status === 'lost' || p.settlement_status === 'half_lost';
+        const isVoid = (p.settlement_status as string) === 'void' || (p.settlement_status as string) === 'voided';
+        const isFinished = p.fixture?.status === 'finished' || p.fixture?.status === 'retired' || Boolean(p.settled_at);
+        if (isLost || isVoid || (isFinished && !isWon)) return;
+      }
       const kickoff = p.target_kickoff_at || p.fixture?.target_kickoff_at;
       const d = getFixtureWatDate(kickoff);
       if (!d || d >= today.iso) currentAndFutureCount++;
@@ -159,7 +174,7 @@ export const TennisHubView: React.FC<TennisHubViewProps> = ({
       todayIso: today.iso,
       yesterdayIso: yesterday.iso,
     };
-  }, [allPredictions]);
+  }, [allPredictions, isSubscriber]);
 
   const isPastDateSelected =
     selectedDate !== 'all' &&
@@ -173,19 +188,31 @@ export const TennisHubView: React.FC<TennisHubViewProps> = ({
 
   // Active predictions matching the selected date
   const dateScopedPredictions = useMemo(() => {
+    let baseList = allPredictions;
+    if (!isSubscriber) {
+      baseList = baseList.filter((p) => {
+        const isWon = p.settlement_status === 'won' || p.settlement_status === 'half_won';
+        const isLost = p.settlement_status === 'lost' || p.settlement_status === 'half_lost';
+        const isVoid = (p.settlement_status as string) === 'void' || (p.settlement_status as string) === 'voided';
+        const isFinished = p.fixture?.status === 'finished' || p.fixture?.status === 'retired' || Boolean(p.settled_at);
+        if (isLost || isVoid || (isFinished && !isWon)) return false;
+        return true;
+      });
+    }
+
     if (selectedDate === 'all') {
-      return allPredictions.filter((p) => {
+      return baseList.filter((p) => {
         const kickoff = p.target_kickoff_at || p.fixture?.target_kickoff_at;
         const d = getFixtureWatDate(kickoff);
         return !d || d >= dynamicDateTabs.todayIso;
       });
     }
-    return allPredictions.filter((p) => {
+    return baseList.filter((p) => {
       const kickoff = p.target_kickoff_at || p.fixture?.target_kickoff_at;
       const d = getFixtureWatDate(kickoff);
       return d === selectedDate;
     });
-  }, [allPredictions, selectedDate, dynamicDateTabs.todayIso]);
+  }, [allPredictions, selectedDate, dynamicDateTabs.todayIso, isSubscriber]);
 
   // Dynamic competition category match counts for selected date horizon
   const competitionCounts = useMemo(() => {
@@ -371,28 +398,38 @@ export const TennisHubView: React.FC<TennisHubViewProps> = ({
       const status = (p.settlement_status || 'pending').toLowerCase();
 
       if (status === 'won') allWon++;
-      else if (status === 'lost') allLost++;
-      else if (status === 'void' || status === 'voided') allVoid++;
+      else if (status === 'lost') {
+        if (isSubscriber) allLost++;
+      }
+      else if (status === 'void' || status === 'voided') {
+        if (isSubscriber) allVoid++;
+      }
       else allPending++;
 
       if (tier === 'BANGER') {
         bangerTotal++;
         if (status === 'won') bangerWon++;
-        else if (status === 'lost') bangerLost++;
+        else if (status === 'lost') {
+          if (isSubscriber) bangerLost++;
+        }
       } else if (tier === 'TOP_PICK' || tier === 'TOP PICK') {
         topPickTotal++;
         if (status === 'won') topPickWon++;
-        else if (status === 'lost') topPickLost++;
+        else if (status === 'lost') {
+          if (isSubscriber) topPickLost++;
+        }
       } else if (tier === 'HIGH_CONFIDENCE' || tier === 'HIGH CONFIDENCE') {
         highTotal++;
         if (status === 'won') highWon++;
-        else if (status === 'lost') highLost++;
+        else if (status === 'lost') {
+          if (isSubscriber) highLost++;
+        }
       }
     }
 
     const calcWinRate = (w: number, l: number) => {
       const decisive = w + l;
-      return decisive > 0 ? String(Math.round((w / decisive) * 100)) : '0';
+      return decisive > 0 ? String(Math.round((w / decisive) * 100)) : (w > 0 && !isSubscriber ? '100' : '0');
     };
 
     return {
@@ -415,7 +452,7 @@ export const TennisHubView: React.FC<TennisHubViewProps> = ({
       highLost,
       highWinRate: calcWinRate(highWon, highLost),
     };
-  }, [dateScopedPredictions]);
+  }, [dateScopedPredictions, isSubscriber]);
 
   return (
     <div className="tennis-hub-view-wrapper" style={{ width: '100%', maxWidth: '1480px', margin: '0 auto', padding: '0 16px 80px 16px' }}>

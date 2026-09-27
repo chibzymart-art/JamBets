@@ -65,6 +65,12 @@ export const SpecialistMarketCard: React.FC<SpecialistMarketCardProps> = ({
   const isSettled = ['won', 'lost', 'void'].includes(prediction.settlement_status);
   const isWon = prediction.settlement_status === 'won';
   const isLost = prediction.settlement_status === 'lost';
+  const isVoid = prediction.settlement_status === 'void' || prediction.settlement_status === 'voided';
+
+  // Strict Paywall: Non-paid users strictly see only won fixtures (never lost, void, or un-won finished)
+  if (is_locked && (isLost || isVoid || (isFinished && !isWon))) {
+    return null;
+  }
 
   // Full-time final score display
   const ftHome = fixture?.home_score ?? (prediction.actual_score ? prediction.actual_score.split('-')[0]?.trim() : null);

@@ -263,6 +263,40 @@ async function fetchBasketballFromUpstream(isPaidOrAdmin: boolean): Promise<Bask
   let settledLost = 0;
   let settledVoid = 0;
 
+// Strict Paywall Redaction for Basketball:
+// 1. Non-paid users only see WON predictions for finished matches (unlocked as proof)
+// 2. Non-paid users NEVER see lost, void, or un-won finished predictions (completely hidden)
+// 3. Upcoming predictions are locked
+function applyBasketballPaywallRedaction(preds: any[]): any[] {
+  return preds
+    .filter((p: any) => {
+      const status = (p.settlement_status || '').toLowerCase();
+      const isFinished = p.fixture?.status === 'finished' || Boolean(p.settled_at);
+      if (status === 'lost' || status === 'void' || status === 'voided' || (isFinished && status !== 'won')) {
+        return false;
+      }
+      return true;
+    })
+    .map((p: any) => {
+      const isWon = (p.settlement_status || '').toLowerCase() === 'won';
+      if (isWon) {
+        return {
+          ...p,
+          is_locked: false,
+        };
+      }
+      return {
+        ...p,
+        is_locked: true,
+        probability: null,
+        confidence_category: p.confidence_category === 'BANGER' ? 'BANGER' : 'TOP PICK',
+        prediction: '🔒 Subscriber Only',
+        secondary_predictions: [],
+        metadata: {},
+      };
+    });
+}
+
   for (const s of settlements) {
     const st = (s.status || '').toLowerCase();
     if (st === 'won') settledWon++;
@@ -273,21 +307,23 @@ async function fetchBasketballFromUpstream(isPaidOrAdmin: boolean): Promise<Bask
   const finishedDecisive = settledWon + settledLost;
   const winRate = finishedDecisive > 0 ? Math.round((settledWon / finishedDecisive) * 100) : 85.0;
 
+  const sanitizedPredictions = !isPaidOrAdmin ? applyBasketballPaywallRedaction(predictions) : predictions;
+
   return {
-    predictions,
+    predictions: sanitizedPredictions,
     leagues,
-    settlements,
+    settlements: isPaidOrAdmin ? settlements : settlements.filter((s: any) => (s.status || '').toLowerCase() === 'won'),
     stats: {
-      total_matches: predictions.length,
+      total_matches: sanitizedPredictions.length,
       bangers_count: bangers,
       top_picks_count: topPicks,
       high_confidence_count: highConf,
       leagues_count: leagues.length,
-      settled_count: settlements.length,
+      settled_count: isPaidOrAdmin ? settlements.length : settledWon,
       settled_won: settledWon,
-      settled_lost: settledLost,
-      settled_void: settledVoid,
-      win_rate: winRate,
+      settled_lost: isPaidOrAdmin ? settledLost : 0,
+      settled_void: isPaidOrAdmin ? settledVoid : 0,
+      win_rate: isPaidOrAdmin ? winRate : (settledWon > 0 ? 100 : 0),
     },
     cached_at: new Date().toISOString(),
   };

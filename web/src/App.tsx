@@ -1068,6 +1068,8 @@ export default function App() {
       ).map((f) => f.id)
     );
 
+    const isPaid = isAdmin || canViewPredictions;
+
     sourceList.forEach((item: any) => {
       if (!activeFixtureIds.has(item.fixture_id)) return;
       let st = item.settlement_status || 'pending';
@@ -1079,63 +1081,79 @@ export default function App() {
         item.prediction === 'SKIP';
 
       if (st === 'won') allWon++;
-      else if (st === 'lost') allLost++;
-      else if (st === 'void' || st === 'voided') allVoid++;
+      else if (st === 'lost') {
+        if (isPaid) allLost++;
+      }
+      else if (st === 'void' || st === 'voided') {
+        if (isPaid) allVoid++;
+      }
       else allPending++;
 
       if (rawCat === 'BANGER') {
         bangerTotal++;
         if (st === 'won') bangerWon++;
-        else if (st === 'lost') bangerLost++;
+        else if (st === 'lost') {
+          if (isPaid) bangerLost++;
+        }
         else bangerPending++;
       } else if (rawCat === 'TOP_PICK' || rawCat === 'TOPPICK') {
         topPickTotal++;
         if (st === 'won') topPickWon++;
-        else if (st === 'lost') topPickLost++;
+        else if (st === 'lost') {
+          if (isPaid) topPickLost++;
+        }
         else topPickPending++;
       } else if (rawCat === 'HIGH_CONFIDENCE' || rawCat === 'HIGHCONFIDENCE' || rawCat === 'HIGH') {
         highTotal++;
         if (st === 'won') highWon++;
-        else if (st === 'lost') highLost++;
+        else if (st === 'lost') {
+          if (isPaid) highLost++;
+        }
         else highPending++;
       } else if (rawCat === 'MID_CONFIDENCE' || rawCat === 'MIDCONFIDENCE' || rawCat === 'MID') {
         midTotal++;
         if (st === 'won') midWon++;
-        else if (st === 'lost') midLost++;
+        else if (st === 'lost') {
+          if (isPaid) midLost++;
+        }
         else midPending++;
       } else if (rawCat === 'LOW_CONFIDENCE' || rawCat === 'LOWCONFIDENCE' || rawCat === 'LOW' || rawCat === 'RISKY') {
         lowTotal++;
         if (st === 'won') lowWon++;
-        else if (st === 'lost') lowLost++;
+        else if (st === 'lost') {
+          if (isPaid) lowLost++;
+        }
         else lowPending++;
       } else if (isAntiLoss) {
         antiLossTotal++;
         if (st === 'won') antiLossWon++;
-        else if (st === 'lost') antiLossLost++;
+        else if (st === 'lost') {
+          if (isPaid) antiLossLost++;
+        }
         else antiLossPending++;
       }
     });
 
     const allDecided = allWon + allLost;
-    const allWinRate = allDecided > 0 ? Math.round((allWon / allDecided) * 100) : 0;
+    const allWinRate = allDecided > 0 ? Math.round((allWon / allDecided) * 100) : (allWon > 0 && !isPaid ? 100 : 0);
 
     const bangerDecided = bangerWon + bangerLost;
-    const bangerWinRate = bangerDecided > 0 ? Math.round((bangerWon / bangerDecided) * 100) : 0;
+    const bangerWinRate = bangerDecided > 0 ? Math.round((bangerWon / bangerDecided) * 100) : (bangerWon > 0 && !isPaid ? 100 : 0);
 
     const topPickDecided = topPickWon + topPickLost;
-    const topPickWinRate = topPickDecided > 0 ? Math.round((topPickWon / topPickDecided) * 100) : 0;
+    const topPickWinRate = topPickDecided > 0 ? Math.round((topPickWon / topPickDecided) * 100) : (topPickWon > 0 && !isPaid ? 100 : 0);
 
     const highDecided = highWon + highLost;
-    const highWinRate = highDecided > 0 ? Math.round((highWon / highDecided) * 100) : 0;
+    const highWinRate = highDecided > 0 ? Math.round((highWon / highDecided) * 100) : (highWon > 0 && !isPaid ? 100 : 0);
 
     const midDecided = midWon + midLost;
-    const midWinRate = midDecided > 0 ? Math.round((midWon / midDecided) * 100) : 0;
+    const midWinRate = midDecided > 0 ? Math.round((midWon / midDecided) * 100) : (midWon > 0 && !isPaid ? 100 : 0);
 
     const lowDecided = lowWon + lowLost;
-    const lowWinRate = lowDecided > 0 ? Math.round((lowWon / lowDecided) * 100) : 0;
+    const lowWinRate = lowDecided > 0 ? Math.round((lowWon / lowDecided) * 100) : (lowWon > 0 && !isPaid ? 100 : 0);
 
     const antiLossDecided = antiLossWon + antiLossLost;
-    const antiLossWinRate = antiLossDecided > 0 ? Math.round((antiLossWon / antiLossDecided) * 100) : 0;
+    const antiLossWinRate = antiLossDecided > 0 ? Math.round((antiLossWon / antiLossDecided) * 100) : (antiLossWon > 0 && !isPaid ? 100 : 0);
 
     const scopedFixtures = selectedDate === 'all'
       ? fixtures.filter((f) => {
@@ -1207,7 +1225,7 @@ export default function App() {
       liveCount,
       settledMatchesCount
     };
-  }, [fixtures, predsByFixture, canViewPredictions, selectedDate]);
+  }, [fixtures, predsByFixture, canViewPredictions, isAdmin, selectedDate]);
 
   // Dynamic Tier-specific activity and settlement stats wired to Card 2
   const activeTierStats = useMemo(() => {

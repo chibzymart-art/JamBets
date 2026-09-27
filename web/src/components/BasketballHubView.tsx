@@ -85,6 +85,14 @@ export const BasketballHubView: React.FC<BasketballHubViewProps> = ({
   const dynamicDateTabs = useMemo(() => {
     const fixtureCountByDate = new Map<string, number>();
     allPredictions.forEach((p) => {
+      // Free users & visitors strictly see only won fixtures (never lost, void, or un-won finished fixtures)
+      if (!isSubscriber) {
+        const isWon = p.settlement_status === 'won' || p.settlement_status === 'half_won';
+        const isLost = p.settlement_status === 'lost' || p.settlement_status === 'half_lost';
+        const isVoid = (p.settlement_status as string) === 'void' || (p.settlement_status as string) === 'voided';
+        const isFinished = p.fixture?.status === 'finished' || Boolean(p.settled_at);
+        if (isLost || isVoid || (isFinished && !isWon)) return;
+      }
       const kickoff = p.target_kickoff_at || p.fixture?.target_kickoff_at;
       const d = getFixtureWatDate(kickoff);
       if (d) {
@@ -112,11 +120,22 @@ export const BasketballHubView: React.FC<BasketballHubViewProps> = ({
     });
 
     return [...pastDates, ...futureDates];
-  }, [allPredictions]);
+  }, [allPredictions, isSubscriber]);
 
   // Filtered Predictions
   const filteredPredictions = useMemo(() => {
     return allPredictions.filter((p) => {
+      // Strict Paywall: Free users & visitors strictly see only won fixtures (never lost, void, or un-won finished fixtures)
+      if (!isSubscriber) {
+        const isWon = p.settlement_status === 'won' || p.settlement_status === 'half_won';
+        const isLost = p.settlement_status === 'lost' || p.settlement_status === 'half_lost';
+        const isVoid = (p.settlement_status as string) === 'void' || (p.settlement_status as string) === 'voided';
+        const isFinished = p.fixture?.status === 'finished' || Boolean(p.settled_at);
+        if (isLost || isVoid || (isFinished && !isWon)) {
+          return false;
+        }
+      }
+
       // 1. Date Filter (ignore if viewing past results)
       if (settlementFilter === 'all') {
         const kickoff = p.target_kickoff_at || p.fixture?.target_kickoff_at;
@@ -141,6 +160,7 @@ export const BasketballHubView: React.FC<BasketballHubViewProps> = ({
       if (settlementFilter !== 'all') {
         const st = (p.settlement_status || 'pending').toLowerCase();
         if (st !== settlementFilter) return false;
+        if (!isSubscriber && (settlementFilter === 'lost' || settlementFilter === 'void')) return false;
       }
 
       // 5. Tier Filter
@@ -153,7 +173,7 @@ export const BasketballHubView: React.FC<BasketballHubViewProps> = ({
 
       return true;
     });
-  }, [allPredictions, selectedDate, selectedLeague, selectedMarket, settlementFilter, selectedTier]);
+  }, [allPredictions, selectedDate, selectedLeague, selectedMarket, settlementFilter, selectedTier, isSubscriber]);
 
   // Dynamic Lagos WAT Daily Metrics strictly calculated for active selectedDate
   const dailyStats = useMemo(() => {
@@ -173,6 +193,14 @@ export const BasketballHubView: React.FC<BasketballHubViewProps> = ({
         return;
       }
 
+      if (!isSubscriber) {
+        const isWon = p.settlement_status === 'won' || p.settlement_status === 'half_won';
+        const isLost = p.settlement_status === 'lost' || p.settlement_status === 'half_lost';
+        const isVoid = (p.settlement_status as string) === 'void' || (p.settlement_status as string) === 'voided';
+        const isFinished = p.fixture?.status === 'finished' || Boolean(p.settled_at);
+        if (isLost || isVoid || (isFinished && !isWon)) return;
+      }
+
       dayTotal++;
       const c = (p.confidence_category || '').toUpperCase();
       if (c === 'BANGER') dayBangers++;
@@ -180,13 +208,17 @@ export const BasketballHubView: React.FC<BasketballHubViewProps> = ({
 
       const st = (p.settlement_status || 'pending').toLowerCase();
       if (st === 'won') dayWon++;
-      else if (st === 'lost') dayLost++;
-      else if (st === 'void') dayVoid++;
+      else if (st === 'lost') {
+        if (isSubscriber) dayLost++;
+      }
+      else if (st === 'void') {
+        if (isSubscriber) dayVoid++;
+      }
       else dayPending++;
     });
 
     const decided = dayWon + dayLost;
-    const winRate = decided > 0 ? Math.round((dayWon / decided) * 100) : null;
+    const winRate = decided > 0 ? Math.round((dayWon / decided) * 100) : (dayWon > 0 && !isSubscriber ? 100 : null);
 
     return {
       total: dayTotal,
@@ -197,11 +229,11 @@ export const BasketballHubView: React.FC<BasketballHubViewProps> = ({
       decided,
       bangers: dayBangers,
       topPicks: dayTopPicks,
-      settled: dayWon + dayLost + dayVoid,
+      settled: isSubscriber ? (dayWon + dayLost + dayVoid) : dayWon,
       winRate,
       isDaily: Boolean(selectedDate && selectedDate !== 'all'),
     };
-  }, [allPredictions, selectedDate]);
+  }, [allPredictions, selectedDate, isSubscriber]);
 
   return (
     <div className="bball-page-root" style={{ minHeight: '80vh', width: '100%', maxWidth: '1480px', margin: '0 auto', padding: '0 16px 40px' }}>

@@ -45,7 +45,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             actual_score,
             target_kickoff_at
           `)
-          .in('settlement_status', ['won', 'lost', 'settled'])
+          .eq('settlement_status', 'won')
           .order('target_kickoff_at', { ascending: false })
           .limit(8);
 
@@ -65,19 +65,21 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             .in('id', fixtureIds);
 
           const fixtureMap = new Map((fixtures || []).map((f: any) => [f.id, f]));
-          const combined = preds.map(p => ({
-            ...p,
-            fixture: fixtureMap.get(p.fixture_id)
-          }));
+          const combined = preds
+            .filter((p: any) => p.settlement_status === 'won')
+            .map(p => ({
+              ...p,
+              fixture: fixtureMap.get(p.fixture_id)
+            }));
 
           setSettledPicks(combined);
         }
 
-        // Fetch total count of settled matches
+        // Fetch total count of settled won matches
         const { count } = await supabase
           .from('football_predictions')
           .select('*', { count: 'exact', head: true })
-          .in('settlement_status', ['won', 'lost', 'settled']);
+          .eq('settlement_status', 'won');
 
         if (count && count > 0) {
           setTotalSettledCount(count);
@@ -209,7 +211,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               </div>
 
               <div className="hero-light-metric-card">
-                <span className="metric-light-label">Settled picks</span>
+                <span className="metric-light-label">Verified won picks</span>
                 <span className="metric-light-val dark">{totalSettledCount > 0 ? `${totalSettledCount}+` : '680+'}</span>
               </div>
 
@@ -403,7 +405,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           ) : settledPicks.length > 0 ? (
             <div className="ledger-light-grid">
               {settledPicks.map((pick) => {
-                const isWon = pick.settlement_status === 'won';
                 const homeName = pick.fixture?.home_team?.name || 'Home Club';
                 const awayName = pick.fixture?.away_team?.name || 'Away Club';
                 const leagueName = pick.fixture?.league?.name || 'League';
@@ -412,11 +413,11 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                   : (pick.actual_score || 'FT');
 
                 return (
-                  <div key={pick.id} className={`ledger-light-card ${isWon ? 'card-won' : 'card-lost'}`}>
+                  <div key={pick.id} className="ledger-light-card card-won">
                     <div className="ledger-card-top">
                       <span className="ledger-league-badge">{leagueName}</span>
-                      <span className={`ledger-status-tag ${isWon ? 'tag-won' : 'tag-lost'}`}>
-                        {isWon ? '✓ VERIFIED WON' : '✕ SETTLED LOST'}
+                      <span className="ledger-status-tag tag-won">
+                        ✓ VERIFIED WON
                       </span>
                     </div>
 

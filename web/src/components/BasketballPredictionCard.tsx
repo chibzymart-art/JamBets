@@ -35,15 +35,22 @@ export const BasketballPredictionCard: React.FC<BasketballPredictionCardProps> =
   const homeTeam = fixture?.home_team;
   const awayTeam = fixture?.away_team;
 
-  const isFinished = fixture?.status === 'finished';
+  const isFinished = fixture?.status === 'finished' || Boolean(prediction.settled_at);
   const isLive = fixture?.status === 'live';
-  const isWon = prediction.settlement_status === 'won';
-  const isLost = prediction.settlement_status === 'lost';
-  const isVoid = prediction.settlement_status === 'void';
+  const isWon = prediction.settlement_status === 'won' || prediction.settlement_status === 'half_won';
+  const isLost = prediction.settlement_status === 'lost' || prediction.settlement_status === 'half_lost';
+  const isVoid = (prediction.settlement_status as string) === 'void' || (prediction.settlement_status as string) === 'voided';
 
-  // Entitlement: Admins, paid subscribers, or settled/finished matches are unlocked
+  // Entitlement: Admins or entitled subscribers have full access
   const isUserEntitled = Boolean(isAdmin || canViewPredictions || isSubscriber);
-  const isLocked = !isUserEntitled && (is_locked || !(isWon || isLost || isVoid || isFinished));
+
+  // Strict Paywall: Free users and visitors strictly see only won fixtures (never lost, void, or un-won finished)
+  if (!isUserEntitled && (isLost || isVoid || (isFinished && !isWon))) {
+    return null;
+  }
+
+  // For non-entitled users, only WON predictions are unlocked as proof; upcoming/live are locked
+  const isLocked = !isUserEntitled ? !isWon : Boolean(is_locked);
 
   // Kickoff formatting in Lagos WAT (UTC+1)
   const kickoffDate = new Date(prediction.target_kickoff_at || fixture?.target_kickoff_at || Date.now());

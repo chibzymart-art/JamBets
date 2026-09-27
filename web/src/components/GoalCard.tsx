@@ -656,6 +656,14 @@ export const StandaloneGoalCard: React.FC<StandaloneGoalCardProps> = ({
 
   const isLive = f?.status === 'live' || f?.status === 'in_progress' || f?.status === 'halftime';
   const isFinished = f?.status === 'finished' || f?.period === 'FT' || p.settlement_status !== 'pending';
+  const isWon = p.settlement_status === 'won';
+  const isLost = p.settlement_status === 'lost';
+  const isVoid = (p.settlement_status as string) === 'void' || (p.settlement_status as string) === 'voided';
+
+  // Strict Paywall: Non-paid users strictly see only won fixtures (never lost, void, or un-won finished)
+  if (!isPaidUser && (isLost || isVoid || (isFinished && !isWon))) {
+    return null;
+  }
 
   // Helper to format scores with spaces around hyphens
   const formatScore = (raw?: string | null): string | null => {
@@ -740,8 +748,6 @@ export const StandaloneGoalCard: React.FC<StandaloneGoalCardProps> = ({
     });
   };
 
-  const isWon = p.settlement_status === 'won';
-  const isLost = p.settlement_status === 'lost';
   const [isAiExpanded, setIsAiExpanded] = React.useState(false);
 
   return (

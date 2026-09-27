@@ -227,8 +227,13 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
       // Exclude void or archived legacy records completely from user display
       if (p.settlement_status === 'void' || (p as any).publication_status === 'archived') return false;
 
-      // Strict Paywall: Non-paid users NEVER see lost predictions
-      if (!isPaidUser && p.settlement_status === 'lost') return false;
+      // Strict Paywall: Non-paid users ONLY see won predictions for finished matches, never lost/void/unsettled
+      if (!isPaidUser) {
+        const isFinished = p.fixture?.status === 'finished' || Boolean(p.settled_at);
+        if (p.settlement_status === 'lost' || p.settlement_status === 'void' || (isFinished && p.settlement_status !== 'won')) {
+          return false;
+        }
+      }
 
       // Status filter
       if (statusFilter === 'won' && p.settlement_status !== 'won') return false;

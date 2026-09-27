@@ -78,15 +78,22 @@ export const TennisPredictionCard: React.FC<TennisPredictionCardProps> = ({
     hour12: true,
   });
 
-  const isFinished = fixture?.status === 'finished' || fixture?.status === 'retired';
+  const isFinished = fixture?.status === 'finished' || fixture?.status === 'retired' || Boolean(prediction.settled_at);
   const isLive = fixture?.status === 'live';
-  const isWon = prediction.settlement_status === 'won';
-  const isLost = prediction.settlement_status === 'lost';
-  const isVoid = prediction.settlement_status === 'void';
+  const isWon = prediction.settlement_status === 'won' || prediction.settlement_status === 'half_won';
+  const isLost = prediction.settlement_status === 'lost' || prediction.settlement_status === 'half_lost';
+  const isVoid = (prediction.settlement_status as string) === 'void' || (prediction.settlement_status as string) === 'voided';
 
-  // Entitlement: Admins, entitled subscribers, or settled/finished matches are unlocked
+  // Entitlement: Admins or entitled subscribers have full access
   const isUserEntitled = Boolean(isAdmin || canViewPredictions || isSubscriber);
-  const isLocked = !isUserEntitled && (is_locked || !(isWon || isLost || isVoid || isFinished));
+
+  // Strict Paywall: Free users and visitors strictly see only won fixtures (never lost, void, or un-won finished)
+  if (!isUserEntitled && (isLost || isVoid || (isFinished && !isWon))) {
+    return null;
+  }
+
+  // For non-entitled users, only WON predictions are unlocked as proof; upcoming/live are locked
+  const isLocked = !isUserEntitled ? !isWon : Boolean(is_locked);
 
   // Confidence tier configuration (matching Football FixtureCard exactly)
   const effectiveCategory = isLocked ? 'LOCKED' : (prediction.confidence_category || 'TOP PICK');
