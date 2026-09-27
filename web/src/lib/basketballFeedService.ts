@@ -91,7 +91,6 @@ const PRED_SELECT = `
     away_rest_days,
     is_home_b2b,
     is_away_b2b,
-    metadata,
     league:basketball_leagues!inner(
       id,
       code,
@@ -172,32 +171,65 @@ export async function fetchBasketballFeed(
   }
 
   try {
-    // 1. Fetch Predictions
-    const predTable = isUnlocked ? 'basketball_predictions' : 'basketball_predictions_paywall';
-    let predQuery = supabase
-      .from(predTable)
-      .select(PRED_SELECT)
-      .order('target_kickoff_at', { ascending: true })
-      .limit(300);
+    let rawPredictions: BasketballPrediction[] = [];
+    let rawLeagues: BasketballLeague[] = [];
+    let rawSettlements: BasketballSettlement[] = [];
+    let usedEdge = false;
 
-    const [predRes, leaguesRes, settleRes] = await Promise.all([
-      predQuery,
-      supabase
-        .from('basketball_leagues')
-        .select('*')
-        .eq('is_active', true)
-        .order('name', { ascending: true })
-        .limit(100),
-      supabase
-        .from('basketball_settlements')
-        .select(SETTLE_SELECT)
-        .order('settled_at', { ascending: false })
-        .limit(200),
-    ]);
+    // 1. Query Edge CDN Proxy first (shields Supabase from thousands of browser calls)
+    if (typeof window !== 'undefined') {
+      try {
+        const session = (await supabase.auth.getSession()).data.session;
+        const reqHeaders: Record<string, string> = { Accept: 'application/json' };
+        if (session?.access_token) {
+          reqHeaders['Authorization'] = `Bearer ${session.access_token}`;
+        }
+        const edgeRes = await fetch('/api/basketball-feed', {
+          headers: reqHeaders,
+          cache: forceRefresh ? 'no-cache' : 'default',
+        });
+        if (edgeRes.ok) {
+          const edgeData = await edgeRes.json();
+          if (edgeData.success && Array.isArray(edgeData.predictions)) {
+            rawPredictions = edgeData.predictions;
+            rawLeagues = edgeData.leagues || [];
+            rawSettlements = edgeData.settlements || [];
+            usedEdge = true;
+          }
+        }
+      } catch {
+        // Fallback to direct PostgREST if edge unavailable
+      }
+    }
 
-    let rawPredictions: BasketballPrediction[] = (predRes.data as unknown as BasketballPrediction[]) || [];
-    let rawLeagues: BasketballLeague[] = (leaguesRes.data as BasketballLeague[]) || [];
-    let rawSettlements: BasketballSettlement[] = (settleRes.data as BasketballSettlement[]) || [];
+    if (!usedEdge) {
+      // 2. Direct Supabase PostgREST Fallback (strictly bounded)
+      const predTable = isUnlocked ? 'basketball_predictions' : 'basketball_predictions_paywall';
+      const predQuery = supabase
+        .from(predTable)
+        .select(PRED_SELECT)
+        .order('target_kickoff_at', { ascending: true })
+        .limit(50);
+
+      const [predRes, leaguesRes, settleRes] = await Promise.all([
+        predQuery,
+        supabase
+          .from('basketball_leagues')
+          .select('id,code,name,country,quarter_minutes,periods_count,default_pace')
+          .eq('is_active', true)
+          .order('name', { ascending: true })
+          .limit(50),
+        supabase
+          .from('basketball_settlements')
+          .select(SETTLE_SELECT)
+          .order('settled_at', { ascending: false })
+          .limit(50),
+      ]);
+
+      rawPredictions = (predRes.data as unknown as BasketballPrediction[]) || [];
+      rawLeagues = (leaguesRes.data as BasketballLeague[]) || [];
+      rawSettlements = (settleRes.data as BasketballSettlement[]) || [];
+    }
 
     // Fallback: If remote table is currently unpopulated, use high-fidelity verified sample models
     if (!rawPredictions || rawPredictions.length === 0) {

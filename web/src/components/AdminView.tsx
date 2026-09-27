@@ -81,7 +81,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
     message?: string;
   }>({ type: null, status: 'idle' });
 
-  // 6-Engine Specialist Telemetry State
+  // Specialist Telemetry State
   const [specialistTelemetry, setSpecialistTelemetry] = useState<{
     id: string;
     name: string;
@@ -89,7 +89,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
     modelName: string;
     icon: string;
     accent: string;
-    triggerTask: 'RUN_PREDICTIONS' | 'RUN_GOALS_PREDICTIONS' | 'RUN_HOME_WIN_ENGINE' | 'RUN_AWAY_WIN_ENGINE' | 'RUN_DRAW_HUNTER_ENGINE' | 'RUN_CORNERS_ENGINE';
+    triggerTask: 'RUN_PREDICTIONS' | 'RUN_GOALS_PREDICTIONS' | 'RUN_CORNERS_ENGINE';
     total: number;
     pending: number;
     won: number;
@@ -698,7 +698,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
         table: string;
         paywallTable: string;
         accent: string;
-        triggerTask: 'RUN_PREDICTIONS' | 'RUN_GOALS_PREDICTIONS' | 'RUN_HOME_WIN_ENGINE' | 'RUN_AWAY_WIN_ENGINE' | 'RUN_DRAW_HUNTER_ENGINE' | 'RUN_CORNERS_ENGINE';
+        triggerTask: 'RUN_PREDICTIONS' | 'RUN_GOALS_PREDICTIONS' | 'RUN_CORNERS_ENGINE';
       }[] = [
         {
           id: 'core',
@@ -721,28 +721,6 @@ export const AdminView: React.FC<AdminViewProps> = ({
           paywallTable: 'goals_predictions_paywall',
           accent: 'linear-gradient(90deg, #f97316, #eab308)',
           triggerTask: 'RUN_GOALS_PREDICTIONS'
-        },
-        {
-          id: 'home_win',
-          name: 'Home & Away (1X2)',
-          marketTag: 'Direct 1X2 Outright (1 / 2)',
-          modelName: 'Bivariate Poisson Dixon-Coles',
-          icon: '⚔️',
-          table: 'home_win_predictions',
-          paywallTable: 'home_win_predictions_paywall',
-          accent: 'linear-gradient(90deg, #10b981, #059669)',
-          triggerTask: 'RUN_HOME_WIN_ENGINE'
-        },
-        {
-          id: 'draw',
-          name: 'Draw Hunter',
-          marketTag: 'High-Value Draws (X)',
-          modelName: 'Low Variance Parity Index',
-          icon: '🤝',
-          table: 'draw_predictions',
-          paywallTable: 'draw_predictions_paywall',
-          accent: 'linear-gradient(90deg, #eab308, #ca8a04)',
-          triggerTask: 'RUN_DRAW_HUNTER_ENGINE'
         },
         {
           id: 'corners',
@@ -964,20 +942,17 @@ export const AdminView: React.FC<AdminViewProps> = ({
     }
   };
 
-  // Direct Client-Side All Specialist Engines Settlement Pass
+  // Direct Client-Side Specialist Engines Settlement Pass
   const directClientAllSettlements = async (): Promise<{
     goals: { settled: number; won: number; lost: number };
-    homeWin: { settled: number; won: number; lost: number };
-    awayWin: { settled: number; won: number; lost: number };
-    draw: { settled: number; won: number; lost: number };
     corners: { settled: number; won: number; lost: number };
   }> => {
     const goalsRes = await directClientGoalsSettlement();
     const nowIso = new Date().toISOString();
 
     const settleSpecialistTable = async (
-      table: 'home_win_predictions' | 'away_win_predictions' | 'draw_predictions' | 'corner_predictions',
-      settleTable: 'home_win_settlements' | 'away_win_settlements' | 'draw_settlements' | 'corner_settlements',
+      table: 'corner_predictions',
+      settleTable: 'corner_settlements',
       evalFn: (p: any, f: any) => { status: 'won' | 'lost' | 'void' | null; notes: string; scoreStr: string | null; cornersStr?: string; totalCorners?: number }
     ) => {
       let settled = 0, won = 0, lost = 0;
@@ -1052,29 +1027,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
       return { settled, won, lost };
     };
 
-    const [homeWin, awayWin, draw, corners] = await Promise.all([
-      settleSpecialistTable('home_win_predictions', 'home_win_settlements', (p, f) => {
-        const hs = f.home_score;
-        const as_ = f.away_score;
-        if (hs === null || as_ === null) return { status: null, notes: '', scoreStr: null };
-        const isAway = p.prediction === 'Away Win';
-        const st = isAway ? (as_ > hs ? 'won' : 'lost') : (hs > as_ ? 'won' : 'lost');
-        return { status: st, notes: `Settled 1X2: ${hs}-${as_} (${isAway ? 'Away Win' : 'Home Win'})`, scoreStr: `${hs}-${as_}` };
-      }),
-      settleSpecialistTable('away_win_predictions', 'away_win_settlements', (_p, f) => {
-        const hs = f.home_score;
-        const as_ = f.away_score;
-        if (hs === null || as_ === null) return { status: null, notes: '', scoreStr: null };
-        const st = as_ > hs ? 'won' : 'lost';
-        return { status: st, notes: `Settled: Away Win ${as_} > ${hs}`, scoreStr: `${hs}-${as_}` };
-      }),
-      settleSpecialistTable('draw_predictions', 'draw_settlements', (_p, f) => {
-        const hs = f.home_score;
-        const as_ = f.away_score;
-        if (hs === null || as_ === null) return { status: null, notes: '', scoreStr: null };
-        const st = hs === as_ ? 'won' : 'lost';
-        return { status: st, notes: `Settled: Draw ${hs}-${as_}`, scoreStr: `${hs}-${as_}` };
-      }),
+    const [corners] = await Promise.all([
       settleSpecialistTable('corner_predictions', 'corner_settlements', (p, f) => {
         const line = p.market?.includes('7.5') ? 7.5 : p.market?.includes('8.5') ? 8.5 : p.market?.includes('10.5') ? 10.5 : 9.5;
         if (f.corners_home === null || f.corners_away === null || f.corners_home === undefined || f.corners_away === undefined) {
@@ -1092,22 +1045,19 @@ export const AdminView: React.FC<AdminViewProps> = ({
       })
     ]);
 
-    return { goals: goalsRes, homeWin, awayWin, draw, corners };
+    return { goals: goalsRes, corners };
   };
 
   // Interactive Engine Trigger & Automation Switchboard
   const triggerEngineTask = async (
-    taskName: 'RUN_PREDICTIONS' | 'RUN_SETTLEMENTS' | 'RUN_GOALS_PREDICTIONS' | 'RUN_GOALS_SETTLEMENT' | 'RUN_HOME_WIN_ENGINE' | 'RUN_AWAY_WIN_ENGINE' | 'RUN_DRAW_HUNTER_ENGINE' | 'RUN_CORNERS_ENGINE' | 'RUN_ALL_ENGINES'
+    taskName: 'RUN_PREDICTIONS' | 'RUN_SETTLEMENTS' | 'RUN_GOALS_PREDICTIONS' | 'RUN_GOALS_SETTLEMENT' | 'RUN_CORNERS_ENGINE' | 'RUN_ALL_ENGINES'
   ) => {
     playSfx('cook');
-    const type: 'prediction' | 'settlement' | 'goals_prediction' | 'goals_settlement' | 'goals' | 'home_win' | 'away_win' | 'draw' | 'corners' | 'all_specialists' =
+    const type: 'prediction' | 'settlement' | 'goals_prediction' | 'goals_settlement' | 'goals' | 'corners' | 'all_specialists' =
       taskName === 'RUN_PREDICTIONS' ? 'prediction'
       : taskName === 'RUN_SETTLEMENTS' ? 'settlement'
       : taskName === 'RUN_GOALS_SETTLEMENT' ? 'goals_settlement'
       : taskName === 'RUN_GOALS_PREDICTIONS' ? 'goals_prediction'
-      : taskName === 'RUN_HOME_WIN_ENGINE' ? 'home_win'
-      : taskName === 'RUN_AWAY_WIN_ENGINE' ? 'away_win'
-      : taskName === 'RUN_DRAW_HUNTER_ENGINE' ? 'draw'
       : taskName === 'RUN_CORNERS_ENGINE' ? 'corners'
       : 'all_specialists';
 
@@ -1116,11 +1066,8 @@ export const AdminView: React.FC<AdminViewProps> = ({
       RUN_SETTLEMENTS: '5-Min Live Master Settlement (All Engines)',
       RUN_GOALS_PREDICTIONS: 'Goals Specialist Model (Over 2.5 & 1H Blitz)',
       RUN_GOALS_SETTLEMENT: 'Goals Specialist Settlement Pass',
-      RUN_HOME_WIN_ENGINE: 'Home Fortress Specialist Engine',
-      RUN_AWAY_WIN_ENGINE: 'Road Warrior Specialist Engine',
-      RUN_DRAW_HUNTER_ENGINE: 'Draw Hunter Specialist Engine',
       RUN_CORNERS_ENGINE: 'Corners Specialist Engine',
-      RUN_ALL_ENGINES: 'Parallel Dispatch of All 6 Engines'
+      RUN_ALL_ENGINES: 'Parallel Dispatch of Specialist Engines'
     };
 
     setEngineTaskStatus({
@@ -1161,7 +1108,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
       // Direct client-side settlement guarantee for immediate responsiveness
       if (taskName === 'RUN_SETTLEMENTS' || taskName === 'RUN_ALL_ENGINES') {
         const directResult = await directClientAllSettlements();
-        const totalSettled = (directResult.goals.settled || 0) + directResult.homeWin.settled + directResult.awayWin.settled + directResult.draw.settled + directResult.corners.settled;
+        const totalSettled = (directResult.goals.settled || 0) + (directResult.corners?.settled || 0);
         if (taskId) {
           await supabase
             .from('admin_tasks')
@@ -1977,57 +1924,6 @@ export const AdminView: React.FC<AdminViewProps> = ({
             </div>
           </div>
 
-          {/* GROUP 2: OUTRIGHT SPECIALIST ENGINES */}
-          <div className="engine-group-box" style={{ borderColor: 'rgba(52, 211, 153, 0.3)' }}>
-            <div className="engine-group-header">
-              <span className="group-icon">🏰</span>
-              <span className="group-title">Outright Specials (1 - X - 2)</span>
-              <span className="group-tag">HOME • AWAY • DRAW</span>
-            </div>
-            <div className="engine-group-triggers">
-              <button
-                type="button"
-                id="btn-trigger-homewin-pred"
-                className={`compact-trigger-btn btn-homewin-pred ${engineTaskStatus.type === 'home_win' && (engineTaskStatus.status === 'running' || engineTaskStatus.status === 'pending') ? 'cooking' : ''}`}
-                disabled={engineTaskStatus.status === 'pending' || engineTaskStatus.status === 'running'}
-                onClick={() => triggerEngineTask('RUN_HOME_WIN_ENGINE')}
-              >
-                <span className="trigger-icon">🏰</span>
-                <div className="trigger-copy">
-                  <div className="trigger-label">Home Fortress</div>
-                  <div className="trigger-meta">Elo & Dominance</div>
-                </div>
-              </button>
-
-              <button
-                type="button"
-                id="btn-trigger-awaywin-pred"
-                className={`compact-trigger-btn btn-awaywin-pred ${engineTaskStatus.type === 'away_win' && (engineTaskStatus.status === 'running' || engineTaskStatus.status === 'pending') ? 'cooking' : ''}`}
-                disabled={engineTaskStatus.status === 'pending' || engineTaskStatus.status === 'running'}
-                onClick={() => triggerEngineTask('RUN_AWAY_WIN_ENGINE')}
-              >
-                <span className="trigger-icon">🚀</span>
-                <div className="trigger-copy">
-                  <div className="trigger-label">Road Warrior</div>
-                  <div className="trigger-meta">Counter Away xG</div>
-                </div>
-              </button>
-
-              <button
-                type="button"
-                id="btn-trigger-draw-pred"
-                className={`compact-trigger-btn btn-draw-pred ${engineTaskStatus.type === 'draw' && (engineTaskStatus.status === 'running' || engineTaskStatus.status === 'pending') ? 'cooking' : ''}`}
-                disabled={engineTaskStatus.status === 'pending' || engineTaskStatus.status === 'running'}
-                onClick={() => triggerEngineTask('RUN_DRAW_HUNTER_ENGINE')}
-              >
-                <span className="trigger-icon">🤝</span>
-                <div className="trigger-copy">
-                  <div className="trigger-label">Draw Hunter</div>
-                  <div className="trigger-meta">Low Variance Parity</div>
-                </div>
-              </button>
-            </div>
-          </div>
 
           {/* GROUP 3: IN-PLAY & STATISTICAL SPECIALISTS */}
           <div className="engine-group-box goals-specialist-box">

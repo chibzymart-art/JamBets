@@ -113,18 +113,6 @@ const FIXTURE_JOIN =
   'fixture:football_fixtures!inner(id,status,target_kickoff_at,home_score,away_score,match_minute,period,half_time_home_score,half_time_away_score,corners_home,corners_away,venue,league:football_leagues(id,name,code,country),home_team:football_teams!football_fixtures_home_team_id_fkey(id,name,short_name),away_team:football_teams!football_fixtures_away_team_id_fkey(id,name,short_name))';
 
 const SELECTS: Record<string, { table: string; select: string }> = {
-  home_win: {
-    table: 'home_win_predictions_paywall',
-    select: `id,fixture_id,prediction,probability,confidence_category,dominance_tier,home_venue_advantage,home_clean_sheet_prob,xg_home,xg_away,target_kickoff_at,settlement_status,settled_at,actual_score,settlement_notes,publication_status,is_locked,${FIXTURE_JOIN}`,
-  },
-  away_win: {
-    table: 'away_win_predictions_paywall',
-    select: `id,fixture_id,prediction,probability,confidence_category,counter_tier,away_counter_efficiency,away_clean_sheet_prob,target_kickoff_at,settlement_status,settled_at,actual_score,settlement_notes,is_locked,${FIXTURE_JOIN}`,
-  },
-  draw: {
-    table: 'draw_predictions_paywall',
-    select: `id,fixture_id,prediction,probability,confidence_category,stalemate_tier,tactical_equilibrium_score,low_scoring_density,target_kickoff_at,settlement_status,settled_at,actual_score,settlement_notes,is_locked,${FIXTURE_JOIN}`,
-  },
   corners: {
     table: 'corner_predictions_paywall',
     select: `id,fixture_id,prediction,market,probability,confidence_category,corner_tier,predicted_total_corners,home_corners_avg,away_corners_avg,over_8_5_prob,over_9_5_prob,over_10_5_prob,target_kickoff_at,settlement_status,settled_at,actual_corners,settlement_notes,publication_status,is_locked,${FIXTURE_JOIN}`,
@@ -178,32 +166,6 @@ function computeTacticalAnalysis(
         rationale: `${home} and ${away} exhibit open attacking profiles with ${xg} combined expected goals. Both sides feature proactive transition play and defensive vulnerabilities that strongly favor a high-scoring contest exceeding 2.5 goals.`,
       };
     }
-  }
-
-  if (marketCategory === 'home_win') {
-    const adv = raw.home_venue_advantage ? Math.round(raw.home_venue_advantage * 100) : 28;
-    const cs = raw.home_clean_sheet_prob ? Math.round(raw.home_clean_sheet_prob * 100) : 46;
-    return {
-      tag: raw.dominance_tier || 'FORTRESS_DOMINANCE',
-      rationale: `${home} commands an authoritative venue rating with a +${adv}% Fortress advantage and ${cs}% clean-sheet expectation. ${away}'s defensive transitions struggle under sustained home territory pressure, establishing high home victory conviction.`,
-    };
-  }
-
-  if (marketCategory === 'away_win') {
-    const eff = raw.away_counter_efficiency ? Math.round(raw.away_counter_efficiency * 100) : 34;
-    return {
-      tag: raw.counter_tier || 'ROAD_COUNTER_CARE',
-      rationale: `${away} demonstrates elite transition pace with a +${eff}% road counter efficiency rating against high pressing lines. ${home}'s over-commitment in possession leaves vulnerable space behind, creating clinical counter-attacking opportunities for an away win.`,
-    };
-  }
-
-  if (marketCategory === 'draw') {
-    const eq = raw.tactical_equilibrium_score ? Math.round(raw.tactical_equilibrium_score * 100) : 78;
-    const dens = raw.low_scoring_density ? Math.round(raw.low_scoring_density * 100) : 44;
-    return {
-      tag: raw.stalemate_tier || 'SKELLAM_EQUILIBRIUM',
-      rationale: `Zero-Inflated Skellam model identifies intense tactical parity (${eq}% equilibrium) between ${home} and ${away}. Heavy joint density on 0-0 and 1-1 scorelines (${dens}%) confirms low-risk tactical management favoring a shared-points stalemate.`,
-    };
   }
 
   if (marketCategory === 'corners') {
@@ -420,21 +382,7 @@ export async function fetchMarketFeed(
 
   // 3. Direct Supabase Fallback (strict emergency fallback with reduced limit to shield connection pool)
   try {
-    const [hwRes, drRes, crRes, glRes] = await Promise.all([
-      supabase
-        .from(SELECTS.home_win.table)
-        .select(SELECTS.home_win.select)
-        .neq('settlement_status', 'void')
-        .neq('publication_status', 'archived')
-        .order('probability', { ascending: false })
-        .limit(2000),
-      supabase
-        .from(SELECTS.draw.table)
-        .select(SELECTS.draw.select)
-        .neq('settlement_status', 'void')
-        .neq('publication_status', 'archived')
-        .order('probability', { ascending: false })
-        .limit(2000),
+    const [crRes, glRes] = await Promise.all([
       supabase
         .from(SELECTS.corners.table)
         .select(SELECTS.corners.select)
@@ -454,8 +402,6 @@ export async function fetchMarketFeed(
     const normalizeList = (data: any[], cat: any, forced?: MarketType) =>
       (data || []).map((r) => normalizePrediction(r, cat, forced));
 
-    const allHw = normalizeList(hwRes.data || [], 'home_win');
-    const allDr = normalizeList(drRes.data || [], 'draw');
     const allCr = normalizeList(
       (crRes.data || []).filter(
         (r: any) => r.settlement_status === 'pending' || (r.settlement_notes && r.settlement_notes.startsWith('Verified:'))
@@ -492,9 +438,9 @@ export async function fetchMarketFeed(
     const counts: Record<MarketType, number> = {
       general: 0,
       curated: 0,
-      home_win: filterByDate(allHw).length,
+      home_win: 0,
       away_win: 0,
-      draw: filterByDate(allDr).length,
+      draw: 0,
       'over_2.5_goals': filterByDate(allOver25).length,
       'ht_over_0.5_goals': filterByDate(allHt05).length,
       corners: filterByDate(allCr).length,
@@ -502,8 +448,6 @@ export async function fetchMarketFeed(
 
     // Calculate Curated
     const crossCut = [
-      ...filterByDate(allHw),
-      ...filterByDate(allDr),
       ...filterByDate(allOver25),
       ...filterByDate(allHt05),
       ...filterByDate(allCr),
@@ -514,12 +458,10 @@ export async function fetchMarketFeed(
     // Get active market target list
     let targetList: UnifiedMarketPrediction[] = [];
     if (market === 'curated') targetList = crossCut;
-    else if (market === 'home_win' || (market as string) === 'away_win') targetList = filterByDate(allHw);
-    else if (market === 'draw') targetList = filterByDate(allDr);
     else if (market === 'corners') targetList = filterByDate(allCr);
-    else if (market === 'over_2.5_goals') targetList = filterByDate(allOver25);
     else if (market === 'ht_over_0.5_goals') targetList = filterByDate(allHt05);
-    else if (market === 'general') targetList = [];
+    else if (market === 'over_2.5_goals') targetList = filterByDate(allOver25);
+    else targetList = filterByDate(allOver25);
 
     // Sort by probability descending
     targetList.sort((a, b) => (b.probability || 0) - (a.probability || 0));

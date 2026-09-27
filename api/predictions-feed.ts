@@ -33,7 +33,7 @@ interface MemoryCacheEntry {
 // In-memory cache & promise deduplication to prevent cache stampedes
 const memoryCache = new Map<string, MemoryCacheEntry>();
 const inflightPromises = new Map<string, Promise<FeedData>>();
-const CACHE_TTL_MS = 60 * 1000; // 60 seconds edge memory cache
+const CACHE_TTL_MS = 120 * 1000; // 120 seconds edge memory cache (reduces Supabase upstream load)
 
 // In-memory cache for user auth verification (120s for valid users, 30s for invalid)
 const userAuthCache = new Map<string, { isPaid: boolean; expiresAt: number }>();
@@ -179,7 +179,14 @@ function getCorsOrigin(req: Request): string {
 }
 
 function prunePrediction(p: any): any {
-  const meta = p.metadata;
+  let meta = p.metadata;
+  if (typeof meta === 'string') {
+    try {
+      meta = JSON.parse(meta);
+    } catch {
+      meta = {};
+    }
+  }
   let prunedMeta: Record<string, any> = {};
   if (meta && typeof meta === 'object') {
     if (meta.ai_summary) prunedMeta.ai_summary = meta.ai_summary;
@@ -241,6 +248,11 @@ function prunePrediction(p: any): any {
 }
 
 async function fetchFromUpstream(): Promise<FeedData> {
+  const now = new Date();
+  // Bound query to active calendar window (-48h to +5 days) to eliminate huge full-table egress
+  const minDate = new Date(now.getTime() - 48 * 60 * 60 * 1000).toISOString();
+  const maxDate = new Date(now.getTime() + 5 * 24 * 60 * 60 * 1000).toISOString();
+
   const selectQuery = encodeURIComponent(
     `id,fixture_id,prediction,market,probability,confidence_category,secondary_predictions,metadata,settlement_status,settlement_notes,settled_at,actual_score,publication_status,simulations_count,target_kickoff_at,tier_required,fixture:football_fixtures!inner(id,canonical_key,target_kickoff_at,status,home_score,away_score,match_minute,period,half_time_home_score,half_time_away_score,corners_home,corners_away,postponed_at,cancelled_at,venue,league:football_leagues!inner(id,name,code,country),home_team:football_teams!football_fixtures_home_team_id_fkey(id,name),away_team:football_teams!football_fixtures_away_team_id_fkey(id,name))`
   );
@@ -254,7 +266,7 @@ async function fetchFromUpstream(): Promise<FeedData> {
 
   const [predRes, leagueRes] = await Promise.all([
     fetch(
-      `${SUPABASE_URL}/rest/v1/football_predictions?select=${selectQuery}&publication_status=eq.published&order=target_kickoff_at.asc,id.asc&limit=2000`,
+      `${SUPABASE_URL}/rest/v1/football_predictions?select=${selectQuery}&publication_status=eq.published&target_kickoff_at=gte.${minDate}&target_kickoff_at=lte.${maxDate}&order=target_kickoff_at.asc,id.asc&limit=500`,
       { headers }
     ),
     fetch(
@@ -322,9 +334,9 @@ export default async function handler(req: Request) {
     'Content-Type': 'application/json',
     'Cache-Control': isVipOrAdmin
       ? 'private, no-cache, no-store, must-revalidate'
-      : 'public, s-maxage=60, stale-while-revalidate=120',
-    'CDN-Cache-Control': isVipOrAdmin ? 'no-store' : 'public, s-maxage=60',
-    'Vercel-CDN-Cache-Control': isVipOrAdmin ? 'no-store' : 'public, s-maxage=60',
+      : 'public, s-maxage=120, stale-while-revalidate=300',
+    'CDN-Cache-Control': isVipOrAdmin ? 'no-store' : 'public, s-maxage=120',
+    'Vercel-CDN-Cache-Control': isVipOrAdmin ? 'no-store' : 'public, s-maxage=120',
     'Access-Control-Allow-Origin': corsOrigin,
     'Access-Control-Allow-Credentials': 'true',
     'X-RateLimit-Limit': '120',

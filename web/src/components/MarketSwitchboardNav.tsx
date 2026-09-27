@@ -46,28 +46,12 @@ const MARKET_TABS: MarketTabConfig[] = [
     accentColor: '#e11d48',
   },
   {
-    id: 'home_win',
-    label: 'Home & Away',
-    icon: '⚔️',
-    badgeTag: '1X2 ELITE',
-    description: 'Full-Time Match Winner model evaluating home fortress dominance & lethal road transitions',
-    accentColor: '#059669',
-  },
-  {
     id: 'corners',
     label: 'Corners Specialist',
     icon: '🚩',
     badgeTag: 'NB GLM',
     description: 'Negative Binomial Set-Piece GLM analyzing wing width & cross deflection volume',
     accentColor: '#d97706',
-  },
-  {
-    id: 'draw',
-    label: 'Draw Hunter',
-    icon: '⚖️',
-    badgeTag: 'SKELLAM TES',
-    description: 'Zero-Inflated Skellam Equilibrium measuring low-scoring tactical symmetry',
-    accentColor: '#7c3aed',
   },
 ];
 

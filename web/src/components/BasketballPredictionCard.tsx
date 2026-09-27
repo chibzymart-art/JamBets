@@ -178,7 +178,7 @@ export const BasketballPredictionCard: React.FC<BasketballPredictionCardProps> =
       </div>
 
       {/* 3. PRIMARY BANKER SELECTION BOX */}
-      <div className="bball-banker-box">
+      <div className={`bball-banker-box ${isWon ? 'box-won' : isLost ? 'box-lost' : isVoid ? 'box-void' : ''}`}>
         <div className="bball-banker-left">
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span className="bball-market-label">

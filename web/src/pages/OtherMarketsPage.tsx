@@ -30,9 +30,6 @@ export interface OtherMarketsPageProps {
 }
 
 const VALID_MARKETS: MarketType[] = [
-  'home_win',
-  'away_win',
-  'draw',
   'over_2.5_goals',
   'ht_over_0.5_goals',
   'corners',
@@ -72,15 +69,24 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
   const resolveInitialMarket = (): MarketType => {
     const urlMarket = searchParams.get('market') as MarketType | null;
     if (urlMarket && VALID_MARKETS.includes(urlMarket)) {
-      return urlMarket === 'general' || (urlMarket as string) === 'away_win' ? 'home_win' : urlMarket;
+      if (urlMarket === 'general' || (urlMarket as string) === 'home_win' || (urlMarket as string) === 'away_win' || (urlMarket as string) === 'draw') {
+        return 'over_2.5_goals';
+      }
+      return urlMarket;
     }
     const sessionMarket = (typeof window !== 'undefined'
       ? sessionStorage.getItem('other_markets_tab')
       : null) as MarketType | null;
     if (sessionMarket && VALID_MARKETS.includes(sessionMarket)) {
-      return sessionMarket === 'general' || (sessionMarket as string) === 'away_win' ? 'home_win' : sessionMarket;
+      if (sessionMarket === 'general' || (sessionMarket as string) === 'home_win' || (sessionMarket as string) === 'away_win' || (sessionMarket as string) === 'draw') {
+        return 'over_2.5_goals';
+      }
+      return sessionMarket;
     }
-    return initialMarket === 'general' || (initialMarket as string) === 'away_win' ? 'home_win' : initialMarket;
+    if (initialMarket === 'general' || (initialMarket as string) === 'home_win' || (initialMarket as string) === 'away_win' || (initialMarket as string) === 'draw') {
+      return 'over_2.5_goals';
+    }
+    return initialMarket;
   };
 
   const [activeMarket, setActiveMarket] = useState<MarketType>(resolveInitialMarket);
@@ -97,7 +103,7 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
 
   // Synchronize state changes to URL and sessionStorage so page reload preserves current page without resetting
   const handleSelectMarket = useCallback((m: MarketType) => {
-    const safeMarket = m === 'general' || (m as string) === 'away_win' ? 'home_win' : m;
+    const safeMarket = (m === 'general' || (m as string) === 'home_win' || (m as string) === 'away_win' || (m as string) === 'draw') ? 'over_2.5_goals' : m;
     setActiveMarket(safeMarket);
     try {
       sessionStorage.setItem('other_markets_tab', safeMarket);
@@ -204,16 +210,13 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
     const marketLabels: Record<string, string> = {
       'over_2.5_goals': 'Over 2.5 Goals',
       'ht_over_0.5_goals': '1st Half Over 0.5 Blitz',
-      home_win: 'Home Win Dominance',
-      away_win: 'Away Win Counter',
-      draw: 'Draw Hunter Equilibrium',
       corners: 'Corners Specialist',
     };
     const currentMarketName = marketLabels[activeMarket] || 'Other Markets';
 
     updatePageSeo({
       title: `${currentMarketName} Specialist Predictions — Oddsbanta AI`,
-      description: `Mathematical models for ${currentMarketName} across 30 world football leagues. High-confidence Poisson, HVDI, CARE, Skellam, and NB GLM models.`,
+      description: `Mathematical models for ${currentMarketName} across 30 world football leagues. High-confidence Poisson and Negative Binomial GLM models.`,
       canonicalPath: '/other-markets',
     });
   }, [activeMarket]);
@@ -312,11 +315,11 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
               <div className="market-nav-icon-circle">🎯</div>
               <div className="market-nav-titles">
                 <span className="market-nav-title-text">Other Markets</span>
-                <span className="market-nav-sub-text">Goals, 1X2 Specialist, Corners & Draw Hunter</span>
+                <span className="market-nav-sub-text">Goals (Over 2.5 & 1H Blitz) & Corners Specialist</span>
               </div>
             </div>
             <span className="market-nav-count-pill specialist-pill">
-              5 Specialist Models
+              Specialist Models
             </span>
           </div>
         </div>

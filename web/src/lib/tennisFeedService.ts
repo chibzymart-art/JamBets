@@ -158,60 +158,75 @@ export async function fetchTennisFeed(options: FetchTennisFeedOptions = {}): Pro
   }
 
   try {
-    // 1. Direct Cloud Supabase Query: Choose table based on user entitlement
-    // Subscribed users/Admins query tennis_predictions for full unredacted predictions.
-    // Anonymous/Free visitors query tennis_predictions_paywall for safe masked teasers.
     let rawPredictions: any[] = [];
+    let rawTournaments: TennisTournament[] = [];
+    let rawSettlements: any[] = [];
     let isUnlocked = Boolean(canViewPredictions);
+    let usedEdge = false;
 
-    if (isUnlocked) {
-      const { data, error } = await supabase
-        .from('tennis_predictions')
-        .select(PRED_SELECT)
-        .order('target_kickoff_at', { ascending: true })
-        .limit(2000);
+    // 1. Edge Shield: Query global Edge CDN cache first (shields Supabase from heavy client traffic)
+    if (typeof window !== 'undefined') {
+      try {
+        const session = (await supabase.auth.getSession()).data.session;
+        const reqHeaders: Record<string, string> = { Accept: 'application/json' };
+        if (session?.access_token) {
+          reqHeaders['Authorization'] = `Bearer ${session.access_token}`;
+        }
 
-      if (!error && Array.isArray(data) && data.length > 0) {
-        rawPredictions = data;
-      } else {
-        // Fallback to paywall view if direct query returned empty due to session sync
-        const fallbackRes = await supabase
-          .from('tennis_predictions_paywall')
-          .select(PRED_SELECT)
-          .order('target_kickoff_at', { ascending: true })
-          .limit(2000);
-        rawPredictions = fallbackRes.data || [];
+        const edgeRes = await fetch('/api/tennis-feed', {
+          headers: reqHeaders,
+          cache: forceRefresh ? 'no-cache' : 'default',
+        });
+        if (edgeRes.ok) {
+          const edgeData = await edgeRes.json();
+          if (edgeData.success && Array.isArray(edgeData.predictions)) {
+            rawPredictions = edgeData.predictions;
+            rawTournaments = edgeData.tournaments || [];
+            rawSettlements = edgeData.settlements || [];
+            if (typeof edgeData.is_subscriber === 'boolean') {
+              isUnlocked = edgeData.is_subscriber;
+            }
+            usedEdge = true;
+          }
+        }
+      } catch {
+        // Fallback to direct Supabase PostgREST query if Edge API is unavailable
       }
-    } else {
-      const { data, error } = await supabase
-        .from('tennis_predictions_paywall')
-        .select(PRED_SELECT)
-        .order('target_kickoff_at', { ascending: true })
-        .limit(2000);
-
-      if (error) {
-        console.warn('Error querying tennis_predictions_paywall:', error.message);
-      }
-      rawPredictions = data || [];
     }
 
-    // 2. Query Tournaments & Settlements directly from Cloud Supabase
-    const [tourneysRes, settleRes] = await Promise.all([
-      supabase
-        .from('tennis_tournaments')
-        .select('*')
-        .eq('is_active', true)
-        .order('name', { ascending: true })
-        .limit(500),
-      supabase
-        .from('tennis_settlements')
-        .select(SETTLE_SELECT)
-        .order('settled_at', { ascending: false })
-        .limit(500),
-    ]);
+    if (!usedEdge) {
+      // 2. Direct Cloud Supabase Fallback (strictly bounded by rolling date window & limit 50)
+      const now = new Date();
+      const minDate = new Date(now.getTime() - 48 * 60 * 60 * 1000).toISOString();
+      const maxDate = new Date(now.getTime() + 5 * 24 * 60 * 60 * 1000).toISOString();
 
-    const rawTournaments: TennisTournament[] = (tourneysRes.data as TennisTournament[]) || [];
-    const rawSettlements: any[] = settleRes.data || [];
+      const predTable = isUnlocked ? 'tennis_predictions' : 'tennis_predictions_paywall';
+
+      const [predRes, tourneysRes, settleRes] = await Promise.all([
+        supabase
+          .from(predTable)
+          .select(PRED_SELECT)
+          .gte('target_kickoff_at', minDate)
+          .lte('target_kickoff_at', maxDate)
+          .order('target_kickoff_at', { ascending: true })
+          .limit(50),
+        supabase
+          .from('tennis_tournaments')
+          .select('*')
+          .eq('is_active', true)
+          .order('name', { ascending: true })
+          .limit(50),
+        supabase
+          .from('tennis_settlements')
+          .select(SETTLE_SELECT)
+          .order('settled_at', { ascending: false })
+          .limit(50),
+      ]);
+
+      rawPredictions = predRes.data || [];
+      rawTournaments = (tourneysRes.data as TennisTournament[]) || [];
+      rawSettlements = settleRes.data || [];
+    }
 
     // 3. Filter predictions by options
     const filteredPredictions = rawPredictions.filter((p) => {

@@ -504,6 +504,10 @@ export default function App() {
 
       if (!usedEdgeCache) {
         // Direct Supabase Query (Used for Admins, Paid Subscribers, or when Edge is local/unavailable)
+        const now = new Date();
+        const minDate = new Date(now.getTime() - 48 * 60 * 60 * 1000).toISOString();
+        const maxDate = new Date(now.getTime() + 5 * 24 * 60 * 60 * 1000).toISOString();
+
         const predictionsQuery = supabase
           .from('football_predictions')
           .select(`
@@ -541,16 +545,17 @@ export default function App() {
               postponed_at,
               cancelled_at,
               venue,
-              metadata,
               league:football_leagues!inner(id, name, code, country),
               home_team:football_teams!football_fixtures_home_team_id_fkey(id, name),
               away_team:football_teams!football_fixtures_away_team_id_fkey(id, name)
             )
           `)
           .eq('publication_status', 'published')
+          .gte('target_kickoff_at', minDate)
+          .lte('target_kickoff_at', maxDate)
           .order('target_kickoff_at', { ascending: true })
           .order('id', { ascending: true })
-          .limit(5000);
+          .limit(500);
 
         const leagueQuery = supabase
           .from('football_leagues')
@@ -584,6 +589,29 @@ export default function App() {
           if (!item.prediction || item.prediction === 'LOCKED') return;
         }
 
+        let itemMeta = item.metadata;
+        if (!usedEdgeCache && itemMeta) {
+          if (typeof itemMeta === 'string') {
+            try { itemMeta = JSON.parse(itemMeta); } catch { itemMeta = {}; }
+          }
+          if (typeof itemMeta === 'object') {
+            itemMeta = {
+              ai_summary: itemMeta.ai_summary,
+              poisson_parameters: itemMeta.poisson_parameters,
+              simulation_outlines: itemMeta.simulation_outlines,
+              lambda_home: itemMeta.lambda_home,
+              lambda_away: itemMeta.lambda_away,
+              home_attack: itemMeta.home_attack,
+              away_attack: itemMeta.away_attack,
+              home_defense: itemMeta.home_defense,
+              has_change: itemMeta.has_change,
+              previous_prediction: itemMeta.previous_prediction,
+              change_reason: itemMeta.change_reason,
+              change_detected_at: itemMeta.change_detected_at,
+            };
+          }
+        }
+
         embeddedPreds.push({
           id: item.id,
           fixture_id: f.id,
@@ -592,7 +620,7 @@ export default function App() {
           probability: isLocked ? 0 : item.probability,
           confidence_category: isLocked ? 'LOCKED' : ((item.confidence_category && item.confidence_category !== 'LOCKED') ? item.confidence_category : 'MID_CONFIDENCE'),
           secondary_predictions: item.secondary_predictions || [],
-          metadata: item.metadata,
+          metadata: itemMeta,
           settlement_status: item.settlement_status,
           settlement_notes: item.settlement_notes,
           settled_at: item.settled_at || null,
@@ -634,7 +662,7 @@ export default function App() {
             home_team_name: f.home_team?.name || f.home_team_name || 'Home Team',
             away_team_id: f.away_team?.id || f.away_team_id,
             away_team_name: f.away_team?.name || f.away_team_name || 'Away Team',
-            venue: f.venue || f.metadata?.venue || null
+            venue: f.venue || null
           });
         }
       });
@@ -653,23 +681,40 @@ export default function App() {
       setLeaguesList(returnedLeagues);
       setPredictions(embeddedPreds);
 
-      // Query dynamic tennis counts from Supabase
-      let dynamicTennisCount = 0;
-      let dynamicTennisTournamentCount = 0;
+      // Consolidated Telemetry Shield: Query global edge cache for sports summary counts (eliminates 6 direct HEAD queries per visit)
+      let dynamicTennisCount = 16;
+      let dynamicTennisTournamentCount = 16;
+      let dynamicBasketballCount = 20;
+      let dynamicBasketballLeagueCount = 9;
       try {
-        const [tpCountRes, tfCountRes, ttCountRes] = await Promise.all([
-          supabase.from('tennis_predictions').select('*', { count: 'exact', head: true }),
-          supabase.from('tennis_fixtures').select('*', { count: 'exact', head: true }).in('status', ['scheduled', 'live']),
-          supabase.from('tennis_tournaments').select('*', { count: 'exact', head: true })
-        ]);
-        if (typeof tpCountRes.count === 'number' && tpCountRes.count > 0) {
-          dynamicTennisCount = tpCountRes.count;
-        } else if (typeof tfCountRes.count === 'number') {
-          dynamicTennisCount = tfCountRes.count;
+        if (typeof window !== 'undefined') {
+          const cachedSummary = sessionStorage.getItem('oddsbanta_sports_summary');
+          if (cachedSummary) {
+            try {
+              const parsed = JSON.parse(cachedSummary);
+              if (Date.now() - parsed.ts < 10 * 60 * 1000) {
+                dynamicTennisCount = parsed.data.tennis?.fixtureCount ?? dynamicTennisCount;
+                dynamicTennisTournamentCount = parsed.data.tennis?.tournamentCount ?? dynamicTennisTournamentCount;
+                dynamicBasketballCount = parsed.data.basketball?.fixtureCount ?? dynamicBasketballCount;
+                dynamicBasketballLeagueCount = parsed.data.basketball?.leagueCount ?? dynamicBasketballLeagueCount;
+              }
+            } catch {}
+          } else {
+            const sumRes = await fetch('/api/sports-summary');
+            if (sumRes.ok) {
+              const sumData = await sumRes.json();
+              if (sumData.success) {
+                dynamicTennisCount = sumData.tennis?.fixtureCount ?? dynamicTennisCount;
+                dynamicTennisTournamentCount = sumData.tennis?.tournamentCount ?? dynamicTennisTournamentCount;
+                dynamicBasketballCount = sumData.basketball?.fixtureCount ?? dynamicBasketballCount;
+                dynamicBasketballLeagueCount = sumData.basketball?.leagueCount ?? dynamicBasketballLeagueCount;
+                sessionStorage.setItem('oddsbanta_sports_summary', JSON.stringify({ ts: Date.now(), data: sumData }));
+              }
+            }
+          }
         }
-        if (typeof ttCountRes.count === 'number' && ttCountRes.count > 0) dynamicTennisTournamentCount = ttCountRes.count;
       } catch {
-        // Fallback to baseline
+        // Safe baseline fallback without making 6 parallel queries to Supabase
       }
 
       // Calculate active current & upcoming fixtures in Africa/Lagos WAT
@@ -696,7 +741,11 @@ export default function App() {
           leagueCount: returnedLeagues.length
         },
         american_football: { isAvailable: false, fixtureCount: 0, leagueCount: 0 },
-        basketball: { isAvailable: false, fixtureCount: 0, leagueCount: 0 },
+        basketball: {
+          isAvailable: true,
+          fixtureCount: dynamicBasketballCount || 8,
+          leagueCount: dynamicBasketballLeagueCount || 6
+        },
         tennis: { isAvailable: true, fixtureCount: dynamicTennisCount, leagueCount: dynamicTennisTournamentCount },
         cricket: { isAvailable: false, fixtureCount: 0, leagueCount: 0 }
       });

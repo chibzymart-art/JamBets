@@ -331,16 +331,127 @@
   box-shadow: 0 8px 24px rgba(234, 88, 12, 0.12), 0 2px 6px rgba(0, 0, 0, 0.04);
 }
 
+/* Settled Outcomes — Thick Green for Won, Thick Red for Lost */
 .bball-card.card-won {
-  border-left: 5px solid #10b981;
+  border: 2.5px solid #16a34a !important;
+  background: #f0fdf4 !important;
+  box-shadow: 0 4px 18px rgba(22, 163, 74, 0.16), 0 1px 3px rgba(0, 0, 0, 0.04) !important;
+}
+
+.bball-card.card-won:hover {
+  border-color: #15803d !important;
+  background: #dcfce7 !important;
+  box-shadow: 0 6px 24px rgba(22, 163, 74, 0.22) !important;
+}
+
+.bball-card.card-won .bball-banker-box,
+.bball-banker-box.box-won {
+  background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%) !important;
+  border: 2px solid #22c55e !important;
+  box-shadow: 0 3px 12px rgba(34, 197, 94, 0.2) !important;
+}
+
+.bball-card.card-won .bball-market-label,
+.bball-banker-box.box-won .bball-market-label {
+  color: #166534 !important;
+}
+
+.bball-card.card-won .bball-prediction-text,
+.bball-banker-box.box-won .bball-prediction-text {
+  color: #14532d !important;
+  font-weight: 900 !important;
 }
 
 .bball-card.card-lost {
-  border-left: 5px solid #ef4444;
+  border: 2.5px solid #ef4444 !important;
+  background: #fef2f2 !important;
+  box-shadow: 0 4px 18px rgba(239, 68, 68, 0.16), 0 1px 3px rgba(0, 0, 0, 0.04) !important;
+}
+
+.bball-card.card-lost:hover {
+  border-color: #dc2626 !important;
+  background: #fee2e2 !important;
+  box-shadow: 0 6px 24px rgba(239, 68, 68, 0.22) !important;
+}
+
+.bball-card.card-lost .bball-banker-box,
+.bball-banker-box.box-lost {
+  background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%) !important;
+  border: 2px solid #f87171 !important;
+  box-shadow: 0 3px 12px rgba(239, 68, 68, 0.18) !important;
+}
+
+.bball-card.card-lost .bball-market-label,
+.bball-banker-box.box-lost .bball-market-label {
+  color: #991b1b !important;
+}
+
+.bball-card.card-lost .bball-prediction-text,
+.bball-banker-box.box-lost .bball-prediction-text {
+  color: #7f1d1d !important;
+  font-weight: 900 !important;
 }
 
 .bball-card.card-void {
-  border-left: 5px solid #f59e0b;
+  border: 2.5px solid #f59e0b !important;
+  background: #fffbeb !important;
+}
+
+.bball-card.card-void .bball-banker-box,
+.bball-banker-box.box-void {
+  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%) !important;
+  border: 2px solid #fbbf24 !important;
+}
+
+/* Dark Mode Overrides for Settled Cards */
+[data-theme="dark"] .bball-card.card-won,
+.dark .bball-card.card-won {
+  background: rgba(6, 78, 59, 0.28) !important;
+  border: 2.5px solid #10b981 !important;
+  box-shadow: 0 4px 18px rgba(16, 185, 129, 0.2) !important;
+}
+
+[data-theme="dark"] .bball-card.card-won .bball-banker-box,
+.dark .bball-card.card-won .bball-banker-box,
+[data-theme="dark"] .bball-banker-box.box-won,
+.dark .bball-banker-box.box-won {
+  background: rgba(6, 78, 59, 0.6) !important;
+  border: 2px solid #34d399 !important;
+}
+
+[data-theme="dark"] .bball-card.card-won .bball-market-label,
+.dark .bball-card.card-won .bball-market-label {
+  color: #6ee7b7 !important;
+}
+
+[data-theme="dark"] .bball-card.card-won .bball-prediction-text,
+.dark .bball-card.card-won .bball-prediction-text {
+  color: #ecfdf5 !important;
+}
+
+[data-theme="dark"] .bball-card.card-lost,
+.dark .bball-card.card-lost {
+  background: rgba(127, 29, 29, 0.28) !important;
+  border: 2.5px solid #ef4444 !important;
+  box-shadow: 0 4px 18px rgba(239, 68, 68, 0.2) !important;
+}
+
+[data-theme="dark"] .bball-card.card-lost .bball-banker-box,
+.dark .bball-card.card-lost .bball-banker-box,
+[data-theme="dark"] .bball-banker-box.box-lost,
+.dark .bball-banker-box.box-lost {
+  background: rgba(127, 29, 29, 0.6) !important;
+  border: 2px solid #f87171 !important;
+}
+
+[data-theme="dark"] .bball-card.card-lost .bball-market-label,
+.dark .bball-card.card-lost .bball-market-label {
+  color: #fca5a5 !important;
+}
+
+[data-theme="dark"] .bball-card.card-lost .bball-prediction-text,
+.dark .bball-card.card-lost .bball-prediction-text {
+  color: #fef2f2 !important;
 }
 
 /* Top Meta Row */
@@ -568,12 +679,12 @@
 }
 
 /* -------------------------------------------------------------
-   4. BOLD & EYE-CATCHING "CLICK TO VIEW MORE" BUTTON
+   4. BOLD & EYE-CATCHING "CLICK TO VIEW MORE" BUTTON (VIBRANT BLUE)
    ------------------------------------------------------------- */
 .bball-view-more-btn {
-  background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+  background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
   color: #ffffff;
-  border: none;
+  border: 1px solid #38bdf8;
   border-radius: 9999px;
   padding: 8px 22px;
   font-size: 12px;
@@ -584,14 +695,15 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  box-shadow: 0 4px 14px rgba(234, 88, 12, 0.4), 0 0 10px rgba(249, 115, 22, 0.25);
+  box-shadow: 0 4px 14px rgba(2, 132, 199, 0.35), 0 0 10px rgba(56, 189, 248, 0.2);
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .bball-view-more-btn:hover {
   transform: translateY(-2px) scale(1.02);
-  box-shadow: 0 6px 18px rgba(234, 88, 12, 0.5), 0 0 14px rgba(249, 115, 22, 0.35);
-  background: linear-gradient(135deg, #c2410c 0%, #ea580c 100%);
+  box-shadow: 0 6px 18px rgba(2, 132, 199, 0.45), 0 0 14px rgba(56, 189, 248, 0.3);
+  background: linear-gradient(135deg, #0369a1 0%, #075985 100%);
+  border-color: #7dd3fc;
 }
 
 .bball-view-more-btn.expanded {

@@ -1,11 +1,8 @@
 """
 Oddsbanta — Master Runner for Decoupled Specialist Engines
-Runs the 4 specialist mathematical engines and settlement pass in sequence:
-1. Home Win Dominance Engine
-2. Away Win Road Counter Engine
-3. Draw Hunter Equilibrium Engine
-4. Corners Specialist Engine
-5. Specialist Settlements Pipeline
+Runs the specialist mathematical engines and settlement pass in sequence:
+1. Corners Specialist Engine
+2. Specialist Settlements Pipeline
 """
 
 import sys
@@ -17,8 +14,6 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../.
 if hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(encoding='utf-8')
 
-from python.src.engines.home_and_away_engine import HomeAndAwayEngine
-from python.src.engines.draw_engine import DrawEngine
 from python.src.engines.corners_engine import CornersEngine
 from python.src.engines.specialist_settlements import SpecialistSettlementPipeline
 
@@ -32,17 +27,7 @@ def run_all(predict: bool = True, settle: bool = True):
     results = {}
 
     if predict:
-        # 1. Home & Away 1X2 Specialist Engine
-        print("--- Running Home & Away 1X2 Engine ---")
-        ha_engine = HomeAndAwayEngine()
-        results["home_and_away"] = ha_engine.run()
-
-        # 3. Draw Engine
-        print("\n--- Running Draw Hunter Engine ---")
-        draw_engine = DrawEngine()
-        results["draw"] = draw_engine.run()
-
-        # 4. Corners Engine
+        # Corners Specialist Engine
         print("\n--- Running Corners Specialist Engine ---")
         corners_engine = CornersEngine()
         results["corners"] = corners_engine.run()

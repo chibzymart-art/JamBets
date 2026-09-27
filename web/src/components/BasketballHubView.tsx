@@ -155,6 +155,54 @@ export const BasketballHubView: React.FC<BasketballHubViewProps> = ({
     });
   }, [allPredictions, selectedDate, selectedLeague, selectedMarket, settlementFilter, selectedTier]);
 
+  // Dynamic Lagos WAT Daily Metrics strictly calculated for active selectedDate
+  const dailyStats = useMemo(() => {
+    let dayTotal = 0;
+    let dayWon = 0;
+    let dayLost = 0;
+    let dayVoid = 0;
+    let dayPending = 0;
+    let dayBangers = 0;
+    let dayTopPicks = 0;
+
+    allPredictions.forEach((p) => {
+      const kickoff = p.target_kickoff_at || p.fixture?.target_kickoff_at;
+      const d = getFixtureWatDate(kickoff);
+      // Strictly ground metrics to the active selectedDate unless 'all' is explicitly chosen
+      if (selectedDate && selectedDate !== 'all' && d !== selectedDate) {
+        return;
+      }
+
+      dayTotal++;
+      const c = (p.confidence_category || '').toUpperCase();
+      if (c === 'BANGER') dayBangers++;
+      else if (c === 'TOP PICK' || c === 'TOP_PICK') dayTopPicks++;
+
+      const st = (p.settlement_status || 'pending').toLowerCase();
+      if (st === 'won') dayWon++;
+      else if (st === 'lost') dayLost++;
+      else if (st === 'void') dayVoid++;
+      else dayPending++;
+    });
+
+    const decided = dayWon + dayLost;
+    const winRate = decided > 0 ? Math.round((dayWon / decided) * 100) : null;
+
+    return {
+      total: dayTotal,
+      won: dayWon,
+      lost: dayLost,
+      void: dayVoid,
+      pending: dayPending,
+      decided,
+      bangers: dayBangers,
+      topPicks: dayTopPicks,
+      settled: dayWon + dayLost + dayVoid,
+      winRate,
+      isDaily: Boolean(selectedDate && selectedDate !== 'all'),
+    };
+  }, [allPredictions, selectedDate]);
+
   return (
     <div className="bball-page-root" style={{ minHeight: '80vh', width: '100%', maxWidth: '1480px', margin: '0 auto', padding: '0 16px 40px' }}>
       {/* 1. REDUCED HERO BANNER WITH INTEGRATED LAGOS WAT DATE SELECTOR */}
@@ -189,12 +237,14 @@ export const BasketballHubView: React.FC<BasketballHubViewProps> = ({
             className={`bball-stat-card ${selectedTier === 'all' && settlementFilter === 'all' ? 'active' : ''}`}
             style={{ cursor: 'pointer' }}
             onClick={() => { setSelectedTier('all'); setSettlementFilter('all'); }}
-            title="View All Matches"
+            title={dailyStats.isDaily ? `Daily Win Rate (${dailyStats.won}W - ${dailyStats.lost}L)` : 'Overall Win Rate'}
           >
             <span className="bball-stat-val green">
-              {feedData?.stats.win_rate ?? 84}%
+              {dailyStats.winRate != null ? `${dailyStats.winRate}%` : dailyStats.pending > 0 ? '—' : '0%'}
             </span>
-            <span className="bball-stat-lbl">Verified Win Rate</span>
+            <span className="bball-stat-lbl">
+              {dailyStats.isDaily ? 'Daily Win Rate' : 'Overall Win Rate'}
+            </span>
           </div>
           <div
             className={`bball-stat-card ${selectedTier === 'bangers' ? 'active' : ''}`}
@@ -203,7 +253,7 @@ export const BasketballHubView: React.FC<BasketballHubViewProps> = ({
             title="Filter by 96%+ Bangers"
           >
             <span className="bball-stat-val accent">
-              {feedData?.stats.bangers_count ?? 0}
+              {dailyStats.bangers}
             </span>
             <span className="bball-stat-lbl">⭐ Bangers Active</span>
           </div>
@@ -214,13 +264,13 @@ export const BasketballHubView: React.FC<BasketballHubViewProps> = ({
             title="Filter by Top Picks"
           >
             <span className="bball-stat-val gold">
-              {feedData?.stats.top_picks_count ?? 0}
+              {dailyStats.topPicks}
             </span>
             <span className="bball-stat-lbl">👑 Top Picks</span>
           </div>
           <div className="bball-stat-card">
             <span className="bball-stat-val">
-              {feedData?.stats.total_matches ?? 0}
+              {dailyStats.total}
             </span>
             <span className="bball-stat-lbl">Scheduled Matches</span>
           </div>
@@ -231,7 +281,7 @@ export const BasketballHubView: React.FC<BasketballHubViewProps> = ({
             title="View Settled Won Matches"
           >
             <span className="bball-stat-val">
-              {feedData?.stats.settled_count ?? 0}
+              {dailyStats.settled}
             </span>
             <span className="bball-stat-lbl">Settled Predictions</span>
           </div>
