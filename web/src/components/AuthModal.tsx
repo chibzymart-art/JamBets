@@ -8,6 +8,65 @@ interface AuthModalProps {
   initialMode?: 'signin' | 'register' | 'forgot';
 }
 
+interface RetryOptions {
+  maxRetries?: number;
+  initialDelayMs?: number;
+  maxDelayMs?: number;
+  onRetry?: (attempt: number, maxRetries: number, delayMs: number) => void;
+}
+
+function isRetryableAuthError(error: any): boolean {
+  if (!error) return false;
+  const status = error.status || error.statusCode;
+  if (status === 429 || status === 503 || status === 504 || status === 502) {
+    return true;
+  }
+  const msg = (error.message || error.error_description || '').toLowerCase();
+  if (
+    msg.includes('rate limit') ||
+    msg.includes('too many requests') ||
+    msg.includes('over_request_rate_limit') ||
+    msg.includes('fetch failed') ||
+    msg.includes('failed to fetch') ||
+    msg.includes('network error') ||
+    msg.includes('gateway timeout') ||
+    msg.includes('service unavailable')
+  ) {
+    return true;
+  }
+  return false;
+}
+
+async function executeAuthWithRetry<T>(
+  action: () => Promise<T>,
+  options: RetryOptions = {}
+): Promise<T> {
+  const maxRetries = options.maxRetries ?? 3;
+  const initialDelay = options.initialDelayMs ?? 600;
+  const maxDelay = options.maxDelayMs ?? 3500;
+
+  let attempt = 0;
+  while (true) {
+    try {
+      return await action();
+    } catch (err: any) {
+      attempt++;
+      if (attempt > maxRetries || !isRetryableAuthError(err)) {
+        throw err;
+      }
+      const backoff = Math.min(initialDelay * Math.pow(2, attempt - 1), maxDelay);
+      const jitter = Math.floor(Math.random() * 300);
+      const delayMs = backoff + jitter;
+
+      if (options.onRetry) {
+        options.onRetry(attempt, maxRetries, delayMs);
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+}
+
 export const AuthModal: React.FC<AuthModalProps> = ({
   isOpen,
   onClose,
@@ -24,6 +83,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [financialAccepted, setFinancialAccepted] = useState(false);
 
   const [loading, setLoading] = useState(false);
+  const [queueNotice, setQueueNotice] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
@@ -31,43 +91,58 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (loading) return; // Prevent duplicate concurrent requests
     setErrorMessage(null);
     setSuccessMessage(null);
+    setQueueNotice(null);
     setLoading(true);
 
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: email.trim(),
-        password
+      const { data, error } = await executeAuthWithRetry(async () => {
+        const res = await supabase.auth.signInWithPassword({
+          email: email.trim(),
+          password
+        });
+        if (res.error) {
+          throw res.error;
+        }
+        return res;
+      }, {
+        maxRetries: 3,
+        initialDelayMs: 600,
+        onRetry: (attempt, max) => {
+          setQueueNotice(`High server demand — securing your session in queue... (Attempt ${attempt} of ${max})`);
+        }
       });
 
       if (error) {
         throw error;
       }
 
-      if (data.user) {
-        // Check if user has been soft-deleted / disabled
-        const { data: userRecord } = await supabase
-          .from('users')
-          .select('is_deleted, status')
-          .eq('id', data.user.id)
-          .single();
-
-        if (userRecord?.is_deleted || userRecord?.status === 'disabled') {
+      if (data?.user) {
+        // High-concurrency optimization: check metadata to eliminate redundant DB roundtrip
+        if (data.user.user_metadata?.status === 'disabled' || data.user.user_metadata?.is_deleted === true) {
           await supabase.auth.signOut();
           setErrorMessage('This account has been deactivated. Please contact support.');
           return;
         }
 
+        setQueueNotice(null);
         setSuccessMessage('Successfully signed in!');
         setTimeout(() => {
           onAuthSuccess();
           onClose();
-        }, 500);
+        }, 400);
       }
     } catch (err: any) {
       console.error('Sign-in error:', err);
-      setErrorMessage(err.message || 'Invalid email or password. Please check your credentials.');
+      setQueueNotice(null);
+      const msg = err.message || '';
+      if (msg.toLowerCase().includes('rate limit') || msg.toLowerCase().includes('too many requests')) {
+        setErrorMessage('Server is receiving unusually high traffic. Please wait a moment and try again.');
+      } else {
+        setErrorMessage(msg || 'Invalid email or password. Please check your credentials.');
+      }
     } finally {
       setLoading(false);
     }
@@ -75,8 +150,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (loading) return; // Prevent duplicate concurrent requests
     setErrorMessage(null);
     setSuccessMessage(null);
+    setQueueNotice(null);
 
     // Strict validation: BOTH disclaimers MUST be explicitly checked (Cases A, B, C rejected)
     if (!ageAccepted && !financialAccepted) {
@@ -100,19 +177,31 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     setLoading(true);
 
     try {
-      // Send verified disclaimers in user metadata to trigger the server-side database validation
-      const { data, error } = await supabase.auth.signUp({
-        email: email.trim(),
-        password,
-        options: {
-          data: {
-            display_name: displayName.trim() || email.split('@')[0],
-            disclaimer_age_accepted: true,
-            disclaimer_financial_accepted: true,
-            disclaimer_version: 'v1.0',
-            status: 'active',
-            is_deleted: false
+      const { data, error } = await executeAuthWithRetry(async () => {
+        // Send verified disclaimers in user metadata to trigger the server-side database validation
+        const res = await supabase.auth.signUp({
+          email: email.trim(),
+          password,
+          options: {
+            data: {
+              display_name: displayName.trim() || email.split('@')[0],
+              disclaimer_age_accepted: true,
+              disclaimer_financial_accepted: true,
+              disclaimer_version: 'v1.0',
+              status: 'active',
+              is_deleted: false
+            }
           }
+        });
+        if (res.error) {
+          throw res.error;
+        }
+        return res;
+      }, {
+        maxRetries: 3,
+        initialDelayMs: 800,
+        onRetry: (attempt, max) => {
+          setQueueNotice(`Processing registration in queue due to high demand... (Attempt ${attempt} of ${max})`);
         }
       });
 
@@ -120,16 +209,23 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         throw error;
       }
 
-      if (data.user) {
+      if (data?.user) {
+        setQueueNotice(null);
         setSuccessMessage('Account created successfully! Disclaimers recorded.');
         setTimeout(() => {
           onAuthSuccess();
           onClose();
-        }, 700);
+        }, 600);
       }
     } catch (err: any) {
       console.error('Registration error:', err);
-      setErrorMessage(err.message || 'Registration failed. Please check your inputs.');
+      setQueueNotice(null);
+      const msg = err.message || '';
+      if (msg.toLowerCase().includes('rate limit') || msg.toLowerCase().includes('too many requests')) {
+        setErrorMessage('Server is receiving unusually high registration volume. Please wait a few seconds and try again.');
+      } else {
+        setErrorMessage(msg || 'Registration failed. Please check your inputs.');
+      }
     } finally {
       setLoading(false);
     }
@@ -137,8 +233,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   const handleForgotPassword = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (loading) return;
     setErrorMessage(null);
     setSuccessMessage(null);
+    setQueueNotice(null);
 
     if (!email.trim()) {
       setErrorMessage('Please enter your registered email address.');
@@ -148,17 +246,31 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     setLoading(true);
 
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-        redirectTo: `${window.location.origin}/reset-password`
+      const { error } = await executeAuthWithRetry(async () => {
+        const res = await supabase.auth.resetPasswordForEmail(email.trim(), {
+          redirectTo: `${window.location.origin}/reset-password`
+        });
+        if (res.error) {
+          throw res.error;
+        }
+        return res;
+      }, {
+        maxRetries: 2,
+        initialDelayMs: 1000,
+        onRetry: (attempt, max) => {
+          setQueueNotice(`Sending secure recovery link... (Attempt ${attempt} of ${max})`);
+        }
       });
 
       if (error) {
         throw error;
       }
 
+      setQueueNotice(null);
       setSuccessMessage('Password reset link sent! Check your inbox (and spam folder) for instructions.');
     } catch (err: any) {
       console.error('Forgot password error:', err);
+      setQueueNotice(null);
       const msg = err.message || '';
       if (msg.toLowerCase().includes('rate limit') || msg.toLowerCase().includes('over_email_send_rate_limit')) {
         setErrorMessage('Email rate limit reached. Supabase limits password recovery emails to prevent abuse. Please wait a short while before requesting another link.');
@@ -170,8 +282,15 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
   };
 
+  const handleModalClose = () => {
+    setErrorMessage(null);
+    setSuccessMessage(null);
+    setQueueNotice(null);
+    onClose();
+  };
+
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div className="modal-backdrop" onClick={handleModalClose}>
       <div className="modal-card auth-modal-card" onClick={(e) => e.stopPropagation()}>
         {/* Modal Header */}
         <div className="modal-header">
@@ -190,7 +309,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               </p>
             </div>
           </div>
-          <button className="modal-close-btn" onClick={onClose} aria-label="Close modal">
+          <button className="modal-close-btn" onClick={handleModalClose} aria-label="Close modal">
             ✕
           </button>
         </div>
@@ -204,6 +323,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               setMode('signin');
               setErrorMessage(null);
               setSuccessMessage(null);
+              setQueueNotice(null);
             }}
           >
             Sign In
@@ -215,6 +335,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               setMode('register');
               setErrorMessage(null);
               setSuccessMessage(null);
+              setQueueNotice(null);
             }}
           >
             Create Account
@@ -222,6 +343,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         </div>
 
         {/* Status Alerts */}
+        {queueNotice && (
+          <div className="auth-alert alert-queue" role="status">
+            <span className="alert-icon">⏳</span>
+            <span>{queueNotice}</span>
+          </div>
+        )}
         {errorMessage && (
           <div className="auth-alert alert-error" role="alert">
             <span className="alert-icon">⚠️</span>

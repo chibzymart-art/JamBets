@@ -4401,6 +4401,13 @@ body {
   color: #047857;
 }
 
+.alert-queue {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1d4ed8;
+  animation: pulse-slow 2s infinite ease-in-out;
+}
+
 .auth-form {
   display: flex;
   flex-direction: column;
