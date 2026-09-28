@@ -138,6 +138,7 @@ export default async function handler(req: Request): Promise<Response> {
     'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600',
     'CDN-Cache-Control': 'public, s-maxage=300',
     'Vercel-CDN-Cache-Control': 'public, s-maxage=300',
+    'Vary': 'Origin',
   };
 
   try {

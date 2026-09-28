@@ -306,7 +306,13 @@ function normalizePrediction(
 
 // Fast in-memory client cache to make market tab switching instantaneous (0ms)
 const clientMemoryCache = new Map<string, { data: UnifiedMarketFeedResponse; timestamp: number }>();
+const clientInflightPromises = new Map<string, Promise<UnifiedMarketFeedResponse>>();
 const CLIENT_CACHE_TTL_MS = 60 * 1000; // 60s client cache
+
+export function clearMarketFeedCache() {
+  clientMemoryCache.clear();
+  clientInflightPromises.clear();
+}
 
 export async function fetchMarketFeed(
   options: FetchMarketFeedOptions
@@ -327,6 +333,12 @@ export async function fetchMarketFeed(
     return cached.data;
   }
 
+  if (clientInflightPromises.has(cacheKey)) {
+    return clientInflightPromises.get(cacheKey)!;
+  }
+
+  const inflight = (async () => {
+    try {
   // 1. Try Edge API Route first (with 1 retry to protect DB connection pool)
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
@@ -532,4 +544,11 @@ export async function fetchMarketFeed(
       error: err.message || 'Failed to query market feed',
     };
   }
+  } finally {
+    clientInflightPromises.delete(cacheKey);
+  }
+  })();
+
+  clientInflightPromises.set(cacheKey, inflight);
+  return inflight;
 }

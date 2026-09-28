@@ -40,8 +40,9 @@ export interface FetchTennisFeedOptions {
   forceRefresh?: boolean;
 }
 
-const CLIENT_CACHE_TTL_MS = 15 * 1000; // 15 seconds memory cache
-let clientCache: { data: TennisFeedResponse; timestamp: number; key: string } | null = null;
+const CLIENT_CACHE_TTL_MS = 30 * 1000; // 30 seconds fresh client memory cache
+const clientMemoryCache = new Map<string, { data: TennisFeedResponse; timestamp: number }>();
+const clientInflightPromises = new Map<string, Promise<TennisFeedResponse>>();
 
 const PRED_SELECT = `
   id,
@@ -153,11 +154,19 @@ export async function fetchTennisFeed(options: FetchTennisFeedOptions = {}): Pro
 
   const cacheKey = `${surface}:${tour}:${tier}:${Boolean(canViewPredictions)}`;
 
-  if (!forceRefresh && clientCache && clientCache.key === cacheKey && Date.now() - clientCache.timestamp < CLIENT_CACHE_TTL_MS) {
-    return clientCache.data;
+  // 1. Instant Cache Hit
+  const cached = clientMemoryCache.get(cacheKey);
+  if (!forceRefresh && cached && Date.now() - cached.timestamp < CLIENT_CACHE_TTL_MS) {
+    return cached.data;
   }
 
-  try {
+  // 2. Client-side In-flight Promise Deduplication
+  if (!forceRefresh && clientInflightPromises.has(cacheKey)) {
+    return clientInflightPromises.get(cacheKey)!;
+  }
+
+  const inflight = (async () => {
+    try {
     let rawPredictions: any[] = [];
     let rawTournaments: TennisTournament[] = [];
     let rawSettlements: any[] = [];
@@ -325,7 +334,7 @@ export async function fetchTennisFeed(options: FetchTennisFeedOptions = {}): Pro
       cached_at: new Date().toISOString(),
     };
 
-    clientCache = { data: response, timestamp: Date.now(), key: cacheKey };
+    clientMemoryCache.set(cacheKey, { data: response, timestamp: Date.now() });
     return response;
   } catch (err: any) {
     console.error('Direct Cloud Supabase tennis fetch error:', err);
@@ -350,9 +359,19 @@ export async function fetchTennisFeed(options: FetchTennisFeedOptions = {}): Pro
       cached_at: new Date().toISOString(),
       error: err.message || 'Failed to fetch tennis data from Cloud Supabase',
     };
+  } finally {
+    clientInflightPromises.delete(cacheKey);
   }
+  })();
+
+  if (!forceRefresh) {
+    clientInflightPromises.set(cacheKey, inflight);
+  }
+
+  return inflight;
 }
 
 export function clearTennisFeedCache() {
-  clientCache = null;
+  clientMemoryCache.clear();
+  clientInflightPromises.clear();
 }

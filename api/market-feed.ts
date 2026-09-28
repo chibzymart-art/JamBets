@@ -684,6 +684,7 @@ export default async function handler(req: Request) {
         : 'public, s-maxage=60, stale-while-revalidate=300',
       'CDN-Cache-Control': isVipOrAdmin ? 'no-store' : 'public, s-maxage=60',
       'Vercel-CDN-Cache-Control': isVipOrAdmin ? 'no-store' : 'public, s-maxage=60',
+      'Vary': 'Authorization, Origin',
       'Access-Control-Allow-Origin': corsOrigin,
       'Access-Control-Allow-Credentials': 'true',
     };

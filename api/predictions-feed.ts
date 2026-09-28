@@ -334,9 +334,10 @@ export default async function handler(req: Request) {
     'Content-Type': 'application/json',
     'Cache-Control': isVipOrAdmin
       ? 'private, no-cache, no-store, must-revalidate'
-      : 'public, s-maxage=120, stale-while-revalidate=300',
-    'CDN-Cache-Control': isVipOrAdmin ? 'no-store' : 'public, s-maxage=120',
-    'Vercel-CDN-Cache-Control': isVipOrAdmin ? 'no-store' : 'public, s-maxage=120',
+      : 'public, s-maxage=60, stale-while-revalidate=300',
+    'CDN-Cache-Control': isVipOrAdmin ? 'no-store' : 'public, s-maxage=60',
+    'Vercel-CDN-Cache-Control': isVipOrAdmin ? 'no-store' : 'public, s-maxage=60',
+    'Vary': 'Authorization, Origin',
     'Access-Control-Allow-Origin': corsOrigin,
     'Access-Control-Allow-Credentials': 'true',
     'X-RateLimit-Limit': '120',

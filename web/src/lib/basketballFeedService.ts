@@ -48,8 +48,9 @@ export interface FetchBasketballFeedOptions {
   forceRefresh?: boolean;
 }
 
-const CLIENT_CACHE_TTL_MS = 15 * 1000; // 15 seconds memory cache
-let clientCache: { data: BasketballFeedResponse; timestamp: number; key: string } | null = null;
+const CLIENT_CACHE_TTL_MS = 30 * 1000; // 30 seconds fresh client memory cache
+const clientMemoryCache = new Map<string, { data: BasketballFeedResponse; timestamp: number }>();
+const clientInflightPromises = new Map<string, Promise<BasketballFeedResponse>>();
 
 const PRED_SELECT = `
   id,
@@ -163,14 +164,19 @@ export async function fetchBasketballFeed(
   const isUnlocked = Boolean(canViewPredictions);
   const cacheKey = `bball_${league || 'all'}_${market || 'all'}_${tier || 'all'}_${isUnlocked ? 'vip' : 'free'}`;
 
-  if (!forceRefresh && clientCache && clientCache.key === cacheKey) {
-    const age = Date.now() - clientCache.timestamp;
-    if (age < CLIENT_CACHE_TTL_MS) {
-      return clientCache.data;
-    }
+  // 1. Instant Cache Hit
+  const cached = clientMemoryCache.get(cacheKey);
+  if (!forceRefresh && cached && Date.now() - cached.timestamp < CLIENT_CACHE_TTL_MS) {
+    return cached.data;
   }
 
-  try {
+  // 2. Client-side In-flight Promise Deduplication
+  if (!forceRefresh && clientInflightPromises.has(cacheKey)) {
+    return clientInflightPromises.get(cacheKey)!;
+  }
+
+  const inflight = (async () => {
+    try {
     let rawPredictions: BasketballPrediction[] = [];
     let rawLeagues: BasketballLeague[] = [];
     let rawSettlements: BasketballSettlement[] = [];
@@ -393,7 +399,7 @@ export async function fetchBasketballFeed(
       cached_at: new Date().toISOString(),
     };
 
-    clientCache = { data: response, timestamp: Date.now(), key: cacheKey };
+    clientMemoryCache.set(cacheKey, { data: response, timestamp: Date.now() });
     return response;
   } catch (err: any) {
     console.error('Direct Cloud Supabase basketball fetch error:', err);
@@ -419,11 +425,21 @@ export async function fetchBasketballFeed(
       cached_at: new Date().toISOString(),
       error: err.message,
     };
+  } finally {
+    clientInflightPromises.delete(cacheKey);
   }
+  })();
+
+  if (!forceRefresh) {
+    clientInflightPromises.set(cacheKey, inflight);
+  }
+
+  return inflight;
 }
 
 export function clearBasketballFeedCache() {
-  clientCache = null;
+  clientMemoryCache.clear();
+  clientInflightPromises.clear();
 }
 
 // ------------------------------------------------------------------
