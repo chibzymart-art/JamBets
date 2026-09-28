@@ -281,18 +281,37 @@ export default function App() {
     return () => clearInterval(timer);
   }, []);
 
-  // User & Auth Session Management
+  // User & Auth Session Management (Phase 3 High-Concurrency Bootstrap)
   const fetchUserData = async (userId: string) => {
     try {
-      const [userRes, subRes, entRes] = await Promise.all([
-        supabase.from('users').select('*').eq('id', userId).single(),
-        supabase.from('subscriptions').select('*').eq('user_id', userId).order('created_at', { ascending: false }).limit(1),
-        supabase.from('entitlements').select('*').eq('user_id', userId).order('created_at', { ascending: false }).limit(1)
-      ]);
+      let userData: UserProfile | null = null;
+      let subData: UserSubscription | null = null;
+      let entData: UserEntitlement | null = null;
 
-      if (userRes.data) {
+      // Primary: Single atomic roundtrip via get_user_session_bootstrap RPC
+      const { data: bootstrapData, error: rpcError } = await supabase.rpc('get_user_session_bootstrap', {
+        p_user_id: userId
+      });
+
+      if (!rpcError && bootstrapData && (bootstrapData.user || bootstrapData.subscription || bootstrapData.entitlement)) {
+        userData = bootstrapData.user as UserProfile | null;
+        subData = bootstrapData.subscription as UserSubscription | null;
+        entData = bootstrapData.entitlement as UserEntitlement | null;
+      } else {
+        // Resilient Fallback: parallel direct queries if RPC is unavailable or returns an error
+        const [userRes, subRes, entRes] = await Promise.all([
+          supabase.from('users').select('*').eq('id', userId).single(),
+          supabase.from('subscriptions').select('*').eq('user_id', userId).order('created_at', { ascending: false }).limit(1),
+          supabase.from('entitlements').select('*').eq('user_id', userId).order('created_at', { ascending: false }).limit(1)
+        ]);
+        userData = userRes.data as UserProfile | null;
+        subData = (subRes.data && subRes.data.length > 0 ? subRes.data[0] : null) as UserSubscription | null;
+        entData = (entRes.data && entRes.data.length > 0 ? entRes.data[0] : null) as UserEntitlement | null;
+      }
+
+      if (userData) {
         // Enforce soft-delete deactivation compliance
-        if (userRes.data.is_deleted === true || userRes.data.status === 'disabled') {
+        if (userData.is_deleted === true || userData.status === 'disabled') {
           console.warn('User account is soft-deleted / disabled. Signing out immediately.');
           await supabase.auth.signOut();
           setCurrentUser(null);
@@ -302,7 +321,7 @@ export default function App() {
           alert('This account has been deactivated (soft delete). Access to Oddsbanta is blocked.');
           return;
         }
-        setProfile(userRes.data as UserProfile);
+        setProfile(userData);
       } else {
         // Fallback user profile so modals and settings never render null
         setProfile({
@@ -316,11 +335,11 @@ export default function App() {
           updated_at: new Date().toISOString()
         });
       }
-      if (subRes.data && subRes.data.length > 0) {
-        setSubscription(subRes.data[0] as UserSubscription);
+      if (subData) {
+        setSubscription(subData);
       }
-      if (entRes.data && entRes.data.length > 0) {
-        setEntitlement(entRes.data[0] as UserEntitlement);
+      if (entData) {
+        setEntitlement(entData);
       }
     } catch (err) {
       console.warn('Error fetching user profile from Cloud Supabase:', err);
