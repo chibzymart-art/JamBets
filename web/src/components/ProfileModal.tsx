@@ -650,7 +650,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
               <h4 className="tier-name">Standard Plan</h4>
               <div className="tier-price">₦5,000 <span>/ month</span></div>
               <ul className="tier-perks">
-                <li>✓ Full 250k simulation predictions</li>
+                <li>✓ Full Football coverage (General & Specialist markets)</li>
                 <li>✓ Unlocked probabilities & confidence tiers</li>
                 <li>✓ 4-day horizon predictions</li>
                 <li>✓ Automatic 15-minute settlement sync</li>
@@ -671,8 +671,8 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
               <h4 className="tier-name">BigBang VIP</h4>
               <div className="tier-price">₦10,000 <span>/ month</span></div>
               <ul className="tier-perks">
-                <li>✓ Everything in Standard</li>
-                <li>✓ Early mathematical settlement alerts</li>
+                <li>✓ Everything in Standard (All Football)</li>
+                <li>✓ Multi-Sport VIP: Tennis, Basketball & Cricket models</li>
                 <li>✓ BANGER & TOP PICK priority signals</li>
                 <li>✓ Detailed Poisson parameter breakdowns</li>
               </ul>
