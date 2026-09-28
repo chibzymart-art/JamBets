@@ -215,7 +215,7 @@ export async function fetchBasketballFeed(
         .from(predTable)
         .select(PRED_SELECT)
         .order('target_kickoff_at', { ascending: true })
-        .limit(50);
+        .limit(1000);
 
       const [predRes, leaguesRes, settleRes] = await Promise.all([
         predQuery,
@@ -224,12 +224,12 @@ export async function fetchBasketballFeed(
           .select('id,code,name,country,quarter_minutes,periods_count,default_pace')
           .eq('is_active', true)
           .order('name', { ascending: true })
-          .limit(50),
+          .limit(100),
         supabase
           .from('basketball_settlements')
           .select(SETTLE_SELECT)
           .order('settled_at', { ascending: false })
-          .limit(50),
+          .limit(100),
       ]);
 
       rawPredictions = (predRes.data as unknown as BasketballPrediction[]) || [];

@@ -236,15 +236,15 @@ async function fetchBasketballFromUpstream(isPaidOrAdmin: boolean): Promise<Bask
 
   const [predsRes, leaguesRes, settleRes] = await Promise.all([
     fetch(
-      `${SUPABASE_URL}/rest/v1/${predTable}?select=${predSelect}&order=target_kickoff_at.asc&limit=100`,
+      `${SUPABASE_URL}/rest/v1/${predTable}?select=${predSelect}&order=target_kickoff_at.asc&limit=1000`,
       { headers }
     ),
     fetch(
-      `${SUPABASE_URL}/rest/v1/basketball_leagues?select=id,code,name,country,quarter_minutes,periods_count,default_pace&is_active=eq.true&order=name.asc&limit=50`,
+      `${SUPABASE_URL}/rest/v1/basketball_leagues?select=id,code,name,country,quarter_minutes,periods_count,default_pace&is_active=eq.true&order=name.asc&limit=100`,
       { headers }
     ),
     fetch(
-      `${SUPABASE_URL}/rest/v1/basketball_settlements?select=${settleSelect}&order=settled_at.desc&limit=50`,
+      `${SUPABASE_URL}/rest/v1/basketball_settlements?select=${settleSelect}&order=settled_at.desc&limit=100`,
       { headers }
     ),
   ]);

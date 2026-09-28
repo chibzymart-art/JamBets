@@ -218,18 +218,18 @@ export async function fetchTennisFeed(options: FetchTennisFeedOptions = {}): Pro
           .gte('target_kickoff_at', minDate)
           .lte('target_kickoff_at', maxDate)
           .order('target_kickoff_at', { ascending: true })
-          .limit(50),
+          .limit(1000),
         supabase
           .from('tennis_tournaments')
           .select('*')
           .eq('is_active', true)
           .order('name', { ascending: true })
-          .limit(50),
+          .limit(100),
         supabase
           .from('tennis_settlements')
           .select(SETTLE_SELECT)
           .order('settled_at', { ascending: false })
-          .limit(50),
+          .limit(100),
       ]);
 
       rawPredictions = predRes.data || [];

@@ -185,15 +185,15 @@ async function fetchTennisDataFromUpstream(rawToken?: string | null): Promise<Te
 
   const [predsRes, tourneysRes, settleRes] = await Promise.all([
     fetch(
-      `${SUPABASE_URL}/rest/v1/tennis_predictions_paywall?select=${predSelect}&target_kickoff_at=gte.${minDate}&target_kickoff_at=lte.${maxDate}&order=target_kickoff_at.asc&limit=100`,
+      `${SUPABASE_URL}/rest/v1/tennis_predictions_paywall?select=${predSelect}&target_kickoff_at=gte.${minDate}&target_kickoff_at=lte.${maxDate}&order=target_kickoff_at.asc&limit=1000`,
       { headers }
     ),
     fetch(
-      `${SUPABASE_URL}/rest/v1/tennis_tournaments?select=*&order=name.asc&limit=50`,
+      `${SUPABASE_URL}/rest/v1/tennis_tournaments?select=*&order=name.asc&limit=100`,
       { headers }
     ),
     fetch(
-      `${SUPABASE_URL}/rest/v1/tennis_settlements?select=${settleSelect}&order=settled_at.desc&limit=50`,
+      `${SUPABASE_URL}/rest/v1/tennis_settlements?select=${settleSelect}&order=settled_at.desc&limit=100`,
       { headers }
     ),
   ]);
