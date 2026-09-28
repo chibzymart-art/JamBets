@@ -10,6 +10,7 @@ Validates:
 
 import unittest
 from unittest.mock import MagicMock, patch
+from datetime import datetime, timezone
 import sys
 import os
 
@@ -145,7 +146,7 @@ class TestCornersSettlementEngine(unittest.TestCase):
 
         self.mock_db.get.side_effect = [
             [{"id": "pred-5", "fixture_id": "fix-5", "market": "over_7.5_corners", "prediction": "Over 7.5 Corners", "settlement_status": "pending"}],
-            [{"id": "fix-5", "status": "finished", "period": "FT", "corners_home": None, "corners_away": None}]
+            [{"id": "fix-5", "status": "finished", "period": "FT", "target_kickoff_at": datetime.now(timezone.utc).isoformat(), "corners_home": None, "corners_away": None}]
         ]
         res = self.engine.settle()
         self.assertEqual(res["settled"], 0)
