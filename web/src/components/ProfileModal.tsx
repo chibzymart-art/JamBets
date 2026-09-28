@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { UserProfile, UserSubscription, UserEntitlement } from '../types';
 
@@ -21,6 +22,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
   entitlement,
   onProfileUpdated
 }) => {
+  const navigate = useNavigate();
   // Derive robust effective profile ensuring modal NEVER fails to render for authenticated users
   const effectiveProfile: UserProfile | null = profile || (currentUser ? {
     id: currentUser.id,
@@ -46,11 +48,6 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
       setDisplayName(effectiveProfile.display_name);
     }
   }, [effectiveProfile?.display_name]);
-
-  // Subscription upgrade state
-  const [upgrading, setUpgrading] = useState(false);
-  const [upgradeSuccess, setUpgradeSuccess] = useState<string | null>(null);
-  const [upgradeError, setUpgradeError] = useState<string | null>(null);
 
   // Security / Password state
   const [newPassword, setNewPassword] = useState('');
@@ -152,29 +149,10 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
 
   const currentTier = (effectiveProfile.role || subscription?.tier || 'free').toLowerCase();
 
-  const handleTierChange = async (targetTier: 'free' | 'standard' | 'bigbang') => {
+  const handleTierChange = (targetTier: 'free' | 'standard' | 'bigbang') => {
     if (targetTier === currentTier) return;
-    setUpgrading(true);
-    setUpgradeError(null);
-    setUpgradeSuccess(null);
-
-    try {
-      const { error } = await supabase.rpc('upgrade_subscription_tier', {
-        target_tier: targetTier
-      });
-
-      if (error) throw error;
-
-      setUpgradeSuccess(`Successfully transitioned subscription tier to ${targetTier.toUpperCase()}!`);
-      setTimeout(() => {
-        onProfileUpdated();
-      }, 700);
-    } catch (err: any) {
-      console.error('Subscription change error:', err);
-      setUpgradeError(err.message || 'Failed to update subscription tier.');
-    } finally {
-      setUpgrading(false);
-    }
+    onClose();
+    navigate('/subscribe');
   };
 
   const handleUpdatePassword = async (e: React.FormEvent) => {
@@ -285,20 +263,6 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
             ✕
           </button>
         </div>
-
-        {/* Global Feedback alerts */}
-        {upgradeSuccess && (
-          <div className="auth-alert alert-success" role="alert">
-            <span className="alert-icon">✓</span>
-            <span>{upgradeSuccess}</span>
-          </div>
-        )}
-        {upgradeError && (
-          <div className="auth-alert alert-error" role="alert">
-            <span className="alert-icon">⚠️</span>
-            <span>{upgradeError}</span>
-          </div>
-        )}
 
         {/* Account Details & Status Grid */}
         <div className="profile-details-grid">
@@ -636,11 +600,11 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
               </ul>
               <button
                 type="button"
-                disabled={currentTier === 'free' || upgrading}
+                disabled={currentTier === 'free'}
                 onClick={() => handleTierChange('free')}
                 className={`tier-action-btn ${currentTier === 'free' ? 'btn-current' : 'btn-secondary'}`}
               >
-                {currentTier === 'free' ? 'Current Plan' : 'Downgrade to Free'}
+                {currentTier === 'free' ? 'Active Plan' : 'Free Tier'}
               </button>
             </div>
 
@@ -657,11 +621,11 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
               </ul>
               <button
                 type="button"
-                disabled={currentTier === 'standard' || upgrading}
+                disabled={currentTier === 'standard'}
                 onClick={() => handleTierChange('standard')}
                 className={`tier-action-btn ${currentTier === 'standard' ? 'btn-current' : 'btn-primary'}`}
               >
-                {currentTier === 'standard' ? 'Current Plan' : 'Switch to Standard (₦5,000/mo)'}
+                {currentTier === 'standard' ? 'Active Plan' : 'Upgrade to Standard (₦5,000/mo)'}
               </button>
             </div>
 
@@ -678,19 +642,19 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
               </ul>
               <button
                 type="button"
-                disabled={currentTier === 'bigbang' || upgrading}
+                disabled={currentTier === 'bigbang'}
                 onClick={() => handleTierChange('bigbang')}
                 className={`tier-action-btn ${currentTier === 'bigbang' ? 'btn-current' : 'btn-vip'}`}
               >
-                {currentTier === 'bigbang' ? 'Current Plan' : 'Switch to BigBang VIP (₦10,000/mo)'}
+                {currentTier === 'bigbang' ? 'Active Plan' : 'Upgrade to BigBang VIP (₦10,000/mo)'}
               </button>
             </div>
           </div>
 
           <div className="phase9-payment-notice">
-            <span className="notice-icon">💳</span>
+            <span className="notice-icon">🔒</span>
             <span>
-              <strong>Phase 8 Notice:</strong> Tier selection directly updates Cloud Supabase Row-Level Security entitlements. Automated payment gateway integrations (Paystack / Stripe) are slated for Phase 9.
+              <strong>Secure Entitlements:</strong> Tier upgrades are activated automatically upon payment verification or admin confirmation. Click any plan to review pricing and billing options.
             </span>
           </div>
         </div>

@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { supabase } from '../lib/supabase';
+import { Link } from 'react-router-dom';
 import { DesktopSidebarLayout } from '../components/DesktopSidebarLayout';
 import { FavoritePredictionItem } from '../components/FavoritesDrawer';
 
@@ -21,7 +20,6 @@ export const SubscriptionPage: React.FC<SubscriptionPageProps> = ({
   onToggleFavoriteItem,
   onOpenFavoritesDrawer,
 }) => {
-  const navigate = useNavigate();
   const [selectedBilling, setSelectedBilling] = useState<'monthly' | 'quarterly'>('monthly');
   const [processingPlan, setProcessingPlan] = useState<string | null>(null);
   const [subscribeSuccess, setSubscribeSuccess] = useState<string | null>(null);
@@ -38,40 +36,21 @@ export const SubscriptionPage: React.FC<SubscriptionPageProps> = ({
     setSubscribeSuccess(null);
 
     try {
-      // Call Supabase RPC upgrade_subscription_tier
-      const { error } = await supabase.rpc('upgrade_subscription_tier', {
-        target_tier: tier,
-        months: selectedBilling === 'quarterly' ? 3 : 1
-      });
-
-      if (error) throw error;
+      const planName = tier === 'bigbang' ? 'BigBang VIP (₦10,000/mo)' : 'Standard VIP (₦5,000/mo)';
+      const billingCycle = selectedBilling === 'quarterly' ? 'Quarterly (3 Months with 15% discount)' : 'Monthly';
+      const promptText = `Hello Oddsbanta Billing! I would like to activate ${planName} [${billingCycle}].\n\nAccount Email: ${currentUser.email}\nUser ID: ${currentUser.id}`;
+      const waUrl = `https://wa.me/?text=${encodeURIComponent(promptText)}`;
 
       setSubscribeSuccess(
-        `🎉 Successfully subscribed to ${tier === 'bigbang' ? 'BigBang VIP' : 'Standard'}! Redirecting to Dashboard...`
+        `💳 Redirecting to Oddsbanta VIP Billing Concierge to complete payment and instantly activate your ${tier === 'bigbang' ? 'BigBang VIP' : 'Standard'} entitlement...`
       );
 
-      setTimeout(() => {
-        navigate('/dashboard');
-      }, 1500);
+      // Open WhatsApp payment concierge in new tab
+      window.open(waUrl, '_blank', 'noopener,noreferrer');
 
     } catch (err: any) {
       console.error('Subscription error:', err);
-      // Fallback update profile role directly
-      try {
-        await supabase
-          .from('users')
-          .update({ role: tier === 'bigbang' ? 'bigbang' : 'standard' })
-          .eq('id', currentUser.id);
-
-        setSubscribeSuccess(
-          `🎉 Entitlement updated to ${tier === 'bigbang' ? 'BigBang VIP' : 'Standard'}! Redirecting to Dashboard...`
-        );
-        setTimeout(() => {
-          navigate('/dashboard');
-        }, 1500);
-      } catch {
-        setSubscribeError(err.message || 'Payment processing error. Please try again.');
-      }
+      setSubscribeError(err.message || 'Payment initiation error. Please contact billing support.');
     } finally {
       setProcessingPlan(null);
     }
