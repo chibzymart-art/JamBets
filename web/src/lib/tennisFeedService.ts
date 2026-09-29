@@ -184,18 +184,26 @@ export async function fetchTennisFeed(options: FetchTennisFeedOptions = {}): Pro
 
         const edgeRes = await fetch('/api/tennis-feed', {
           headers: reqHeaders,
-          cache: forceRefresh ? 'no-cache' : 'default',
+          cache: (forceRefresh || Boolean(session?.access_token) || canViewPredictions) ? 'no-cache' : 'default',
         });
         if (edgeRes.ok) {
           const edgeData = await edgeRes.json();
           if (edgeData.success && Array.isArray(edgeData.predictions)) {
-            rawPredictions = edgeData.predictions;
-            rawTournaments = edgeData.tournaments || [];
-            rawSettlements = edgeData.settlements || [];
             if (typeof edgeData.is_subscriber === 'boolean') {
-              isUnlocked = edgeData.is_subscriber;
+              isUnlocked = Boolean(canViewPredictions || edgeData.is_subscriber);
             }
-            usedEdge = true;
+            const hasMasked = edgeData.predictions.some(
+              (p: any) => p.prediction === '🔒 Subscriber Only' || p.prediction === 'LOCKED'
+            );
+            if (isUnlocked && hasMasked) {
+              // Edge returned an anonymous cached payload; fallback directly to unmasked Supabase table
+              usedEdge = false;
+            } else {
+              rawPredictions = edgeData.predictions;
+              rawTournaments = edgeData.tournaments || [];
+              rawSettlements = edgeData.settlements || [];
+              usedEdge = true;
+            }
           }
         }
       } catch {
@@ -258,7 +266,14 @@ export async function fetchTennisFeed(options: FetchTennisFeedOptions = {}): Pro
 
     // 4. Map predictions and enforce proper paywall gating
     const finalPredictions: TennisPrediction[] = filteredPredictions.map((p) => {
-      const isRecordLocked = !isUnlocked && (p.is_locked !== false && p.prediction === 'LOCKED');
+      if (isUnlocked) {
+        return {
+          ...p,
+          is_locked: false,
+        };
+      }
+
+      const isRecordLocked = (p.is_locked !== false && p.prediction === 'LOCKED');
 
       if (isRecordLocked) {
         return {

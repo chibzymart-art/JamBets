@@ -154,7 +154,11 @@ async function checkIsPaidOrAdmin(authToken: string | null): Promise<boolean> {
 
     // 4. Server-verified role or admin email whitelist
     const email = (authUser.email || '').toLowerCase().trim();
-    if (authUser.app_metadata?.role === 'admin' || (email && ADMIN_EMAILS.has(email))) {
+    if (
+      authUser.app_metadata?.role === 'admin' ||
+      authUser.user_metadata?.role === 'admin' ||
+      (email && ADMIN_EMAILS.has(email))
+    ) {
       userAuthCache.set(rawToken, { isPaid: true, expiresAt: Date.now() + 120 * 1000 });
       return true;
     }
@@ -166,11 +170,21 @@ async function checkIsPaidOrAdmin(authToken: string | null): Promise<boolean> {
       Accept: 'application/json',
     };
 
-    // 5. Query active subscriptions & entitlements for this verified user
-    const [subRes, entRes] = await Promise.all([
+    // 5. Query active subscriptions, entitlements & users table for this verified user
+    const [subRes, entRes, userRes] = await Promise.all([
       fetch(`${SUPABASE_URL}/rest/v1/subscriptions?user_id=eq.${userId}&status=eq.active&select=tier&limit=1`, { headers }),
-      fetch(`${SUPABASE_URL}/rest/v1/entitlements?user_id=eq.${userId}&select=tier,valid_until,can_view_predictions&limit=1`, { headers }),
+      fetch(`${SUPABASE_URL}/rest/v1/entitlements?user_id=eq.${userId}&select=tier,valid_until,features&limit=1`, { headers }),
+      fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${userId}&select=role&limit=1`, { headers }),
     ]);
+
+    // Check users table role
+    if (userRes.ok) {
+      const userData = await userRes.json();
+      if (Array.isArray(userData) && userData.length > 0 && userData[0].role === 'admin') {
+        userAuthCache.set(rawToken, { isPaid: true, expiresAt: Date.now() + 120 * 1000 });
+        return true;
+      }
+    }
 
     let isPaid = false;
 
@@ -191,7 +205,16 @@ async function checkIsPaidOrAdmin(authToken: string | null): Promise<boolean> {
         const validUntil = ent.valid_until ? new Date(ent.valid_until).getTime() : Infinity;
         if (validUntil > Date.now()) {
           const tier = (ent.tier || '').toLowerCase();
-          if (ent.can_view_predictions === true || ['standard', 'bigbang', 'vip', 'pro', 'admin'].includes(tier)) {
+          const feats = ent.features || {};
+          const isEntAdmin = tier === 'admin' || feats.admin === true;
+          const hasVipFeatures = Boolean(
+            feats.vip === true ||
+            feats.football_predictions === true ||
+            feats.simulations === true ||
+            feats.all_sports === true ||
+            feats.bigbang === true
+          );
+          if (['standard', 'bigbang', 'vip', 'pro', 'admin'].includes(tier) || isEntAdmin || hasVipFeatures) {
             isPaid = true;
           }
         }

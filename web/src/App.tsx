@@ -528,14 +528,20 @@ export default function App() {
 
           const edgeRes = await fetch('/api/predictions-feed', {
             headers: reqHeaders,
-            cache: session?.access_token ? 'no-cache' : 'default'
+            cache: (session?.access_token || isAdmin || canViewPredictions) ? 'no-cache' : 'default'
           });
           if (edgeRes.ok) {
             const edgeData = await edgeRes.json();
             if (edgeData.success && Array.isArray(edgeData.predictions) && edgeData.predictions.length > 0) {
-              rawPredRecords = edgeData.predictions;
-              returnedLeagues = edgeData.leagues || [];
-              usedEdgeCache = true;
+              const hasMasked = edgeData.predictions.some((p: any) => p.prediction === 'LOCKED');
+              if ((isAdmin || canViewPredictions) && hasMasked) {
+                // Anonymous cache returned; bypass to direct Supabase query
+                usedEdgeCache = false;
+              } else {
+                rawPredRecords = edgeData.predictions;
+                returnedLeagues = edgeData.leagues || [];
+                usedEdgeCache = true;
+              }
             }
           }
         } catch {
@@ -2847,6 +2853,7 @@ export default function App() {
         profile={profile}
         subscription={subscription}
         entitlement={entitlement}
+        isAdmin={isAdmin}
         onProfileUpdated={fetchCloudData}
       />
 

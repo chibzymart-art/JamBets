@@ -192,15 +192,27 @@ export async function fetchBasketballFeed(
         }
         const edgeRes = await fetch('/api/basketball-feed', {
           headers: reqHeaders,
-          cache: forceRefresh ? 'no-cache' : 'default',
+          cache: (forceRefresh || Boolean(session?.access_token) || canViewPredictions) ? 'no-cache' : 'default',
         });
         if (edgeRes.ok) {
           const edgeData = await edgeRes.json();
           if (edgeData.success && Array.isArray(edgeData.predictions)) {
-            rawPredictions = edgeData.predictions;
-            rawLeagues = edgeData.leagues || [];
-            rawSettlements = edgeData.settlements || [];
-            usedEdge = true;
+            let edgeUnlocked = isUnlocked;
+            if (typeof edgeData.is_subscriber === 'boolean') {
+              edgeUnlocked = Boolean(canViewPredictions || edgeData.is_subscriber);
+            }
+            const hasMasked = edgeData.predictions.some(
+              (p: any) => p.prediction === '🔒 VIP Locked Prediction' || p.prediction === 'LOCKED' || p.is_locked === true
+            );
+            if (edgeUnlocked && hasMasked) {
+              // Edge returned an anonymous cached payload; fallback directly to unmasked Supabase table
+              usedEdge = false;
+            } else {
+              rawPredictions = edgeData.predictions;
+              rawLeagues = edgeData.leagues || [];
+              rawSettlements = edgeData.settlements || [];
+              usedEdge = true;
+            }
           }
         }
       } catch {
@@ -317,7 +329,14 @@ export async function fetchBasketballFeed(
 
     // 3. Map predictions and enforce proper paywall gating
     const finalPredictions: BasketballPrediction[] = filteredPredictions.map((p) => {
-      const isRecordLocked = !isUnlocked && (p.is_locked !== false && p.prediction === 'LOCKED');
+      if (isUnlocked) {
+        return {
+          ...p,
+          is_locked: false,
+        };
+      }
+
+      const isRecordLocked = (p.is_locked !== false && p.prediction === 'LOCKED');
 
       if (isRecordLocked) {
         return {

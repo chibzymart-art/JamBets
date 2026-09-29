@@ -349,7 +349,10 @@ export async function fetchMarketFeed(
       const headers: Record<string, string> = { Accept: 'application/json' };
       if (token) headers['Authorization'] = `Bearer ${token}`;
 
-      const res = await fetch(url, { headers });
+      const res = await fetch(url, {
+        headers,
+        cache: (Boolean(token) || isAdmin || canViewPredictions) ? 'no-cache' : 'default',
+      });
       if (res.ok) {
         const contentType = res.headers.get('content-type') || '';
         if (contentType.includes('application/json')) {
@@ -367,6 +370,9 @@ export async function fetchMarketFeed(
                 return true;
               })
               .map((p: UnifiedMarketPrediction) => {
+                if (isAdmin || canViewPredictions) {
+                  p.is_locked = false;
+                }
                 if (!p.tactical_rationale) {
                   const tactical = computeTacticalAnalysis(p, p.market_category, p.market as MarketType);
                   p.tactical_tag = p.tactical_tag || tactical.tag;

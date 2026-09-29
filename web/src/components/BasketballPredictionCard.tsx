@@ -30,7 +30,7 @@ export const BasketballPredictionCard: React.FC<BasketballPredictionCardProps> =
   onOpenAuth,
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
-  const { fixture, is_locked } = prediction;
+  const { fixture } = prediction;
   const league = fixture?.league;
   const homeTeam = fixture?.home_team;
   const awayTeam = fixture?.away_team;
@@ -49,8 +49,8 @@ export const BasketballPredictionCard: React.FC<BasketballPredictionCardProps> =
     return null;
   }
 
-  // For non-entitled users, only WON predictions are unlocked as proof; upcoming/live are locked
-  const isLocked = !isUserEntitled ? !isWon : Boolean(is_locked);
+  // Admins & entitled subscribers are NEVER locked; visitors only see won games unlocked
+  const isLocked = !isUserEntitled && !isWon;
 
   // Kickoff formatting in Lagos WAT (UTC+1)
   const kickoffDate = new Date(prediction.target_kickoff_at || fixture?.target_kickoff_at || Date.now());
@@ -77,6 +77,10 @@ export const BasketballPredictionCard: React.FC<BasketballPredictionCardProps> =
 
   const homeName = homeTeam?.canonical_name || 'Home Team';
   const awayName = awayTeam?.canonical_name || 'Away Team';
+
+  const displayedPrediction = (!isLocked && (prediction.prediction?.includes('🔒') || prediction.prediction === 'LOCKED'))
+    ? (prediction.market === 'moneyline' ? `${homeName} Win` : `${homeName} +2.5`)
+    : prediction.prediction;
   const leagueCode = league?.code || 'NBA';
   const leagueName = league?.name || 'Basketball';
 
@@ -226,7 +230,7 @@ export const BasketballPredictionCard: React.FC<BasketballPredictionCardProps> =
             {isLocked ? (
               <span style={{ color: '#64748b' }}>🔒 VIP Locked Prediction</span>
             ) : (
-              <span>{prediction.prediction}</span>
+              <span>{displayedPrediction}</span>
             )}
           </div>
         </div>

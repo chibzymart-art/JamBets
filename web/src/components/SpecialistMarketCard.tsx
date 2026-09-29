@@ -16,9 +16,10 @@ export const SpecialistMarketCard: React.FC<SpecialistMarketCardProps> = ({
   isFavorite = false,
   onToggleFavorite,
   onOpenUpgrade,
-  isAdmin: _isAdmin = false,
+  isAdmin = false,
 }) => {
-  const { fixture, metrics, is_locked } = prediction;
+  const { fixture, metrics, is_locked: rawIsLocked } = prediction;
+  const isLocked = isAdmin ? false : Boolean(rawIsLocked);
   const homeName = formatClubName(fixture?.home_team?.short_name || fixture?.home_team?.name || 'Home Club');
   const awayName = formatClubName(fixture?.away_team?.short_name || fixture?.away_team?.name || 'Away Club');
   const leagueName = fixture?.league?.name || fixture?.league?.code || 'Football';
@@ -68,7 +69,7 @@ export const SpecialistMarketCard: React.FC<SpecialistMarketCardProps> = ({
   const isVoid = prediction.settlement_status === 'void' || prediction.settlement_status === 'voided';
 
   // Strict Paywall: Non-paid users strictly see only won fixtures (never lost, void, or un-won finished)
-  if (is_locked && (isLost || isVoid || (isFinished && !isWon))) {
+  if (isLocked && (isLost || isVoid || (isFinished && !isWon))) {
     return null;
   }
 
@@ -207,7 +208,7 @@ export const SpecialistMarketCard: React.FC<SpecialistMarketCardProps> = ({
   };
 
   return (
-    <div className={`specialist-market-card ${is_locked ? 'is-freemium-locked' : ''} ${isSettled ? `settled-${prediction.settlement_status}` : ''}`}>
+    <div className={`specialist-market-card ${isLocked ? 'is-freemium-locked' : ''} ${isSettled ? `settled-${prediction.settlement_status}` : ''}`}>
       {/* Top Card Header */}
       <div className="card-top-row">
         <div className="card-league-badge">
@@ -286,7 +287,7 @@ export const SpecialistMarketCard: React.FC<SpecialistMarketCardProps> = ({
           <span className="engine-label">{prediction.market_label}</span>
         </div>
 
-        {!is_locked && (
+        {!isLocked && (
           <span className={`confidence-tier-pill tier-${prediction.confidence_tier?.toLowerCase()}`}>
             {prediction.confidence_tier?.replace(/_/g, ' ')}
           </span>
@@ -308,7 +309,7 @@ export const SpecialistMarketCard: React.FC<SpecialistMarketCardProps> = ({
 
       {/* Main Prediction & Probability Section */}
       <div className="card-prediction-container">
-        {is_locked ? (
+        {isLocked ? (
           /* Frosted Freemium Paywall Mask */
           <div className="freemium-locked-overlay">
             <div className="locked-mask-content">
@@ -483,7 +484,7 @@ export const SpecialistMarketCard: React.FC<SpecialistMarketCardProps> = ({
       <div className="card-action-footer">
         <div className="action-left-info" />
 
-        {!is_locked && (
+        {!isLocked && (
           <button
             type="button"
             className={`add-to-acca-btn ${isFavorite ? 'in-slip' : ''}`}

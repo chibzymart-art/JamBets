@@ -25,7 +25,7 @@ export const TennisPredictionCard: React.FC<TennisPredictionCardProps> = ({
   onOpenAuth,
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
-  const { fixture, is_locked } = prediction;
+  const { fixture } = prediction;
   const tournament = fixture?.tournament;
   const player1 = fixture?.player1;
   const player2 = fixture?.player2;
@@ -92,13 +92,17 @@ export const TennisPredictionCard: React.FC<TennisPredictionCardProps> = ({
     return null;
   }
 
-  // For non-entitled users, only WON predictions are unlocked as proof; upcoming/live are locked
-  const isLocked = !isUserEntitled ? !isWon : Boolean(is_locked);
+  // Admins & entitled subscribers are NEVER locked; visitors only see won games unlocked
+  const isLocked = !isUserEntitled && !isWon;
 
   // Confidence tier configuration (matching Football FixtureCard exactly)
   const effectiveCategory = isLocked ? 'LOCKED' : (prediction.confidence_category || 'TOP PICK');
   const tierConfig = getTierConfig(effectiveCategory);
   const cleanTierLabel = (tierConfig.label || '').replace(/\s*\([^)]*\)/g, '').trim();
+
+  const displayedPrediction = (!isLocked && prediction.prediction === '🔒 Subscriber Only')
+    ? `${leaderName} Win`
+    : prediction.prediction;
 
   const probPct = prediction.probability != null
     ? ((prediction.probability <= 1 ? prediction.probability * 100 : prediction.probability)).toFixed(1)
@@ -355,7 +359,7 @@ export const TennisPredictionCard: React.FC<TennisPredictionCardProps> = ({
                 )}
               </div>
               <div className="key-pick-outcome">
-                {prediction.prediction}
+                {displayedPrediction}
               </div>
               <div className="key-pick-prob">
                 {probPct ? `${probPct}% Probability` : 'Simulated'}

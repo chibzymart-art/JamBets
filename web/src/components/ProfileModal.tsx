@@ -10,6 +10,7 @@ interface ProfileModalProps {
   profile: UserProfile | null;
   subscription: UserSubscription | null;
   entitlement: UserEntitlement | null;
+  isAdmin?: boolean;
   onProfileUpdated: () => void;
 }
 
@@ -20,6 +21,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
   profile,
   subscription,
   entitlement,
+  isAdmin = false,
   onProfileUpdated
 }) => {
   const navigate = useNavigate();
@@ -265,28 +267,65 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
         </div>
 
         {/* Account Details & Status Grid */}
-        <div className="profile-details-grid">
-          <div className="profile-detail-card">
-            <span className="detail-label">Display Name / User</span>
-            <span className="detail-value">{effectiveProfile.display_name || 'Oddsbanta Member'}</span>
-          </div>
-          <div className="profile-detail-card">
-            <span className="detail-label">Current Role / Tier</span>
-            <span className={`detail-value tier-badge-${currentTier}`}>
-              {currentTier.toUpperCase()}
-            </span>
-          </div>
-          <div className="profile-detail-card">
-            <span className="detail-label">Predictions Access</span>
-            <span className="detail-value" style={{ color: entitlement?.can_view_predictions ? '#34d399' : '#f87171' }}>
-              {entitlement?.can_view_predictions ? 'Unlocked (Full Access)' : 'Locked (Teaser View Only)'}
-            </span>
-          </div>
-          <div className="profile-detail-card">
-            <span className="detail-label">Member Since</span>
-            <span className="detail-value">{formatLagosDate(effectiveProfile.created_at)}</span>
-          </div>
-        </div>
+        {(() => {
+          const adminEmails = [
+            'chibzymart@gmail.com',
+            'whizzchibz@gmail.com',
+            'chibuezec.amuchie@gmail.com',
+            'chibuezeamuchie@gmail.com',
+            'nnamdiamuchie@gmail.com'
+          ];
+          const userEmail = (effectiveProfile.email || currentUser?.email || '').toLowerCase().trim();
+          const isSuperAdmin = Boolean(
+            isAdmin ||
+            effectiveProfile.role === 'admin' ||
+            currentUser?.user_metadata?.role === 'admin' ||
+            (currentUser as any)?.app_metadata?.role === 'admin' ||
+            subscription?.tier === 'admin' ||
+            entitlement?.tier === 'admin' ||
+            (entitlement?.features as any)?.admin === true ||
+            (userEmail ? adminEmails.includes(userEmail) : false)
+          );
+
+          const isFullAccess = Boolean(
+            isSuperAdmin ||
+            ['bigbang', 'vip'].includes((subscription?.tier || '').toLowerCase()) ||
+            ['bigbang', 'vip'].includes((entitlement?.tier || '').toLowerCase()) ||
+            (entitlement?.features as any)?.vip === true ||
+            (entitlement?.features as any)?.football_predictions === true ||
+            (entitlement?.features as any)?.all_sports === true ||
+            (entitlement?.features as any)?.multi_sport === true ||
+            (entitlement?.features as any)?.tennis === true ||
+            (entitlement?.features as any)?.basketball === true
+          );
+
+          return (
+            <div className="profile-details-grid">
+              <div className="profile-detail-card">
+                <span className="detail-label">Display Name / User</span>
+                <span className="detail-value">{effectiveProfile.display_name || 'Oddsbanta Member'}</span>
+              </div>
+              <div className="profile-detail-card">
+                <span className="detail-label">Current Role / Tier</span>
+                <span className={`detail-value tier-badge-${isSuperAdmin ? 'admin' : currentTier}`}>
+                  {isSuperAdmin ? '🛡 SUPER ADMIN' : currentTier.toUpperCase()}
+                </span>
+              </div>
+              <div className="profile-detail-card">
+                <span className="detail-label">Predictions Access</span>
+                <span className="detail-value" style={{ color: isFullAccess ? '#34d399' : '#f87171' }}>
+                  {isSuperAdmin
+                    ? '🛡 Super Admin (Full Unrestricted Access)'
+                    : (isFullAccess ? 'Unlocked (Full Access)' : 'Locked (Teaser View Only)')}
+                </span>
+              </div>
+              <div className="profile-detail-card">
+                <span className="detail-label">Member Since</span>
+                <span className="detail-value">{formatLagosDate(effectiveProfile.created_at)}</span>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Section 0: Username & Public Profile Setting */}
         <div className="settings-section">
