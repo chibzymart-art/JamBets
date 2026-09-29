@@ -245,6 +245,40 @@ export async function fetchTennisFeed(options: FetchTennisFeedOptions = {}): Pro
       rawSettlements = settleRes.data || [];
     }
 
+    // 2.5 Defensive Client-Side Deduplication (Pair + Date dedupe)
+    const matchDedupeMap = new Map<string, TennisPrediction>();
+    for (const p of rawPredictions) {
+      const p1 = (p.fixture?.player1?.canonical_name || p.fixture?.player1_id || '').toLowerCase().trim();
+      const p2 = (p.fixture?.player2?.canonical_name || p.fixture?.player2_id || '').toLowerCase().trim();
+      const pMin = p1 < p2 ? p1 : p2;
+      const pMax = p1 < p2 ? p2 : p1;
+      const kickoffDate = (p.target_kickoff_at || p.fixture?.target_kickoff_at || '').substring(0, 10);
+      const matchKey = `${pMin}_vs_${pMax}_${kickoffDate}`;
+
+      if (!matchDedupeMap.has(matchKey)) {
+        matchDedupeMap.set(matchKey, p);
+      } else {
+        const existing = matchDedupeMap.get(matchKey)!;
+        const pSettled = (p.settlement_status || '').toLowerCase();
+        const exSettled = (existing.settlement_status || '').toLowerCase();
+        const pIsSettled = pSettled === 'won' || pSettled === 'lost' || p.fixture?.status === 'finished';
+        const exIsSettled = exSettled === 'won' || exSettled === 'lost' || existing.fixture?.status === 'finished';
+
+        // Prefer settled / finished fixture over pending / scheduled fixture
+        if (pIsSettled && !exIsSettled) {
+          matchDedupeMap.set(matchKey, p);
+        } else if (!pIsSettled && exIsSettled) {
+          // keep existing settled match
+        } else {
+          // Prefer record with valid probability or higher probability
+          if ((p.probability || 0) > (existing.probability || 0)) {
+            matchDedupeMap.set(matchKey, p);
+          }
+        }
+      }
+    }
+    rawPredictions = Array.from(matchDedupeMap.values());
+
     // 3. Filter predictions by options
     const filteredPredictions = rawPredictions.filter((p) => {
       if (surface && surface !== 'all') {

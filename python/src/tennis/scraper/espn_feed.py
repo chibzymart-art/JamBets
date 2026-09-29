@@ -16,6 +16,7 @@ import httpx
 from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional
 from .base import BaseTennisScraper
+from python.src.tennis.tournament_normalizer import TournamentNormalizer
 
 logger = logging.getLogger("tennis.scraper.espn")
 
@@ -239,7 +240,7 @@ class EspnTennisFeedScraper(BaseTennisScraper):
 
                     # Deterministic canonical key: TOUR:TOURNAMENT:P1-P2:DATE
                     date_key = kickoff_raw[:10].replace("-", "") if kickoff_raw else "TBD"
-                    t_slug = self.slugify(raw_t_name)
+                    t_slug = TournamentNormalizer.normalize(raw_t_name)
                     canonical_key = f"{tour.upper()}:{t_slug}:{p1_canonical}-{p2_canonical}:{date_key}"
 
                     best_of_sets = 5 if ("wimbledon" in t_slug or "us_open" in t_slug or "roland_garros" in t_slug or "australian_open" in t_slug) and tour.lower() == "atp" else 3

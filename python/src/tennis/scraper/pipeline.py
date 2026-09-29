@@ -379,9 +379,21 @@ class TennisIngestionPipeline:
                 }
 
                 if not dry_run:
-                    res = self.db.upsert_fixture(db_payload)
-                    if res and "id" in res:
-                        fixture_record["id"] = res["id"]
+                    # Check if a rescheduled match exists for this player pair & tournament within window
+                    rescheduled = self.db.find_matching_rescheduled_fixture(
+                        p1_id, p2_id, tournament_id, f["target_kickoff_at"]
+                    )
+                    if rescheduled and rescheduled.get("id") and rescheduled.get("canonical_key") != f["canonical_key"]:
+                        logger.info(
+                            "Detected rescheduled tennis fixture: %s vs %s (existing id=%s). Updating kickoff to %s",
+                            p1_canonical, p2_canonical, rescheduled["id"], f["target_kickoff_at"]
+                        )
+                        self.db.update_fixture_score(rescheduled["id"], db_payload)
+                        fixture_record["id"] = rescheduled["id"]
+                    else:
+                        res = self.db.upsert_fixture(db_payload)
+                        if res and "id" in res:
+                            fixture_record["id"] = res["id"]
 
                 stats["fixtures"].append(fixture_record)
                 stats["fixtures_synced"] += 1

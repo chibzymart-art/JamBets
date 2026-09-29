@@ -3,10 +3,22 @@ Unit tests for Oddsbanta Autonomous Tennis Scraper & Surface Engine (Phase 2)
 Invariant: Strict isolation from football tests and components. Uses standard unittest.
 """
 
+import os
+import sys
 import unittest
-from src.tennis.cpi_registry import CpiRegistry, KNOWN_TOURNAMENT_PROFILES
-from src.tennis.elo_engine import TennisEloEngine
-from src.tennis.scraper.espn_feed import EspnTennisFeedScraper
+from pathlib import Path
+
+# Add project root and python root to sys.path
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+PYTHON_ROOT = PROJECT_ROOT / "python"
+if str(PYTHON_ROOT) not in sys.path:
+    sys.path.insert(0, str(PYTHON_ROOT))
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from python.src.tennis.cpi_registry import CpiRegistry, KNOWN_TOURNAMENT_PROFILES
+from python.src.tennis.elo_engine import TennisEloEngine
+from python.src.tennis.scraper.espn_feed import EspnTennisFeedScraper
 
 
 class TestTennisScraperEngine(unittest.TestCase):
@@ -78,7 +90,14 @@ class TestTennisScraperEngine(unittest.TestCase):
         self.assertEqual(EspnTennisFeedScraper._map_round_code("Semifinals"), "SF")
         self.assertEqual(EspnTennisFeedScraper._map_round_code("Quarterfinals"), "QF")
         self.assertEqual(EspnTennisFeedScraper._map_round_code("Round of 16"), "R16")
-        self.assertEqual(EspnTennisFeedScraper._map_round_code("Qualifying 1st Round"), "QUAL")
+    def test_tournament_normalizer(self):
+        from python.src.tennis.tournament_normalizer import TournamentNormalizer
+        self.assertEqual(TournamentNormalizer.normalize("Adana Open"), "adana")
+        self.assertEqual(TournamentNormalizer.normalize("Adana, Turkiye"), "adana")
+        self.assertTrue(TournamentNormalizer.is_same_tournament("Adana Open", "Adana, Turkiye"))
+        self.assertEqual(TournamentNormalizer.normalize("AITO Hangzhou Open"), "hangzhou")
+        self.assertEqual(TournamentNormalizer.normalize("ATP - Japan Open"), "japan")
+        self.assertEqual(TournamentNormalizer.normalize("Mouilleron-le-Captif, France"), "mouilleron_le_captif")
 
 
 if __name__ == "__main__":

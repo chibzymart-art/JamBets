@@ -17,6 +17,7 @@ import httpx
 from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional
 from .base import BaseTennisScraper
+from python.src.tennis.tournament_normalizer import TournamentNormalizer
 
 logger = logging.getLogger("tennis.scraper.livescore")
 
@@ -175,7 +176,8 @@ class LiveScoreTennisScraper(BaseTennisScraper):
                 # 8. Deterministic Canonical Key: TOUR:TOURNAMENT:P1-P2:DATE
                 raw_tournament_name = f"{snm}"
                 date_key = kickoff_dt.strftime("%Y%m%d")
-                canonical_key = f"{detected_tour}:{self.slugify(raw_tournament_name)}:{p1_canonical}-{p2_canonical}:{date_key}"
+                normalized_tour = TournamentNormalizer.normalize(raw_tournament_name)
+                canonical_key = f"{detected_tour}:{normalized_tour}:{p1_canonical}-{p2_canonical}:{date_key}"
 
                 fixture = {
                     "source": "livescore",

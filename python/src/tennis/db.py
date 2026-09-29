@@ -99,6 +99,35 @@ class TennisDbClient:
         res = resp.json()
         return res[0] if res else {}
 
+    def find_matching_rescheduled_fixture(
+        self, p1_id: str, p2_id: str, tournament_id: str, kickoff_iso: str
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Detects an existing fixture between the same two players in the same tournament
+        within a rolling window [-24h, +36h] to reconcile rescheduled matches.
+        """
+        if not p1_id or not p2_id or not kickoff_iso:
+            return None
+        try:
+            from datetime import datetime, timedelta
+            k_dt = datetime.fromisoformat(kickoff_iso.replace("Z", "+00:00"))
+            min_dt = (k_dt - timedelta(hours=24)).isoformat()
+            max_dt = (k_dt + timedelta(hours=36)).isoformat()
+
+            params = {
+                "tournament_id": f"eq.{tournament_id}",
+                "and": f"(target_kickoff_at.gte.{min_dt},target_kickoff_at.lte.{max_dt})",
+                "or": f"(and(player1_id.eq.{p1_id},player2_id.eq.{p2_id}),and(player1_id.eq.{p2_id},player2_id.eq.{p1_id}))",
+                "limit": "1"
+            }
+            resp = self.client.get("/tennis_fixtures", params=params)
+            if resp.status_code == 200:
+                res = resp.json()
+                return res[0] if res else None
+        except Exception as e:
+            logger.warning("Error checking for rescheduled fixture: %s", e)
+        return None
+
     # ------------------------------------------------------------------
     # Predictions
     # ------------------------------------------------------------------
