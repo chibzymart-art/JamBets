@@ -1,9 +1,9 @@
-name: JamBets Autonomous Tennis Settlement Engine (3-Hour)
+name: JamBets Autonomous Tennis Settlement Engine (30-Min)
 
 on:
   schedule:
-    # Run every 3 hours as specified
-    - cron: '0 */3 * * *'
+    # Run every 30 minutes for real-time set and match settlements
+    - cron: '*/30 * * * *'
   workflow_dispatch:
     inputs:
       lookback_hours:

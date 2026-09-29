@@ -60,7 +60,7 @@ jobs:
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
         run: |
           echo "=== RUNNING BASKETBALL SCOREBOARD & SCHEDULE INGESTION ==="
-          python -m python.src.basketball.daemon --once --days-back 2 --days-forward 3
+          python -m python.src.basketball.daemon --once --days-back 2 --days-forward 4
 
       - name: Execute 250,000 Monte Carlo Basketball Prediction Engine
         if: ${{ github.event_name == 'schedule' || inputs.action == 'all' || inputs.action == 'predict-only' }}
@@ -70,7 +70,7 @@ jobs:
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
         run: |
           echo "=== RUNNING BASKETBALL 250K MONTE CARLO PREDICTION ENGINE ==="
-          python -m python.src.basketball.run_predictions --days-forward 3
+          python -m python.src.basketball.run_predictions --days-forward 4
 
       - name: Execute Autonomous Basketball Settlement Engine
         if: ${{ github.event_name == 'schedule' || inputs.action == 'all' || inputs.action == 'settle-only' }}
