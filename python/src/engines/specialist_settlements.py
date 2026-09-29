@@ -51,7 +51,8 @@ class SpecialistSettlementPipeline:
         return {
             "settled": res.get("settled", 0),
             "won": res.get("won", 0),
-            "lost": res.get("lost", 0)
+            "lost": res.get("lost", 0),
+            "void": res.get("void", 0)
         }
 
 

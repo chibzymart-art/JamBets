@@ -6,6 +6,7 @@ Completely isolated and decoupled from other market engines.
 Zero synthetic, fabricated, or goal-based fallback counts permitted.
 """
 
+import re
 import sys
 import os
 from datetime import datetime, timezone
@@ -38,16 +39,16 @@ class CornersSettlementEngine:
         print("🚩 [CornersSettlementEngine] Starting Dedicated Corner Settlement Pass...")
         now_iso = datetime.now(timezone.utc).isoformat()
 
-        # 1. Fetch pending published corner predictions
+        # 1. Fetch pending corner predictions (including archived historical ones)
         pending_preds = self.db.get("corner_predictions", {
             "settlement_status": "eq.pending",
-            "publication_status": "neq.archived",
-            "limit": "300"
+            "order": "target_kickoff_at.asc",
+            "limit": "1000"
         })
 
         if not pending_preds:
             print("ℹ️ [CornersSettlementEngine] No pending corner predictions to settle.")
-            return {"status": "success", "settled": 0, "won": 0, "lost": 0, "pending": 0}
+            return {"status": "success", "settled": 0, "won": 0, "lost": 0, "void": 0, "pending": 0}
 
         print(f"📊 [CornersSettlementEngine] Found {len(pending_preds)} pending corner predictions.")
 
@@ -80,7 +81,33 @@ class CornersSettlementEngine:
             prediction_text = pred.get("prediction", "")
             fixture = fixtures_map.get(fid)
 
+            # Compute hours since kickoff
+            kickoff_str = (fixture.get("target_kickoff_at") if fixture else None) or pred.get("target_kickoff_at")
+            hours_since_kickoff = 999.0
+            if kickoff_str:
+                try:
+                    k_dt = datetime.fromisoformat(kickoff_str.replace("Z", "+00:00"))
+                    hours_since_kickoff = (datetime.now(timezone.utc) - k_dt).total_seconds() / 3600.0
+                except Exception:
+                    pass
+
+            # Handle Orphaned predictions (fixture ID no longer exists in football_fixtures)
             if not fixture:
+                # If kickoff is in the future (> -0.5h), keep pending
+                if hours_since_kickoff < 0:
+                    continue
+
+                # Kickoff has passed but fixture row was deleted/deprecated during schema migration
+                void_notes = "Orphaned prediction: linked fixture non-existent in database — protected void settlement."
+                self.db.patch("corner_predictions", {
+                    "settlement_status": "void",
+                    "actual_corners": "N/A",
+                    "settled_at": now_iso,
+                    "settlement_notes": void_notes
+                }, {"id": f"eq.{pid}"})
+                void_count += 1
+                settled_count += 1
+                print(f"  🛡️ [CornersSettlementEngine] Voided orphaned prediction {pid} (missing fixture {fid})")
                 continue
 
             status = (fixture.get("status") or "").lower()
@@ -109,10 +136,30 @@ class CornersSettlementEngine:
                 settled_count += 1
                 continue
 
+            # Upcoming matches (kickoff is in the future)
+            if hours_since_kickoff < 0:
+                continue
+
             is_finished = status in ["finished", "ft", "aet", "pen", "settled"] or period == "FT"
             if not is_finished:
-                # Match has not finished yet
-                continue
+                # If match kicked off >= 3.5 hours ago, check if corners and completion can be confirmed
+                if hours_since_kickoff >= 3.5:
+                    scraped_corners = self.scraper.enrich_fixture_corners(fixture, self.db)
+                    if scraped_corners and (scraped_corners[0] > 0 or scraped_corners[1] > 0):
+                        ch, ca = scraped_corners
+                        fixture["corners_home"] = ch
+                        fixture["corners_away"] = ca
+                        fixture["status"] = "finished"
+                        fixture["period"] = "FT"
+                        self.db.patch("football_fixtures", {
+                            "status": "finished",
+                            "period": "FT"
+                        }, {"id": f"eq.{fid}"})
+                        is_finished = True
+
+                if not is_finished:
+                    # Match still in-play or recently started
+                    continue
 
             # Check if fixture already has official corner stats
             ch = fixture.get("corners_home")
@@ -131,16 +178,6 @@ class CornersSettlementEngine:
 
             # If telemetry is STILL missing after querying all providers (ESPN, LiveScore, FotMob):
             if not has_telemetry:
-                # Check match kickoff age to determine whether to await or void
-                kickoff_str = fixture.get("target_kickoff_at")
-                hours_since_kickoff = 999.0
-                if kickoff_str:
-                    try:
-                        k_dt = datetime.fromisoformat(kickoff_str.replace("Z", "+00:00"))
-                        hours_since_kickoff = (datetime.now(timezone.utc) - k_dt).total_seconds() / 3600.0
-                    except Exception:
-                        pass
-
                 # If the match finished very recently (< 3 hours since kickoff), provider feeds might still be compiling stats
                 if hours_since_kickoff < 3.0:
                     awaiting_stats_count += 1
@@ -171,14 +208,11 @@ class CornersSettlementEngine:
                 print(f"  🛡️ [CornersSettlementEngine] Voided unrecorded telemetry for {prediction_text} on fixture {fid}")
                 continue
 
-            # Standard line threshold evaluation:
-            # Over 7.5 requires >= 8 corners to win
-            # Over 8.5 requires >= 9 corners to win
+            # Dynamic line threshold evaluation (Over 7.5 requires >=8, Over 8.5 requires >=9, etc.)
             line = 8.5
-            if "7.5" in market or "7.5" in prediction_text:
-                line = 7.5
-            elif "8.5" in market or "8.5" in prediction_text:
-                line = 8.5
+            line_match = re.search(r"(\d+\.5)", f"{market} {prediction_text}")
+            if line_match:
+                line = float(line_match.group(1))
 
             total_corners = int(ch) + int(ca)
             is_won = total_corners > line
