@@ -415,23 +415,40 @@ class TestSettlementEngine(unittest.TestCase):
     # 14. Per-Fixture Failure Isolation
     def test_14_per_fixture_failure_isolation(self):
         mock_supabase = MagicMock()
-        # Returns 2 fixtures, fixture 1 throws exception
-        mock_supabase.get_active_fixtures_for_monitoring.return_value = [
-            {"id": "f_bad", "canonical_key": "bad_key", "kickoff_at": "2026-09-08T16:00:00Z"},
-            {"id": "f_good", "canonical_key": "good_key", "kickoff_at": "2026-09-08T16:00:00Z"}
-        ]
+        mock_supabase.get.side_effect = lambda table, params=None: [
+            {"id": "f_bad", "canonical_key": "bad_key", "kickoff_at": "2026-09-08T12:00:00Z", "target_kickoff_at": "2026-09-08T12:00:00Z", "status": "live"},
+            {"id": "f_good", "canonical_key": "good_key", "kickoff_at": "2026-09-08T12:00:00Z", "target_kickoff_at": "2026-09-08T12:00:00Z", "status": "live"}
+        ] if table == "football_fixtures" else []
         mock_supabase.get_system_job_by_key.return_value = None
         mock_supabase.create_system_job.return_value = {"id": "job-1"}
-        mock_supabase.get_unsettled_predictions.side_effect = lambda f_id: [
-            {"id": f"p_{f_id}", "fixture_id": f_id, "market": "1x2", "prediction": "home"}
-        ] if f_id != "f_bad" else (_ for _ in ()).throw(RuntimeError("Network Timeout"))
+        mock_supabase.get_unsettled_predictions.return_value = [
+            {"id": "p_f_bad", "fixture_id": "f_bad", "market": "1x2", "prediction": "home", "target_kickoff_at": "2026-09-08T12:00:00Z"},
+            {"id": "p_f_good", "fixture_id": "f_good", "market": "1x2", "prediction": "home", "target_kickoff_at": "2026-09-08T12:00:00Z"}
+        ]
 
         scheduler = SettlementScheduler(supabase_client=mock_supabase)
-        res = scheduler.run_settlement_cycle(slot_override=2, force_now_wat=datetime(2026, 9, 8, 12, 0, tzinfo=timezone.utc))
+        scheduler.livescore_adapter.fetch_fixtures = MagicMock(return_value=[])
+        scheduler.flashscore_adapter.fetch_fixtures = MagicMock(return_value=[])
+        scheduler.espn_adapter.fetch_fixtures = MagicMock(return_value=[])
+
+        def mock_eval(*args, **kwargs):
+            pred = kwargs.get("prediction") or (args[0] if args else {})
+            if pred.get("fixture_id") == "f_bad":
+                raise RuntimeError("Isolated Fixture Failure")
+            return SettlementDecision(
+                prediction_id=pred["id"],
+                fixture_id=pred["fixture_id"],
+                market="1x2",
+                prediction="home",
+                status=SettlementStatus.WON,
+                notes="Won"
+            )
+
+        with patch("python.src.football.settlement_engine.SettlementEngine.evaluate", side_effect=mock_eval):
+            res = scheduler.run_settlement_cycle(slot_override=2, force_now_wat=datetime(2026, 9, 8, 12, 0, tzinfo=timezone.utc))
 
         self.assertEqual(res["fixtures_inspected"], 2)
         self.assertEqual(res["errors_count"], 1)  # Bad fixture recorded error
-        # Cycle finished cleanly without aborting
         self.assertIn("duration_ms", res)
 
     # 15. Crash Recovery & Stale Lock Breaking
@@ -457,13 +474,13 @@ class TestSettlementEngine(unittest.TestCase):
 
     # 16. Lagos WAT Slot Calculation
     def test_16_lagos_wat_slot_calculation(self):
-        # 18:22 WAT -> slot 18*4 + 1 = 73
+        # 18:22 WAT -> slot 18*12 + (22//5) = 216 + 4 = 220
         dt = datetime(2026, 9, 8, 18, 22, tzinfo=timezone.utc)
         slot, nominal, next_s, key = SettlementScheduler.calculate_slot(dt)
-        self.assertEqual(slot, 73)
-        self.assertEqual(nominal.minute, 15)
-        self.assertEqual(next_s.minute, 30)
-        self.assertEqual(key, "settlement-cycle-2026-09-08-slot73-wat")
+        self.assertEqual(slot, 220)
+        self.assertEqual(nominal.minute, 20)
+        self.assertEqual(next_s.minute, 25)
+        self.assertEqual(key, "settlement-cycle-2026-09-08-slot220-wat")
 
 
 if __name__ == "__main__":

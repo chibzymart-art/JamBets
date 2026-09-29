@@ -545,6 +545,30 @@ class SettlementScheduler:
             except Exception as se:
                 print(f"  [WARN] Decoupled specialist settlement pass error: {se}")
 
+            # Step 5.2: Settlement Lag Detection & Automated Alerting
+            try:
+                lagging_preds = []
+                four_hours_ago = (now_utc - timedelta(hours=4)).isoformat()
+                unsettled_after = self.supabase.get_unsettled_predictions()
+                for p in unsettled_after:
+                    ko = p.get("target_kickoff_at") or p.get("kickoff_at") or ""
+                    if ko and ko < four_hours_ago:
+                        lagging_preds.append(p)
+
+                if len(lagging_preds) >= 10:
+                    oldest_ko = min((p.get("target_kickoff_at") or p.get("kickoff_at") or "") for p in lagging_preds)
+                    print(f"  [ALERT] Detected {len(lagging_preds)} lagging unsettled predictions older than 4 hours! Dispatching alert...")
+                    from python.src.alerts.email_notifier import send_settlement_lag_alert
+                    send_settlement_lag_alert(
+                        unsettled_count=len(lagging_preds),
+                        oldest_kickoff_iso=oldest_ko,
+                        context={"count": len(lagging_preds), "oldest_kickoff": oldest_ko}
+                    )
+                else:
+                    print(f"  [OK] Settlement lag check passed: {len(lagging_preds)} fixtures > 4h pending (threshold: 10).")
+            except Exception as ale:
+                print(f"  [WARN] Settlement lag check encountered error: {ale}")
+
             duration_ms = round((time.perf_counter() - start_perf) * 1000.0, 2)
             stats["duration_ms"] = duration_ms
 

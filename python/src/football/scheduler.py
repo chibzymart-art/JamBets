@@ -654,6 +654,85 @@ class AdminTaskPoller(threading.Thread):
                     )
                     print(f"[POLLER] Admin task {task_name} finished successfully", flush=True)
 
+                elif task_name in ("RUN_CORNERS_SETTLEMENT", "SETTLE_CORNERS"):
+                    print("[POLLER] Executing Corners Specialist settlement engine...", flush=True)
+                    from python.src.corners.corners_settlement_engine import CornersSettlementEngine
+                    engine = CornersSettlementEngine(db=supabase)
+                    corners_res = engine.settle()
+                    supabase.update_admin_task(
+                        task_id=task_id,
+                        status="COMPLETED",
+                        metadata={"status": "COMPLETED", "corners_settlement": corners_res}
+                    )
+                    print(f"[POLLER] Admin task {task_name} finished successfully with {corners_res.get('settled', 0)} settled", flush=True)
+
+                elif task_name in ("RUN_CORNERS_ENGINE", "RUN_CORNERS_PREDICTIONS", "PREDICT_CORNERS"):
+                    print("[POLLER] Executing Corners Specialist prediction engine...", flush=True)
+                    from python.src.engines.corners_engine import CornersEngine
+                    corners_engine = CornersEngine()
+                    res = corners_engine.run()
+                    supabase.update_admin_task(
+                        task_id=task_id,
+                        status="COMPLETED",
+                        metadata=res
+                    )
+                    print(f"[POLLER] Admin task {task_name} finished successfully", flush=True)
+
+                elif task_name in ("RUN_ALL_ENGINES", "RUN_ALL_SPECIALISTS"):
+                    print("[POLLER] Executing Master Decoupled Specialist runner...", flush=True)
+                    from python.src.engines.run_all_specialists import run_all
+                    res = run_all(predict=True, settle=True)
+                    supabase.update_admin_task(
+                        task_id=task_id,
+                        status="COMPLETED",
+                        metadata=res
+                    )
+                    print(f"[POLLER] Admin task {task_name} finished successfully", flush=True)
+
+                elif task_name in ("RUN_TENNIS_ENGINE", "RUN_TENNIS_PREDICTIONS"):
+                    print("[POLLER] Executing Autonomous Tennis 250k Monte Carlo prediction engine...", flush=True)
+                    from python.src.tennis.run_tennis_predictions import run_prediction_cycle
+                    res = run_prediction_cycle(days_ahead=4, simulations_count=250000)
+                    supabase.update_admin_task(
+                        task_id=task_id,
+                        status="COMPLETED",
+                        metadata=res
+                    )
+                    print(f"[POLLER] Admin task {task_name} finished successfully", flush=True)
+
+                elif task_name in ("RUN_TENNIS_SETTLEMENT", "SETTLE_TENNIS"):
+                    print("[POLLER] Executing Autonomous Tennis precision settlement pass...", flush=True)
+                    from python.src.tennis.run_tennis_settlement import run_settlement
+                    res = run_settlement(lookback_hours=48)
+                    supabase.update_admin_task(
+                        task_id=task_id,
+                        status="COMPLETED",
+                        metadata=res
+                    )
+                    print(f"[POLLER] Admin task {task_name} finished successfully", flush=True)
+
+                elif task_name in ("RUN_BASKETBALL_ENGINE", "RUN_BASKETBALL_PREDICTIONS"):
+                    print("[POLLER] Executing Autonomous Basketball 250k Monte Carlo prediction engine...", flush=True)
+                    from python.src.basketball.run_predictions import run_basketball_predictions
+                    res = run_basketball_predictions(days_forward=4, num_sims=250000)
+                    supabase.update_admin_task(
+                        task_id=task_id,
+                        status="COMPLETED",
+                        metadata=res
+                    )
+                    print(f"[POLLER] Admin task {task_name} finished successfully", flush=True)
+
+                elif task_name in ("RUN_BASKETBALL_SETTLEMENT", "SETTLE_BASKETBALL"):
+                    print("[POLLER] Executing Autonomous Basketball settlement pass...", flush=True)
+                    from python.src.basketball.run_settlement import run_settlement_cycle
+                    res = run_settlement_cycle(lookback_hours=48)
+                    supabase.update_admin_task(
+                        task_id=task_id,
+                        status="COMPLETED",
+                        metadata=res
+                    )
+                    print(f"[POLLER] Admin task {task_name} finished successfully", flush=True)
+
                 else:
                     supabase.update_admin_task(
                         task_id=task_id,

@@ -76,7 +76,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
 
   // Gen-Z Engine Trigger & Automation State
   const [engineTaskStatus, setEngineTaskStatus] = useState<{
-    type: 'prediction' | 'settlement' | 'goals_prediction' | 'goals_settlement' | 'goals' | 'home_win' | 'away_win' | 'draw' | 'corners' | 'all_specialists' | null;
+    type: 'prediction' | 'settlement' | 'goals_prediction' | 'goals_settlement' | 'goals' | 'home_win' | 'away_win' | 'draw' | 'corners' | 'corners_settlement' | 'all_specialists' | 'tennis_engine' | 'tennis_settlement' | 'basketball_engine' | 'basketball_settlement' | null;
     status: 'idle' | 'pending' | 'running' | 'completed' | 'failed';
     message?: string;
   }>({ type: null, status: 'idle' });
@@ -89,7 +89,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
     modelName: string;
     icon: string;
     accent: string;
-    triggerTask: 'RUN_PREDICTIONS' | 'RUN_GOALS_PREDICTIONS' | 'RUN_CORNERS_ENGINE';
+    triggerTask: 'RUN_PREDICTIONS' | 'RUN_GOALS_PREDICTIONS' | 'RUN_CORNERS_ENGINE' | 'RUN_TENNIS_ENGINE' | 'RUN_BASKETBALL_ENGINE';
     total: number;
     pending: number;
     won: number;
@@ -698,7 +698,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
         table: string;
         paywallTable: string;
         accent: string;
-        triggerTask: 'RUN_PREDICTIONS' | 'RUN_GOALS_PREDICTIONS' | 'RUN_CORNERS_ENGINE';
+        triggerTask: 'RUN_PREDICTIONS' | 'RUN_GOALS_PREDICTIONS' | 'RUN_CORNERS_ENGINE' | 'RUN_TENNIS_ENGINE' | 'RUN_BASKETBALL_ENGINE';
       }[] = [
         {
           id: 'core',
@@ -732,6 +732,28 @@ export const AdminView: React.FC<AdminViewProps> = ({
           paywallTable: 'corner_predictions_paywall',
           accent: 'linear-gradient(90deg, #06b6d4, #0891b2)',
           triggerTask: 'RUN_CORNERS_ENGINE'
+        },
+        {
+          id: 'tennis',
+          name: 'Tennis Grand Slam / Tour',
+          marketTag: 'Match Winner • Sets • Games',
+          modelName: 'Autonomous 250k Monte Carlo',
+          icon: '🎾',
+          table: 'tennis_predictions',
+          paywallTable: 'tennis_predictions_paywall',
+          accent: 'linear-gradient(90deg, #10b981, #059669)',
+          triggerTask: 'RUN_TENNIS_ENGINE'
+        },
+        {
+          id: 'basketball',
+          name: 'Basketball Pro Specialist',
+          marketTag: 'Moneyline • Spread • Totals',
+          modelName: 'Autonomous 250k Monte Carlo',
+          icon: '🏀',
+          table: 'basketball_predictions',
+          paywallTable: 'basketball_predictions_paywall',
+          accent: 'linear-gradient(90deg, #f59e0b, #d97706)',
+          triggerTask: 'RUN_BASKETBALL_ENGINE'
         }
       ];
 
@@ -1050,15 +1072,20 @@ export const AdminView: React.FC<AdminViewProps> = ({
 
   // Interactive Engine Trigger & Automation Switchboard
   const triggerEngineTask = async (
-    taskName: 'RUN_PREDICTIONS' | 'RUN_SETTLEMENTS' | 'RUN_GOALS_PREDICTIONS' | 'RUN_GOALS_SETTLEMENT' | 'RUN_CORNERS_ENGINE' | 'RUN_ALL_ENGINES'
+    taskName: 'RUN_PREDICTIONS' | 'RUN_SETTLEMENTS' | 'RUN_GOALS_PREDICTIONS' | 'RUN_GOALS_SETTLEMENT' | 'RUN_CORNERS_ENGINE' | 'RUN_CORNERS_SETTLEMENT' | 'RUN_ALL_ENGINES' | 'RUN_TENNIS_ENGINE' | 'RUN_TENNIS_SETTLEMENT' | 'RUN_BASKETBALL_ENGINE' | 'RUN_BASKETBALL_SETTLEMENT'
   ) => {
     playSfx('cook');
-    const type: 'prediction' | 'settlement' | 'goals_prediction' | 'goals_settlement' | 'goals' | 'corners' | 'all_specialists' =
+    const type: 'prediction' | 'settlement' | 'goals_prediction' | 'goals_settlement' | 'goals' | 'corners' | 'corners_settlement' | 'all_specialists' | 'tennis_engine' | 'tennis_settlement' | 'basketball_engine' | 'basketball_settlement' =
       taskName === 'RUN_PREDICTIONS' ? 'prediction'
       : taskName === 'RUN_SETTLEMENTS' ? 'settlement'
       : taskName === 'RUN_GOALS_SETTLEMENT' ? 'goals_settlement'
       : taskName === 'RUN_GOALS_PREDICTIONS' ? 'goals_prediction'
       : taskName === 'RUN_CORNERS_ENGINE' ? 'corners'
+      : taskName === 'RUN_CORNERS_SETTLEMENT' ? 'corners_settlement'
+      : taskName === 'RUN_TENNIS_ENGINE' ? 'tennis_engine'
+      : taskName === 'RUN_TENNIS_SETTLEMENT' ? 'tennis_settlement'
+      : taskName === 'RUN_BASKETBALL_ENGINE' ? 'basketball_engine'
+      : taskName === 'RUN_BASKETBALL_SETTLEMENT' ? 'basketball_settlement'
       : 'all_specialists';
 
     const humanTaskNames: Record<string, string> = {
@@ -1067,7 +1094,12 @@ export const AdminView: React.FC<AdminViewProps> = ({
       RUN_GOALS_PREDICTIONS: 'Goals Specialist Model (Over 2.5 & 1H Blitz)',
       RUN_GOALS_SETTLEMENT: 'Goals Specialist Settlement Pass',
       RUN_CORNERS_ENGINE: 'Corners Specialist Engine',
-      RUN_ALL_ENGINES: 'Parallel Dispatch of Specialist Engines'
+      RUN_CORNERS_SETTLEMENT: 'Corners Specialist Settlement Pass',
+      RUN_ALL_ENGINES: 'Parallel Dispatch of Specialist Engines',
+      RUN_TENNIS_ENGINE: 'Tennis 250k Monte Carlo Engine',
+      RUN_TENNIS_SETTLEMENT: 'Tennis Precision Settlement Pass',
+      RUN_BASKETBALL_ENGINE: 'Basketball 250k Monte Carlo Engine',
+      RUN_BASKETBALL_SETTLEMENT: 'Basketball Autonomous Settlement Pass'
     };
 
     setEngineTaskStatus({
@@ -1131,6 +1163,20 @@ export const AdminView: React.FC<AdminViewProps> = ({
               status: 'COMPLETED',
               metadata: {
                 goals_settlement_direct: directResult,
+                completed_at: new Date().toISOString()
+              }
+            })
+            .eq('id', taskId);
+        }
+      } else if (taskName === 'RUN_CORNERS_SETTLEMENT') {
+        const directResult = await directClientAllSettlements();
+        if (directResult.corners && directResult.corners.settled > 0 && taskId) {
+          await supabase
+            .from('admin_tasks')
+            .update({
+              status: 'COMPLETED',
+              metadata: {
+                corners_settlement_direct: directResult.corners,
                 completed_at: new Date().toISOString()
               }
             })
@@ -1811,6 +1857,8 @@ export const AdminView: React.FC<AdminViewProps> = ({
               (engine.id === 'away_win' && engineTaskStatus.type === 'away_win') ||
               (engine.id === 'draw' && engineTaskStatus.type === 'draw') ||
               (engine.id === 'corners' && engineTaskStatus.type === 'corners') ||
+              (engine.id === 'tennis' && engineTaskStatus.type === 'tennis_engine') ||
+              (engine.id === 'basketball' && engineTaskStatus.type === 'basketball_engine') ||
               engineTaskStatus.type === 'all_specialists'
             ) && (engineTaskStatus.status === 'running' || engineTaskStatus.status === 'pending');
 
@@ -1830,6 +1878,8 @@ export const AdminView: React.FC<AdminViewProps> = ({
                     : engine.id === 'draw' ? '#eab308'
                     : engine.id === 'corners' ? '#06b6d4'
                     : engine.id === 'goals' ? '#f97316'
+                    : engine.id === 'tennis' ? '#10b981'
+                    : engine.id === 'basketball' ? '#f59e0b'
                     : '#38bdf8'
                   }`
                 }}
@@ -1977,6 +2027,20 @@ export const AdminView: React.FC<AdminViewProps> = ({
 
               <button
                 type="button"
+                id="btn-trigger-corners-settle"
+                className={`compact-trigger-btn btn-corners-settle ${engineTaskStatus.type === 'corners_settlement' && (engineTaskStatus.status === 'running' || engineTaskStatus.status === 'pending') ? 'cooking' : ''}`}
+                disabled={engineTaskStatus.status === 'pending' || engineTaskStatus.status === 'running'}
+                onClick={() => triggerEngineTask('RUN_CORNERS_SETTLEMENT')}
+              >
+                <span className="trigger-icon">🎯</span>
+                <div className="trigger-copy">
+                  <div className="trigger-label">Settle Corners</div>
+                  <div className="trigger-meta">Box-Score Pass</div>
+                </div>
+              </button>
+
+              <button
+                type="button"
                 id="btn-trigger-football-pred"
                 className={`compact-trigger-btn btn-football-pred ${engineTaskStatus.type === 'prediction' && (engineTaskStatus.status === 'running' || engineTaskStatus.status === 'pending') ? 'cooking' : ''}`}
                 disabled={engineTaskStatus.status === 'pending' || engineTaskStatus.status === 'running'}
@@ -1986,6 +2050,72 @@ export const AdminView: React.FC<AdminViewProps> = ({
                 <div className="trigger-copy">
                   <div className="trigger-label">Core 1X2 & O/U</div>
                   <div className="trigger-meta">250k Sims</div>
+                </div>
+              </button>
+            </div>
+          </div>
+
+          {/* GROUP 3B: TENNIS & BASKETBALL AUTONOMOUS SPECIALISTS */}
+          <div className="engine-group-box" style={{ borderColor: 'rgba(16, 185, 129, 0.4)', background: 'rgba(6, 78, 59, 0.1)' }}>
+            <div className="engine-group-header">
+              <span className="group-icon">🎾</span>
+              <span className="group-title">Tennis & Basketball Pro Specialists</span>
+              <span className="group-tag" style={{ background: '#064e3b', color: '#6ee7b7' }}>250K SIMS • MULTI-SPORT</span>
+            </div>
+            <div className="engine-group-triggers">
+              <button
+                type="button"
+                id="btn-trigger-tennis-pred"
+                className={`compact-trigger-btn btn-tennis-pred ${engineTaskStatus.type === 'tennis_engine' && (engineTaskStatus.status === 'running' || engineTaskStatus.status === 'pending') ? 'cooking' : ''}`}
+                disabled={engineTaskStatus.status === 'pending' || engineTaskStatus.status === 'running'}
+                onClick={() => triggerEngineTask('RUN_TENNIS_ENGINE')}
+              >
+                <span className="trigger-icon">🎾</span>
+                <div className="trigger-copy">
+                  <div className="trigger-label">Run Tennis Engine</div>
+                  <div className="trigger-meta">Grand Slam & Tours (4d)</div>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                id="btn-trigger-tennis-settle"
+                className={`compact-trigger-btn btn-tennis-settle ${engineTaskStatus.type === 'tennis_settlement' && (engineTaskStatus.status === 'running' || engineTaskStatus.status === 'pending') ? 'cooking' : ''}`}
+                disabled={engineTaskStatus.status === 'pending' || engineTaskStatus.status === 'running'}
+                onClick={() => triggerEngineTask('RUN_TENNIS_SETTLEMENT')}
+              >
+                <span className="trigger-icon">🏆</span>
+                <div className="trigger-copy">
+                  <div className="trigger-label">Settle Tennis Matches</div>
+                  <div className="trigger-meta">Precision 48h Matcher</div>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                id="btn-trigger-bball-pred"
+                className={`compact-trigger-btn btn-bball-pred ${engineTaskStatus.type === 'basketball_engine' && (engineTaskStatus.status === 'running' || engineTaskStatus.status === 'pending') ? 'cooking' : ''}`}
+                disabled={engineTaskStatus.status === 'pending' || engineTaskStatus.status === 'running'}
+                onClick={() => triggerEngineTask('RUN_BASKETBALL_ENGINE')}
+              >
+                <span className="trigger-icon">🏀</span>
+                <div className="trigger-copy">
+                  <div className="trigger-label">Run Basketball Engine</div>
+                  <div className="trigger-meta">Moneyline & Spread (4d)</div>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                id="btn-trigger-bball-settle"
+                className={`compact-trigger-btn btn-bball-settle ${engineTaskStatus.type === 'basketball_settlement' && (engineTaskStatus.status === 'running' || engineTaskStatus.status === 'pending') ? 'cooking' : ''}`}
+                disabled={engineTaskStatus.status === 'pending' || engineTaskStatus.status === 'running'}
+                onClick={() => triggerEngineTask('RUN_BASKETBALL_SETTLEMENT')}
+              >
+                <span className="trigger-icon">🏀</span>
+                <div className="trigger-copy">
+                  <div className="trigger-label">Settle Basketball</div>
+                  <div className="trigger-meta">ESPN & LiveScore Pass</div>
                 </div>
               </button>
             </div>
