@@ -55,6 +55,44 @@ export default function App() {
   const [isFaqModalOpen, setIsFaqModalOpen] = useState(false);
   const [isBotHubModalOpen, setIsBotHubModalOpen] = useState(false);
 
+  // Guest UI Auth Takeover Banner State
+  const [isGuestBannerDismissed, setIsGuestBannerDismissed] = useState<boolean>(() => {
+    try {
+      return sessionStorage.getItem('oddsbanta_guest_banner_dismissed') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const handleDismissGuestBanner = () => {
+    setIsGuestBannerDismissed(true);
+    try {
+      sessionStorage.setItem('oddsbanta_guest_banner_dismissed', 'true');
+    } catch {}
+  };
+
+  const handleGoogleSignIn = async () => {
+    try {
+      const redirectTo = `${window.location.origin}${window.location.pathname === '/' ? '/dashboard' : window.location.pathname}`;
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo,
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'select_account',
+          },
+        },
+      });
+      if (error) {
+        throw error;
+      }
+    } catch (err: any) {
+      console.error('Google OAuth error:', err);
+      alert(err.message || 'Failed to initiate Google authentication. Please try again.');
+    }
+  };
+
   // Authoritative Cloud Data State
   const [fixtures, setFixtures] = useState<QueueFixture[]>([]);
   const [predictions, setPredictions] = useState<FootballPrediction[]>([]);
@@ -1482,6 +1520,41 @@ export default function App() {
         </div>
       </aside>
 
+      {/* Auth Takeover Banner for unauthenticated visitors */}
+      {!currentUser && !isGuestBannerDismissed && (
+        <aside className="auth-takeover-banner" role="region" aria-label="Quick Sign In Banner">
+          <div className="auth-takeover-content">
+            <span className="auth-takeover-badge">⚡ 1-CLICK ACCESS</span>
+            <span className="auth-takeover-text">
+              Sign in with <strong>Google / Gmail</strong> to unlock full 250k Monte Carlo tennis &amp; football predictions, live slips, and high-confidence AI value edges.
+            </span>
+            <button
+              type="button"
+              id="btn-takeover-google-auth"
+              className="auth-takeover-google-btn"
+              onClick={handleGoogleSignIn}
+            >
+              <svg viewBox="0 0 24 24" width="16" height="16">
+                <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z"/>
+                <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.35 24 12 24z"/>
+                <path fill="#FBBC05" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 10.03 0 12s.45 3.82 1.25 5.42l4.03-3.15z"/>
+                <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.35 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"/>
+              </svg>
+              <span>Continue with Google</span>
+            </button>
+            <button
+              type="button"
+              className="auth-takeover-close-btn"
+              onClick={handleDismissGuestBanner}
+              title="Dismiss announcement"
+              aria-label="Dismiss banner"
+            >
+              ✕
+            </button>
+          </div>
+        </aside>
+      )}
+
       {/* 1. TOP HEADER BAR */}
       <header className={`site-header ${location.pathname === '/' ? 'landing-standalone-header' : ''}`}>
         <div className="site-header-inner">
@@ -1560,6 +1633,24 @@ export default function App() {
                     <div className="hamburger-guest-header">
                       <div className="hamburger-guest-title">Welcome to Oddsbanta</div>
                       <div className="hamburger-guest-sub">Sign in to unlock full VIP odds & simulations</div>
+                      <button
+                        type="button"
+                        id="btn-hamburger-google-auth"
+                        className="google-oauth-btn"
+                        style={{ marginBottom: '8px', padding: '10px 14px', fontSize: '13px' }}
+                        onClick={() => {
+                          setIsHamburgerOpen(false);
+                          handleGoogleSignIn();
+                        }}
+                      >
+                        <svg className="google-icon-svg" viewBox="0 0 24 24" width="18" height="18">
+                          <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z"/>
+                          <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.35 24 12 24z"/>
+                          <path fill="#FBBC05" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 10.03 0 12s.45 3.82 1.25 5.42l4.03-3.15z"/>
+                          <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.35 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"/>
+                        </svg>
+                        <span>Continue with Google</span>
+                      </button>
                       <button
                         type="button"
                         className="hamburger-signin-btn"
@@ -1809,13 +1900,30 @@ export default function App() {
             </button>
 
             {!currentUser && (
-              <button
-                type="button"
-                className="login-action-btn desktop-only"
-                onClick={() => { setAuthModalMode('signin'); setIsAuthModalOpen(true); }}
-              >
-                Sign In
-              </button>
+              <>
+                <button
+                  type="button"
+                  id="btn-header-google-auth"
+                  className="google-header-login-btn desktop-only"
+                  onClick={handleGoogleSignIn}
+                  title="Instant 1-Click Sign In with Google / Gmail"
+                >
+                  <svg viewBox="0 0 24 24" width="15" height="15">
+                    <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z"/>
+                    <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.35 24 12 24z"/>
+                    <path fill="#FBBC05" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 10.03 0 12s.45 3.82 1.25 5.42l4.03-3.15z"/>
+                    <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.35 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"/>
+                  </svg>
+                  <span>Sign In with Google</span>
+                </button>
+                <button
+                  type="button"
+                  className="login-action-btn desktop-only"
+                  onClick={() => { setAuthModalMode('signin'); setIsAuthModalOpen(true); }}
+                >
+                  Sign In
+                </button>
+              </>
             )}
 
             {/* Catalogue Acca Slip Button across all screens (Mobile & Desktop) */}

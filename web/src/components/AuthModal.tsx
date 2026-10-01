@@ -89,6 +89,41 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   if (!isOpen) return null;
 
+  const handleGoogleSignIn = async () => {
+    if (loading) return;
+    setErrorMessage(null);
+    setSuccessMessage(null);
+    setQueueNotice(null);
+    setLoading(true);
+
+    try {
+      const redirectTo = `${window.location.origin}${window.location.pathname === '/' ? '/dashboard' : window.location.pathname}`;
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo,
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'select_account',
+          },
+        },
+      });
+
+      if (error) {
+        throw error;
+      }
+    } catch (err: any) {
+      console.error('Google OAuth error:', err);
+      const msg = err.message || '';
+      if (msg.toLowerCase().includes('rate limit') || msg.toLowerCase().includes('too many requests')) {
+        setErrorMessage('Server is receiving unusually high traffic. Please wait a moment and try again.');
+      } else {
+        setErrorMessage(msg || 'Failed to initiate Google authentication. Please try again.');
+      }
+      setLoading(false);
+    }
+  };
+
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     if (loading) return; // Prevent duplicate concurrent requests
@@ -364,147 +399,207 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
         {/* Form Body: Sign In */}
         {mode === 'signin' && (
-          <form onSubmit={handleSignIn} className="auth-form">
-            <div className="form-group">
-              <label htmlFor="signin-email" className="form-label">Email Address</label>
-              <input
-                id="signin-email"
-                type="email"
-                required
-                placeholder="name@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                autoComplete="email"
-                className="form-input"
-              />
-            </div>
+          <div className="auth-form-wrapper">
+            {/* Google / Gmail 1-Click Sign In */}
+            <div className="social-auth-section">
+              <button
+                type="button"
+                id="btn-google-signin"
+                disabled={loading}
+                onClick={handleGoogleSignIn}
+                className="google-oauth-btn"
+                title="Instant 1-Click Sign In with Gmail / Google"
+              >
+                <svg className="google-icon-svg" viewBox="0 0 24 24" width="20" height="20">
+                  <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z"/>
+                  <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.35 24 12 24z"/>
+                  <path fill="#FBBC05" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 10.03 0 12s.45 3.82 1.25 5.42l4.03-3.15z"/>
+                  <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.35 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"/>
+                </svg>
+                <span>Continue with Google / Gmail</span>
+              </button>
 
-            <div className="form-group">
-              <div className="form-label-row">
-                <label htmlFor="signin-password" className="form-label">Password</label>
-                <button
-                  type="button"
-                  id="btn-forgot-password-link"
-                  className="auth-forgot-link"
-                  onClick={() => {
-                    setMode('forgot');
-                    setErrorMessage(null);
-                    setSuccessMessage(null);
-                  }}
-                >
-                  Forgot Password?
-                </button>
+              <div className="auth-divider">
+                <span className="auth-divider-line" />
+                <span className="auth-divider-text">or continue with email</span>
+                <span className="auth-divider-line" />
               </div>
-              <input
-                id="signin-password"
-                type="password"
-                required
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                autoComplete="current-password"
-                className="form-input"
-              />
             </div>
 
-            <button type="submit" id="btn-auth-signin" disabled={loading} className="auth-submit-btn">
-              {loading ? 'Authenticating...' : 'Sign In'}
-            </button>
-          </form>
+            <form onSubmit={handleSignIn} className="auth-form">
+              <div className="form-group">
+                <label htmlFor="signin-email" className="form-label">Email Address</label>
+                <input
+                  id="signin-email"
+                  type="email"
+                  required
+                  placeholder="name@example.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  autoComplete="email"
+                  className="form-input"
+                />
+              </div>
+
+              <div className="form-group">
+                <div className="form-label-row">
+                  <label htmlFor="signin-password" className="form-label">Password</label>
+                  <button
+                    type="button"
+                    id="btn-forgot-password-link"
+                    className="auth-forgot-link"
+                    onClick={() => {
+                      setMode('forgot');
+                      setErrorMessage(null);
+                      setSuccessMessage(null);
+                    }}
+                  >
+                    Forgot Password?
+                  </button>
+                </div>
+                <input
+                  id="signin-password"
+                  type="password"
+                  required
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  autoComplete="current-password"
+                  className="form-input"
+                />
+              </div>
+
+              <button type="submit" id="btn-auth-signin" disabled={loading} className="auth-submit-btn">
+                {loading ? 'Authenticating...' : 'Sign In'}
+              </button>
+            </form>
+          </div>
         )}
 
         {/* Form Body: Register */}
         {mode === 'register' && (
-          <form onSubmit={handleRegister} className="auth-form">
-            <div className="form-group">
-              <label htmlFor="register-name" className="form-label">Full Name / Display Name</label>
-              <input
-                id="register-name"
-                type="text"
-                placeholder="e.g. John Doe"
-                value={displayName}
-                onChange={(e) => setDisplayName(e.target.value)}
-                autoComplete="name"
-                className="form-input"
-              />
+          <div className="auth-form-wrapper">
+            {/* Google / Gmail 1-Click Registration */}
+            <div className="social-auth-section">
+              <button
+                type="button"
+                id="btn-google-signup"
+                disabled={loading}
+                onClick={handleGoogleSignIn}
+                className="google-oauth-btn"
+                title="Instant 1-Click Sign Up with Gmail / Google"
+              >
+                <svg className="google-icon-svg" viewBox="0 0 24 24" width="20" height="20">
+                  <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z"/>
+                  <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.35 24 12 24z"/>
+                  <path fill="#FBBC05" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 10.03 0 12s.45 3.82 1.25 5.42l4.03-3.15z"/>
+                  <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.35 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"/>
+                </svg>
+                <span>Sign Up with Google / Gmail</span>
+              </button>
+
+              <p className="google-oauth-disclaimer">
+                By continuing with Google, you verify you are 18+ and agree to Oddsbanta's Terms of Service & Financial Indemnity.
+              </p>
+
+              <div className="auth-divider">
+                <span className="auth-divider-line" />
+                <span className="auth-divider-text">or register with email</span>
+                <span className="auth-divider-line" />
+              </div>
             </div>
 
-            <div className="form-group">
-              <label htmlFor="register-email" className="form-label">Email Address</label>
-              <input
-                id="register-email"
-                type="email"
-                required
-                placeholder="name@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                autoComplete="email"
-                className="form-input"
-              />
-            </div>
-
-            <div className="form-group">
-              <label htmlFor="register-password" className="form-label">Password (min 6 chars)</label>
-              <input
-                id="register-password"
-                type="password"
-                required
-                minLength={6}
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                autoComplete="new-password"
-                className="form-input"
-              />
-            </div>
-
-            {/* MANDATORY LEGAL & AGE DISCLAIMERS (Section 15) */}
-            <div className="disclaimer-container">
-              <div className="disclaimer-header">
-                <span className="disclaimer-badge">MANDATORY LEGAL ACKNOWLEDGMENTS</span>
-                <span className="disclaimer-version">Version v1.0</span>
+            <form onSubmit={handleRegister} className="auth-form">
+              <div className="form-group">
+                <label htmlFor="register-name" className="form-label">Full Name / Display Name</label>
+                <input
+                  id="register-name"
+                  type="text"
+                  placeholder="e.g. John Doe"
+                  value={displayName}
+                  onChange={(e) => setDisplayName(e.target.value)}
+                  autoComplete="name"
+                  className="form-input"
+                />
               </div>
 
-              {/* Disclaimer 1 */}
-              <label className="disclaimer-checkbox-label" htmlFor="disclaimer-age">
+              <div className="form-group">
+                <label htmlFor="register-email" className="form-label">Email Address</label>
                 <input
-                  type="checkbox"
-                  id="disclaimer-age"
-                  checked={ageAccepted}
-                  onChange={(e) => setAgeAccepted(e.target.checked)}
-                  className="disclaimer-checkbox"
+                  id="register-email"
+                  type="email"
                   required
+                  placeholder="name@example.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  autoComplete="email"
+                  className="form-input"
                 />
-                <span className="disclaimer-text">
-                  <strong>Age Verification:</strong> I confirm I am 18 years and above and at the legal age for sports betting.
-                </span>
-              </label>
+              </div>
 
-              {/* Disclaimer 2 */}
-              <label className="disclaimer-checkbox-label" htmlFor="disclaimer-financial">
+              <div className="form-group">
+                <label htmlFor="register-password" className="form-label">Password (min 6 chars)</label>
                 <input
-                  type="checkbox"
-                  id="disclaimer-financial"
-                  checked={financialAccepted}
-                  onChange={(e) => setFinancialAccepted(e.target.checked)}
-                  className="disclaimer-checkbox"
+                  id="register-password"
+                  type="password"
                   required
+                  minLength={6}
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  autoComplete="new-password"
+                  className="form-input"
                 />
-                <span className="disclaimer-text">
-                  <strong>Financial Indemnity & Educational Notice:</strong> I understand that the information provided is not financial advice, is for educational/informational purposes only, and I indemnify Oddsbanta from financial losses arising from reliance on the information provided.
-                </span>
-              </label>
-            </div>
+              </div>
 
-            <button
-              type="submit"
-              id="btn-auth-register"
-              disabled={loading || !ageAccepted || !financialAccepted}
-              className={`auth-submit-btn ${(!ageAccepted || !financialAccepted) ? 'btn-disabled' : ''}`}
-            >
-              {loading ? 'Registering Account...' : 'Agree & Create Account'}
-            </button>
-          </form>
+              {/* MANDATORY LEGAL & AGE DISCLAIMERS (Section 15) */}
+              <div className="disclaimer-container">
+                <div className="disclaimer-header">
+                  <span className="disclaimer-badge">MANDATORY LEGAL ACKNOWLEDGMENTS</span>
+                  <span className="disclaimer-version">Version v1.0</span>
+                </div>
+
+                {/* Disclaimer 1 */}
+                <label className="disclaimer-checkbox-label" htmlFor="disclaimer-age">
+                  <input
+                    type="checkbox"
+                    id="disclaimer-age"
+                    checked={ageAccepted}
+                    onChange={(e) => setAgeAccepted(e.target.checked)}
+                    className="disclaimer-checkbox"
+                    required
+                  />
+                  <span className="disclaimer-text">
+                    <strong>Age Verification:</strong> I confirm I am 18 years and above and at the legal age for sports betting.
+                  </span>
+                </label>
+
+                {/* Disclaimer 2 */}
+                <label className="disclaimer-checkbox-label" htmlFor="disclaimer-financial">
+                  <input
+                    type="checkbox"
+                    id="disclaimer-financial"
+                    checked={financialAccepted}
+                    onChange={(e) => setFinancialAccepted(e.target.checked)}
+                    className="disclaimer-checkbox"
+                    required
+                  />
+                  <span className="disclaimer-text">
+                    <strong>Financial Indemnity & Educational Notice:</strong> I understand that the information provided is not financial advice, is for educational/informational purposes only, and I indemnify Oddsbanta from financial losses arising from reliance on the information provided.
+                  </span>
+                </label>
+              </div>
+
+              <button
+                type="submit"
+                id="btn-auth-register"
+                disabled={loading || !ageAccepted || !financialAccepted}
+                className={`auth-submit-btn ${(!ageAccepted || !financialAccepted) ? 'btn-disabled' : ''}`}
+              >
+                {loading ? 'Registering Account...' : 'Agree & Create Account'}
+              </button>
+            </form>
+          </div>
         )}
 
         {/* Form Body: Forgot Password */}
