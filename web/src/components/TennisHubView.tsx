@@ -964,6 +964,7 @@ export const TennisHubView: React.FC<TennisHubViewProps> = ({
                       ? isFavoriteItem(prediction.fixture_id, 'Match Winner', prediction.prediction)
                       : false
                   }
+                  isFavoriteItem={isFavoriteItem}
                   onToggleFavorite={onToggleFavoriteItem}
                   onOpenUpgrade={onOpenSubscription}
                   onOpenAuth={onOpenAuth}

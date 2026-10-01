@@ -9,6 +9,7 @@ export interface TennisPredictionCardProps {
   isAdmin?: boolean;
   canViewPredictions?: boolean;
   isFavorite?: boolean;
+  isFavoriteItem?: (fixtureId: string, market: string, pick: string) => boolean;
   onToggleFavorite?: (item: FavoritePredictionItem) => void;
   onOpenUpgrade?: () => void;
   onOpenAuth?: (mode: 'signin' | 'register') => void;
@@ -20,6 +21,7 @@ export const TennisPredictionCard: React.FC<TennisPredictionCardProps> = ({
   isAdmin = false,
   canViewPredictions = false,
   isFavorite = false,
+  isFavoriteItem,
   onToggleFavorite,
   onOpenUpgrade,
   onOpenAuth,
@@ -204,20 +206,53 @@ export const TennisPredictionCard: React.FC<TennisPredictionCardProps> = ({
 
   const markov = prediction.metadata?.markov;
 
-  const handleFavoriteClick = (e: React.MouseEvent) => {
+  const primaryMarket = 'Match Winner';
+  const primaryPick = displayedPrediction || prediction.prediction;
+
+  const isPrimaryFav = Boolean(
+    isFavoriteItem
+      ? isFavoriteItem(prediction.fixture_id, primaryMarket, primaryPick)
+      : isFavorite
+  );
+
+  const handlePrimaryFavoriteToggle = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!onToggleFavorite) return;
     const favoriteItem: FavoritePredictionItem = {
-      id: `${prediction.fixture_id}::${prediction.market || 'Match Winner'}::${prediction.prediction}`,
+      id: `${prediction.fixture_id}::${primaryMarket}::${primaryPick}`,
       fixtureId: prediction.fixture_id,
       homeTeam: p1DisplayName,
       awayTeam: p2DisplayName,
       league: tournament?.name || `${tour} Tour`,
       targetKickoffAt: prediction.target_kickoff_at || fixture?.target_kickoff_at || new Date().toISOString(),
-      market: 'Match Winner',
-      prediction: prediction.prediction,
-      probability: (probPct ? Number(probPct) / 100 : prediction.probability) || 0.7,
+      market: primaryMarket,
+      prediction: primaryPick,
+      probability: probNum ? Math.round(probNum) : 75,
       confidenceCategory: prediction.confidence_category,
+    };
+    onToggleFavorite(favoriteItem);
+  };
+
+  const handleSecondaryFavoriteToggle = (
+    e: React.MouseEvent,
+    sec: any,
+    secMarket: string,
+    secPick: string,
+    secProb: number | null
+  ) => {
+    e.stopPropagation();
+    if (!onToggleFavorite) return;
+    const favoriteItem: FavoritePredictionItem = {
+      id: `${prediction.fixture_id}::${secMarket}::${secPick}`,
+      fixtureId: prediction.fixture_id,
+      homeTeam: p1DisplayName,
+      awayTeam: p2DisplayName,
+      league: tournament?.name || `${tour} Tour`,
+      targetKickoffAt: prediction.target_kickoff_at || fixture?.target_kickoff_at || new Date().toISOString(),
+      market: secMarket,
+      prediction: secPick,
+      probability: secProb != null ? secProb : 65,
+      confidenceCategory: sec.tier || 'HIGH CONFIDENCE',
     };
     onToggleFavorite(favoriteItem);
   };
@@ -234,14 +269,11 @@ export const TennisPredictionCard: React.FC<TennisPredictionCardProps> = ({
         {onToggleFavorite && (
           <button
             type="button"
-            className={`glance-favorite-btn ${isFavorite ? 'starred' : ''}`}
-            title={isFavorite ? 'Remove from Acca Slip' : 'Add to Acca Slip'}
-            onClick={(e) => {
-              e.stopPropagation();
-              handleFavoriteClick(e);
-            }}
+            className={`glance-favorite-btn ${isPrimaryFav ? 'starred' : ''}`}
+            title={isPrimaryFav ? 'Remove from Acca Slip' : 'Add to Acca Slip'}
+            onClick={handlePrimaryFavoriteToggle}
           >
-            {isFavorite ? '✓ IN SLIP' : '+ ADD TO SLIP'}
+            {isPrimaryFav ? '✓ IN SLIP' : '+ ADD TO SLIP'}
           </button>
         )}
 
@@ -347,12 +379,12 @@ export const TennisPredictionCard: React.FC<TennisPredictionCardProps> = ({
           {onToggleFavorite && (
             <button
               type="button"
-              className={`tennis-add-slip-btn ${isFavorite ? 'in-slip' : ''}`}
-              onClick={handleFavoriteClick}
-              title={isFavorite ? 'Remove from Acca Slip' : 'Add to Acca Slip'}
-              aria-label={isFavorite ? 'Remove from Acca Slip' : 'Add to Acca Slip'}
+              className={`tennis-add-slip-btn ${isPrimaryFav ? 'in-slip' : ''}`}
+              onClick={handlePrimaryFavoriteToggle}
+              title={isPrimaryFav ? 'Remove from Acca Slip' : 'Add to Acca Slip'}
+              aria-label={isPrimaryFav ? 'Remove from Acca Slip' : 'Add to Acca Slip'}
             >
-              {isFavorite ? '✓ IN SLIP' : '+ ADD TO SLIP'}
+              {isPrimaryFav ? '✓ IN SLIP' : '+ ADD TO SLIP'}
             </button>
           )}
 
@@ -404,7 +436,7 @@ export const TennisPredictionCard: React.FC<TennisPredictionCardProps> = ({
               <div className="key-pick-prob">
                 {probPct ? `${probPct}% Probability` : 'Simulated'}
               </div>
-              <div className="key-pick-view-more-tag">
+              <div className={`key-pick-view-more-tag ${isExpanded ? 'is-expanded' : ''}`}>
                 {isExpanded ? '▴ Hide Details' : '▾ Click to View More'}
               </div>
             </div>
@@ -426,7 +458,7 @@ export const TennisPredictionCard: React.FC<TennisPredictionCardProps> = ({
 
       {/* 2.5 EXPLICIT CLICK TO VIEW MORE CALL-TO-ACTION (Overs, Handicaps & Simulation Breakdown) */}
       <div
-        className="tennis-card-expand-bar"
+        className={`tennis-card-expand-bar ${isExpanded ? 'is-expanded' : ''}`}
         onClick={(e) => {
           e.stopPropagation();
           setIsExpanded(!isExpanded);
@@ -515,16 +547,26 @@ export const TennisPredictionCard: React.FC<TennisPredictionCardProps> = ({
                     >
                       {tierConfig.icon} {cleanTierLabel}
                     </span>
+                    {onToggleFavorite && (
+                      <button
+                        type="button"
+                        className={`secondary-card-fav-btn ${isPrimaryFav ? 'active' : ''}`}
+                        onClick={handlePrimaryFavoriteToggle}
+                        title={isPrimaryFav ? 'Remove prediction from slip' : 'Add primary pick to favorites slip'}
+                      >
+                        {isPrimaryFav ? '✓ IN SLIP' : '+ ADD TO SLIP'}
+                      </button>
+                    )}
                   </div>
                 </div>
 
                 <div className="sniper-primary-main">
                   <div className="sniper-market-outcome">
                     <span className="sniper-market-name">
-                      {prediction.market ? prediction.market.replace(/_/g, ' ').toUpperCase() : 'MATCH WINNER'}
+                      {primaryMarket.toUpperCase()}
                     </span>
                     <span className="sniper-outcome-val">
-                      {prediction.prediction}
+                      {primaryPick}
                     </span>
                   </div>
                   <div className="sniper-prob-group">
@@ -546,9 +588,19 @@ export const TennisPredictionCard: React.FC<TennisPredictionCardProps> = ({
                     </span>
                   </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: 10 }}>
                     {displayedSecondaryPreds.map((sec, idx) => {
                       const marketName = (() => {
+                        const m = (sec.market || '').toLowerCase();
+                        if (m.includes('total_games') || m.includes('over')) return 'Total Games';
+                        if (m.includes('set_handicap') || m.includes('handicap')) return 'Set Handicap';
+                        if (m.includes('first_set') || m.includes('1st_set')) return '1st Set Winner';
+                        if (m.includes('match_winner')) return 'Match Winner';
+                        if (m.includes('correct_set')) return 'Correct Score';
+                        return (sec.market || 'Market').replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase());
+                      })();
+
+                      const displayMarketTitle = (() => {
                         const m = (sec.market || '').toLowerCase();
                         if (m.includes('total_games') || m.includes('over')) return '⚡ Total Games (Overs)';
                         if (m.includes('set_handicap') || m.includes('handicap')) return '🎾 Set Handicap';
@@ -563,38 +615,59 @@ export const TennisPredictionCard: React.FC<TennisPredictionCardProps> = ({
                         ? Math.round(sec.probability <= 1 ? sec.probability * 100 : sec.probability)
                         : null;
 
+                      const isSecFav = Boolean(
+                        isFavoriteItem ? isFavoriteItem(prediction.fixture_id, marketName, pickVal) : false
+                      );
+
                       return (
                         <div
                           key={idx}
+                          className="tennis-secondary-pred-tile"
                           style={{
                             background: '#ffffff',
-                            border: '1.5px solid #e2e8f0',
+                            border: isSecFav ? '1.5px solid #10b981' : '1.5px solid #e2e8f0',
                             borderRadius: 10,
                             padding: '10px 14px',
                             display: 'flex',
                             justifyContent: 'space-between',
                             alignItems: 'center',
-                            boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
+                            boxShadow: isSecFav ? '0 2px 8px rgba(16, 185, 129, 0.15)' : '0 1px 3px rgba(0,0,0,0.03)',
+                            transition: 'all 0.15s ease',
+                            gap: 10,
                           }}
                         >
-                          <div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ fontSize: 10.5, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.2px' }}>
-                              {marketName}
+                              {displayMarketTitle}
                             </div>
-                            <div style={{ fontSize: 13.5, fontWeight: 900, color: '#0f172a', marginTop: 2 }}>
+                            <div style={{ fontSize: 13.5, fontWeight: 900, color: '#0f172a', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                               {pickVal}
                             </div>
                           </div>
-                          {probVal != null && (
-                            <div style={{ textAlign: 'right' }}>
-                              <div style={{ fontSize: 14, fontWeight: 900, color: probVal >= 75 ? '#16a34a' : '#2563eb' }}>
-                                {probVal}%
+
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                            {probVal != null && (
+                              <div style={{ textAlign: 'right' }}>
+                                <div style={{ fontSize: 14, fontWeight: 900, color: probVal >= 75 ? '#16a34a' : '#2563eb' }}>
+                                  {probVal}%
+                                </div>
+                                <div style={{ fontSize: 9.5, fontWeight: 700, color: '#94a3b8' }}>
+                                  Prob
+                                </div>
                               </div>
-                              <div style={{ fontSize: 9.5, fontWeight: 700, color: '#94a3b8' }}>
-                                Prob
-                              </div>
-                            </div>
-                          )}
+                            )}
+
+                            {onToggleFavorite && (
+                              <button
+                                type="button"
+                                className={`secondary-card-fav-btn ${isSecFav ? 'active' : ''}`}
+                                onClick={(e) => handleSecondaryFavoriteToggle(e, sec, marketName, pickVal, probVal)}
+                                title={isSecFav ? 'Remove from slip' : 'Add to slip'}
+                              >
+                                {isSecFav ? '✓ IN SLIP' : '+ ADD TO SLIP'}
+                              </button>
+                            )}
+                          </div>
                         </div>
                       );
                     })}

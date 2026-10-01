@@ -2201,32 +2201,35 @@ body {
   box-shadow: inset 0 -3px 0 #dc2626;
 }
 
-/* Prominent Click to View More bar on Tennis Prediction Card */
+/* Prominent Click to View More bar on Tennis Prediction Card (Blue Attractor Container) */
 .tennis-card-expand-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-top: 6px;
-  padding: 5px 12px;
-  background: #f8fafc;
-  border: 1px dashed #cbd5e1;
-  border-radius: 6px;
+  margin-top: 8px;
+  padding: 6px 14px;
+  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 60%, #bae6fd 100%);
+  border: 1.5px solid #38bdf8;
+  border-radius: 8px;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   user-select: none;
+  box-shadow: 0 2px 6px rgba(2, 132, 199, 0.12);
 }
 
 .tennis-card-expand-bar:hover {
-  background: #f1f5f9;
+  background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%);
   border-color: #0284c7;
+  box-shadow: 0 4px 14px rgba(2, 132, 199, 0.28);
+  transform: translateY(-1px);
 }
 
 .tennis-expand-teaser {
   display: flex;
   align-items: center;
-  gap: 5px;
-  font-size: 11px;
-  color: #475569;
+  gap: 6px;
+  font-size: 11.5px;
+  color: #0369a1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2234,37 +2237,109 @@ body {
 
 .tennis-expand-teaser strong {
   color: #0f172a;
+  font-weight: 800;
 }
 
 .tennis-expand-teaser-dot {
-  color: #f59e0b;
-  font-size: 12px;
+  background: #0284c7;
+  color: #ffffff;
+  font-size: 10px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 1px 3px rgba(2, 132, 199, 0.3);
 }
 
 .tennis-expand-cta-btn {
   font-size: 11px;
   font-weight: 800;
-  color: #0284c7;
-  letter-spacing: 0.2px;
+  color: #ffffff;
+  background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+  border: 1px solid #0284c7;
+  padding: 5px 14px;
+  border-radius: 9999px;
+  letter-spacing: 0.3px;
   white-space: nowrap;
   margin-left: 8px;
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 3px;
+  gap: 5px;
+  box-shadow: 0 2px 8px rgba(2, 132, 199, 0.35);
+  transition: all 0.2s ease;
+  animation: tennisBluePulse 3s infinite;
+}
+
+@keyframes tennisBluePulse {
+  0% { box-shadow: 0 0 0 0 rgba(2, 132, 199, 0.5); }
+  65% { box-shadow: 0 0 0 6px rgba(2, 132, 199, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(2, 132, 199, 0); }
 }
 
 .tennis-card-expand-bar:hover .tennis-expand-cta-btn {
-  color: #0369a1;
-  text-decoration: underline;
+  background: linear-gradient(135deg, #0369a1 0%, #075985 100%);
+  color: #ffffff;
+  text-decoration: none;
+  box-shadow: 0 4px 12px rgba(2, 132, 199, 0.5);
+  transform: scale(1.02);
+}
+
+.tennis-card-expand-bar.is-expanded {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+  box-shadow: none;
+}
+
+.tennis-card-expand-bar.is-expanded .tennis-expand-cta-btn {
+  background: #64748b;
+  border-color: #64748b;
+  box-shadow: none;
+  animation: none;
 }
 
 .key-pick-view-more-tag {
-  font-size: 9.5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  font-size: 10px;
   font-weight: 800;
-  color: #0284c7;
-  margin-top: 2px;
+  color: #ffffff;
+  background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+  border: 1px solid #0284c7;
+  padding: 3px 10px;
+  border-radius: 9999px;
+  margin-top: 4px;
   text-align: center;
-  letter-spacing: 0.1px;
+  letter-spacing: 0.2px;
+  box-shadow: 0 2px 6px rgba(2, 132, 199, 0.35);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  cursor: pointer;
+  user-select: none;
+}
+
+.key-pick-view-more-tag:hover {
+  background: linear-gradient(135deg, #0369a1 0%, #075985 100%);
+  box-shadow: 0 3px 8px rgba(2, 132, 199, 0.45);
+  transform: translateY(-1px);
+}
+
+.key-pick-view-more-tag.is-expanded {
+  background: #64748b;
+  border-color: #64748b;
+  box-shadow: none;
+}
+
+.tennis-secondary-pred-tile {
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.tennis-secondary-pred-tile:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.07) !important;
 }
 
 .compact-kpi-ratio {
