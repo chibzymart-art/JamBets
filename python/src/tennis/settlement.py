@@ -400,6 +400,15 @@ class TennisSettlementEngine:
                         logger.info("Settled existing finished fixture prediction %s -> %s (%s)", pred_id, settlement_status.upper(), actual_result)
                     except Exception as e:
                         logger.error("Failed settling fixture %s: %s", fixture_id, e)
+                else:
+                    stats["settled"] += 1
+                    if settlement_status == "won":
+                        stats["won"] += 1
+                    elif settlement_status == "lost":
+                        stats["lost"] += 1
+                    elif settlement_status == "void":
+                        stats["void"] += 1
+                    logger.info("[DRY RUN] Would settle existing finished fixture %s -> %s (%s)", pred_id, settlement_status.upper(), actual_result)
                 continue
 
             # Find matching live/completed ESPN competition
@@ -410,6 +419,37 @@ class TennisSettlementEngine:
                     break
 
             if not matched_comp:
+                # 36-Hour Unplayed Abandonment Rule:
+                # If a scheduled match has no score in provider feeds and kickoff was > 36h ago,
+                # officially void per standard ATP/WTA betting rules (unplayed / walkover / cancellation).
+                ko_dt = TennisFixtureMatcher._parse_dt(item.get("target_kickoff_at") or fix.get("target_kickoff_at"))
+                if ko_dt and (now_utc - ko_dt).total_seconds() > 36 * 3600:
+                    abandon_notes = f"Fixture remained unplayed >36 hours past scheduled kickoff ({ko_dt.strftime('%Y-%m-%d')}). Voided per ATP/WTA betting rules."
+                    abandon_result = "Match Unplayed / Cancelled"
+                    if not dry_run:
+                        try:
+                            self.db.update_fixture_score(fixture_id, {"status": "cancelled"})
+                            self.db.settle_prediction(
+                                prediction_id=pred_id,
+                                fixture_id=fixture_id,
+                                status="void",
+                                notes=abandon_notes,
+                                p1_sets=0,
+                                p2_sets=0,
+                                total_games=0,
+                                actual_result=abandon_result
+                            )
+                            stats["settled"] += 1
+                            stats["void"] += 1
+                            logger.info("Auto-voided stale unplayed fixture prediction %s (>48h overdue)", pred_id)
+                        except Exception as e:
+                            logger.error("Failed to auto-void stale fixture %s: %s", fixture_id, e)
+                    else:
+                        stats["settled"] += 1
+                        stats["void"] += 1
+                        logger.info("[DRY RUN] Would auto-void stale unplayed fixture %s (>48h overdue)", pred_id)
+                    continue
+
                 stats["unsettled_pending"] += 1
                 logger.debug("Fixture %s (%s) has no matching live/completed score yet.", fixture_id, fix.get("canonical_key"))
                 continue

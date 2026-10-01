@@ -73,7 +73,7 @@ class TestTennisPredictionEngine(unittest.TestCase):
         p2 = {"display_name": "Martin Damm", "current_rank": 175}
 
         market, label, prob, tier = engine._select_best_market_and_tier(
-            player1=p1, player2=p2, sim_res=sim_res, elo_diff=250.0
+            player1=p1, player2=p2, sim_res=sim_res, elo_diff=320.0
         )
         self.assertEqual(tier, "BANGER")
         self.assertEqual(market, "match_winner")

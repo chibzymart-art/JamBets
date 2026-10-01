@@ -2139,7 +2139,132 @@ body {
   box-shadow: inset 0 -3px 0 #16a34a;
 }
 .tennis-winrates-kpi-card {
-  grid-template-columns: 0.9fr 1.8fr 1fr 1fr;
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr)) !important;
+  width: 100%;
+}
+
+.tennis-winrates-kpi-card .compact-kpi-segment {
+  padding: 3px 2px !important;
+  min-width: 0 !important;
+  overflow: hidden !important;
+}
+
+.tennis-winrates-kpi-card .compact-kpi-title {
+  font-size: 8px !important;
+  letter-spacing: -0.2px !important;
+}
+
+.tennis-winrates-kpi-card .compact-kpi-pill {
+  font-size: 6.8px !important;
+  padding: 0 2px !important;
+}
+
+.tennis-winrates-kpi-card .compact-kpi-pct {
+  font-size: 10.5px !important;
+}
+
+.tennis-winrates-kpi-card .compact-kpi-ratio {
+  font-size: 7px !important;
+  letter-spacing: -0.3px !important;
+}
+
+.nosafe-subseg .compact-kpi-title { color: #dc2626; }
+.nosafe-pill {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+.compact-kpi-pct.nosafe-text { color: #dc2626; }
+
+.compact-kpi-segment.banger-subseg.active-seg {
+  background: #fffbeb;
+  box-shadow: inset 0 -3px 0 #d97706;
+}
+
+.compact-kpi-segment.toppick-subseg.active-seg {
+  background: #fff7ed;
+  box-shadow: inset 0 -3px 0 #ea580c;
+}
+
+.compact-kpi-segment.high-subseg.active-seg {
+  background: #f0fdf4;
+  box-shadow: inset 0 -3px 0 #16a34a;
+}
+
+.compact-kpi-segment.mid-subseg.active-seg {
+  background: #eff6ff;
+  box-shadow: inset 0 -3px 0 #2563eb;
+}
+
+.compact-kpi-segment.nosafe-subseg.active-seg {
+  background: #fef2f2;
+  box-shadow: inset 0 -3px 0 #dc2626;
+}
+
+/* Prominent Click to View More bar on Tennis Prediction Card */
+.tennis-card-expand-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 6px;
+  padding: 5px 12px;
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.tennis-card-expand-bar:hover {
+  background: #f1f5f9;
+  border-color: #0284c7;
+}
+
+.tennis-expand-teaser {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: #475569;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tennis-expand-teaser strong {
+  color: #0f172a;
+}
+
+.tennis-expand-teaser-dot {
+  color: #f59e0b;
+  font-size: 12px;
+}
+
+.tennis-expand-cta-btn {
+  font-size: 11px;
+  font-weight: 800;
+  color: #0284c7;
+  letter-spacing: 0.2px;
+  white-space: nowrap;
+  margin-left: 8px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.tennis-card-expand-bar:hover .tennis-expand-cta-btn {
+  color: #0369a1;
+  text-decoration: underline;
+}
+
+.key-pick-view-more-tag {
+  font-size: 9.5px;
+  font-weight: 800;
+  color: #0284c7;
+  margin-top: 2px;
+  text-align: center;
+  letter-spacing: 0.1px;
 }
 
 .compact-kpi-ratio {
@@ -12303,11 +12428,52 @@ body {
 
   .tennis-winrates-kpi-card {
     display: grid !important;
-    grid-template-columns: 0.85fr 1.4fr 0.85fr 0.9fr !important;
+    grid-template-columns: repeat(7, minmax(0, 1fr)) !important;
     width: 100% !important;
     max-width: 100% !important;
     overflow-x: hidden !important;
     box-sizing: border-box !important;
+    padding: 0 !important;
+  }
+
+  .tennis-winrates-kpi-card .compact-kpi-segment {
+    padding: 2px 1px !important;
+    min-width: 0 !important;
+  }
+
+  .tennis-winrates-kpi-card .compact-kpi-header {
+    gap: 1px !important;
+  }
+
+  .tennis-winrates-kpi-card .compact-kpi-title {
+    font-size: 7px !important;
+    letter-spacing: -0.3px !important;
+  }
+
+  .tennis-winrates-kpi-card .compact-kpi-pill {
+    font-size: 6px !important;
+    padding: 0 1px !important;
+  }
+
+  .tennis-winrates-kpi-card .compact-kpi-pct {
+    font-size: 9px !important;
+  }
+
+  .tennis-winrates-kpi-card .compact-kpi-ratio {
+    font-size: 6px !important;
+    letter-spacing: -0.4px !important;
+  }
+
+  .tennis-card-expand-bar {
+    padding: 4px 8px !important;
+    flex-direction: column !important;
+    gap: 3px !important;
+    text-align: center !important;
+  }
+
+  .tennis-expand-cta-btn {
+    margin-left: 0 !important;
+    font-size: 10px !important;
   }
 
   .winrates-kpi-card::-webkit-scrollbar,

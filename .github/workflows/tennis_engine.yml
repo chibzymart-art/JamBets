@@ -4,6 +4,12 @@ on:
   schedule:
     # Run daily at 23:00 UTC to ingest newly scheduled knockout rounds and 4-day forward slate
     - cron: '0 23 * * *'
+  push:
+    branches:
+      - main
+    paths:
+      - 'python/src/tennis/**'
+      - '.github/workflows/tennis_engine.yml'
   workflow_dispatch:
     inputs:
       days_ahead:

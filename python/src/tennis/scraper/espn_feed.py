@@ -18,6 +18,8 @@ from typing import Dict, Any, List, Optional
 from .base import BaseTennisScraper
 from python.src.tennis.tournament_normalizer import TournamentNormalizer
 
+import unicodedata
+
 logger = logging.getLogger("tennis.scraper.espn")
 
 
@@ -28,19 +30,40 @@ class EspnTennisFeedScraper(BaseTennisScraper):
 
     BASE_URL = "https://site.api.espn.com/apis/site/v2/sports/tennis"
 
+    # Known alias mappings for composite Latin/Asian surnames to avoid duplicate fixtures
+    KNOWN_PLAYER_ALIASES = {
+        "tomas_etcheverry": "tomas_martin_etcheverry",
+        "chak_wong": "chak_lam_coleman_wong",
+        "coleman_wong": "chak_lam_coleman_wong",
+        "adolfo_vallejo": "adolfo_daniel_vallejo",
+        "stan_wawrinka": "stanislas_wawrinka",
+        "sascha_zverev": "alexander_zverev",
+        "carlos_alcaraz_garfia": "carlos_alcaraz",
+        "bernab_zapata_miralles": "bernabe_zapata_miralles",
+        "bernabe_zapata": "bernabe_zapata_miralles",
+        "pedro_martinez_portero": "pedro_martinez",
+        "jaume_munar_clar": "jaume_munar",
+        "dan_evans": "daniel_evans",
+    }
+
     def __init__(self, timeout: float = 15.0):
         self.timeout = timeout
         self.client = httpx.Client(timeout=self.timeout)
 
-    @staticmethod
-    def slugify(text: str) -> str:
+    @classmethod
+    def slugify(cls, text: str) -> str:
         """
         Converts player names and tournament strings into deterministic canonical identifiers.
+        Normalizes unicode accents and applies canonical player alias resolution.
         """
         if not text:
             return "unknown"
-        clean = re.sub(r"[^\w\s-]", "", text.strip().lower())
-        return re.sub(r"[-\s]+", "_", clean)
+        # Normalize unicode accents / diacritics (e.g. Tomás -> tomas)
+        nfkd_form = unicodedata.normalize('NFKD', text.strip())
+        ascii_text = "".join([c for c in nfkd_form if not unicodedata.combining(c)])
+        clean = re.sub(r"[^\w\s-]", "", ascii_text.lower())
+        slug = re.sub(r"[-\s]+", "_", clean)
+        return cls.KNOWN_PLAYER_ALIASES.get(slug, slug)
 
     def fetch_rankings(self, tour: str = "atp") -> List[Dict[str, Any]]:
         """
@@ -135,6 +158,15 @@ class EspnTennisFeedScraper(BaseTennisScraper):
 
                     # Only ingest Singles matches for prediction engine precision
                     if "doubles" in type_slug or "doubles" in type_text:
+                        continue
+
+                    # Strict Gender Isolation: ESPN combined events contain both Men's and Women's competitions
+                    tour_lower = tour.lower().strip()
+                    is_women = "women" in type_slug or "women" in type_text or "wta" in type_slug or "wta" in type_text
+                    is_men = (bool(re.search(r"\bmen'?s?\b", type_slug)) or bool(re.search(r"\bmen'?s?\b", type_text)) or "atp" in type_slug or "atp" in type_text) and not is_women
+                    if tour_lower == "atp" and is_women:
+                        continue
+                    elif tour_lower == "wta" and is_men:
                         continue
 
                     competitors = comp.get("competitors", [])
@@ -332,6 +364,15 @@ class EspnTennisFeedScraper(BaseTennisScraper):
 
                     # Only Singles matches
                     if "doubles" in type_slug or "doubles" in type_text:
+                        continue
+
+                    # Strict Gender Isolation: ESPN combined events contain both Men's and Women's competitions
+                    tour_lower = tour.lower().strip()
+                    is_women = "women" in type_slug or "women" in type_text or "wta" in type_slug or "wta" in type_text
+                    is_men = (bool(re.search(r"\bmen'?s?\b", type_slug)) or bool(re.search(r"\bmen'?s?\b", type_text)) or "atp" in type_slug or "atp" in type_text) and not is_women
+                    if tour_lower == "atp" and is_women:
+                        continue
+                    elif tour_lower == "wta" and is_men:
                         continue
 
                     competitors = comp.get("competitors", [])

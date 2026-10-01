@@ -117,8 +117,11 @@ class TennisIngestionPipeline:
         }
 
         try:
-            # Query existing tournament by name
-            existing = self.db.client.get("/tennis_tournaments", params={"name": f"eq.{profile.name}"}).json()
+            # Query existing tournament by name AND tour
+            existing = self.db.client.get(
+                "/tennis_tournaments",
+                params={"name": f"eq.{profile.name}", "tour": f"eq.{profile.tour}"}
+            ).json()
             if existing:
                 t_id = existing[0]["id"]
             else:

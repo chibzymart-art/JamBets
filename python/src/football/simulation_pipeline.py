@@ -194,6 +194,7 @@ class SimulationPipeline:
             ]
 
         persisted_count = 0
+        has_banker = bool(primary and primary.market_name != "NO_SAFE_BANKER")
 
         # 6. Persist Simulation Job & Single Sniper Prediction to Cloud Supabase
         if persist_to_supabase and primary:

@@ -304,6 +304,11 @@ export const TennisHubView: React.FC<TennisHubViewProps> = ({
       list = list.filter((p) => {
         const tier = (p.confidence_category || '').toUpperCase().replace(/ /g, '_');
         const target = selectedTier.toUpperCase().replace(/ /g, '_');
+        if (target === 'NO_SAFE_BANKER') {
+          const m = (p.market || '').toUpperCase().replace(/ /g, '_');
+          const pred = (p.prediction || '').toUpperCase().replace(/ /g, '_');
+          return tier.includes('NO_SAFE_BANKER') || m.includes('NO_SAFE_BANKER') || pred.includes('NO_SAFE_BANKER');
+        }
         return tier === target;
       });
     }
@@ -394,8 +399,18 @@ export const TennisHubView: React.FC<TennisHubViewProps> = ({
     let highWon = 0;
     let highLost = 0;
 
+    let midTotal = 0;
+    let midWon = 0;
+    let midLost = 0;
+
+    let noSafeTotal = 0;
+    let noSafeWon = 0;
+    let noSafeLost = 0;
+
     for (const p of dateScopedPredictions) {
       const tier = (p.confidence_category || '').toUpperCase().replace(/ /g, '_');
+      const market = (p.market || '').toUpperCase().replace(/ /g, '_');
+      const pred = (p.prediction || '').toUpperCase().replace(/ /g, '_');
       const status = (p.settlement_status || 'pending').toLowerCase();
 
       if (status === 'won') allWon++;
@@ -407,7 +422,15 @@ export const TennisHubView: React.FC<TennisHubViewProps> = ({
       }
       else allPending++;
 
-      if (tier === 'BANGER') {
+      const isNoSafe = tier.includes('NO_SAFE_BANKER') || market.includes('NO_SAFE_BANKER') || pred.includes('NO_SAFE_BANKER');
+
+      if (isNoSafe) {
+        noSafeTotal++;
+        if (status === 'won') noSafeWon++;
+        else if (status === 'lost') {
+          if (isSubscriber) noSafeLost++;
+        }
+      } else if (tier === 'BANGER') {
         bangerTotal++;
         if (status === 'won') bangerWon++;
         else if (status === 'lost') {
@@ -424,6 +447,12 @@ export const TennisHubView: React.FC<TennisHubViewProps> = ({
         if (status === 'won') highWon++;
         else if (status === 'lost') {
           if (isSubscriber) highLost++;
+        }
+      } else if (tier === 'MID_CONFIDENCE' || tier === 'MID CONFIDENCE') {
+        midTotal++;
+        if (status === 'won') midWon++;
+        else if (status === 'lost') {
+          if (isSubscriber) midLost++;
         }
       }
     }
@@ -452,6 +481,14 @@ export const TennisHubView: React.FC<TennisHubViewProps> = ({
       highWon,
       highLost,
       highWinRate: calcWinRate(highWon, highLost),
+      midTotal,
+      midWon,
+      midLost,
+      midWinRate: calcWinRate(midWon, midLost),
+      noSafeTotal,
+      noSafeWon,
+      noSafeLost,
+      noSafeWinRate: calcWinRate(noSafeWon, noSafeLost),
     };
   }, [dateScopedPredictions, isSubscriber]);
 
@@ -613,10 +650,10 @@ export const TennisHubView: React.FC<TennisHubViewProps> = ({
                 setSelectedTier('all');
                 setSettlementFilter('all');
               }}
-              title="Click to reset tier filters and view all tennis predictions"
+              title="Click to view all tennis predictions"
             >
               <div className="compact-kpi-header">
-                <span className="compact-kpi-title">All Preds</span>
+                <span className="compact-kpi-title">All</span>
                 <span className="compact-kpi-pill">{scorecardStats.allTotal}M</span>
               </div>
               <div className="compact-kpi-val-row">
@@ -625,49 +662,55 @@ export const TennisHubView: React.FC<TennisHubViewProps> = ({
               </div>
             </div>
 
-            {/* Tab 2: Bangers & Top Picks Grouped Tab */}
-            <div className="compact-kpi-grouped-tab">
-              <div
-                className={`compact-kpi-subsegment banger-subseg ${selectedTier === 'BANGER' ? 'active-seg' : ''}`}
-                onClick={() => setSelectedTier(selectedTier === 'BANGER' ? 'all' : 'BANGER')}
-                title="Click to filter by 96%+ Bangers"
-              >
-                <div className="compact-kpi-header">
-                  <span className="compact-kpi-title">⭐ Banger</span>
-                  <span className="compact-kpi-pill banger-pill">{scorecardStats.bangerTotal}M</span>
-                </div>
-                <div className="compact-kpi-val-row">
-                  <span className="compact-kpi-pct banger-text">{scorecardStats.bangerWinRate}%</span>
-                  <span className="compact-kpi-ratio">{scorecardStats.bangerWon}W • {scorecardStats.bangerLost}L</span>
-                </div>
+            {/* Tab 2: Banger */}
+            <div
+              className={`compact-kpi-segment banger-subseg ${selectedTier === 'BANGER' ? 'active-seg' : ''}`}
+              onClick={() => {
+                setSettlementFilter('all');
+                setSelectedTier(selectedTier === 'BANGER' ? 'all' : 'BANGER');
+              }}
+              title="Click to filter by 96%+ Bangers"
+            >
+              <div className="compact-kpi-header">
+                <span className="compact-kpi-title">⭐ Banger</span>
+                <span className="compact-kpi-pill banger-pill">{scorecardStats.bangerTotal}M</span>
               </div>
-
-              <div className="compact-kpi-inner-divider" />
-
-              <div
-                className={`compact-kpi-subsegment toppick-subseg ${selectedTier === 'TOP PICK' ? 'active-seg' : ''}`}
-                onClick={() => setSelectedTier(selectedTier === 'TOP PICK' ? 'all' : 'TOP PICK')}
-                title="Click to filter by 90%-95% Top Picks"
-              >
-                <div className="compact-kpi-header">
-                  <span className="compact-kpi-title">👑 Top Pick</span>
-                  <span className="compact-kpi-pill toppick-pill">{scorecardStats.topPickTotal}M</span>
-                </div>
-                <div className="compact-kpi-val-row">
-                  <span className="compact-kpi-pct toppick-text">{scorecardStats.topPickWinRate}%</span>
-                  <span className="compact-kpi-ratio">{scorecardStats.topPickWon}W • {scorecardStats.topPickLost}L</span>
-                </div>
+              <div className="compact-kpi-val-row">
+                <span className="compact-kpi-pct banger-text">{scorecardStats.bangerWinRate}%</span>
+                <span className="compact-kpi-ratio">{scorecardStats.bangerWon}W • {scorecardStats.bangerLost}L</span>
               </div>
             </div>
 
-            {/* Tab 3: High Confidence */}
+            {/* Tab 3: Top Pick */}
             <div
-              className={`compact-kpi-segment high-conf-seg ${selectedTier === 'HIGH CONFIDENCE' ? 'active-seg' : ''}`}
-              onClick={() => setSelectedTier(selectedTier === 'HIGH CONFIDENCE' ? 'all' : 'HIGH CONFIDENCE')}
+              className={`compact-kpi-segment toppick-subseg ${selectedTier === 'TOP PICK' ? 'active-seg' : ''}`}
+              onClick={() => {
+                setSettlementFilter('all');
+                setSelectedTier(selectedTier === 'TOP PICK' ? 'all' : 'TOP PICK');
+              }}
+              title="Click to filter by 90%-95% Top Picks"
+            >
+              <div className="compact-kpi-header">
+                <span className="compact-kpi-title">👑 Top Pick</span>
+                <span className="compact-kpi-pill toppick-pill">{scorecardStats.topPickTotal}M</span>
+              </div>
+              <div className="compact-kpi-val-row">
+                <span className="compact-kpi-pct toppick-text">{scorecardStats.topPickWinRate}%</span>
+                <span className="compact-kpi-ratio">{scorecardStats.topPickWon}W • {scorecardStats.topPickLost}L</span>
+              </div>
+            </div>
+
+            {/* Tab 4: High Confidence */}
+            <div
+              className={`compact-kpi-segment high-subseg ${selectedTier === 'HIGH CONFIDENCE' ? 'active-seg' : ''}`}
+              onClick={() => {
+                setSettlementFilter('all');
+                setSelectedTier(selectedTier === 'HIGH CONFIDENCE' ? 'all' : 'HIGH CONFIDENCE');
+              }}
               title="Click to filter by 83%-89% High Confidence"
             >
               <div className="compact-kpi-header">
-                <span className="compact-kpi-title">High Conf</span>
+                <span className="compact-kpi-title">⚡ High</span>
                 <span className="compact-kpi-pill high-pill">{scorecardStats.highTotal}M</span>
               </div>
               <div className="compact-kpi-val-row">
@@ -676,24 +719,63 @@ export const TennisHubView: React.FC<TennisHubViewProps> = ({
               </div>
             </div>
 
-            {/* Tab 4: Won (Placed on right-hand side after High Confidence) */}
+            {/* Tab 5: Mid Confidence */}
+            <div
+              className={`compact-kpi-segment mid-subseg ${selectedTier === 'MID CONFIDENCE' ? 'active-seg' : ''}`}
+              onClick={() => {
+                setSettlementFilter('all');
+                setSelectedTier(selectedTier === 'MID CONFIDENCE' ? 'all' : 'MID CONFIDENCE');
+              }}
+              title="Click to filter by 75%-82% Mid Confidence"
+            >
+              <div className="compact-kpi-header">
+                <span className="compact-kpi-title">🛡️ Mid</span>
+                <span className="compact-kpi-pill mid-pill">{scorecardStats.midTotal}M</span>
+              </div>
+              <div className="compact-kpi-val-row">
+                <span className="compact-kpi-pct mid-text">{scorecardStats.midWinRate}%</span>
+                <span className="compact-kpi-ratio">{scorecardStats.midWon}W • {scorecardStats.midLost}L</span>
+              </div>
+            </div>
+
+            {/* Tab 6: No Safe Banker (High Volatility) */}
+            <div
+              className={`compact-kpi-segment nosafe-subseg ${selectedTier === 'NO_SAFE_BANKER' ? 'active-seg' : ''}`}
+              onClick={() => {
+                setSettlementFilter('all');
+                setSelectedTier(selectedTier === 'NO_SAFE_BANKER' ? 'all' : 'NO_SAFE_BANKER');
+              }}
+              title="Click to filter High Volatility / No Safe Banker predictions"
+            >
+              <div className="compact-kpi-header">
+                <span className="compact-kpi-title">⚠️ No Safe</span>
+                <span className="compact-kpi-pill nosafe-pill">{scorecardStats.noSafeTotal}M</span>
+              </div>
+              <div className="compact-kpi-val-row">
+                <span className="compact-kpi-pct nosafe-text">{scorecardStats.noSafeWinRate}%</span>
+                <span className="compact-kpi-ratio">{scorecardStats.noSafeWon}W • {scorecardStats.noSafeLost}L</span>
+              </div>
+            </div>
+
+            {/* Tab 7: Won */}
             <div
               className={`compact-kpi-segment won-seg ${settlementFilter === 'won' ? 'active-seg' : ''}`}
               onClick={() => {
-                setSettlementFilter(settlementFilter === 'won' ? 'all' : 'won');
-                if (settlementFilter !== 'won') {
+                const nextState = settlementFilter === 'won' ? 'all' : 'won';
+                setSettlementFilter(nextState);
+                if (nextState === 'won') {
                   setSelectedTier('all');
                 }
               }}
               title="Click to filter Won tennis predictions"
             >
               <div className="compact-kpi-header">
-                <span className="compact-kpi-title">Won</span>
+                <span className="compact-kpi-title">✓ Won</span>
                 <span className="compact-kpi-pill won-pill">{scorecardStats.allWon}</span>
               </div>
               <div className="compact-kpi-val-row">
-                <span className="compact-kpi-pct won-text">✓ Won</span>
-                <span className="compact-kpi-ratio">{scorecardStats.allWon}W • {scorecardStats.allLost}L</span>
+                <span className="compact-kpi-pct won-text">{scorecardStats.allWon}W</span>
+                <span className="compact-kpi-ratio">{scorecardStats.allLost} Lost</span>
               </div>
             </div>
           </div>

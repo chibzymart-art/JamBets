@@ -123,9 +123,10 @@ export interface TennisMarkovMetrics {
 
 export interface TennisSecondaryPrediction {
   market: TennisMarket;
-  pick: string;
+  pick?: string;
+  prediction?: string;
   probability: number;
-  tier: TennisConfidenceTier;
+  tier?: TennisConfidenceTier;
 }
 
 export interface TennisPrediction {

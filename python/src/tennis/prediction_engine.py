@@ -62,19 +62,29 @@ class TennisPredictionEngine:
 
         # 2. Derive single point serve win probabilities (p1, p2)
         # Empirical ATP baseline serve point win rate is ~64.5%; WTA is ~57.5%
-        tour = tournament.get("tour", "ATP").upper()
+        tour = str(tournament.get("tour") or fixture.get("tour") or "").upper()
+        if not tour and fixture.get("canonical_key"):
+            tour = fixture["canonical_key"].split(":")[0].upper()
+        if not tour:
+            tour = "ATP"
         base_serve_pt = 0.645 if tour in ("ATP", "GRAND_SLAM") else 0.585
 
         elo_diff = p1_elo - p2_elo
+
+        # Calibrated serve point differential bounded to empirical ATP/WTA spread:
+        # Scaled logistic curve preventing hyperbolic S-curve distortion.
+        # Max serve point delta is realistically bounded at ±5.2% (10.4% maximum total serve gap).
+        serve_delta = math.tanh(elo_diff / 480.0) * 0.052
+
         # Adjust for court speed (Faster CPI raises server advantage; slower CPI raises returner advantage)
-        cpi_adjustment = (cpi - 35.0) * 0.002
+        cpi_adjustment = (cpi - 35.0) * 0.001
 
-        p1_serve_pt = base_serve_pt + (elo_diff / 3200.0) + cpi_adjustment
-        p2_serve_pt = base_serve_pt - (elo_diff / 3200.0) + cpi_adjustment
+        p1_serve_pt = base_serve_pt + serve_delta + cpi_adjustment
+        p2_serve_pt = base_serve_pt - serve_delta + cpi_adjustment
 
-        # Clamp within realistic professional boundaries
-        p1_serve_pt = max(0.51, min(0.76, p1_serve_pt))
-        p2_serve_pt = max(0.51, min(0.76, p2_serve_pt))
+        # Clamp within realistic professional boundaries (never below 52% or above 73%)
+        p1_serve_pt = max(0.52, min(0.73, p1_serve_pt))
+        p2_serve_pt = max(0.52, min(0.73, p2_serve_pt))
 
         # 3. Analytical Markov Calculations
         markov_match = TennisMarkovModel.match_probabilities(
@@ -107,6 +117,15 @@ class TennisPredictionEngine:
         fav_first_set = sim_res.first_set_p1_prob if fav_is_p1 else sim_res.first_set_p2_prob
         fav_hcap = sim_res.set_handicap_p1_minus_1_5 if fav_is_p1 else sim_res.correct_scores.get("0-2", 0.0)
 
+        # Dynamic Over/Under prediction based on court pace and player serving profiles
+        prob_over_21_5 = float(sim_res.total_games_over.get("21.5", 0.50))
+        if prob_over_21_5 >= 0.52:
+            ou_pred = "Over 21.5 Games"
+            ou_prob = prob_over_21_5
+        else:
+            ou_pred = "Under 22.5 Games"
+            ou_prob = 1.0 - float(sim_res.total_games_over.get("22.5", 0.45))
+
         secondary_predictions = [
             {
                 "market": "match_winner",
@@ -125,8 +144,8 @@ class TennisPredictionEngine:
             },
             {
                 "market": "total_games_over_under",
-                "prediction": f"Over 21.5 Games",
-                "probability": round(float(sim_res.total_games_over.get("21.5", 0.50)), 4)
+                "prediction": ou_pred,
+                "probability": round(float(ou_prob), 4)
             }
         ]
 
@@ -198,8 +217,9 @@ class TennisPredictionEngine:
             fav_name = p2_name
             fav_is_p1 = False
 
-        # Zero-Hallucination Banker Filter
-        if fav_prob < 0.60:
+        # 1. Zero-Hallucination Banker Filter
+        # Under calibrated math, a favorite under 58% or with an Elo gap < 40 pts is a pure coin-flip
+        if fav_prob < 0.58 or abs(elo_diff) < 40.0:
             return (
                 "NO_SAFE_BANKER",
                 "NO SAFE BANKER (High Volatility)",
@@ -209,13 +229,13 @@ class TennisPredictionEngine:
 
         # 2. Unranked Player Safety Quarantine
         # When either competitor lacks an official verified ATP/WTA ranking,
-        # true baseline skill is ungrounded (artificial 1450 ELO floor causes false banker delusions).
+        # true baseline skill is ungrounded (wildcard/qualifier variance).
         p1_rank = player1.get("current_rank")
         p2_rank = player2.get("current_rank")
         has_unranked = (p1_rank is None or p1_rank <= 0) or (p2_rank is None or p2_rank <= 0)
 
         if has_unranked:
-            if fav_prob < 0.72:
+            if fav_prob < 0.70:
                 return (
                     "NO_SAFE_BANKER",
                     "NO SAFE BANKER (Unranked Opponent / High Volatility)",
@@ -235,10 +255,11 @@ class TennisPredictionEngine:
         cat_str = (tournament.get("category") or "").upper() if tournament else ""
         is_challenger = cat_str in ("CH", "125") or tour_str == "CHALLENGER"
 
-        # 3. BANGER Tier (Elite Confidence >= 82% & strong verified ELO gap >= 175)
+        # 3. BANGER Tier (Elite Banker standard: target >= 85% verified win rate)
         # Strictly reserved for verified ATP/WTA Tour & Grand Slam matches.
-        # Challengers are excluded from BANGER tier due to higher baseline variance.
-        if fav_prob >= 0.82 and abs(elo_diff) >= 175.0 and not is_challenger:
+        # Requires massive skill class separation (ELO gap >= 300 pts) and calibrated probability >= 80%.
+        # Challengers are excluded from BANGER tier due to higher variance and withdrawal rates.
+        if fav_prob >= 0.80 and abs(elo_diff) >= 300.0 and not is_challenger:
             return (
                 "match_winner",
                 f"{fav_name} Win",
@@ -246,8 +267,8 @@ class TennisPredictionEngine:
                 "BANGER"
             )
 
-        # 4. TOP PICK Tier (74.0% - 81.9%, or >=82% in Challengers)
-        if fav_prob >= 0.74:
+        # 4. TOP PICK Tier (73.0% - 79.9%, ELO gap >= 170 pts, or >= 80% in Challengers)
+        if fav_prob >= 0.73 and (abs(elo_diff) >= 170.0 or is_challenger):
             return (
                 "match_winner",
                 f"{fav_name} Win",
@@ -255,8 +276,8 @@ class TennisPredictionEngine:
                 "TOP PICK"
             )
 
-        # 5. HIGH CONFIDENCE Tier (68.0% - 73.9%)
-        if fav_prob >= 0.68:
+        # 5. HIGH CONFIDENCE Tier (66.0% - 72.9%, ELO gap >= 80 pts)
+        if fav_prob >= 0.66 and abs(elo_diff) >= 80.0:
             return (
                 "match_winner",
                 f"{fav_name} Win",
@@ -264,7 +285,7 @@ class TennisPredictionEngine:
                 "HIGH CONFIDENCE"
             )
 
-        # 6. MID CONFIDENCE Tier (60.0% - 67.9%)
+        # 6. MID CONFIDENCE Tier (58.0% - 65.9%)
         return (
             "match_winner",
             f"{fav_name} Win",
@@ -308,15 +329,17 @@ class TennisPredictionEngine:
         self,
         limit: int = 500,
         fixtures: Optional[List[Dict[str, Any]]] = None,
-        dry_run: bool = False
+        dry_run: bool = False,
+        min_kickoff: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Queries upcoming scheduled fixtures from Supabase (or uses provided fixtures)
         and publishes fresh predictions.
         """
         if fixtures is None:
-            # Query upcoming scheduled fixtures (exclude fixtures older than 30 minutes)
-            min_kickoff = (datetime.now(timezone.utc) - timedelta(minutes=30)).isoformat()
+            # Query upcoming scheduled fixtures (include fixtures from past 6 hours to handle tennis delays)
+            if not min_kickoff:
+                min_kickoff = (datetime.now(timezone.utc) - timedelta(hours=6)).isoformat()
             resp = self.db.client.get(
                 "/tennis_fixtures",
                 params={
