@@ -60,6 +60,27 @@ export function onGoogleAuthError(cb: AuthErrorCallback) {
   };
 }
 
+let currentRawNonce: string | null = null;
+
+async function generateAndHashNonce(): Promise<{ raw: string; hashed: string } | null> {
+  try {
+    if (typeof window === 'undefined' || !window.crypto?.subtle) {
+      return null;
+    }
+    const raw = crypto.randomUUID();
+    const encoder = new TextEncoder();
+    const encoded = encoder.encode(raw);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', encoded);
+    const hashed = Array.from(new Uint8Array(hashBuffer))
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('');
+    return { raw, hashed };
+  } catch (err) {
+    console.warn('Nonce generation fallback:', err);
+    return null;
+  }
+}
+
 /**
  * Handle Google credential (ID token) returned directly from Google Identity Services (GIS).
  * Exchanges the token via Supabase signInWithIdToken, completely bypassing the Supabase URL
@@ -76,6 +97,7 @@ export async function handleGoogleCredentialResponse(response: { credential: str
     const { data, error } = await supabase.auth.signInWithIdToken({
       provider: 'google',
       token: response.credential,
+      ...(currentRawNonce ? { nonce: currentRawNonce } : {}),
     });
 
     if (error) {
@@ -100,18 +122,24 @@ export function initGoogleIdentityServices(): Promise<boolean> {
       return resolve(false);
     }
 
-    const setup = () => {
+    const setup = async () => {
       if (!window.google?.accounts?.id) {
         return resolve(false);
       }
 
       if (!isInitialized) {
+        const nonceData = await generateAndHashNonce();
+        if (nonceData) {
+          currentRawNonce = nonceData.raw;
+        }
+
         window.google.accounts.id.initialize({
           client_id: GOOGLE_CLIENT_ID,
           callback: handleGoogleCredentialResponse,
           auto_select: false,
           cancel_on_tap_outside: true,
           context: 'signin',
+          ...(nonceData?.hashed ? { nonce: nonceData.hashed } : {}),
         });
         isInitialized = true;
       }
