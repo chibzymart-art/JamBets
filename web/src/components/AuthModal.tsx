@@ -87,6 +87,17 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
+  // Synchronize mode with initialMode and reset status on open
+  React.useEffect(() => {
+    if (isOpen) {
+      setMode(initialMode);
+      setErrorMessage(null);
+      setSuccessMessage(null);
+      setQueueNotice(null);
+      setLoading(false);
+    }
+  }, [isOpen, initialMode]);
+
   if (!isOpen) return null;
 
   const handleGoogleSignIn = async () => {
@@ -115,7 +126,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     } catch (err: any) {
       console.error('Google OAuth error:', err);
       const msg = err.message || '';
-      if (msg.toLowerCase().includes('rate limit') || msg.toLowerCase().includes('too many requests')) {
+      if (msg.toLowerCase().includes('provider is not enabled') || msg.toLowerCase().includes('unsupported provider')) {
+        setErrorMessage('Google Sign-In is configured in the application! To complete live activation, enable the Google provider in your Supabase Dashboard (Authentication → Providers → Google).');
+      } else if (msg.toLowerCase().includes('rate limit') || msg.toLowerCase().includes('too many requests')) {
         setErrorMessage('Server is receiving unusually high traffic. Please wait a moment and try again.');
       } else {
         setErrorMessage(msg || 'Failed to initiate Google authentication. Please try again.');

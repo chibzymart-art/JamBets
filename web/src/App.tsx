@@ -89,7 +89,12 @@ export default function App() {
       }
     } catch (err: any) {
       console.error('Google OAuth error:', err);
-      alert(err.message || 'Failed to initiate Google authentication. Please try again.');
+      const msg = err?.message || '';
+      if (msg.toLowerCase().includes('provider is not enabled') || msg.toLowerCase().includes('unsupported provider')) {
+        alert('Google Sign-In is configured in the application! To complete live activation, enable the Google provider in your Supabase Dashboard under Authentication → Providers → Google.');
+      } else {
+        alert(msg || 'Failed to initiate Google authentication. Please try again.');
+      }
     }
   };
 
