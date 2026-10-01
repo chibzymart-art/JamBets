@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useRef, Fragment } from 'react';
 import { Routes, Route, Navigate, useNavigate, useLocation, Link } from 'react-router-dom';
 import { supabase } from './lib/supabase';
+import { initGoogleIdentityServices, promptGoogleOneTap } from './lib/googleAuth';
 import {
   QueueFixture,
   FootballPrediction,
@@ -71,31 +72,11 @@ export default function App() {
     } catch {}
   };
 
-  const handleGoogleSignIn = async () => {
-    try {
-      const redirectTo = `${window.location.origin}${window.location.pathname === '/' ? '/dashboard' : window.location.pathname}`;
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo,
-          queryParams: {
-            access_type: 'offline',
-            prompt: 'select_account',
-          },
-        },
-      });
-      if (error) {
-        throw error;
-      }
-    } catch (err: any) {
-      console.error('Google OAuth error:', err);
-      const msg = err?.message || '';
-      if (msg.toLowerCase().includes('provider is not enabled') || msg.toLowerCase().includes('unsupported provider')) {
-        alert('Google Sign-In is configured in the application! To complete live activation, enable the Google provider in your Supabase Dashboard under Authentication → Providers → Google.');
-      } else {
-        alert(msg || 'Failed to initiate Google authentication. Please try again.');
-      }
-    }
+  const handleGoogleSignIn = () => {
+    // Trigger Google Identity Services One Tap prompt natively on Oddsbanta, and open modal with branded button
+    promptGoogleOneTap();
+    setAuthModalMode('signin');
+    setIsAuthModalOpen(true);
   };
 
   // Authoritative Cloud Data State
@@ -113,9 +94,10 @@ export default function App() {
   }
 
 
-  // Remove any legacy theme attributes to guarantee permanent light mode & init attribution tracking
+  // Remove any legacy theme attributes to guarantee permanent light mode & init attribution & GIS
   useEffect(() => {
     initAttributionTracker();
+    initGoogleIdentityServices();
     document.documentElement.removeAttribute('data-theme');
     document.body.removeAttribute('data-theme');
     try {

@@ -4746,6 +4746,18 @@ body {
   margin-bottom: 12px;
 }
 
+.gis-btn-wrapper {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  min-height: 44px;
+}
+
+.gis-btn-wrapper iframe {
+  margin: 0 auto !important;
+}
+
 .google-oauth-btn {
   width: 100%;
   padding: 12px 18px;
