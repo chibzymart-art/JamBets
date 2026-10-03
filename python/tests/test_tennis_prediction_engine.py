@@ -110,6 +110,59 @@ class TestTennisPredictionEngine(unittest.TestCase):
         self.assertEqual(tier, "TOP PICK")
         self.assertNotEqual(tier, "BANGER")
 
+    def test_secondary_predictions_non_duplicate_and_distinct(self):
+        # Secondary predictions must never duplicate match_winner and must contain 4 distinct markets
+        engine = TennisPredictionEngine(simulations_count=10000)
+        fix = {
+            "id": "fix_test_sec_preds",
+            "target_kickoff_at": "2026-10-04T12:00:00Z",
+            "best_of_sets": 3,
+            "tournament": {"name": "Madrid Open", "surface": "clay", "court_pace_index": 30.0, "category": "1000", "tour": "ATP"},
+            "player1": {"display_name": "Carlos Alcaraz", "clay_elo": 2350.0, "current_rank": 2},
+            "player2": {"display_name": "Dominic Thiem", "clay_elo": 1850.0, "current_rank": 110}
+        }
+        pred = engine.generate_prediction_for_fixture(fix)
+        self.assertIsNotNone(pred)
+        sec = pred["secondary_predictions"]
+        self.assertEqual(len(sec), 4)
+
+        markets = [s["market"] for s in sec]
+        self.assertIn("game_handicap", markets)
+        self.assertIn("first_set_winner", markets)
+        self.assertIn("set_handicap", markets)
+        self.assertIn("total_games_over_under", markets)
+        self.assertNotIn("match_winner", markets)
+
+        # Confirm non-static probabilities (not 0.63, not 0.885)
+        for s in sec:
+            self.assertGreaterEqual(s["probability"], 0.50)
+            self.assertLessEqual(s["probability"], 0.90)
+            self.assertNotEqual(s["probability"], 0.63)
+
+    def test_no_safe_banker_produces_real_secondary_predictions(self):
+        # When primary is NO_SAFE_BANKER (unranked / coin-flip), secondary predictions must be real-time predicted
+        engine = TennisPredictionEngine(simulations_count=10000)
+        fix = {
+            "id": "fix_test_unranked_volatile",
+            "target_kickoff_at": "2026-10-04T14:00:00Z",
+            "best_of_sets": 3,
+            "tournament": {"name": "Antwerp Open", "surface": "hard_indoor", "court_pace_index": 38.0, "category": "250", "tour": "ATP"},
+            "player1": {"display_name": "Arthur Rinderknech", "hard_elo": 1750.0, "current_rank": 65},
+            "player2": {"display_name": "Unranked Challenger", "hard_elo": 1700.0, "current_rank": None}
+        }
+        pred = engine.generate_prediction_for_fixture(fix)
+        self.assertIsNotNone(pred)
+        self.assertEqual(pred["confidence_category"], "NO_SAFE_BANKER")
+        self.assertEqual(pred["market"], "NO_SAFE_BANKER")
+
+        sec = pred["secondary_predictions"]
+        self.assertEqual(len(sec), 4)
+        for s in sec:
+            self.assertGreaterEqual(s["probability"], 0.50)
+            self.assertLessEqual(s["probability"], 0.88)
+            # Must have non-empty prediction label
+            self.assertTrue(len(s["prediction"]) > 0)
+
 
 if __name__ == "__main__":
     unittest.main()

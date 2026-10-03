@@ -40,11 +40,27 @@ class TennisEloEngine:
     """
 
     @staticmethod
-    def calculate_baseline_elo(rank: Optional[int], points: Optional[float] = None) -> float:
+    def calculate_baseline_elo(
+        rank: Optional[int],
+        points: Optional[float] = None,
+        tournament: Optional[Dict[str, Any]] = None
+    ) -> float:
         """
-        Derives an initial surface baseline ELO from global ranking and points.
+        Derives an initial surface baseline ELO from global ranking and tournament tier.
+        For unranked players, applies Bayesian tournament-tier priors:
+        - Grand Slam / Masters 1000: 1520.0 (Elite qualifier / wildcard caliber)
+        - ATP/WTA 250 / 500: 1450.0 (Standard tour level)
+        - Challenger / ITF: 1380.0 (Challenger / ITF circuit entrant)
         """
         if not rank or rank <= 0:
+            if tournament:
+                tour = str(tournament.get("tour") or "").upper()
+                cat = str(tournament.get("category") or "").upper()
+                name = str(tournament.get("name") or "").upper()
+                if any(k in tour or k in cat or k in name for k in ("GRAND SLAM", "1000", "MASTERS", "WIMBLEDON", "ROLAND", "US OPEN", "AUSTRALIAN OPEN")):
+                    return 1520.0
+                elif any(k in cat or k in tour for k in ("CH", "125", "CHALLENGER", "ITF", "FUTURES")):
+                    return 1380.0
             return 1450.0
 
         if rank == 1:
@@ -65,11 +81,17 @@ class TennisEloEngine:
             return max(1350.0, 1475.0 - (rank - 200) * 0.5)
 
     @classmethod
-    def get_surface_elos(cls, canonical_name: str, rank: Optional[int], points: Optional[float] = None) -> Dict[str, float]:
+    def get_surface_elos(
+        cls,
+        canonical_name: str,
+        rank: Optional[int],
+        points: Optional[float] = None,
+        tournament: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, float]:
         """
         Calculates surface-specific ELOs for Hard, Clay, Grass, and Indoor courts.
         """
-        base_elo = cls.calculate_baseline_elo(rank, points)
+        base_elo = cls.calculate_baseline_elo(rank, points, tournament=tournament)
         c_name = canonical_name.lower().strip()
 
         hard_elo = base_elo

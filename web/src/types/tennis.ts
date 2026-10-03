@@ -125,8 +125,9 @@ export interface TennisSecondaryPrediction {
   market: TennisMarket;
   pick?: string;
   prediction?: string;
-  probability: number;
+  probability: number | null;
   tier?: TennisConfidenceTier;
+  locked?: boolean;
 }
 
 export interface TennisPrediction {

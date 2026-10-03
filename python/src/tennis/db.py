@@ -164,18 +164,21 @@ class TennisDbClient:
         total_games: int,
         was_retired: bool = False,
         was_walkover: bool = False,
-        actual_result: Optional[str] = None
+        actual_result: Optional[str] = None,
+        secondary_predictions: Optional[List[Dict[str, Any]]] = None
     ) -> Dict[str, Any]:
         now_iso = datetime.now(timezone.utc).isoformat()
 
         # 1. Update tennis_predictions table
-        pred_update = {
+        pred_update: Dict[str, Any] = {
             "settlement_status": status,
             "settlement_notes": notes,
             "settled_at": now_iso
         }
         if actual_result:
             pred_update["actual_result"] = actual_result
+        if secondary_predictions is not None:
+            pred_update["secondary_predictions"] = secondary_predictions
         self.client.patch("/tennis_predictions", json=pred_update, params={"id": f"eq.{prediction_id}"})
 
         # 2. Audit record in tennis_settlements table

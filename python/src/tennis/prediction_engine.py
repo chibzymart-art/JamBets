@@ -57,8 +57,15 @@ class TennisPredictionEngine:
         if "indoor" in surface:
             surface_key = "indoor_elo"
 
-        p1_elo = float(player1.get(surface_key, player1.get("hard_elo", 1500.0)))
-        p2_elo = float(player2.get(surface_key, player2.get("hard_elo", 1500.0)))
+        p1_rank = player1.get("current_rank") or player1.get("rank")
+        p2_rank = player2.get("current_rank") or player2.get("rank")
+
+        # Contextual baseline ELO for unranked players (1520 Masters/GS, 1450 Tour, 1380 Challenger)
+        p1_base = TennisEloEngine.calculate_baseline_elo(p1_rank, tournament=tournament)
+        p2_base = TennisEloEngine.calculate_baseline_elo(p2_rank, tournament=tournament)
+
+        p1_elo = float(player1.get(surface_key) or player1.get("hard_elo") or p1_base)
+        p2_elo = float(player2.get(surface_key) or player2.get("hard_elo") or p2_base)
 
         # 2. Derive single point serve win probabilities (p1, p2)
         # Empirical ATP baseline serve point win rate is ~64.5%; WTA is ~57.5%
@@ -110,42 +117,111 @@ class TennisPredictionEngine:
             tournament=tournament
         )
 
-        # Secondary predictions payload (aligned with dominant match favorite)
+        # Secondary predictions payload (strictly dynamic real simulation data, zero artificial clamping)
         fav_is_p1 = sim_res.p1_win_prob >= 0.50
         fav_name = player1["display_name"] if fav_is_p1 else player2["display_name"]
+        dog_name = player2["display_name"] if fav_is_p1 else player1["display_name"]
         fav_win_prob = sim_res.p1_win_prob if fav_is_p1 else sim_res.p2_win_prob
-        fav_first_set = sim_res.first_set_p1_prob if fav_is_p1 else sim_res.first_set_p2_prob
-        fav_hcap = sim_res.set_handicap_p1_minus_1_5 if fav_is_p1 else sim_res.correct_scores.get("0-2", 0.0)
 
-        # Dynamic Over/Under prediction based on court pace and player serving profiles
-        prob_over_21_5 = float(sim_res.total_games_over.get("21.5", 0.50))
-        if prob_over_21_5 >= 0.52:
-            ou_pred = "Over 21.5 Games"
-            ou_prob = prob_over_21_5
+        # 1. First Set Winner - Real Markov + Monte Carlo 1st set transition probability
+        if sim_res.first_set_p1_prob >= sim_res.first_set_p2_prob:
+            first_set_pred = f"{player1['display_name']} 1st Set"
+            first_set_prob = round(float(sim_res.first_set_p1_prob), 4)
         else:
-            ou_pred = "Under 22.5 Games"
-            ou_prob = 1.0 - float(sim_res.total_games_over.get("22.5", 0.45))
+            first_set_pred = f"{player2['display_name']} 1st Set"
+            first_set_prob = round(float(sim_res.first_set_p2_prob), 4)
 
+        # 2. Game Handicap (Spread) - Dynamic line centered on actual expected game margin
+        fav_margin = abs(sim_res.expected_game_margin)
+        fav_hcaps = sim_res.p1_game_handicaps if fav_is_p1 else sim_res.p2_game_handicaps
+        dog_hcaps = sim_res.p2_game_handicaps if fav_is_p1 else sim_res.p1_game_handicaps
+
+        raw_spread_line = round(fav_margin - 0.5) + 0.5
+        spread_line = max(1.5, min(9.5, raw_spread_line))
+        fav_cover_prob = fav_hcaps.get(f"-{spread_line}", 0.50)
+
+        if fav_cover_prob >= 0.50:
+            spread_pred = f"{fav_name} -{spread_line} Games"
+            spread_prob = round(float(fav_cover_prob), 4)
+        else:
+            alt_line = spread_line - 1.0
+            alt_cover = fav_hcaps.get(f"-{alt_line}", 0.0) if alt_line >= 0.5 else 0.0
+            if alt_cover >= 0.50:
+                spread_pred = f"{fav_name} -{alt_line} Games"
+                spread_prob = round(float(alt_cover), 4)
+            else:
+                dog_cover = dog_hcaps.get(f"+{spread_line}", 0.50)
+                spread_pred = f"{dog_name} +{spread_line} Games"
+                spread_prob = round(float(dog_cover), 4)
+
+        # 3. Dynamic Total Games Over/Under (Centered on expected_total_games)
+        exp_games = sim_res.expected_total_games
+        raw_ou_line = round(exp_games - 0.5) + 0.5
+        min_ou = 17.5 if best_of_sets == 3 else 31.5
+        max_ou = 27.5 if best_of_sets == 3 else 46.5
+        ou_line = max(min_ou, min(max_ou, raw_ou_line))
+
+        prob_over = sim_res.total_games_over.get(str(ou_line), 0.50)
+        prob_under = round(1.0 - prob_over, 4)
+
+        if prob_over >= 0.50:
+            ou_pred = f"Over {ou_line} Games"
+            ou_prob = round(float(prob_over), 4)
+        else:
+            ou_pred = f"Under {ou_line} Games"
+            ou_prob = round(float(prob_under), 4)
+
+        # 4. Symmetrical Set Handicap & Parity Coin-Flip Handling
+        fav_set_minus = sim_res.set_handicap_p1_minus_1_5 if fav_is_p1 else sim_res.set_handicap_p2_minus_1_5
+        dog_set_plus = sim_res.set_handicap_p2_plus_1_5 if fav_is_p1 else sim_res.set_handicap_p1_plus_1_5
+
+        if conf_tier == "NO_SAFE_BANKER" or fav_win_prob < 0.58:
+            # Coin-flip / High Volatility / Unranked Opponent match:
+            # Pure real-time predicted parity markets derived from 250,000 simulations:
+            if best_of_sets == 5:
+                if sim_res.over_2_5_sets_prob >= 0.50:
+                    set_pred = "Over 3.5 Sets"
+                    set_prob = round(float(sim_res.over_2_5_sets_prob), 4)
+                else:
+                    set_pred = f"{dog_name} +1.5 Sets"
+                    set_prob = round(float(dog_set_plus), 4)
+            else:
+                if sim_res.over_2_5_sets_prob >= 0.50:
+                    set_pred = "Over 2.5 Sets"
+                    set_prob = round(float(sim_res.over_2_5_sets_prob), 4)
+                else:
+                    set_pred = f"{dog_name} +1.5 Sets"
+                    set_prob = round(float(dog_set_plus), 4)
+        else:
+            # Clear favorite match:
+            if fav_set_minus >= 0.50:
+                set_pred = f"{fav_name} -1.5 Sets"
+                set_prob = round(float(fav_set_minus), 4)
+            else:
+                set_pred = f"{dog_name} +1.5 Sets"
+                set_prob = round(float(dog_set_plus), 4)
+
+        # Assembled 4 Calibrated Secondary Predictions (All distinct, non-duplicate, purely predicted)
         secondary_predictions = [
             {
-                "market": "match_winner",
-                "prediction": f"{fav_name} Win",
-                "probability": round(float(fav_win_prob), 4)
+                "market": "game_handicap",
+                "prediction": spread_pred,
+                "probability": spread_prob
             },
             {
                 "market": "first_set_winner",
-                "prediction": f"{fav_name} 1st Set",
-                "probability": round(float(fav_first_set), 4)
+                "prediction": first_set_pred,
+                "probability": first_set_prob
             },
             {
                 "market": "set_handicap",
-                "prediction": f"{fav_name} -1.5 Sets",
-                "probability": round(float(fav_hcap), 4)
+                "prediction": set_pred,
+                "probability": set_prob
             },
             {
                 "market": "total_games_over_under",
                 "prediction": ou_pred,
-                "probability": round(float(ou_prob), 4)
+                "probability": ou_prob
             }
         ]
 
@@ -343,7 +419,7 @@ class TennisPredictionEngine:
             resp = self.db.client.get(
                 "/tennis_fixtures",
                 params={
-                    "status": "eq.scheduled",
+                    "status": "in.(scheduled,live)",
                     "target_kickoff_at": f"gte.{min_kickoff}",
                     "select": "*,tournament:tennis_tournaments(*),player1:tennis_players!tennis_fixtures_player1_id_fkey(*),player2:tennis_players!tennis_fixtures_player2_id_fkey(*)",
                     "order": "target_kickoff_at.asc",

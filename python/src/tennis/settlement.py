@@ -152,13 +152,13 @@ class TennisSettlementEngine:
         actual_res = f"{winner_name} won {winner_sets}-{loser_sets} ({scoreline})"
 
         # A. NO SAFE BANKER
-        if market == "NO_SAFE_BANKER":
+        if market == "NO_SAFE_BANKER" or prediction_text.startswith("NO SAFE BANKER"):
             return "void", "Advisory pick marked as NO_SAFE_BANKER; resolved as non-wagering void.", actual_res
 
         # B. MATCH WINNER
         if market == "match_winner":
-            p1_predicted = p1_name.lower() in prediction_text.lower() or "player 1" in prediction_text.lower()
-            p2_predicted = p2_name.lower() in prediction_text.lower() or "player 2" in prediction_text.lower()
+            p1_predicted = (p1_name.lower() in prediction_text.lower()) or ("player 1" in prediction_text.lower())
+            p2_predicted = (p2_name.lower() in prediction_text.lower()) or ("player 2" in prediction_text.lower())
 
             if p1_predicted and winner_id == fixture.get("player1_id"):
                 return "won", f"{p1_name} won match in full ({scoreline}).", actual_res
@@ -167,10 +167,10 @@ class TennisSettlementEngine:
             else:
                 return "lost", f"{loser_name} defeated by {winner_name} ({scoreline}).", actual_res
 
-        # C. SET HANDICAP (-1.5 / +1.5)
+        # C. SET HANDICAP (-1.5 / +1.5 / -2.5 / +2.5 / Over 2.5 Sets)
         if market == "set_handicap":
             if "-1.5" in prediction_text:
-                fav_p1 = p1_name.lower() in prediction_text.lower()
+                fav_p1 = (p1_name.lower() in prediction_text.lower()) or ("player 1" in prediction_text.lower())
                 fav_sets = p1_sets if fav_p1 else p2_sets
                 dog_sets = p2_sets if fav_p1 else p1_sets
                 if fav_sets - dog_sets > 1.5:  # e.g. 2-0 (diff 2) or 3-0 / 3-1
@@ -178,19 +178,58 @@ class TennisSettlementEngine:
                 else:
                     return "lost", f"Favorite failed to cover -1.5 sets margin ({fav_sets}-{dog_sets}).", actual_res
             elif "+1.5" in prediction_text:
-                dog_p1 = p1_name.lower() in prediction_text.lower()
+                dog_p1 = (p1_name.lower() in prediction_text.lower()) or ("player 1" in prediction_text.lower())
                 dog_sets = p1_sets if dog_p1 else p2_sets
                 if dog_sets >= 1:
                     return "won", f"Underdog won at least 1 set (+1.5 covered).", actual_res
                 else:
                     return "lost", f"Underdog failed to win a set (lost in straight sets).", actual_res
+            elif "-2.5" in prediction_text:
+                fav_p1 = (p1_name.lower() in prediction_text.lower()) or ("player 1" in prediction_text.lower())
+                fav_sets = p1_sets if fav_p1 else p2_sets
+                dog_sets = p2_sets if fav_p1 else p1_sets
+                if fav_sets - dog_sets > 2.5:  # e.g. 3-0 in Bo5
+                    return "won", f"Favorite covered -2.5 sets margin ({fav_sets}-{dog_sets}).", actual_res
+                else:
+                    return "lost", f"Favorite failed to cover -2.5 sets margin ({fav_sets}-{dog_sets}).", actual_res
+            elif "+2.5" in prediction_text:
+                dog_p1 = (p1_name.lower() in prediction_text.lower()) or ("player 1" in prediction_text.lower())
+                dog_sets = p1_sets if dog_p1 else p2_sets
+                if dog_sets >= 1:
+                    return "won", f"Underdog won at least 1 set (+2.5 covered).", actual_res
+                else:
+                    return "lost", f"Underdog failed to win a set (lost 3-0 in straight sets).", actual_res
+            elif "2.5" in prediction_text:
+                total_sets_played = p1_sets + p2_sets
+                if "Over" in prediction_text:
+                    if total_sets_played >= 3:
+                        return "won", f"Match went to deciding 3rd set ({total_sets_played} sets played).", actual_res
+                    else:
+                        return "lost", f"Match concluded in straight sets ({total_sets_played} sets played).", actual_res
+                elif "Under" in prediction_text:
+                    if total_sets_played < 3:
+                        return "won", f"Match concluded in straight sets ({total_sets_played} sets played).", actual_res
+                    else:
+                        return "lost", f"Match went to deciding 3rd set ({total_sets_played} sets played).", actual_res
+            elif "3.5" in prediction_text:
+                total_sets_played = p1_sets + p2_sets
+                if "Over" in prediction_text:
+                    if total_sets_played >= 4:
+                        return "won", f"Grand Slam Bo5 match went to 4+ sets ({total_sets_played} sets played).", actual_res
+                    else:
+                        return "lost", f"Grand Slam Bo5 match concluded 3-0 in straight sets.", actual_res
+                elif "Under" in prediction_text:
+                    if total_sets_played < 4:
+                        return "won", f"Grand Slam Bo5 match concluded 3-0 in straight sets.", actual_res
+                    else:
+                        return "lost", f"Grand Slam Bo5 match reached 4+ sets ({total_sets_played} sets played).", actual_res
 
-        # D. GAME HANDICAP
+        # D. GAME HANDICAP (Spread)
         if market == "game_handicap":
-            hcap_match = re.search(r"([+-]?\d+\.?\d*)", prediction_text)
+            hcap_match = re.search(r"([+-]\d+\.?\d*)", prediction_text) or re.search(r"(\d+\.?\d*)\s*Games?", prediction_text, re.IGNORECASE)
             if hcap_match:
                 hcap = float(hcap_match.group(1))
-                is_p1_handicap = p1_name.lower() in prediction_text.lower()
+                is_p1_handicap = (p1_name.lower() in prediction_text.lower()) or ("player 1" in prediction_text.lower())
                 net_margin = (p1_games - p2_games) if is_p1_handicap else (p2_games - p1_games)
                 if net_margin + hcap > 0:
                     return "won", f"Game handicap {hcap:+} covered with net margin {net_margin:+}.", actual_res
@@ -201,7 +240,7 @@ class TennisSettlementEngine:
 
         # E. TOTAL GAMES OVER / UNDER
         if market == "total_games_over_under":
-            line_match = re.search(r"(\d+\.?\d*)", prediction_text)
+            line_match = re.search(r"(?:Over|Under)\s*(\d+\.?\d*)", prediction_text, re.IGNORECASE) or re.search(r"(\d+\.?\d*)\s*Games?", prediction_text, re.IGNORECASE)
             if line_match:
                 line = float(line_match.group(1))
                 if "Over" in prediction_text:
@@ -222,14 +261,41 @@ class TennisSettlementEngine:
                 if len(clean_s1) == 2:
                     s1_g1, s1_g2 = int(clean_s1[0]), int(clean_s1[1])
                     s1_p1_won = s1_g1 > s1_g2
-                    predicted_p1 = p1_name.lower() in prediction_text.lower()
-                    if (predicted_p1 and s1_p1_won) or (not predicted_p1 and not s1_p1_won):
+                    predicted_p1 = (p1_name.lower() in prediction_text.lower()) or ("player 1" in prediction_text.lower())
+                    predicted_p2 = (p2_name.lower() in prediction_text.lower()) or ("player 2" in prediction_text.lower())
+                    if (predicted_p1 and s1_p1_won) or (predicted_p2 and not s1_p1_won):
+                        return "won", f"First set won ({set_scores[0]}).", actual_res
+                    elif (predicted_p1 and not s1_p1_won) or (predicted_p2 and s1_p1_won):
+                        return "lost", f"First set lost ({set_scores[0]}).", actual_res
+                    elif s1_p1_won:
                         return "won", f"First set won ({set_scores[0]}).", actual_res
                     else:
                         return "lost", f"First set lost ({set_scores[0]}).", actual_res
 
         # Fallback default
         return "void", "Unsettled or unknown market configuration.", actual_res
+
+    @classmethod
+    def evaluate_secondary_predictions(
+        cls,
+        secondary_predictions: List[Dict[str, Any]],
+        fixture: Dict[str, Any]
+    ) -> List[Dict[str, Any]]:
+        """
+        Evaluates each secondary prediction against the completed fixture.
+        Returns the secondary_predictions list with settlement_status and settlement_notes annotated.
+        """
+        settled_secs = []
+        for sec in (secondary_predictions or []):
+            sec_copy = dict(sec)
+            m = sec_copy.get("market")
+            p_text = sec_copy.get("prediction") or sec_copy.get("pick") or ""
+            if m and p_text:
+                status, notes, _ = cls.evaluate_prediction(m, p_text, fixture)
+                sec_copy["settlement_status"] = status
+                sec_copy["settlement_notes"] = notes
+            settled_secs.append(sec_copy)
+        return settled_secs
 
     def run_precision_settlement_cycle(
         self,
@@ -372,6 +438,7 @@ class TennisSettlementEngine:
                     prediction_text=prediction_text,
                     fixture=fix
                 )
+                settled_secs = self.evaluate_secondary_predictions(item.get("secondary_predictions") or [], fix)
                 p1_sets = int(fix.get("score_p1_sets") or 0)
                 p2_sets = int(fix.get("score_p2_sets") or 0)
                 _, _, total_games = self.parse_total_games(fix.get("set_scores") or [])
@@ -388,7 +455,8 @@ class TennisSettlementEngine:
                             total_games=total_games,
                             was_retired=(fix.get("status") == "retired"),
                             was_walkover=(fix.get("status") == "walkover"),
-                            actual_result=actual_result
+                            actual_result=actual_result,
+                            secondary_predictions=settled_secs
                         )
                         stats["settled"] += 1
                         if settlement_status == "won":
@@ -506,6 +574,7 @@ class TennisSettlementEngine:
                     prediction_text=prediction_text,
                     fixture=eval_fixture
                 )
+                settled_secs = self.evaluate_secondary_predictions(item.get("secondary_predictions") or [], eval_fixture)
 
                 p1_sets = aligned["score_p1_sets"]
                 p2_sets = aligned["score_p2_sets"]
@@ -523,7 +592,8 @@ class TennisSettlementEngine:
                             total_games=total_games,
                             was_retired=aligned["was_retired"],
                             was_walkover=aligned["was_walkover"],
-                            actual_result=actual_result
+                            actual_result=actual_result,
+                            secondary_predictions=settled_secs
                         )
                         stats["settled"] += 1
                         if settlement_status == "won":

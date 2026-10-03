@@ -114,45 +114,15 @@ export const TennisPredictionCard: React.FC<TennisPredictionCardProps> = ({
     : null;
   const scoreRating = probNum != null ? (probNum / 10).toFixed(1) : null;
 
-  // Resolve secondary predictions with robust fallback if empty in legacy DB records
+  // Resolve secondary predictions from dynamic database record or empty array
+  // Filter out legacy match_winner so secondary grid is strictly distinct derivative markets
   const displayedSecondaryPreds = useMemo(() => {
-    if (prediction.secondary_predictions && prediction.secondary_predictions.length > 0) {
-      return prediction.secondary_predictions;
-    }
-    // Fallback: build default secondary predictions so every card has Overs and Handicaps
-    const fallbackList = [];
-    const favWinProb = probNum || 75;
-
-    // 1. Total Games (Over/Under)
-    const baseOverLine = cpi >= 40 ? '22.5' : '21.5';
-    fallbackList.push({
-      market: 'total_games_over_under' as any,
-      prediction: `Over ${baseOverLine} Games`,
-      pick: `Over ${baseOverLine} Games`,
-      probability: 0.63,
-      tier: 'HIGH CONFIDENCE' as any,
+    const list = prediction.secondary_predictions || [];
+    return list.filter(sec => {
+      const m = (sec.market || '').toLowerCase();
+      return m !== 'match_winner';
     });
-
-    // 2. Set Handicap
-    fallbackList.push({
-      market: 'set_handicap' as any,
-      prediction: `${leaderName} -1.5 Sets`,
-      pick: `${leaderName} -1.5 Sets`,
-      probability: Math.min(0.85, Math.max(0.55, (favWinProb * 0.85) / 100)),
-      tier: 'TOP PICK' as any,
-    });
-
-    // 3. 1st Set Winner
-    fallbackList.push({
-      market: 'first_set_winner' as any,
-      prediction: `${leaderName} 1st Set`,
-      pick: `${leaderName} 1st Set`,
-      probability: Math.min(0.88, Math.max(0.58, (favWinProb * 0.92) / 100)),
-      tier: 'HIGH CONFIDENCE' as any,
-    });
-
-    return fallbackList;
-  }, [prediction.secondary_predictions, probNum, cpi, leaderName]);
+  }, [prediction.secondary_predictions]);
 
   const category = (tournament?.category || '250').toUpperCase();
   const round = fixture?.round;
@@ -468,7 +438,7 @@ export const TennisPredictionCard: React.FC<TennisPredictionCardProps> = ({
         <div className="tennis-expand-teaser">
           <span className="tennis-expand-teaser-dot">⚡</span>
           <span className="tennis-expand-teaser-text">
-            Secondary Markets: <strong>Overs/Unders</strong> • <strong>Set Handicap</strong> • <strong>1st Set</strong>
+            Secondary Markets: <strong>Game Spread</strong> • <strong>1st Set</strong> • <strong>Set Handicap</strong> • <strong>Total Games</strong>
           </span>
         </div>
         <div className="tennis-expand-cta-btn">
@@ -570,31 +540,32 @@ export const TennisPredictionCard: React.FC<TennisPredictionCardProps> = ({
                     </span>
                   </div>
                   <div className="sniper-prob-group">
-                    <span className="sniper-prob-val">{probPct ? `${probPct}%` : '88.5%'}</span>
+                    <span className="sniper-prob-val">{probPct ? `${probPct}%` : '--'}</span>
                     <span className="sniper-prob-label">Simulated Probability</span>
                   </div>
                 </div>
               </div>
 
-              {/* Secondary Markets Grid (Total Games Over/Under, Set Handicap, 1st Set, etc.) */}
+              {/* Secondary Markets Grid (Game Spread, 1st Set, Set Handicap, Total Games) */}
               {displayedSecondaryPreds && displayedSecondaryPreds.length > 0 && (
                 <div className="tennis-secondary-markets-section" style={{ marginTop: 14 }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
                     <span style={{ fontSize: 11.5, fontWeight: 800, color: '#334155', textTransform: 'uppercase', letterSpacing: '0.4px', display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <span>📊</span> SECONDARY PREDICTIONS & MARKETS (OVERS / HANDICAPS)
+                      <span>📊</span> SECONDARY PREDICTIONS & MARKETS (SPREAD / OVERS / HANDICAPS)
                     </span>
                     <span style={{ fontSize: 10, fontWeight: 700, color: '#059669', background: '#ecfdf5', padding: '1px 8px', borderRadius: 9999, border: '1px solid #a7f3d0' }}>
                       Markov Calibrated
                     </span>
                   </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: 10 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))', gap: 12 }}>
                     {displayedSecondaryPreds.map((sec, idx) => {
                       const marketName = (() => {
                         const m = (sec.market || '').toLowerCase();
-                        if (m.includes('total_games') || m.includes('over')) return 'Total Games';
-                        if (m.includes('set_handicap') || m.includes('handicap')) return 'Set Handicap';
+                        if (m.includes('game_handicap')) return 'Game Handicap';
                         if (m.includes('first_set') || m.includes('1st_set')) return '1st Set Winner';
+                        if (m.includes('set_handicap')) return 'Set Handicap';
+                        if (m.includes('total_games') || m.includes('over')) return 'Total Games';
                         if (m.includes('match_winner')) return 'Match Winner';
                         if (m.includes('correct_set')) return 'Correct Score';
                         return (sec.market || 'Market').replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase());
@@ -602,14 +573,16 @@ export const TennisPredictionCard: React.FC<TennisPredictionCardProps> = ({
 
                       const displayMarketTitle = (() => {
                         const m = (sec.market || '').toLowerCase();
-                        if (m.includes('total_games') || m.includes('over')) return '⚡ Total Games (Overs)';
-                        if (m.includes('set_handicap') || m.includes('handicap')) return '🎾 Set Handicap';
+                        if (m.includes('game_handicap')) return '⚡ Game Handicap (Spread)';
                         if (m.includes('first_set') || m.includes('1st_set')) return '🥇 1st Set Winner';
+                        if (m.includes('set_handicap')) return '🎾 Set Handicap';
+                        if (m.includes('total_games') || m.includes('over')) return '📊 Total Games';
                         if (m.includes('match_winner')) return '🏆 Match Winner';
                         if (m.includes('correct_set')) return '🎯 Correct Score';
                         return (sec.market || 'Market').replace(/_/g, ' ').toUpperCase();
                       })();
 
+                      const isSecLocked = Boolean((sec as any).locked || sec.probability == null);
                       const pickVal = (sec as any).prediction || sec.pick || 'Pick';
                       const probVal = sec.probability != null
                         ? Math.round(sec.probability <= 1 ? sec.probability * 100 : sec.probability)
@@ -627,42 +600,50 @@ export const TennisPredictionCard: React.FC<TennisPredictionCardProps> = ({
                             background: '#ffffff',
                             border: isSecFav ? '1.5px solid #10b981' : '1.5px solid #e2e8f0',
                             borderRadius: 10,
-                            padding: '10px 14px',
+                            padding: '12px 14px',
                             display: 'flex',
+                            flexDirection: 'column',
                             justifyContent: 'space-between',
-                            alignItems: 'center',
                             boxShadow: isSecFav ? '0 2px 8px rgba(16, 185, 129, 0.15)' : '0 1px 3px rgba(0,0,0,0.03)',
                             transition: 'all 0.15s ease',
-                            gap: 10,
+                            gap: 8,
                           }}
                         >
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: 10.5, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.2px' }}>
+                          {/* Top Header: Market Title on Left, Probability Badge on Right */}
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                            <span style={{ fontSize: 11, fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.25px', display: 'flex', alignItems: 'center', gap: 4 }}>
                               {displayMarketTitle}
-                            </div>
-                            <div style={{ fontSize: 13.5, fontWeight: 900, color: '#0f172a', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                              {pickVal}
-                            </div>
+                            </span>
+
+                            {probVal != null ? (
+                              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: probVal >= 75 ? '#ecfdf5' : '#eff6ff', border: `1px solid ${probVal >= 75 ? '#a7f3d0' : '#bfdbfe'}`, padding: '2px 8px', borderRadius: 6, flexShrink: 0 }}>
+                                <span style={{ fontSize: 12.5, fontWeight: 900, color: probVal >= 75 ? '#15803d' : '#1d4ed8' }}>
+                                  {probVal}%
+                                </span>
+                                <span style={{ fontSize: 9.5, fontWeight: 700, color: probVal >= 75 ? '#166534' : '#1e40af' }}>
+                                  Prob
+                                </span>
+                              </div>
+                            ) : isSecLocked ? (
+                              <div style={{ fontSize: 11, fontWeight: 800, color: '#d97706', background: '#fef3c7', padding: '2px 8px', borderRadius: 6, border: '1px solid #fde68a', flexShrink: 0 }}>
+                                🔒 VIP Lock
+                              </div>
+                            ) : null}
                           </div>
 
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-                            {probVal != null && (
-                              <div style={{ textAlign: 'right' }}>
-                                <div style={{ fontSize: 14, fontWeight: 900, color: probVal >= 75 ? '#16a34a' : '#2563eb' }}>
-                                  {probVal}%
-                                </div>
-                                <div style={{ fontSize: 9.5, fontWeight: 700, color: '#94a3b8' }}>
-                                  Prob
-                                </div>
-                              </div>
-                            )}
+                          {/* Bottom Row: Full Pick Name & Line in Bold without any Truncation + Add to Slip */}
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginTop: 2 }}>
+                            <div style={{ fontSize: 14, fontWeight: 900, color: '#0f172a', lineHeight: 1.35, wordBreak: 'break-word', whiteSpace: 'normal', flex: 1 }}>
+                              {pickVal}
+                            </div>
 
-                            {onToggleFavorite && (
+                            {onToggleFavorite && !isSecLocked && (
                               <button
                                 type="button"
                                 className={`secondary-card-fav-btn ${isSecFav ? 'active' : ''}`}
                                 onClick={(e) => handleSecondaryFavoriteToggle(e, sec, marketName, pickVal, probVal)}
                                 title={isSecFav ? 'Remove from slip' : 'Add to slip'}
+                                style={{ flexShrink: 0 }}
                               >
                                 {isSecFav ? '✓ IN SLIP' : '+ ADD TO SLIP'}
                               </button>
@@ -693,7 +674,7 @@ export const TennisPredictionCard: React.FC<TennisPredictionCardProps> = ({
                     {p1DisplayName.split(' ').pop()} Hold Est.
                   </div>
                   <div style={{ fontSize: 14, fontWeight: 800, color: '#0f172a', marginTop: 2 }}>
-                    {Math.round((markov?.p_hold_player1 || 0.82) * 100)}% • {p1Elo} ELO
+                    {markov?.p_hold_player1 != null ? `${Math.round(markov.p_hold_player1 * 100)}% • ${p1Elo} ELO` : `${p1Elo} ELO`}
                   </div>
                 </div>
                 <div>
@@ -701,7 +682,7 @@ export const TennisPredictionCard: React.FC<TennisPredictionCardProps> = ({
                     {p2DisplayName.split(' ').pop()} Hold Est.
                   </div>
                   <div style={{ fontSize: 14, fontWeight: 800, color: '#0f172a', marginTop: 2 }}>
-                    {Math.round((markov?.p_hold_player2 || 0.8) * 100)}% • {p2Elo} ELO
+                    {markov?.p_hold_player2 != null ? `${Math.round(markov.p_hold_player2 * 100)}% • ${p2Elo} ELO` : `${p2Elo} ELO`}
                   </div>
                 </div>
                 <div>
@@ -709,7 +690,9 @@ export const TennisPredictionCard: React.FC<TennisPredictionCardProps> = ({
                     Dominance Ratio (DR)
                   </div>
                   <div style={{ fontSize: 14, fontWeight: 800, color: '#0f172a', marginTop: 2 }}>
-                    {(markov?.dominance_ratio_player1 || 1.15).toFixed(2)} vs {(markov?.dominance_ratio_player2 || 0.92).toFixed(2)}
+                    {markov?.dominance_ratio_player1 != null && markov?.dominance_ratio_player2 != null
+                      ? `${markov.dominance_ratio_player1.toFixed(2)} vs ${markov.dominance_ratio_player2.toFixed(2)}`
+                      : '-- vs --'}
                   </div>
                 </div>
               </div>

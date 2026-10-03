@@ -16,7 +16,10 @@ import httpx
 from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional
 from .base import BaseTennisScraper
-from python.src.tennis.tournament_normalizer import TournamentNormalizer
+try:
+    from ..tournament_normalizer import TournamentNormalizer
+except (ImportError, ValueError):
+    from python.src.tennis.tournament_normalizer import TournamentNormalizer
 
 import unicodedata
 

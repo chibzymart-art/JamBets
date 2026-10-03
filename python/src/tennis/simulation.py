@@ -28,13 +28,19 @@ class SimulationResults:
     first_set_p2_prob: float
     expected_total_games: float
     expected_game_margin: float
-    set_handicap_p1_minus_1_5: float  # P1 wins in straight sets (2-0)
-    set_handicap_p2_plus_1_5: float   # P2 wins at least 1 set
+    set_handicap_p1_minus_1_5: float  # P1 wins by >= 1.5 sets (2-0 in Bo3, 3-0/3-1 in Bo5)
+    set_handicap_p2_plus_1_5: float   # P2 covers +1.5 sets (wins >= 1 set in Bo3, >= 2 sets in Bo5)
     game_handicaps: Dict[str, float]  # e.g. "-2.5": 0.654, "-3.5": 0.582
     total_games_over: Dict[str, float]  # e.g. "21.5": 0.523, "22.5": 0.441
     correct_scores: Dict[str, float]  # e.g. "2-0": 0.475, "2-1": 0.295
     p1_hold_rate: float
     p2_hold_rate: float
+    # Symmetrical set handicaps & parity markets
+    set_handicap_p2_minus_1_5: float = 0.0  # P2 wins by >= 1.5 sets
+    set_handicap_p1_plus_1_5: float = 0.0   # P1 covers +1.5 sets
+    over_2_5_sets_prob: float = 0.0         # Both players win at least 1 set
+    p1_game_handicaps: Dict[str, float] = field(default_factory=dict)
+    p2_game_handicaps: Dict[str, float] = field(default_factory=dict)
 
 
 class TennisMonteCarloSimulator:
@@ -53,7 +59,7 @@ class TennisMonteCarloSimulator:
         num_simulations: int = 250000
     ) -> SimulationResults:
         """
-        Executes N Monte Carlo match simulations.
+        Executes N Monte Carlo match simulations with symmetrical set & game margins.
         """
         # Analytical game and tiebreak transition probabilities
         p1_hold = TennisMarkovModel.game_hold_probability(p1_serve_pt)
@@ -68,6 +74,8 @@ class TennisMonteCarloSimulator:
         p1_match_wins = 0
         p1_first_set_wins = 0
         p1_set_margin_minus_1_5 = 0
+        p2_set_margin_minus_1_5 = 0
+        both_players_won_set_count = 0
         total_games_list = np.zeros(n, dtype=np.int32)
         game_margins_list = np.zeros(n, dtype=np.int32)
         correct_score_counts: Dict[str, int] = {}
@@ -116,11 +124,17 @@ class TennisMonteCarloSimulator:
             p1_won_match = p1_sets == sets_needed
             p1_match_wins += np.count_nonzero(p1_won_match)
 
-            # Set handicap -1.5 (P1 wins in straight sets, e.g. 2-0 in bo3, 3-0/3-1 in bo5)
+            # Symmetrical Set Handicaps
             if best_of_sets == 3:
+                # Bo3: -1.5 Sets is straight sets (2-0 vs 0-2)
                 p1_set_margin_minus_1_5 += np.count_nonzero((p1_sets == 2) & (p2_sets == 0))
+                p2_set_margin_minus_1_5 += np.count_nonzero((p2_sets == 2) & (p1_sets == 0))
+                both_players_won_set_count += np.count_nonzero((p1_sets >= 1) & (p2_sets >= 1))
             else:
+                # Bo5 (Grand Slam): -1.5 Sets is winning 3-0 or 3-1 (losing <= 1 set)
                 p1_set_margin_minus_1_5 += np.count_nonzero((p1_sets == 3) & (p2_sets <= 1))
+                p2_set_margin_minus_1_5 += np.count_nonzero((p2_sets == 3) & (p1_sets <= 1))
+                both_players_won_set_count += np.count_nonzero((p1_sets >= 1) & (p2_sets >= 1))
 
             start_idx = total_processed
             end_idx = total_processed + curr_chunk
@@ -142,21 +156,42 @@ class TennisMonteCarloSimulator:
         exp_games = round(float(np.mean(total_games_list)), 1)
         exp_margin = round(float(np.mean(game_margins_list)), 1)
 
-        # Game Handicaps (-1.5 to -5.5)
-        game_handicaps = {}
-        for h in [1.5, 2.5, 3.5, 4.5, 5.5]:
-            prob_cover = round(float(np.mean(game_margins_list > h)), 4)
-            game_handicaps[f"-{h}"] = prob_cover
-            game_handicaps[f"+{h}"] = round(1.0 - prob_cover, 4)
+        # Symmetrical Game Handicaps for both players (-0.5 to -9.5 and +0.5 to +9.5)
+        p1_margins = game_margins_list
+        p2_margins = -game_margins_list
+        hcap_lines = [0.5, 1.5, 2.5, 3.5, 4.5, 5.5, 6.5, 7.5, 8.5, 9.5]
 
-        # Total Games Over/Under (Lines 19.5 through 25.5)
+        p1_game_handicaps: Dict[str, float] = {}
+        p2_game_handicaps: Dict[str, float] = {}
+        for h in hcap_lines:
+            prob_p1_minus = round(float(np.mean(p1_margins > h)), 4)
+            prob_p2_minus = round(float(np.mean(p2_margins > h)), 4)
+
+            # Player 1 handicaps: -h covers if p1_margin > h; +h covers if p1_margin > -h (1 - p2_margin > h)
+            p1_game_handicaps[f"-{h}"] = prob_p1_minus
+            p1_game_handicaps[f"+{h}"] = round(1.0 - prob_p2_minus, 4)
+
+            # Player 2 handicaps: -h covers if p2_margin > h; +h covers if p2_margin > -h (1 - p1_margin > h)
+            p2_game_handicaps[f"-{h}"] = prob_p2_minus
+            p2_game_handicaps[f"+{h}"] = round(1.0 - prob_p1_minus, 4)
+
+        # Total Games Over/Under across entire spectrum (Bo3: 16.5-28.5, Bo5: 29.5-48.5)
+        total_game_lines = [
+            16.5, 17.5, 18.5, 19.5, 20.5, 21.5, 22.5, 23.5, 24.5, 25.5, 26.5, 27.5, 28.5,
+            29.5, 30.5, 31.5, 32.5, 33.5, 34.5, 35.5, 36.5, 37.5, 38.5, 39.5, 40.5, 41.5,
+            42.5, 43.5, 44.5, 45.5, 46.5, 47.5, 48.5
+        ]
         total_games_over = {}
-        for line in [19.5, 20.5, 21.5, 22.5, 23.5, 24.5, 25.5]:
+        for line in total_game_lines:
             prob_over = round(float(np.mean(total_games_list > line)), 4)
             total_games_over[str(line)] = prob_over
 
-        set_hcap_minus15 = round(p1_set_margin_minus_1_5 / n, 4)
-        set_hcap_plus15 = round(1.0 - set_hcap_minus15, 4)
+        # Symmetrical Set Handicaps
+        set_hcap_p1_minus15 = round(p1_set_margin_minus_1_5 / n, 4)
+        set_hcap_p2_plus15 = round(1.0 - set_hcap_p1_minus15, 4)
+        set_hcap_p2_minus15 = round(p2_set_margin_minus_1_5 / n, 4)
+        set_hcap_p1_plus15 = round(1.0 - set_hcap_p2_minus15, 4)
+        over_2_5_sets = round(both_players_won_set_count / n, 4)
 
         correct_scores = {k: round(v / n, 4) for k, v in correct_score_counts.items()}
 
@@ -168,13 +203,18 @@ class TennisMonteCarloSimulator:
             first_set_p2_prob=first_set_p2,
             expected_total_games=exp_games,
             expected_game_margin=exp_margin,
-            set_handicap_p1_minus_1_5=set_hcap_minus15,
-            set_handicap_p2_plus_1_5=set_hcap_plus15,
-            game_handicaps=game_handicaps,
+            set_handicap_p1_minus_1_5=set_hcap_p1_minus15,
+            set_handicap_p2_plus_1_5=set_hcap_p2_plus15,
+            game_handicaps=p1_game_handicaps,
             total_games_over=total_games_over,
             correct_scores=correct_scores,
             p1_hold_rate=round(p1_hold, 4),
-            p2_hold_rate=round(p2_hold, 4)
+            p2_hold_rate=round(p2_hold, 4),
+            set_handicap_p2_minus_1_5=set_hcap_p2_minus15,
+            set_handicap_p1_plus_1_5=set_hcap_p1_plus15,
+            over_2_5_sets_prob=over_2_5_sets,
+            p1_game_handicaps=p1_game_handicaps,
+            p2_game_handicaps=p2_game_handicaps
         )
 
     def _simulate_set_vector(

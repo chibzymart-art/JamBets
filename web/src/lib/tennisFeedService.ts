@@ -5,7 +5,6 @@ import {
   TennisSettlement,
   TennisSurface,
   TennisTour,
-  TennisConfidenceTier,
 } from '../types/tennis';
 
 export interface TennisStats {
@@ -314,8 +313,19 @@ export async function fetchTennisFeed(options: FetchTennisFeedOptions = {}): Pro
           ...p,
           prediction: '🔒 Subscriber Only',
           probability: null,
-          confidence_category: (p.confidence_category === 'BANGER' ? 'BANGER' : 'TOP PICK') as TennisConfidenceTier,
-          secondary_predictions: [],
+          secondary_predictions: (p.secondary_predictions && p.secondary_predictions.length > 0)
+            ? p.secondary_predictions.map((s: any) => ({
+                market: s.market,
+                prediction: '🔒 VIP Banker',
+                probability: null,
+                locked: true,
+              }))
+            : [
+                { market: 'game_handicap', prediction: '🔒 VIP Banker', probability: null, locked: true },
+                { market: 'first_set_winner', prediction: '🔒 VIP Banker', probability: null, locked: true },
+                { market: 'set_handicap', prediction: '🔒 VIP Banker', probability: null, locked: true },
+                { market: 'total_games_over_under', prediction: '🔒 VIP Banker', probability: null, locked: true },
+              ],
           metadata: {
             ...p.metadata,
             ai_tactical_analysis:

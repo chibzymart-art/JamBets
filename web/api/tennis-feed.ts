@@ -216,6 +216,18 @@ async function fetchTennisDataFromUpstream(rawToken?: string | null): Promise<Te
   const tournaments = tourneysRes.ok ? await tourneysRes.json() : [];
   const settlements = settleRes.ok ? await settleRes.json() : [];
 
+  // Ensure locked predictions have structured paywall teaser markers if unpopulated
+  for (const p of predictions) {
+    if (p.is_locked && (!p.secondary_predictions || p.secondary_predictions.length === 0)) {
+      p.secondary_predictions = [
+        { market: 'game_handicap', prediction: '🔒 VIP Banker', probability: null, locked: true },
+        { market: 'first_set_winner', prediction: '🔒 VIP Banker', probability: null, locked: true },
+        { market: 'set_handicap', prediction: '🔒 VIP Banker', probability: null, locked: true },
+        { market: 'total_games_over_under', prediction: '🔒 VIP Banker', probability: null, locked: true },
+      ];
+    }
+  }
+
   // Compute stats
   let bangers = 0;
   let topPicks = 0;
@@ -240,7 +252,7 @@ async function fetchTennisDataFromUpstream(rawToken?: string | null): Promise<Te
   }
 
   const finishedDecisive = settledWon + settledLost;
-  const winRate = finishedDecisive > 0 ? Math.round((settledWon / finishedDecisive) * 100) : 88.5;
+  const winRate = finishedDecisive > 0 ? Math.round((settledWon / finishedDecisive) * 100) : 0;
 
   return {
     predictions: Array.isArray(predictions) ? predictions : [],
@@ -379,7 +391,12 @@ export default async function handler(req: Request): Promise<Response> {
           prediction: '🔒 Subscriber Only',
           probability: null,
           confidence_category: p.confidence_category === 'BANGER' ? 'BANGER' : 'TOP PICK',
-          secondary_predictions: [],
+          secondary_predictions: [
+            { market: 'game_handicap', prediction: '🔒 VIP Spread Pick', probability: null, locked: true },
+            { market: 'first_set_winner', prediction: '🔒 VIP 1st Set Winner', probability: null, locked: true },
+            { market: 'set_handicap', prediction: '🔒 VIP Set Handicap', probability: null, locked: true },
+            { market: 'total_games_over_under', prediction: '🔒 VIP Over/Under Total', probability: null, locked: true },
+          ],
           metadata: {
             ...p.metadata,
             ai_tactical_analysis: '🔒 Upgrade to Oddsbanta VIP to unlock comprehensive 250,000 Monte Carlo simulation distributions and AI tactical breakdown.',

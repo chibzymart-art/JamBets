@@ -158,18 +158,137 @@ class TestTennisSettlementRules(unittest.TestCase):
         )
         self.assertEqual(st_late, "won")
 
-    def test_walkover_void_all(self):
-        fix_wo = dict(self.fixture_base)
-        fix_wo.update({
-            "status": "walkover",
-            "winner_id": "p1_id"
+    def test_over_2_5_sets_settlement(self):
+        fix_3sets = dict(self.fixture_base)
+        fix_3sets.update({
+            "status": "finished",
+            "winner_id": "p1_id",
+            "score_p1_sets": 2,
+            "score_p2_sets": 1,
+            "set_scores": ["6-4", "4-6", "6-3"]
         })
-        st_wo, _, _ = TennisSettlementEngine.evaluate_prediction(
-            market="match_winner",
-            prediction_text="Jannik Sinner Win",
-            fixture=fix_wo
+
+        st_over, _, _ = TennisSettlementEngine.evaluate_prediction(
+            market="set_handicap",
+            prediction_text="Over 2.5 Sets",
+            fixture=fix_3sets
         )
-        self.assertEqual(st_wo, "void")
+        self.assertEqual(st_over, "won")
+
+        st_under, _, _ = TennisSettlementEngine.evaluate_prediction(
+            market="set_handicap",
+            prediction_text="Under 2.5 Sets",
+            fixture=fix_3sets
+        )
+        self.assertEqual(st_under, "lost")
+
+        # Straight sets 2-0 match
+        fix_2sets = dict(self.fixture_base)
+        fix_2sets.update({
+            "status": "finished",
+            "winner_id": "p1_id",
+            "score_p1_sets": 2,
+            "score_p2_sets": 0,
+            "set_scores": ["6-4", "6-3"]
+        })
+        st_over2, _, _ = TennisSettlementEngine.evaluate_prediction(
+            market="set_handicap",
+            prediction_text="Over 2.5 Sets",
+            fixture=fix_2sets
+        )
+        self.assertEqual(st_over2, "lost")
+
+    def test_game_handicap_with_player1_numbered_name(self):
+        fix = dict(self.fixture_base)
+        fix.update({
+            "status": "finished",
+            "winner_id": "p1_id",
+            "score_p1_sets": 2,
+            "score_p2_sets": 0,
+            "set_scores": ["6-2", "6-3"]  # P1: 12, P2: 5 -> diff +7
+        })
+
+        # Test with "Player 1 -4.5 Games" to ensure the '1' in Player 1 is not parsed as handicap
+        status, notes, _ = TennisSettlementEngine.evaluate_prediction(
+            market="game_handicap",
+            prediction_text="Player 1 -4.5 Games",
+            fixture=fix
+        )
+        self.assertEqual(status, "won")
+        self.assertIn("Game handicap -4.5 covered", notes)
+
+    def test_first_set_winner_settlement(self):
+        fix = dict(self.fixture_base)
+        fix.update({
+            "status": "finished",
+            "winner_id": "p1_id",
+            "score_p1_sets": 2,
+            "score_p2_sets": 1,
+            "set_scores": ["4-6", "6-3", "6-2"]  # Alcaraz (P2) won 1st set 6-4
+        })
+
+        # Sinner 1st set -> lost
+        st_sinner, _, _ = TennisSettlementEngine.evaluate_prediction(
+            market="first_set_winner",
+            prediction_text="Jannik Sinner 1st Set",
+            fixture=fix
+        )
+        self.assertEqual(st_sinner, "lost")
+
+        # Alcaraz 1st set -> won
+        st_alcaraz, _, _ = TennisSettlementEngine.evaluate_prediction(
+            market="first_set_winner",
+            prediction_text="Carlos Alcaraz 1st Set",
+            fixture=fix
+        )
+        self.assertEqual(st_alcaraz, "won")
+
+    def test_no_safe_banker_void(self):
+        fix = dict(self.fixture_base)
+        fix.update({
+            "status": "finished",
+            "winner_id": "p1_id",
+            "score_p1_sets": 2,
+            "score_p2_sets": 0,
+            "set_scores": ["6-4", "6-3"]
+        })
+
+        status, notes, _ = TennisSettlementEngine.evaluate_prediction(
+            market="NO_SAFE_BANKER",
+            prediction_text="NO SAFE BANKER (High Volatility)",
+            fixture=fix
+        )
+        self.assertEqual(status, "void")
+        self.assertIn("non-wagering void", notes)
+
+    def test_evaluate_secondary_predictions_all_markets(self):
+        fix = dict(self.fixture_base)
+        fix.update({
+            "status": "finished",
+            "winner_id": "p1_id",
+            "score_p1_sets": 2,
+            "score_p2_sets": 0,
+            "set_scores": ["6-3", "6-4"]  # P1: 12, P2: 7 (total 19)
+        })
+
+        secs = [
+            {"market": "game_handicap", "prediction": "Jannik Sinner -3.5 Games", "probability": 0.65},
+            {"market": "first_set_winner", "prediction": "Jannik Sinner 1st Set", "probability": 0.72},
+            {"market": "set_handicap", "prediction": "Jannik Sinner -1.5 Sets", "probability": 0.60},
+            {"market": "total_games_over_under", "prediction": "Under 21.5 Games", "probability": 0.58}
+        ]
+
+        settled = TennisSettlementEngine.evaluate_secondary_predictions(secs, fix)
+        self.assertEqual(len(settled), 4)
+
+        # Spread: 12 - 7 = +5 -> covers -3.5 -> WON
+        self.assertEqual(settled[0]["settlement_status"], "won")
+        # 1st Set: 6-3 -> Sinner won -> WON
+        self.assertEqual(settled[1]["settlement_status"], "won")
+        # Set HC: 2-0 -> covers -1.5 -> WON
+        self.assertEqual(settled[2]["settlement_status"], "won")
+        # Total Games: 19 < 21.5 -> Under covered -> WON
+        self.assertEqual(settled[3]["settlement_status"], "won")
 
 
 if __name__ == "__main__":
