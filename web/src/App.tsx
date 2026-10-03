@@ -35,6 +35,9 @@ import './tennis.css';
 import { TennisHubView } from './components/TennisHubView';
 import './basketball.css';
 import { BasketballHubView } from './components/BasketballHubView';
+import { TrackRecordPage } from './pages/TrackRecord';
+import { getScoreInfo, SCORE_TIERS, ScoreTierKey } from './lib/confidenceScore';
+import { seoForPath, DASHBOARD_PATHS } from './lib/routeMeta';
 
 
 export default function App() {
@@ -46,7 +49,8 @@ export default function App() {
   const [subscription, setSubscription] = useState<UserSubscription | null>(null);
   const [entitlement, setEntitlement] = useState<UserEntitlement | null>(null);
   const [isAuthChecking, setIsAuthChecking] = useState<boolean>(true);
-  const targetPredictionsPath = currentUser ? '/dashboard' : '/predictions';
+  // The dashboard is public (guests see free picks; paid content stays locked inside each card).
+  const targetPredictionsPath = DASHBOARD_PATHS.football;
 
   // Modals
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
@@ -137,57 +141,18 @@ export default function App() {
 
   useEffect(() => {
     setIsHamburgerOpen(false);
-    if (location.pathname === '/tennis') {
-      setSelectedSport('tennis');
-      updatePageSeo({
-        title: 'Tennis Predictions & 250k Monte Carlo Hub | Oddsbanta AI',
-        description: 'Autonomous tennis prediction engine featuring 250,000 Monte Carlo simulations, Court Pace Index (CPI) calibration, and surface ELO models.',
-      });
-    } else if (location.pathname === '/basketball') {
-      setSelectedSport('basketball');
-      updatePageSeo({
-        title: 'Basketball Predictions & 250k Monte Carlo Hub | Oddsbanta AI',
-        description: 'Autonomous basketball prediction engine featuring 250,000 Monte Carlo simulations, Dean Oliver Four Factors analysis, and schedule fatigue modeling.',
-      });
-    } else if (location.pathname === '/american-football') {
-      setSelectedSport('american_football');
-      updatePageSeo({
-        title: 'American Football Predictions (Coming Soon) | Oddsbanta',
-        description: 'NFL & American football quantitative prediction engine coming soon to Oddsbanta.',
-      });
-    } else if (location.pathname === '/cricket') {
-      setSelectedSport('cricket');
-      updatePageSeo({
-        title: 'Cricket AI Predictions (Coming Soon) | Oddsbanta',
-        description: 'Cricket quantitative modeling lab and match simulations coming soon to Oddsbanta.',
-      });
-    } else if (location.pathname === '/football') {
-      setSelectedSport('football');
-      updatePageSeo({
-        title: 'Football Predictions & Smart Sport Analysis | Oddsbanta AI',
-        description: 'Authoritative football predictions, verified mathematical simulations, and AI tactical analysis.',
-      });
-    } else if (location.pathname === '/goals') {
-      updatePageSeo({
-        title: 'Over 2.5 Goals & 1st Half Specialist | Oddsbanta AI',
-        description: 'Calibrated mathematical predictions for Over 2.5 and First Half Over 0.5 goals.',
-      });
-    } else if (location.pathname === '/subscription') {
-      updatePageSeo({
-        title: 'Subscription Plans & VIP Access | Oddsbanta',
-        description: 'Unlock full mathematical predictions, VIP accumulator slips, and daily high-edge football signals.',
-      });
-    } else if (location.pathname === '/admin') {
-      updatePageSeo({
-        title: 'Admin Command Deck | Oddsbanta',
-        description: 'Internal operations, prediction queue management, and model telemetry.',
-      });
-    } else {
-      updatePageSeo({
-        title: 'Oddsbanta — Smart Sport Analysis & Football Predictions | AI Powered',
-        description: 'Authoritative football predictions, verified mathematical simulations, and AI tactical analysis.',
-      });
-    }
+    const p = location.pathname.replace(/\/+$/, '') || '/';
+    const sportByPath: Record<string, string> = {
+      [DASHBOARD_PATHS.football]: 'football',
+      [DASHBOARD_PATHS.goals]: 'football',
+      [DASHBOARD_PATHS.tennis]: 'tennis',
+      [DASHBOARD_PATHS.basketball]: 'basketball',
+      [DASHBOARD_PATHS.american_football]: 'american_football',
+      [DASHBOARD_PATHS.cricket]: 'cricket',
+    };
+    if (sportByPath[p]) setSelectedSport(sportByPath[p]);
+    // OtherMarketsPage sets its own market-specific SEO on /dashboard/goals.
+    if (p !== DASHBOARD_PATHS.goals) updatePageSeo(seoForPath(p));
   }, [location.pathname]);
 
   // Multi-Filters
@@ -506,13 +471,13 @@ export default function App() {
     navigate('/dashboard');
   };
 
-  // Redirect /dashboard?market=... to /other-markets?market=... for specialist markets, handle ?sport=tennis
+  // Redirect /dashboard?market=... to /dashboard/goals?market=... for specialist markets, handle ?sport=tennis
   useEffect(() => {
     try {
       const searchParams = new URLSearchParams(location.search);
       const m = searchParams.get('market');
-      if (m && m !== 'general' && location.pathname.startsWith('/dashboard')) {
-        navigate(`/other-markets?market=${m}`, { replace: true });
+      if (m && m !== 'general' && location.pathname === DASHBOARD_PATHS.football) {
+        navigate(`${DASHBOARD_PATHS.goals}?market=${m}`, { replace: true });
       }
       const sportParam = searchParams.get('sport');
       if (sportParam === 'tennis') {
@@ -1048,85 +1013,48 @@ export default function App() {
     }
   ], [sportsState, availableLeagues]);
 
-  const currentSportObj = useMemo(() => {
-    return sportsList.find((s) => s.id === selectedSport) || sportsList[0];
-  }, [sportsList, selectedSport]);
-
   const sportPaths: Record<string, string> = useMemo(() => ({
-    football: '/football',
-    basketball: '/basketball',
-    tennis: '/tennis',
-    american_football: '/american-football',
-    cricket: '/cricket'
+    football: DASHBOARD_PATHS.football,
+    basketball: DASHBOARD_PATHS.basketball,
+    tennis: DASHBOARD_PATHS.tennis,
+    american_football: DASHBOARD_PATHS.american_football,
+    cricket: DASHBOARD_PATHS.cricket
   }), []);
 
   const handleSportSelect = (sportId: string) => {
     setSelectedSport(sportId);
-    const targetPath = sportPaths[sportId] || '/football';
+    const targetPath = sportPaths[sportId] || DASHBOARD_PATHS.football;
     navigate(targetPath);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  /** All sport pages live inside the dashboard; the home page is the landing page only. */
+  const isDashboard = location.pathname === '/dashboard' || location.pathname.startsWith('/dashboard/');
+
   const isSportActive = (sportId: string) => {
-    if (sportId === 'tennis') {
-      return location.pathname === '/tennis' || (selectedSport === 'tennis' && (location.pathname.startsWith('/dashboard') || location.pathname.startsWith('/predictions')));
-    }
+    const p = location.pathname.replace(/\/+$/, '');
     if (sportId === 'football') {
-      return (
-        location.pathname === '/football' ||
-        ((location.pathname === '/dashboard' || location.pathname === '/predictions') && selectedSport === 'football')
-      );
+      return (p === DASHBOARD_PATHS.football && selectedSport === 'football') || p === DASHBOARD_PATHS.goals;
     }
-    if (sportId === 'basketball') {
-      return location.pathname === '/basketball' || (selectedSport === 'basketball' && (location.pathname.startsWith('/dashboard') || location.pathname.startsWith('/predictions')));
-    }
-    if (sportId === 'american_football') {
-      return location.pathname === '/american-football' || (selectedSport === 'american_football' && (location.pathname.startsWith('/dashboard') || location.pathname.startsWith('/predictions')));
-    }
-    if (sportId === 'cricket') {
-      return location.pathname === '/cricket' || (selectedSport === 'cricket' && (location.pathname.startsWith('/dashboard') || location.pathname.startsWith('/predictions')));
-    }
-    return false;
+    return p === sportPaths[sportId] || (p === DASHBOARD_PATHS.football && selectedSport === sportId);
   };
 
   // Comprehensive Metrics Calculations (Strictly Cloud Supabase Derived — Zero Fallbacks)
+  // Grouped by the 0–10 confidence score tiers. Losses are counted for every visitor, so the
+  // hit rate shown to guests is the same honest figure subscribers see.
+  type ScoreBucketKey = 'all' | ScoreTierKey | 'pass';
   const scorecardStats = useMemo(() => {
-    let allWon = 0;
-    let allLost = 0;
+    type Bucket = { total: number; won: number; lost: number; pending: number; decided: number; winRate: number | null };
+    const mk = (): Bucket => ({ total: 0, won: 0, lost: 0, pending: 0, decided: 0, winRate: null });
+    const buckets: Record<ScoreBucketKey, Bucket> = {
+      all: mk(),
+      tier9: mk(),
+      tier8: mk(),
+      tier6: mk(),
+      tierLow: mk(),
+      pass: mk(),
+    };
     let allVoid = 0;
-    let allPending = 0;
-
-    let bangerTotal = 0;
-    let bangerWon = 0;
-    let bangerLost = 0;
-    let bangerPending = 0;
-
-    let topPickTotal = 0;
-    let topPickWon = 0;
-    let topPickLost = 0;
-    let topPickPending = 0;
-
-    let highTotal = 0;
-    let highWon = 0;
-    let highLost = 0;
-    let highPending = 0;
-
-    let midTotal = 0;
-    let midWon = 0;
-    let midLost = 0;
-    let midPending = 0;
-
-    let lowTotal = 0;
-    let lowWon = 0;
-    let lowLost = 0;
-    let lowPending = 0;
-
-    let antiLossTotal = 0;
-    let antiLossWon = 0;
-    let antiLossLost = 0;
-    let antiLossPending = 0;
-
-    const sourceList = predictions;
 
     // Filter predictions to only those matching current date filter if not 'all'
     // "All Dates (this will be all predictions of current date and future dates, no past dates)"
@@ -1140,92 +1068,32 @@ export default function App() {
       ).map((f) => f.id)
     );
 
-    const isPaid = isAdmin || canViewPredictions;
-
-    sourceList.forEach((item: any) => {
+    predictions.forEach((item: any) => {
       if (!activeFixtureIds.has(item.fixture_id)) return;
-      let st = item.settlement_status || 'pending';
-      const rawCat = (item.confidence_category || '').toUpperCase().replace(/ /g, '_');
-      const isAntiLoss =
-        rawCat === 'NO_SAFE_BANKER' ||
-        rawCat === 'NOSAFEBANKER' ||
-        item.market === 'NO_SAFE_BANKER' ||
-        item.prediction === 'SKIP';
-
-      if (st === 'won') allWon++;
-      else if (st === 'lost') {
-        if (isPaid) allLost++;
+      const st = item.settlement_status || 'pending';
+      if (st === 'void' || st === 'voided') {
+        allVoid++;
+        return;
       }
-      else if (st === 'void' || st === 'voided') {
-        if (isPaid) allVoid++;
-      }
-      else allPending++;
-
-      if (rawCat === 'BANGER') {
-        bangerTotal++;
-        if (st === 'won') bangerWon++;
-        else if (st === 'lost') {
-          if (isPaid) bangerLost++;
-        }
-        else bangerPending++;
-      } else if (rawCat === 'TOP_PICK' || rawCat === 'TOPPICK') {
-        topPickTotal++;
-        if (st === 'won') topPickWon++;
-        else if (st === 'lost') {
-          if (isPaid) topPickLost++;
-        }
-        else topPickPending++;
-      } else if (rawCat === 'HIGH_CONFIDENCE' || rawCat === 'HIGHCONFIDENCE' || rawCat === 'HIGH') {
-        highTotal++;
-        if (st === 'won') highWon++;
-        else if (st === 'lost') {
-          if (isPaid) highLost++;
-        }
-        else highPending++;
-      } else if (rawCat === 'MID_CONFIDENCE' || rawCat === 'MIDCONFIDENCE' || rawCat === 'MID') {
-        midTotal++;
-        if (st === 'won') midWon++;
-        else if (st === 'lost') {
-          if (isPaid) midLost++;
-        }
-        else midPending++;
-      } else if (rawCat === 'LOW_CONFIDENCE' || rawCat === 'LOWCONFIDENCE' || rawCat === 'LOW' || rawCat === 'RISKY') {
-        lowTotal++;
-        if (st === 'won') lowWon++;
-        else if (st === 'lost') {
-          if (isPaid) lowLost++;
-        }
-        else lowPending++;
-      } else if (isAntiLoss) {
-        antiLossTotal++;
-        if (st === 'won') antiLossWon++;
-        else if (st === 'lost') {
-          if (isPaid) antiLossLost++;
-        }
-        else antiLossPending++;
+      const info = getScoreInfo(item.probability, item.confidence_category);
+      const isPass = info.noPick || item.market === 'NO_SAFE_BANKER' || item.prediction === 'SKIP';
+      const targets: Bucket[] = isPass
+        ? [buckets.pass]
+        : info.tier
+        ? [buckets.all, buckets[info.tier.key]]
+        : [buckets.all];
+      for (const b of targets) {
+        b.total++;
+        if (st === 'won') b.won++;
+        else if (st === 'lost') b.lost++;
+        else b.pending++;
       }
     });
 
-    const allDecided = allWon + allLost;
-    const allWinRate = allDecided > 0 ? Math.round((allWon / allDecided) * 100) : (allWon > 0 && !isPaid ? 100 : 0);
-
-    const bangerDecided = bangerWon + bangerLost;
-    const bangerWinRate = bangerDecided > 0 ? Math.round((bangerWon / bangerDecided) * 100) : (bangerWon > 0 && !isPaid ? 100 : 0);
-
-    const topPickDecided = topPickWon + topPickLost;
-    const topPickWinRate = topPickDecided > 0 ? Math.round((topPickWon / topPickDecided) * 100) : (topPickWon > 0 && !isPaid ? 100 : 0);
-
-    const highDecided = highWon + highLost;
-    const highWinRate = highDecided > 0 ? Math.round((highWon / highDecided) * 100) : (highWon > 0 && !isPaid ? 100 : 0);
-
-    const midDecided = midWon + midLost;
-    const midWinRate = midDecided > 0 ? Math.round((midWon / midDecided) * 100) : (midWon > 0 && !isPaid ? 100 : 0);
-
-    const lowDecided = lowWon + lowLost;
-    const lowWinRate = lowDecided > 0 ? Math.round((lowWon / lowDecided) * 100) : (lowWon > 0 && !isPaid ? 100 : 0);
-
-    const antiLossDecided = antiLossWon + antiLossLost;
-    const antiLossWinRate = antiLossDecided > 0 ? Math.round((antiLossWon / antiLossDecided) * 100) : (antiLossWon > 0 && !isPaid ? 100 : 0);
+    for (const b of Object.values(buckets)) {
+      b.decided = b.won + b.lost;
+      b.winRate = b.decided > 0 ? Math.round((b.won / b.decided) * 100) : null;
+    }
 
     const scopedFixtures = selectedDate === 'all'
       ? fixtures.filter((f) => {
@@ -1250,130 +1118,42 @@ export default function App() {
       return isFinished || hasSettledPred;
     }).length;
 
-    return {
-      allWon,
-      allLost,
-      allVoid,
-      allPending,
-      allDecided,
-      allWinRate,
-      allTotal: allWon + allLost + allPending,
-      bangerTotal,
-      bangerWon,
-      bangerLost,
-      bangerPending,
-      bangerDecided,
-      bangerWinRate,
-      topPickTotal,
-      topPickWon,
-      topPickLost,
-      topPickPending,
-      topPickDecided,
-      topPickWinRate,
-      highTotal,
-      highWon,
-      highLost,
-      highPending,
-      highDecided,
-      highWinRate,
-      midTotal,
-      midWon,
-      midLost,
-      midPending,
-      midDecided,
-      midWinRate,
-      lowTotal,
-      lowWon,
-      lowLost,
-      lowPending,
-      lowDecided,
-      lowWinRate,
-      antiLossTotal,
-      antiLossWon,
-      antiLossLost,
-      antiLossPending,
-      antiLossDecided,
-      antiLossWinRate,
-      liveCount,
-      settledMatchesCount
-    };
-  }, [fixtures, predsByFixture, canViewPredictions, isAdmin, selectedDate]);
+    return { buckets, allVoid, liveCount, settledMatchesCount };
+  }, [fixtures, predictions, predsByFixture, selectedDate]);
 
   // Dynamic Tier-specific activity and settlement stats wired to Card 2
   const activeTierStats = useMemo(() => {
-    switch (selectedTier) {
-      case 'BANGER':
-        return {
-          won: scorecardStats.bangerWon,
-          lost: scorecardStats.bangerLost,
-          pending: scorecardStats.bangerPending,
-          decided: scorecardStats.bangerDecided,
-          winRate: scorecardStats.bangerWinRate,
-          total: scorecardStats.bangerTotal,
-          settled: scorecardStats.bangerDecided,
-        };
-      case 'TOP PICK':
-        return {
-          won: scorecardStats.topPickWon,
-          lost: scorecardStats.topPickLost,
-          pending: scorecardStats.topPickPending,
-          decided: scorecardStats.topPickDecided,
-          winRate: scorecardStats.topPickWinRate,
-          total: scorecardStats.topPickTotal,
-          settled: scorecardStats.topPickDecided,
-        };
-      case 'HIGH':
-        return {
-          won: scorecardStats.highWon,
-          lost: scorecardStats.highLost,
-          pending: scorecardStats.highPending,
-          decided: scorecardStats.highDecided,
-          winRate: scorecardStats.highWinRate,
-          total: scorecardStats.highTotal,
-          settled: scorecardStats.highDecided,
-        };
-      case 'MID':
-        return {
-          won: scorecardStats.midWon,
-          lost: scorecardStats.midLost,
-          pending: scorecardStats.midPending,
-          decided: scorecardStats.midDecided,
-          winRate: scorecardStats.midWinRate,
-          total: scorecardStats.midTotal,
-          settled: scorecardStats.midDecided,
-        };
-      case 'LOW':
-        return {
-          won: scorecardStats.lowWon,
-          lost: scorecardStats.lowLost,
-          pending: scorecardStats.lowPending,
-          decided: scorecardStats.lowDecided,
-          winRate: scorecardStats.lowWinRate,
-          total: scorecardStats.lowTotal,
-          settled: scorecardStats.lowDecided,
-        };
-      case 'NO_SAFE_BANKER':
-        return {
-          won: scorecardStats.antiLossWon,
-          lost: scorecardStats.antiLossLost,
-          pending: scorecardStats.antiLossPending,
-          decided: scorecardStats.antiLossDecided,
-          winRate: scorecardStats.antiLossWinRate,
-          total: scorecardStats.antiLossTotal,
-          settled: scorecardStats.antiLossDecided,
-        };
-      default:
-        return {
-          won: scorecardStats.allWon,
-          lost: scorecardStats.allLost,
-          pending: scorecardStats.allPending,
-          decided: scorecardStats.allDecided,
-          winRate: scorecardStats.allWinRate,
-          total: scorecardStats.allTotal,
-          settled: scorecardStats.settledMatchesCount,
-        };
-    }
+    const key: ScoreBucketKey = selectedTier in scorecardStats.buckets ? (selectedTier as ScoreBucketKey) : 'all';
+    const b = scorecardStats.buckets[key];
+    return { ...b, settled: key === 'all' ? scorecardStats.settledMatchesCount : b.decided };
   }, [selectedTier, scorecardStats]);
+
+  const fmtRate = (v: number | null) => (v === null ? '–' : `${v}%`);
+
+  const renderTierSegment = (key: ScoreTierKey | 'pass', styleKey: string) => {
+    const b = scorecardStats.buckets[key];
+    const tier = key === 'pass' ? null : SCORE_TIERS[key];
+    const label = tier ? `${tier.icon} ${tier.range}` : '⏸ No pick';
+    const title = tier
+      ? `Filter by score ${tier.range} (${tier.name})`
+      : 'Matches where the model declined to make a pick';
+    return (
+      <div
+        className={`compact-kpi-subsegment ${styleKey}-subseg ${selectedTier === key ? 'active-seg' : ''}`}
+        onClick={() => setSelectedTier(selectedTier === key ? 'all' : key)}
+        title={title}
+      >
+        <div className="compact-kpi-header">
+          <span className="compact-kpi-title">{label}</span>
+          <span className={`compact-kpi-pill ${styleKey}-pill`}>{b.total}M</span>
+        </div>
+        <div className="compact-kpi-val-row">
+          <span className={`compact-kpi-pct ${styleKey}-text`}>{fmtRate(b.winRate)}</span>
+          <span className="compact-kpi-ratio">{b.won}W • {b.lost}L</span>
+        </div>
+      </div>
+    );
+  };
 
   // Filtered fixtures for General Market view
   const filteredFixtures = useMemo(() => {
@@ -1411,31 +1191,19 @@ export default function App() {
         if (scoreStatusFilter === 'scheduled' && (isLive || isFinished)) return false;
       }
 
-      // Tier filter
+      // Tier filter (0–10 confidence score tiers, or "pass" for no-pick matches)
       if (selectedTier !== 'all') {
         const hasTier = signals.some((s) => {
-          const sCat = (s.confidence_category || '').toUpperCase().replace(/ /g, '_');
-          if (selectedTier === 'BANGER') return sCat === 'BANGER';
-          if (selectedTier === 'TOP PICK') return sCat === 'TOP_PICK' || sCat === 'TOPPICK';
-          if (selectedTier === 'HIGH') return sCat === 'HIGH_CONFIDENCE' || sCat === 'HIGHCONFIDENCE' || sCat === 'HIGH';
-          if (selectedTier === 'MID') return sCat === 'MID_CONFIDENCE' || sCat === 'MIDCONFIDENCE' || sCat === 'MID';
-          if (selectedTier === 'LOW') return sCat === 'LOW_CONFIDENCE' || sCat === 'LOWCONFIDENCE' || sCat === 'LOW' || sCat === 'RISKY';
-          if (selectedTier === 'NO_SAFE_BANKER') return sCat === 'NO_SAFE_BANKER' || sCat === 'NOSAFEBANKER' || s.market === 'NO_SAFE_BANKER' || s.prediction === 'SKIP';
-          return s.confidence_category === selectedTier;
+          const info = getScoreInfo(s.probability, s.confidence_category);
+          const isPass = info.noPick || s.market === 'NO_SAFE_BANKER' || s.prediction === 'SKIP';
+          if (selectedTier === 'pass') return isPass;
+          return !isPass && info.tier?.key === selectedTier;
         });
         if (!hasTier) return false;
       }
 
-      // Strict User Rule: Non-paid users only see won predictions for the day, lost ones are hidden
-      if (!isAdmin && !canViewPredictions) {
-        const hasWonPred = fixturePreds.some((p) => p.settlement_status === 'won');
-        const hasLostPred = fixturePreds.some(
-          (p) => p.settlement_status === 'lost' || p.settlement_status === 'void' || p.settlement_status === 'voided'
-        );
-        if ((hasLostPred && !hasWonPred) || (isFinished && !hasWonPred)) {
-          return false;
-        }
-      }
+      // Settled picks (wins and losses) are visible to every visitor; hiding losses from guests
+      // would overstate the hit rate.
 
       // Settlement Status filter
       if (settlementFilter !== 'all') {
@@ -1513,7 +1281,7 @@ export default function App() {
           <div className="auth-takeover-content">
             <span className="auth-takeover-badge">⚡ 1-CLICK ACCESS</span>
             <span className="auth-takeover-text">
-              Sign in with <strong>Google / Gmail</strong> to unlock full 250k Monte Carlo tennis &amp; football predictions, live slips, and high-confidence AI value edges.
+              Sign in with <strong>Google / Gmail</strong> to unlock full tennis &amp; football model predictions, 0–10 confidence scores, live slips, and verified track record telemetry.
             </span>
             <button
               type="button"
@@ -1666,25 +1434,98 @@ export default function App() {
                     </Link>
 
                     <Link
-                      to="/football"
-                      className={`hamburger-menu-item ${isSportActive('football') ? 'active' : ''}`}
+                      to={DASHBOARD_PATHS.football}
+                      className={`hamburger-menu-item ${isDashboard ? 'active' : ''}`}
                       onClick={() => {
                         setIsHamburgerOpen(false);
                         handleSportSelect('football');
                       }}
                     >
-                      <span className="hamburger-item-icon">⚽</span>
-                      <span className="hamburger-item-label">Football Predictions</span>
+                      <span className="hamburger-item-icon">📊</span>
+                      <span className="hamburger-item-label">{isDashboard ? 'Dashboard (Football)' : 'Open Dashboard'}</span>
                     </Link>
 
                     <Link
-                      to="/other-markets"
-                      className={`hamburger-menu-item ${location.pathname === '/other-markets' || location.pathname === '/goals' ? 'active' : ''}`}
+                      to={DASHBOARD_PATHS.trackRecord}
+                      className={`hamburger-menu-item ${location.pathname === DASHBOARD_PATHS.trackRecord ? 'active' : ''}`}
                       onClick={() => setIsHamburgerOpen(false)}
                     >
-                      <span className="hamburger-item-icon">🎯</span>
-                      <span className="hamburger-item-label">Other Markets (Specialists)</span>
+                      <span className="hamburger-item-icon">📈</span>
+                      <span className="hamburger-item-label">Track Record (Settled Hit Rates)</span>
                     </Link>
+
+                    {isDashboard && (
+                      <>
+                        <Link
+                          to={DASHBOARD_PATHS.goals}
+                          className={`hamburger-menu-item ${location.pathname === DASHBOARD_PATHS.goals ? 'active' : ''}`}
+                          onClick={() => setIsHamburgerOpen(false)}
+                        >
+                          <span className="hamburger-item-icon">🎯</span>
+                          <span className="hamburger-item-label">Other Markets (Specialists)</span>
+                        </Link>
+
+                        <Link
+                          to={DASHBOARD_PATHS.tennis}
+                          className={`hamburger-menu-item ${isSportActive('tennis') ? 'active' : ''}`}
+                          onClick={() => {
+                            setIsHamburgerOpen(false);
+                            handleSportSelect('tennis');
+                          }}
+                        >
+                          <span className="hamburger-item-icon">🎾</span>
+                          <span className="hamburger-item-label">Tennis Predictions</span>
+                        </Link>
+
+                        <Link
+                          to={DASHBOARD_PATHS.basketball}
+                          className={`hamburger-menu-item ${isSportActive('basketball') ? 'active' : ''}`}
+                          onClick={() => {
+                            setIsHamburgerOpen(false);
+                            handleSportSelect('basketball');
+                          }}
+                        >
+                          <span className="hamburger-item-icon">🏀</span>
+                          <span className="hamburger-item-label">Basketball Predictions</span>
+                        </Link>
+
+                        <Link
+                          to={DASHBOARD_PATHS.american_football}
+                          className={`hamburger-menu-item ${isSportActive('american_football') ? 'active' : ''}`}
+                          onClick={() => {
+                            setIsHamburgerOpen(false);
+                            handleSportSelect('american_football');
+                          }}
+                        >
+                          <span className="hamburger-item-icon">🏈</span>
+                          <span className="hamburger-item-label">American Football (Coming Soon)</span>
+                        </Link>
+
+                        <Link
+                          to={DASHBOARD_PATHS.cricket}
+                          className={`hamburger-menu-item ${isSportActive('cricket') ? 'active' : ''}`}
+                          onClick={() => {
+                            setIsHamburgerOpen(false);
+                            handleSportSelect('cricket');
+                          }}
+                        >
+                          <span className="hamburger-item-icon">🏏</span>
+                          <span className="hamburger-item-label">Cricket (Coming Soon)</span>
+                        </Link>
+
+                        <button
+                          type="button"
+                          className="hamburger-menu-item"
+                          onClick={() => {
+                            setIsHamburgerOpen(false);
+                            setIsAllLeaguesModalOpen(true);
+                          }}
+                        >
+                          <span className="hamburger-item-icon">🏆</span>
+                          <span className="hamburger-item-label">Browse All 40+ Leagues</span>
+                        </button>
+                      </>
+                    )}
 
                     <button
                       type="button"
@@ -1721,67 +1562,6 @@ export default function App() {
                       <span className="hamburger-item-icon">🤖</span>
                       <span className="hamburger-item-label">Bot Hub (Telegram / WhatsApp)</span>
                     </button>
-
-
-                    <button
-                      type="button"
-                      className="hamburger-menu-item"
-                      onClick={() => {
-                        setIsHamburgerOpen(false);
-                        setIsAllLeaguesModalOpen(true);
-                      }}
-                    >
-                      <span className="hamburger-item-icon">🏆</span>
-                      <span className="hamburger-item-label">Browse All 40+ Leagues</span>
-                    </button>
-
-                    <Link
-                      to="/tennis"
-                      className={`hamburger-menu-item ${isSportActive('tennis') ? 'active' : ''}`}
-                      onClick={() => {
-                        setIsHamburgerOpen(false);
-                        handleSportSelect('tennis');
-                      }}
-                    >
-                      <span className="hamburger-item-icon">🎾</span>
-                      <span className="hamburger-item-label">Tennis Predictions (250k MC)</span>
-                    </Link>
-
-                    <Link
-                      to="/basketball"
-                      className={`hamburger-menu-item ${isSportActive('basketball') ? 'active' : ''}`}
-                      onClick={() => {
-                        setIsHamburgerOpen(false);
-                        handleSportSelect('basketball');
-                      }}
-                    >
-                      <span className="hamburger-item-icon">🏀</span>
-                      <span className="hamburger-item-label">Basketball Predictions (250k MC)</span>
-                    </Link>
-
-                    <Link
-                      to="/american-football"
-                      className={`hamburger-menu-item ${isSportActive('american_football') ? 'active' : ''}`}
-                      onClick={() => {
-                        setIsHamburgerOpen(false);
-                        handleSportSelect('american_football');
-                      }}
-                    >
-                      <span className="hamburger-item-icon">🏈</span>
-                      <span className="hamburger-item-label">American Football (Coming Soon)</span>
-                    </Link>
-
-                    <Link
-                      to="/cricket"
-                      className={`hamburger-menu-item ${isSportActive('cricket') ? 'active' : ''}`}
-                      onClick={() => {
-                        setIsHamburgerOpen(false);
-                        handleSportSelect('cricket');
-                      }}
-                    >
-                      <span className="hamburger-item-icon">🏏</span>
-                      <span className="hamburger-item-label">Cricket (Coming Soon)</span>
-                    </Link>
 
                     {isAdmin && (
                       <Link
@@ -1831,7 +1611,8 @@ export default function App() {
             )}
           </div>
 
-            {/* Clean Unified Navigation Links: Sport Types Selection */}
+            {/* Clean Unified Navigation Links: Sport Types Selection (Dashboard Only) */}
+          {isDashboard && (
           <div className="header-center-links header-sports-nav">
             {sportsList.map((sport) => {
               const isActive = isSportActive(sport.id);
@@ -1853,11 +1634,12 @@ export default function App() {
               );
             })}
           </div>
+          )}
 
           <div className="header-right-actions">
             {location.pathname === '/' && (
-              <Link to={targetPredictionsPath} className="landing-nav-cta desktop-only">
-                {currentUser ? '📊 Dashboard →' : '📊 Predictions →'}
+              <Link to={DASHBOARD_PATHS.football} className="landing-nav-cta desktop-only">
+                📊 Open Dashboard →
               </Link>
             )}
 
@@ -1997,18 +1779,25 @@ export default function App() {
           />
 
           {/* REDIRECT ALIASES */}
-          <Route
-            path="/analytics"
-            element={<Navigate to={targetPredictionsPath} replace />}
-          />
-          <Route
-            path="/dashboard/predictions"
-            element={<Navigate to={targetPredictionsPath} replace />}
-          />
+          <Route path="/analytics" element={<Navigate to={DASHBOARD_PATHS.football} replace />} />
+          <Route path="/predictions" element={<Navigate to={DASHBOARD_PATHS.football} replace />} />
+          <Route path="/football" element={<Navigate to={DASHBOARD_PATHS.football} replace />} />
+          <Route path="/dashboard/predictions" element={<Navigate to={DASHBOARD_PATHS.football} replace />} />
+          <Route path="/dashboard/football" element={<Navigate to={DASHBOARD_PATHS.football} replace />} />
+          <Route path="/other-markets" element={<Navigate to={DASHBOARD_PATHS.goals} replace />} />
+          <Route path="/goals" element={<Navigate to={DASHBOARD_PATHS.goals} replace />} />
+          <Route path="/over-2-5" element={<Navigate to={DASHBOARD_PATHS.goals} replace />} />
+          <Route path="/tennis" element={<Navigate to={DASHBOARD_PATHS.tennis} replace />} />
+          <Route path="/basketball" element={<Navigate to={DASHBOARD_PATHS.basketball} replace />} />
+          <Route path="/american-football" element={<Navigate to={DASHBOARD_PATHS.american_football} replace />} />
+          <Route path="/cricket" element={<Navigate to={DASHBOARD_PATHS.cricket} replace />} />
+          <Route path="/track-record" element={<Navigate to={DASHBOARD_PATHS.trackRecord} replace />} />
+          <Route path="/settlement" element={<Navigate to={DASHBOARD_PATHS.trackRecord} replace />} />
+          <Route path="/pricing" element={<Navigate to="/subscription" replace />} />
 
-          {/* ROUTE: OTHER MARKETS (SPECIALIST PREDICTION TERMINAL) */}
+          {/* DASHBOARD ROUTE: OTHER MARKETS (GOALS & SPECIALIST MODELS) */}
           <Route
-            path="/other-markets"
+            path={DASHBOARD_PATHS.goals}
             element={
               <OtherMarketsPage
                 currentUser={currentUser}
@@ -2027,31 +1816,10 @@ export default function App() {
               />
             }
           />
-          <Route
-            path="/goals"
-            element={
-              <OtherMarketsPage
-                currentUser={currentUser}
-                userRole={profile?.role}
-                isAdmin={isAdmin}
-                canViewPredictions={canViewFootball}
-                onOpenAuth={(mode) => {
-                  setAuthModalMode(mode);
-                  setIsAuthModalOpen(true);
-                }}
-                onOpenSubscription={() => setIsPricingModalOpen(true)}
-                favoriteItems={favoriteItems}
-                onToggleFavoriteItem={toggleFavoriteItem}
-                isFavoriteItem={isFavoriteItem}
-                onOpenFavoritesDrawer={() => setIsFavoritesDrawerOpen(true)}
-              />
-            }
-          />
-          <Route path="/over-2-5" element={<Navigate to="/other-markets" replace />} />
 
-          {/* ROUTE: TENNIS PREDICTIONS & MONTE CARLO HUB (Gated strictly to BigBang VIP + Admin) */}
+          {/* DASHBOARD ROUTE: TENNIS PREDICTIONS */}
           <Route
-            path="/tennis"
+            path={DASHBOARD_PATHS.tennis}
             element={
               <div id="fixtures-view-section" style={{ paddingTop: '8px' }}>
                 <TennisHubView
@@ -2070,16 +1838,16 @@ export default function App() {
                   onOpenSubscription={() => setIsPricingModalOpen(true)}
                   onBackToFootball={() => {
                     setSelectedSport('football');
-                    navigate('/dashboard');
+                    navigate(DASHBOARD_PATHS.football);
                   }}
                 />
               </div>
             }
           />
 
-          {/* ROUTE: BASKETBALL PREDICTIONS & MONTE CARLO HUB (Gated strictly to BigBang VIP + Admin) */}
+          {/* DASHBOARD ROUTE: BASKETBALL PREDICTIONS */}
           <Route
-            path="/basketball"
+            path={DASHBOARD_PATHS.basketball}
             element={
               <div id="fixtures-view-section" style={{ paddingTop: '8px' }}>
                 <BasketballHubView
@@ -2098,9 +1866,55 @@ export default function App() {
                   onOpenSubscription={() => setIsPricingModalOpen(true)}
                   onBackToFootball={() => {
                     setSelectedSport('football');
-                    navigate('/dashboard');
+                    navigate(DASHBOARD_PATHS.football);
                   }}
                 />
+              </div>
+            }
+          />
+
+          {/* DASHBOARD ROUTE: PUBLIC TRACK RECORD */}
+          <Route
+            path={DASHBOARD_PATHS.trackRecord}
+            element={<TrackRecordPage />}
+          />
+
+          {/* DASHBOARD ROUTE: AMERICAN FOOTBALL (COMING SOON) */}
+          <Route
+            path={DASHBOARD_PATHS.american_football}
+            element={
+              <div className="coming-soon-panel">
+                <div className="coming-soon-icon-circle">🏈</div>
+                <h2 className="coming-soon-title">American Football Predictions</h2>
+                <span className="coming-soon-status-badge">⏳ Coming Soon</span>
+                <p className="coming-soon-desc">
+                  NFL and NCAA quantitative models with 0–10 confidence scores are currently in calibration. Active football, tennis, and basketball predictions are live now in the dashboard.
+                </p>
+                <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', marginTop: 16 }}>
+                  <button type="button" className="coming-soon-back-btn" onClick={() => handleSportSelect('football')}>
+                    ⚽ View Football Predictions
+                  </button>
+                </div>
+              </div>
+            }
+          />
+
+          {/* DASHBOARD ROUTE: CRICKET (COMING SOON) */}
+          <Route
+            path={DASHBOARD_PATHS.cricket}
+            element={
+              <div className="coming-soon-panel">
+                <div className="coming-soon-icon-circle">🏏</div>
+                <h2 className="coming-soon-title">Cricket Predictions</h2>
+                <span className="coming-soon-status-badge">⏳ Coming Soon</span>
+                <p className="coming-soon-desc">
+                  Cricket quantitative match simulations with 0–10 confidence scores are coming soon to Oddsbanta.
+                </p>
+                <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', marginTop: 16 }}>
+                  <button type="button" className="coming-soon-back-btn" onClick={() => handleSportSelect('football')}>
+                    ⚽ View Football Predictions
+                  </button>
+                </div>
               </div>
             }
           />
@@ -2134,7 +1948,7 @@ export default function App() {
               ) : isAdmin ? (
                 <AdminView
                   currentUserProfile={profile}
-                  onBackToFixtures={() => navigate('/dashboard')}
+                  onBackToFixtures={() => navigate(DASHBOARD_PATHS.football)}
                   onOpenAuthModal={() => {
                     setAuthModalMode('signin');
                     setIsAuthModalOpen(true);
@@ -2145,214 +1959,121 @@ export default function App() {
               )
             }
           />
-          {/* ROUTE 5 & 6: PREDICTIONS & DASHBOARD + DECOUPLED SPORT ROUTES */}
-          {['/dashboard', '/predictions', '/football', '/basketball', '/american-football', '/cricket'].map((pathName) => (
-            <Route
-              key={pathName}
-              path={pathName}
-              element={
-                pathName === '/dashboard' && !currentUser && !isAuthChecking ? (
-                  <Navigate to="/predictions" replace />
-                ) : pathName === '/predictions' && currentUser ? (
-                  <Navigate to="/dashboard" replace />
+
+          {/* ROUTE: MAIN DASHBOARD (FOOTBALL) */}
+          <Route
+            path="/dashboard"
+            element={
+              <div id="fixtures-view-section">
+                {/* 2. FOOTBALL PREDICTION MARKETS SELECTOR BAR (General & Other Markets) */}
+                <div className="prediction-markets-bar" role="tablist" aria-label="Football Prediction Markets">
+                  <div
+                    className={`market-nav-card ${location.pathname === DASHBOARD_PATHS.football ? 'active' : ''}`}
+                    onClick={() => handleSportSelect('football')}
+                    role="tab"
+                    aria-selected={location.pathname === DASHBOARD_PATHS.football}
+                    tabIndex={0}
+                  >
+                    <div className="market-nav-card-left">
+                      <div className="market-nav-icon-circle">⚽</div>
+                      <div className="market-nav-titles">
+                        <span className="market-nav-title-text">General</span>
+                        <span className="market-nav-sub-text">
+                          Core 1X2, Double Chance & Totals • {availableLeagues.length} Leagues
+                        </span>
+                      </div>
+                    </div>
+                    <span className="market-nav-count-pill">
+                      {selectedDate !== 'all' ? `${filteredFixtures.length} Matches` : `${dynamicDateTabs.all.count} Matches`}
+                    </span>
+                  </div>
+
+                  <div
+                    className={`market-nav-card ${location.pathname === DASHBOARD_PATHS.goals ? 'active' : ''}`}
+                    onClick={() => navigate(DASHBOARD_PATHS.goals)}
+                    role="tab"
+                    aria-selected={location.pathname === DASHBOARD_PATHS.goals}
+                    tabIndex={0}
+                  >
+                    <div className="market-nav-card-left">
+                      <div className="market-nav-icon-circle">🎯</div>
+                      <div className="market-nav-titles">
+                        <span className="market-nav-title-text">Other Markets</span>
+                        <span className="market-nav-sub-text">
+                          Goals, 1X2 Specialist, Corners & Draw Hunter
+                        </span>
+                      </div>
+                    </div>
+                    <span className="market-nav-count-pill specialist-pill">
+                      5 Specialist Models
+                    </span>
+                  </div>
+                </div>
+
+                {loading && fixtures.length === 0 ? (
+                  <div className="engine-loading-container" role="status" aria-live="polite">
+                    <div className="engine-loading-card">
+                      <div className="engine-loading-radar-wrap">
+                        <div className="engine-loading-radar-ring" />
+                        <div className="engine-loading-radar-core">⚡</div>
+                      </div>
+                      <div className="engine-loading-header">
+                        <span className="engine-loading-badge">AI PREDICTION ENGINE • WAT (UTC+1)</span>
+                        <h2 className="engine-loading-title">Calibrating Mathematical Engine</h2>
+                        <p className="engine-loading-subtitle">
+                          Running calibrated bivariate Poisson probability distributions and predictive models across 30 world leagues...
+                        </p>
+                      </div>
+
+                      <div className="engine-loading-telemetry-row">
+                        <div className="engine-telemetry-chip active">
+                          <span className="chip-dot" />
+                          <span>Bivariate Poisson: Active</span>
+                        </div>
+                        <div className="engine-telemetry-chip pulsing">
+                          <span className="chip-dot pulse" />
+                          <span>4-Day Queue Sync</span>
+                        </div>
+                        <div className="engine-telemetry-chip">
+                          <span className="chip-dot" />
+                          <span>Settled Ledger Synced</span>
+                        </div>
+                      </div>
+
+                      <div className="engine-skeleton-grid">
+                        <div className="engine-skeleton-card">
+                          <div className="skeleton-row-top">
+                            <span className="skeleton-pill short" />
+                            <span className="skeleton-pill med" />
+                          </div>
+                          <div className="skeleton-match-row">
+                            <span className="skeleton-bar long" />
+                            <span className="skeleton-badge-sm" />
+                            <span className="skeleton-bar long" />
+                          </div>
+                          <div className="skeleton-row-bottom">
+                            <span className="skeleton-pill wide" />
+                          </div>
+                        </div>
+                        <div className="engine-skeleton-card">
+                          <div className="skeleton-row-top">
+                            <span className="skeleton-pill short" />
+                            <span className="skeleton-pill med" />
+                          </div>
+                          <div className="skeleton-match-row">
+                            <span className="skeleton-bar long" />
+                            <span className="skeleton-badge-sm" />
+                            <span className="skeleton-bar long" />
+                          </div>
+                          <div className="skeleton-row-bottom">
+                            <span className="skeleton-pill wide" />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 ) : (
-                  <div id="fixtures-view-section">
-        {/* 2. FOOTBALL PREDICTION MARKETS SELECTOR BAR (General & Other Markets) */}
-        {selectedSport === 'football' && (
-          <div className="prediction-markets-bar" role="tablist" aria-label="Football Prediction Markets">
-            {/* Market 1: General Market */}
-            <div
-              className={`market-nav-card ${location.pathname !== '/other-markets' && location.pathname !== '/goals' ? 'active' : ''}`}
-              onClick={() => {
-                handleSportSelect('football');
-              }}
-              role="tab"
-              aria-selected={location.pathname !== '/other-markets' && location.pathname !== '/goals'}
-              tabIndex={0}
-            >
-              <div className="market-nav-card-left">
-                <div className="market-nav-icon-circle">⚽</div>
-                <div className="market-nav-titles">
-                  <span className="market-nav-title-text">General</span>
-                  <span className="market-nav-sub-text">
-                    Core 1X2, Double Chance & Totals • {availableLeagues.length} Leagues
-                  </span>
-                </div>
-              </div>
-              <span className="market-nav-count-pill">
-                {selectedDate !== 'all' ? `${filteredFixtures.length} Matches` : `${dynamicDateTabs.all.count} Matches`}
-              </span>
-            </div>
-
-            {/* Market 2: Other Markets */}
-            <div
-              className={`market-nav-card ${location.pathname === '/other-markets' || location.pathname === '/goals' ? 'active' : ''}`}
-              onClick={() => {
-                navigate('/other-markets');
-              }}
-              role="tab"
-              aria-selected={location.pathname === '/other-markets' || location.pathname === '/goals'}
-              tabIndex={0}
-            >
-              <div className="market-nav-card-left">
-                <div className="market-nav-icon-circle">🎯</div>
-                <div className="market-nav-titles">
-                  <span className="market-nav-title-text">Other Markets</span>
-                  <span className="market-nav-sub-text">
-                    Goals, 1X2 Specialist, Corners & Draw Hunter
-                  </span>
-                </div>
-              </div>
-              <span className="market-nav-count-pill specialist-pill">
-                5 Specialist Models
-              </span>
-            </div>
-          </div>
-        )}
-
-
-
-        {/* Dynamic Sport Availability: High-Engaging Retaining AI Simulation Loading Experience */}
-        {loading && selectedSport === 'football' && fixtures.length === 0 ? (
-          <div className="engine-loading-container" role="status" aria-live="polite">
-            <div className="engine-loading-card">
-              <div className="engine-loading-radar-wrap">
-                <div className="engine-loading-radar-ring" />
-                <div className="engine-loading-radar-core">⚡</div>
-              </div>
-              <div className="engine-loading-header">
-                <span className="engine-loading-badge">AI PREDICTION ENGINE • WAT (UTC+1)</span>
-                <h2 className="engine-loading-title">Calibrating Mathematical Engine</h2>
-                <p className="engine-loading-subtitle">
-                  Running 250,000 Monte Carlo simulations and calibrated bivariate Poisson probability distributions across 30 world leagues...
-                </p>
-              </div>
-
-              {/* Live Engaging Telemetry Indicators */}
-              <div className="engine-loading-telemetry-row">
-                <div className="engine-telemetry-chip active">
-                  <span className="chip-dot" />
-                  <span>Bivariate Poisson: Active</span>
-                </div>
-                <div className="engine-telemetry-chip pulsing">
-                  <span className="chip-dot pulse" />
-                  <span>4-Day Queue Sync</span>
-                </div>
-                <div className="engine-telemetry-chip">
-                  <span className="chip-dot" />
-                  <span>Verified 100% Win Ledger</span>
-                </div>
-              </div>
-
-              {/* Shimmering Fixture Skeletons */}
-              <div className="engine-skeleton-grid">
-                <div className="engine-skeleton-card">
-                  <div className="skeleton-row-top">
-                    <span className="skeleton-pill short" />
-                    <span className="skeleton-pill med" />
-                  </div>
-                  <div className="skeleton-match-row">
-                    <span className="skeleton-bar long" />
-                    <span className="skeleton-badge-sm" />
-                    <span className="skeleton-bar long" />
-                  </div>
-                  <div className="skeleton-row-bottom">
-                    <span className="skeleton-pill wide" />
-                  </div>
-                </div>
-                <div className="engine-skeleton-card">
-                  <div className="skeleton-row-top">
-                    <span className="skeleton-pill short" />
-                    <span className="skeleton-pill med" />
-                  </div>
-                  <div className="skeleton-match-row">
-                    <span className="skeleton-bar long" />
-                    <span className="skeleton-badge-sm" />
-                    <span className="skeleton-bar long" />
-                  </div>
-                  <div className="skeleton-row-bottom">
-                    <span className="skeleton-pill wide" />
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        ) : !currentSportObj?.isAvailable ? (
-          <div className="coming-soon-panel">
-            <div className="coming-soon-icon-circle">{currentSportObj?.icon || '🏆'}</div>
-            <h2 className="coming-soon-title">{currentSportObj?.name || 'Sport'} AI Model Lab</h2>
-            <span className="coming-soon-status-badge">🚀 VIP Backtesting & Calibration Phase</span>
-            <p className="coming-soon-desc">
-              Our quantitative modeling team is actively backtesting bivariate Poisson distributions, expected points (xP), and player variance models for {currentSportObj?.name || 'this sport'}.
-            </p>
-            <div className="coming-soon-stats-row">
-              <div className="coming-soon-stat-box">
-                <span className="cs-stat-val">85%+</span>
-                <span className="cs-stat-lbl">Target Win Rate</span>
-              </div>
-              <div className="coming-soon-stat-box">
-                <span className="cs-stat-val">250,000</span>
-                <span className="cs-stat-lbl">Simulations / Match</span>
-              </div>
-              <div className="coming-soon-stat-box">
-                <span className="cs-stat-val">In Lab</span>
-                <span className="cs-stat-lbl">Deployment Phase</span>
-              </div>
-            </div>
-            <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', flexWrap: 'wrap' }}>
-              <button
-                type="button"
-                className="coming-soon-back-btn"
-                onClick={() => handleSportSelect('football')}
-              >
-                ⚽ Explore Active Football Predictions {sportsState.football?.fixtureCount ? `(${sportsState.football.fixtureCount} Matches Live)` : ''}
-              </button>
-              <button
-                type="button"
-                className="coming-soon-back-btn"
-                style={{ background: '#0284c7' }}
-                onClick={() => handleSportSelect('tennis')}
-              >
-                🎾 Explore Active Tennis Predictions {sportsState.tennis?.fixtureCount ? `(${sportsState.tennis.fixtureCount} Matches Live)` : ''}
-              </button>
-            </div>
-          </div>
-        ) : selectedSport === 'tennis' ? (
-          <TennisHubView
-            currentUser={currentUser}
-            userRole={profile?.role}
-            isAdmin={isAdmin}
-            canViewPredictions={canViewMultiSport}
-            favoriteItems={favoriteItems}
-            onToggleFavoriteItem={toggleFavoriteItem}
-            isFavoriteItem={isFavoriteItem}
-            onOpenFavoritesDrawer={() => setIsFavoritesDrawerOpen(true)}
-            onOpenAuth={(mode) => {
-              setAuthModalMode(mode);
-              setIsAuthModalOpen(true);
-            }}
-            onOpenSubscription={() => setIsPricingModalOpen(true)}
-            onBackToFootball={() => setSelectedSport('football')}
-          />
-        ) : selectedSport === 'basketball' ? (
-          <BasketballHubView
-            currentUser={currentUser}
-            userRole={profile?.role}
-            isAdmin={isAdmin}
-            canViewPredictions={canViewMultiSport}
-            favoriteItems={favoriteItems}
-            onToggleFavoriteItem={toggleFavoriteItem}
-            isFavoriteItem={isFavoriteItem}
-            onOpenFavoritesDrawer={() => setIsFavoritesDrawerOpen(true)}
-            onOpenAuth={(mode) => {
-              setAuthModalMode(mode);
-              setIsAuthModalOpen(true);
-            }}
-            onOpenSubscription={() => setIsPricingModalOpen(true)}
-            onBackToFootball={() => setSelectedSport('football')}
-          />
-        ) : (
-          <>
+                  <>
             {/* 3. DAILY VERIFIED SCORECARD SECTION */}
         <section className="daily-scorecard-section">
           {/* Top Date Header: Current Date Display on left, League Selector Dropdown on far right */}
@@ -2509,7 +2230,7 @@ export default function App() {
 
           {/* 4. DECONGESTED SCORECARD KPI SECTION (TWO COMPACT CARDS WITH INNER DIVIDER LINES) */}
           <div className="scorecard-two-cards-row">
-            {/* Card 1: 4 Unified Confidence Tabs inside one single-card footprint */}
+            {/* Card 1: 0-10 Confidence Score Tiers inside one single-card footprint */}
             <div className="compact-kpi-card winrates-kpi-card">
               {/* Tab 1: All Predictions */}
               <div
@@ -2523,117 +2244,31 @@ export default function App() {
               >
                 <div className="compact-kpi-header">
                   <span className="compact-kpi-title">All Preds</span>
-                  <span className="compact-kpi-pill">{scorecardStats.allTotal}M</span>
+                  <span className="compact-kpi-pill">{scorecardStats.buckets.all.total}M</span>
                 </div>
                 <div className="compact-kpi-val-row">
-                  <span className="compact-kpi-pct">{scorecardStats.allWinRate}%</span>
-                  <span className="compact-kpi-ratio">{scorecardStats.allWon}W • {scorecardStats.allLost}L</span>
+                  <span className="compact-kpi-pct">{fmtRate(scorecardStats.buckets.all.winRate)}</span>
+                  <span className="compact-kpi-ratio">{scorecardStats.buckets.all.won}W • {scorecardStats.buckets.all.lost}L</span>
                 </div>
               </div>
 
-              {/* Tab 2: Bangers & Top Picks Grouped Tab */}
+              {/* Grouped: 9+ and 8-8.9 */}
               <div className="compact-kpi-grouped-tab">
-                <div
-                  className={`compact-kpi-subsegment banger-subseg ${selectedTier === 'BANGER' ? 'active-seg' : ''}`}
-                  onClick={() => setSelectedTier(selectedTier === 'BANGER' ? 'all' : 'BANGER')}
-                  title="Click to filter by 96%+ Bangers"
-                >
-                  <div className="compact-kpi-header">
-                    <span className="compact-kpi-title">⭐ Banger</span>
-                    <span className="compact-kpi-pill banger-pill">{scorecardStats.bangerTotal}M</span>
-                  </div>
-                  <div className="compact-kpi-val-row">
-                    <span className="compact-kpi-pct banger-text">{scorecardStats.bangerWinRate}%</span>
-                    <span className="compact-kpi-ratio">{scorecardStats.bangerWon}W • {scorecardStats.bangerLost}L</span>
-                  </div>
-                </div>
-
+                {renderTierSegment('tier9', 'banger')}
                 <div className="compact-kpi-inner-divider" />
-
-                <div
-                  className={`compact-kpi-subsegment toppick-subseg ${selectedTier === 'TOP PICK' ? 'active-seg' : ''}`}
-                  onClick={() => setSelectedTier(selectedTier === 'TOP PICK' ? 'all' : 'TOP PICK')}
-                  title="Click to filter by 90%-95% Top Picks"
-                >
-                  <div className="compact-kpi-header">
-                    <span className="compact-kpi-title">👑 Top Pick</span>
-                    <span className="compact-kpi-pill toppick-pill">{scorecardStats.topPickTotal}M</span>
-                  </div>
-                  <div className="compact-kpi-val-row">
-                    <span className="compact-kpi-pct toppick-text">{scorecardStats.topPickWinRate}%</span>
-                    <span className="compact-kpi-ratio">{scorecardStats.topPickWon}W • {scorecardStats.topPickLost}L</span>
-                  </div>
-                </div>
+                {renderTierSegment('tier8', 'toppick')}
               </div>
 
-              {/* Tab 3: High & Mid Confidence Grouped Tab */}
+              {/* Grouped: 6-7.9 and Below 6 */}
               <div className="compact-kpi-grouped-tab">
-                <div
-                  className={`compact-kpi-subsegment high-subseg ${selectedTier === 'HIGH' ? 'active-seg' : ''}`}
-                  onClick={() => setSelectedTier(selectedTier === 'HIGH' ? 'all' : 'HIGH')}
-                  title="Click to filter by 83%-89% High Confidence"
-                >
-                  <div className="compact-kpi-header">
-                    <span className="compact-kpi-title">🟢 High</span>
-                    <span className="compact-kpi-pill high-pill">{scorecardStats.highTotal}M</span>
-                  </div>
-                  <div className="compact-kpi-val-row">
-                    <span className="compact-kpi-pct high-text">{scorecardStats.highWinRate}%</span>
-                    <span className="compact-kpi-ratio">{scorecardStats.highWon}W • {scorecardStats.highLost}L</span>
-                  </div>
-                </div>
-
+                {renderTierSegment('tier6', 'high')}
                 <div className="compact-kpi-inner-divider" />
-
-                <div
-                  className={`compact-kpi-subsegment mid-subseg ${selectedTier === 'MID' ? 'active-seg' : ''}`}
-                  onClick={() => setSelectedTier(selectedTier === 'MID' ? 'all' : 'MID')}
-                  title="Click to filter by 75%-82% Mid Confidence"
-                >
-                  <div className="compact-kpi-header">
-                    <span className="compact-kpi-title">🔵 Mid</span>
-                    <span className="compact-kpi-pill mid-pill">{scorecardStats.midTotal}M</span>
-                  </div>
-                  <div className="compact-kpi-val-row">
-                    <span className="compact-kpi-pct mid-text">{scorecardStats.midWinRate}%</span>
-                    <span className="compact-kpi-ratio">{scorecardStats.midWon}W • {scorecardStats.midLost}L</span>
-                  </div>
-                </div>
+                {renderTierSegment('tierLow', 'low')}
               </div>
 
-              {/* Tab 4: Low & Anti Loss Grouped Tab */}
+              {/* Pass / No Safe Banker */}
               <div className="compact-kpi-grouped-tab">
-                <div
-                  className={`compact-kpi-subsegment low-subseg ${selectedTier === 'LOW' ? 'active-seg' : ''}`}
-                  onClick={() => setSelectedTier(selectedTier === 'LOW' ? 'all' : 'LOW')}
-                  title="Click to filter by 65%-74% Low Confidence"
-                >
-                  <div className="compact-kpi-header">
-                    <span className="compact-kpi-title">🟡 Low</span>
-                    <span className="compact-kpi-pill low-pill">{scorecardStats.lowTotal}M</span>
-                  </div>
-                  <div className="compact-kpi-val-row">
-                    <span className="compact-kpi-pct low-text">{scorecardStats.lowWinRate}%</span>
-                    <span className="compact-kpi-ratio">{scorecardStats.lowWon}W • {scorecardStats.lowLost}L</span>
-                  </div>
-                </div>
-
-                <div className="compact-kpi-inner-divider" />
-
-                <div
-                  className={`compact-kpi-subsegment antiloss-subseg ${selectedTier === 'NO_SAFE_BANKER' ? 'active-seg' : ''}`}
-                  onClick={() => setSelectedTier(selectedTier === 'NO_SAFE_BANKER' ? 'all' : 'NO_SAFE_BANKER')}
-                  title="Click to filter by Anti-Loss (No Safe Banker)"
-                >
-                  <div className="compact-kpi-header">
-                    <span className="compact-kpi-title">🛡️ Anti Loss</span>
-                    <span className="compact-kpi-pill antiloss-pill">{scorecardStats.antiLossTotal}M</span>
-                  </div>
-                  <div className="compact-kpi-val-row">
-                    <span className="compact-kpi-pct antiloss-text">{scorecardStats.antiLossWinRate}%</span>
-                    <span className="compact-kpi-ratio">{scorecardStats.antiLossWon}W • {scorecardStats.antiLossLost}L</span>
-                  </div>
-                </div>
+                {renderTierSegment('pass', 'antiloss')}
               </div>
             </div>
 
@@ -2682,7 +2317,7 @@ export default function App() {
                 title="Click to reset win/loss filters"
               >
                 <span className="act-seg-label">Win Rate</span>
-                <span className="act-seg-val won-text">{activeTierStats.winRate}%</span>
+                <span className="act-seg-val won-text">{fmtRate(activeTierStats.winRate)}</span>
                 <span className="act-seg-sub">{activeTierStats.won}/{activeTierStats.decided}</span>
               </div>
 
@@ -2843,14 +2478,11 @@ export default function App() {
             onOpenFavoritesDrawer={() => setIsFavoritesDrawerOpen(true)}
           />
         </div>
-            </>
-          )}
-                  </div>
-                )
-              }
-            />
-          ))}
-
+                  </>
+                )}
+              </div>
+            }
+          />
           {/* FALLBACK ROUTE */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
@@ -2873,7 +2505,8 @@ export default function App() {
         currentUser={currentUser}
       />
 
-      {/* MOBILE APP BOTTOM TAB BAR (Sport Selectors: Logo & Name + Account Settings) */}
+      {/* MOBILE APP BOTTOM TAB BAR (Sport Selectors: Dashboard Only) */}
+      {isDashboard && (
       <nav className="mobile-app-bottom-bar" aria-label="Mobile Sports & Account Navigation">
         {sportsList.map((sport) => {
           const isActive = isSportActive(sport.id);
@@ -2914,6 +2547,7 @@ export default function App() {
           <span className="mobile-tab-label">Account</span>
         </button>
       </nav>
+      )}
 
       {/* MODALS */}
       <PricingModal

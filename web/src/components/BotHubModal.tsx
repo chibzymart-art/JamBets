@@ -124,7 +124,7 @@ export const BotHubModal: React.FC<BotHubModalProps> = ({
               </span>
             </div>
             <p style={{ margin: 0, fontSize: '13.5px', color: '#94a3b8', lineHeight: 1.5 }}>
-              Never miss a 90%+ Super Banker or Over 2.5 blitz goal again. Get math-calibrated predictions pushed straight to your phone before bookmakers slash odds.
+              Never miss a high-confidence Tier 1 pick or Over 2.5 blitz goal again. Get math-calibrated predictions pushed straight to your phone before kickoff.
             </p>
           </div>
           <button
@@ -179,9 +179,9 @@ export const BotHubModal: React.FC<BotHubModalProps> = ({
               }}
             >
               <div style={{ fontSize: '11px', fontWeight: 800, color: '#38bdf8' }}>STEP 01</div>
-              <div style={{ fontSize: '13px', fontWeight: 800, color: '#ffffff' }}>🔬 250k Simulations</div>
+              <div style={{ fontSize: '13px', fontWeight: 800, color: '#ffffff' }}>🔬 0–10 Confidence Scores</div>
               <div style={{ fontSize: '11px', color: '#94a3b8', lineHeight: 1.4 }}>
-                Daily at 06:00 WAT, our Dixon-Coles cluster simulates each fixture 250,000 times for exact probabilities.
+                Daily at 06:00 WAT, our quantitative engine computes bivariate Poisson probability distributions and assigns calibrated 0–10 scores.
               </div>
             </div>
 
@@ -349,7 +349,7 @@ export const BotHubModal: React.FC<BotHubModalProps> = ({
                 }}
               >
                 <div><code>/today</code> — All today's calibrated predictions</div>
-                <div><code>/bangers</code> — High-certainty 90%+ Super Bankers</div>
+                <div><code>/bangers</code> — Top Tier 1 (9.0+) high-confidence picks</div>
                 <div><code>/goals</code> — Over 2.5 & first-half goal blitz</div>
                 <div><code>/tomorrow</code> — Early forward odds & early edges</div>
                 <div><code>/settled</code> — Auditable ledger & verified ROI</div>
@@ -519,7 +519,7 @@ export const BotHubModal: React.FC<BotHubModalProps> = ({
                   lineHeight: 1.6,
                 }}
               >
-                <div>🔥 <strong>Morning Banker Drop:</strong> Top 90%+ picks before 07:00 WAT</div>
+                <div>🔥 <strong>Morning Banker Drop:</strong> Top Tier 1 picks before 07:00 WAT</div>
                 <div>⚡ <strong>Kickoff Alerts:</strong> Last-minute lineup and momentum flags</div>
                 <div>🎯 <strong>Over 2.5 blitz:</strong> High-scoring matches alerted on the fly</div>
                 <div>📲 <strong>Chat Support:</strong> 24/7 subscriber concierge on WhatsApp</div>

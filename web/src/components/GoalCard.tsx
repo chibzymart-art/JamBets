@@ -864,7 +864,7 @@ export const StandaloneGoalCard: React.FC<StandaloneGoalCardProps> = ({
               <div className="paywall-glass-content">
                 <span className="lock-icon">🔒</span>
                 <span className="lock-heading">{isOver25 ? 'Over 2.5 VIP Edge' : '1H Blitz VIP Edge'}</span>
-                <span className="lock-subtext">Verified 81%+ Historical Win Rate</span>
+                <span className="lock-subtext">Audited Models &amp; Transparent Track Record</span>
                 <button className="subcard-lock-btn" type="button">
                   Unlock VIP Signal →
                 </button>

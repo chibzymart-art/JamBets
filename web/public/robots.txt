@@ -5,10 +5,9 @@
 
 User-agent: *
 Allow: /
-Allow: /goals
-Allow: /predictions
-Allow: /dashboard
-Allow: /pricing
+
+# Login-only area: nothing indexable for anonymous crawlers
+Disallow: /dashboard
 
 # Protect private admin deck and internal edge endpoints
 Disallow: /admin
@@ -27,4 +26,4 @@ Allow: /
 User-agent: TelegramBot
 Allow: /
 
-Sitemap: https://oddsbanta.com/sitemap.xml
+Sitemap: https://www.oddsbanta.com/sitemap.xml

@@ -401,7 +401,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 {mode === 'forgot' && 'Reset Your Password'}
               </h2>
               <p className="modal-subtitle">
-                {mode === 'signin' && 'Access your subscription and verified 250k predictions'}
+                {mode === 'signin' && 'Access your subscription and verified predictions'}
                 {mode === 'register' && 'Join the statistical football modeling community'}
                 {mode === 'forgot' && 'Enter your email to receive recovery instructions'}
               </p>

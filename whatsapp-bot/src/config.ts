@@ -17,5 +17,5 @@ export const config = {
   ],
   authDir: process.env.AUTH_DIR || path.resolve(__dirname, '../auth_info'),
   port: parseInt(process.env.PORT || '8080', 10),
-  websiteUrl: 'https://oddsbanta.com'
+  websiteUrl: 'https://www.oddsbanta.com'
 };

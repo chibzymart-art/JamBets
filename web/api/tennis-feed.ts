@@ -399,7 +399,7 @@ export default async function handler(req: Request): Promise<Response> {
           ],
           metadata: {
             ...p.metadata,
-            ai_tactical_analysis: '🔒 Upgrade to Oddsbanta VIP to unlock comprehensive 250,000 Monte Carlo simulation distributions and AI tactical breakdown.',
+            ai_tactical_analysis: '🔒 Upgrade to Oddsbanta VIP to unlock comprehensive probability distributions and AI tactical breakdown.',
             markov: undefined,
           },
           is_locked: true,

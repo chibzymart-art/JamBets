@@ -439,7 +439,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
       }
 
       text += `🔒 Full 5-dimension breakdowns & live predictions:\n`;
-      text += `👉 https://oddsbanta.com/dashboard\n\n`;
+      text += `👉 https://www.oddsbanta.com/dashboard\n\n`;
       text += `_Oddsbanta — Precision AI Football Analysis_`;
 
       setBroadcastText(text);

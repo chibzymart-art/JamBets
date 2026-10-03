@@ -28,7 +28,7 @@ export async function handleWhatsAppMessage(fromPhone: string, text: string): Pr
   if (lower === 'help' || lower === 'menu' || lower === '?' || lower === 'hi' || lower === 'hello' || lower === 'start') {
     return (
       `🤖 *Welcome to Oddsbanta VIP Predictions Bot*\n` +
-      `_Precision AI Football Analysis & 250k Monte Carlo Draws_\n\n` +
+      `_Precision AI Football Analysis & Calibrated Probability Models_\n\n` +
       `Your Status: *${userAccess.isPaid ? '⭐ ' + userAccess.tier : 'Free Access'}*\n\n` +
       `📌 *Available Commands:*\n` +
       `*1* or *TODAY* — Today's Match Predictions\n` +
@@ -124,7 +124,7 @@ export async function handleWhatsAppMessage(fromPhone: string, text: string): Pr
 
     // Full VIP Unlocked View
     let msg = `🔥 *Oddsbanta Super Bankers (${bangers.length} Matches)*\n`;
-    msg += `_Verified 250k Monte Carlo Consensus & High Win-Rate Target_\n\n`;
+    msg += `_Calibrated 0–10 Confidence Scores & Mathematical Value Edges_\n\n`;
 
     bangers.slice(0, 10).forEach((p: any, idx: number) => {
       const ht = p.fixture?.home_team?.short_name || p.fixture?.home_team?.name || 'Home';

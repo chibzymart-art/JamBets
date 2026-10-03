@@ -17,7 +17,7 @@ export const PricingModal: React.FC<PricingModalProps> = ({ isOpen, onClose, onU
             <img src="/oddsbanta-logo.svg" alt="Oddsbanta" className="modal-brand-logo-img" />
             <div>
               <h2 className="modal-title">Oddsbanta Subscriptions</h2>
-              <p className="modal-subtitle">Instant mathematical edge — flat rates with verified 250k draws</p>
+              <p className="modal-subtitle">Instant mathematical edge — transparent 0–10 confidence scores and audited track record</p>
             </div>
           </div>
           <button className="modal-close-btn" onClick={onClose} aria-label="Close modal">
@@ -100,7 +100,7 @@ export const PricingModal: React.FC<PricingModalProps> = ({ isOpen, onClose, onU
         </div>
 
         <div className="pricing-guarantee-note">
-          <span>🛡 <strong>100% Mathematical Transparency:</strong> Every prediction is backed by 250,000 PCG64 draws recorded on Supabase before kickoff. All voided/cancelled matches are refunded.</span>
+          <span>🛡 <strong>Mathematical Transparency:</strong> Every prediction is derived from calibrated probabilistic models recorded before kickoff. Settled hit rates and outcomes are published on our public track record.</span>
         </div>
       </div>
     </div>

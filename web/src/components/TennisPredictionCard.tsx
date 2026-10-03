@@ -362,7 +362,7 @@ export const TennisPredictionCard: React.FC<TennisPredictionCardProps> = ({
             <div className="glance-key-pick-card locked" onClick={() => setIsExpanded(!isExpanded)}>
               <div className="key-pick-badge">
                 <span className="key-pick-spark">✨</span>
-                <span>KEY 250,000 SIM PICK</span>
+                <span>KEY MODEL PICK</span>
               </div>
               <div className="key-pick-outcome locked-blur">
                 ••••••••••••••••
@@ -384,11 +384,11 @@ export const TennisPredictionCard: React.FC<TennisPredictionCardProps> = ({
             <div
               className="glance-key-pick-card"
               onClick={() => setIsExpanded(!isExpanded)}
-              title="Click to expand calibrated 250,000 Monte Carlo & Markov simulation breakdown"
+              title="Click to expand calibrated model probability & Markov breakdown"
             >
               <div className="key-pick-badge">
                 <span className="key-pick-spark">✨</span>
-                <span>KEY 250,000 SIM PICK</span>
+                <span>KEY MODEL PICK</span>
                 {isWon && (
                   <span style={{ marginLeft: 6, padding: '1px 6px', background: '#16a34a', color: '#fff', borderRadius: 4, fontSize: 10, fontWeight: 900 }}>
                     ✓ WON
@@ -494,7 +494,7 @@ export const TennisPredictionCard: React.FC<TennisPredictionCardProps> = ({
               <div className="prediction-panel-header">
                 <div className="sim-verified-pill">
                   <span className="dot" />
-                  <span>Exact 250,000 Draws Verified • Tennis Engine</span>
+                  <span>Markov Hold/Break Probability Model • Tennis Engine</span>
                 </div>
                 <span className="model-tag">
                   PCG64 • Barnett-Clarke Markov Chain

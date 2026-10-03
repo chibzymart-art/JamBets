@@ -18,8 +18,8 @@ export const FaqModal: React.FC<FaqModalProps> = ({ isOpen, onClose }) => {
 
   const faqs: FaqItem[] = [
     {
-      question: 'What is the Dixon-Coles 250,000 Monte Carlo Engine?',
-      answer: 'Oddsbanta uses an advanced bivariate Poisson model with low-scoring correction (Dixon & Coles 1997). For every candidate fixture across 16 world leagues, our engine computes calibrated expected goals (xG), runs 250,000 independent Monte Carlo draws using the PCG64 random generator, and outputs exact empirical probabilities.',
+      question: 'What is the Dixon-Coles Probability Engine?',
+      answer: 'Oddsbanta uses a calibrated bivariate Poisson model with low-scoring correction (Dixon & Coles 1997). For every candidate fixture across 30 world leagues, our engine computes expected goals (xG), calculates probability distributions, and maps them to transparent 0–10 confidence scores across 4 tiers.',
       category: 'Modeling'
     },
     {
@@ -39,7 +39,7 @@ export const FaqModal: React.FC<FaqModalProps> = ({ isOpen, onClose }) => {
     },
     {
       question: 'Why does Oddsbanta enforce a Zero-Leakage Data Policy?',
-      answer: 'Oddsbanta only publishes fixtures that have passed strict multi-source data validation, completed 250,000 Monte Carlo simulation runs, and satisfied our mathematical publication thresholds. Any fixture with incomplete data remains strictly internal and is never published on the prediction UI. We guarantee 100% mathematical integrity with zero speculative leaks.',
+      answer: 'Oddsbanta only publishes fixtures that have passed strict multi-source data validation, completed probabilistic calibration, and satisfied our mathematical publication thresholds. Any fixture with incomplete data remains strictly internal and is never published on the prediction UI. We maintain full mathematical transparency with settled outcomes tracked on our public ledger.',
       category: 'Integrity'
     }
   ];

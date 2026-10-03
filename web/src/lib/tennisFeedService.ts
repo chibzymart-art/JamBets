@@ -329,7 +329,7 @@ export async function fetchTennisFeed(options: FetchTennisFeedOptions = {}): Pro
           metadata: {
             ...p.metadata,
             ai_tactical_analysis:
-              '🔒 Upgrade to Oddsbanta VIP to unlock full 250,000 Monte Carlo probability distributions and AI tactical breakdown.',
+              '🔒 Upgrade to Oddsbanta VIP to unlock full probability distributions and AI tactical breakdown.',
             markov: undefined,
           },
           is_locked: true,

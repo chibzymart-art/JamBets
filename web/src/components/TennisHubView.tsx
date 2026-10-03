@@ -920,7 +920,7 @@ export const TennisHubView: React.FC<TennisHubViewProps> = ({
                   Synchronizing Tennis Prediction Queue...
                 </div>
                 <div style={{ fontSize: 12, color: 'var(--text-muted, #64748b)', marginTop: 4 }}>
-                  Fetching verified 250,000 Monte Carlo simulations and ATP/WTA match draws.
+                  Fetching calibrated model predictions and ATP/WTA match draws.
                 </div>
               </div>
             ) : filteredPredictions.length === 0 ? (

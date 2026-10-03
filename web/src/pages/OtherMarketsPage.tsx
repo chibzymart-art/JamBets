@@ -36,6 +36,9 @@ const VALID_MARKETS: MarketType[] = [
   'corners',
   'curated',
   'general',
+  'home_win',
+  'away_win',
+  'draw',
 ];
 
 export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
@@ -481,16 +484,14 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
               <span className="scorecard-text-desktop">Won ✅ ({statusStats.won})</span>
               <span className="scorecard-text-mobile">Won ({statusStats.won})</span>
             </button>
-            {isPaidUser && (
-              <button
-                type="button"
-                className={`scorecard-pill lost ${statusFilter === 'lost' ? 'active' : ''}`}
-                onClick={() => setStatusFilter('lost')}
-              >
-                <span className="scorecard-text-desktop">Lost ❌ ({statusStats.lost})</span>
-                <span className="scorecard-text-mobile">Lost ({statusStats.lost})</span>
-              </button>
-            )}
+            <button
+              type="button"
+              className={`scorecard-pill lost ${statusFilter === 'lost' ? 'active' : ''}`}
+              onClick={() => setStatusFilter('lost')}
+            >
+              <span className="scorecard-text-desktop">Lost ❌ ({statusStats.lost})</span>
+              <span className="scorecard-text-mobile">Lost ({statusStats.lost})</span>
+            </button>
             <button
               type="button"
               className={`scorecard-pill pending ${statusFilter === 'pending' ? 'active' : ''}`}
@@ -505,7 +506,30 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
 
       {/* Active Market Cards Stream (Continuous Vertical Scroll) */}
       <section className="other-markets-cards-section" style={{ marginTop: 14 }}>
-        {loading ? (
+        {(activeMarket === 'home_win' || activeMarket === 'away_win' || activeMarket === 'draw') ? (
+          <div className="coming-soon-panel" style={{ textAlign: 'center', padding: '48px 24px', background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0' }}>
+            <div style={{ fontSize: 40, marginBottom: 12 }}>
+              {activeMarket === 'home_win' ? '🏠' : activeMarket === 'away_win' ? '✈️' : '🤝'}
+            </div>
+            <h2 style={{ fontSize: '1.35rem', fontWeight: 800, color: '#0f172a', marginBottom: 8 }}>
+              {activeMarket === 'home_win' ? 'Home Win Specialist' : activeMarket === 'away_win' ? 'Away Win Hunter' : 'Draw Hunter Specialist'} Model Lab
+            </h2>
+            <span style={{ display: 'inline-block', padding: '4px 12px', background: '#f1f5f9', color: '#64748b', borderRadius: 999, fontWeight: 700, fontSize: 12, marginBottom: 16 }}>
+              ⏳ Coming Soon
+            </span>
+            <p style={{ maxWidth: 520, margin: '0 auto 20px', color: '#64748b', fontSize: 14, lineHeight: 1.6 }}>
+              Our quantitative modeling team is actively backtesting {activeMarket === 'home_win' ? 'Home Advantage' : activeMarket === 'away_win' ? 'Counter-Attack Discrepancy' : 'Low-Variance Poisson Convergence'} GLM models. Active specialist markets in production include Over 2.5 Goals, 1H Blitz, and Corners Specialist.
+            </p>
+            <button
+              type="button"
+              className="btn-hero-green"
+              onClick={() => handleSelectMarket('over_2.5_goals')}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, margin: '0 auto' }}
+            >
+              🎯 View Over 2.5 Goals Predictions
+            </button>
+          </div>
+        ) : loading ? (
           <div className="goals-loading-state" style={{ textAlign: 'center', padding: '40px 20px' }}>
             <div className="goals-spinner" />
             <p style={{ marginTop: 12, fontWeight: 700, color: 'var(--text-secondary)' }}>

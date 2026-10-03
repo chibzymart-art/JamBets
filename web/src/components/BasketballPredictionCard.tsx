@@ -303,7 +303,7 @@ export const BasketballPredictionCard: React.FC<BasketballPredictionCardProps> =
         <div className="bball-four-factors-wrap" onClick={(e) => e.stopPropagation()}>
           <div className="bball-ff-header">
             <span>Dean Oliver Four Factors Breakdown</span>
-            <span style={{ color: '#64748b' }}>250k Monte Carlo Simulated Pace</span>
+            <span style={{ color: '#64748b' }}>Possessions &amp; Simulated Pace</span>
           </div>
 
           {/* eFG% */}
@@ -354,7 +354,7 @@ export const BasketballPredictionCard: React.FC<BasketballPredictionCardProps> =
           {prediction.simulated_home_score != null && prediction.simulated_away_score != null && (
             <div style={{ display: 'flex', justifyContent: 'space-around', background: '#ffffff', border: '1px solid #e2e8f0', padding: '10px', borderRadius: '8px', marginTop: '12px', boxShadow: '0 2px 6px rgba(0,0,0,0.03)' }}>
               <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>250k Sim Home Score</div>
+                <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>Expected Home Score</div>
                 <div style={{ fontSize: 16, fontWeight: 800, color: '#ea580c' }}>{prediction.simulated_home_score.toFixed(1)}</div>
               </div>
               <div style={{ textAlign: 'center' }}>
@@ -364,7 +364,7 @@ export const BasketballPredictionCard: React.FC<BasketballPredictionCardProps> =
                 </div>
               </div>
               <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>250k Sim Away Score</div>
+                <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>Expected Away Score</div>
                 <div style={{ fontSize: 16, fontWeight: 800, color: '#0284c7' }}>{prediction.simulated_away_score.toFixed(1)}</div>
               </div>
             </div>
@@ -422,7 +422,7 @@ export const BasketballPredictionCard: React.FC<BasketballPredictionCardProps> =
             setIsExpanded(!isExpanded);
           }}
           aria-expanded={isExpanded}
-          title={isExpanded ? 'Click to collapse breakdown' : 'Click to view 250k Monte Carlo & Four Factors Breakdown'}
+          title={isExpanded ? 'Click to collapse breakdown' : 'Click to view Dean Oliver Four Factors Breakdown'}
         >
           {isExpanded ? (
             <>

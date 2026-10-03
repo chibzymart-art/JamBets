@@ -18,6 +18,7 @@ interface MarketTabConfig {
   badgeTag: string;
   description: string;
   accentColor: string;
+  isComingSoon?: boolean;
 }
 
 const MARKET_TABS: MarketTabConfig[] = [
@@ -52,6 +53,33 @@ const MARKET_TABS: MarketTabConfig[] = [
     badgeTag: 'NB GLM',
     description: 'Negative Binomial Set-Piece GLM analyzing wing width & cross deflection volume',
     accentColor: '#d97706',
+  },
+  {
+    id: 'home_win',
+    label: 'Home Win',
+    icon: '🏠',
+    badgeTag: 'SOON',
+    description: 'Home Advantage & Pitch Familiarity GLM',
+    accentColor: '#6366f1',
+    isComingSoon: true,
+  },
+  {
+    id: 'away_win',
+    label: 'Away Win',
+    icon: '✈️',
+    badgeTag: 'SOON',
+    description: 'Counter-Attack & Travel Fatigue Discrepancy Model',
+    accentColor: '#8b5cf6',
+    isComingSoon: true,
+  },
+  {
+    id: 'draw',
+    label: 'Draw Hunter',
+    icon: '🤝',
+    badgeTag: 'SOON',
+    description: 'Low-Variance Poisson Convergence & Stalemate Classifier',
+    accentColor: '#64748b',
+    isComingSoon: true,
   },
 ];
 
@@ -101,10 +129,16 @@ export const MarketSwitchboardNav: React.FC<MarketSwitchboardNavProps> = ({
               <span className="pill-icon">{tab.icon}</span>
               <span className="pill-label">{tab.label}</span>
 
-              {/* Dynamic Count Badge */}
-              <span className={`pill-count-badge ${isActive ? 'active-count' : ''}`}>
-                {count !== undefined ? count : (loading ? '...' : 0)}
-              </span>
+              {/* Dynamic Count Badge or Coming Soon */}
+              {tab.isComingSoon ? (
+                <span className="pill-count-badge pill-soon-badge" style={{ background: '#f1f5f9', color: '#64748b' }}>
+                  Soon
+                </span>
+              ) : (
+                <span className={`pill-count-badge ${isActive ? 'active-count' : ''}`}>
+                  {count !== undefined ? count : (loading ? '...' : 0)}
+                </span>
+              )}
             </button>
           );
         })}

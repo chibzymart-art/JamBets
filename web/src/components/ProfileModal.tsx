@@ -386,7 +386,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
             <span className="settings-section-icon">🤖</span>
             <div>
               <h3 className="settings-section-title">VIP Telegram Bot & WhatsApp Hub</h3>
-              <p className="settings-section-sub">Direct access to live 250,000-simulated predictions on your phone</p>
+              <p className="settings-section-sub">Direct access to verified model predictions on your phone</p>
             </div>
           </div>
 

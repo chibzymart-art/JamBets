@@ -71,8 +71,8 @@ export const FavoritesDrawer: React.FC<FavoritesDrawerProps> = ({
       text += `🎯 Pick: *${fav.prediction}* (${fav.market})${probStr ? ` • ${probStr}` : ''}\n\n`;
     });
 
-    text += `🔒 Verified with 250,000 Monte Carlo Simulations\n`;
-    text += `👉 https://oddsbanta.com/dashboard\n`;
+    text += `🔒 Calibrated 0–10 Confidence Scores | Oddsbanta\n`;
+    text += `👉 https://www.oddsbanta.com/dashboard\n`;
     text += `_Oddsbanta — Smart Sport Analysis and Prediction_`;
 
     navigator.clipboard.writeText(text);
@@ -142,7 +142,7 @@ export const FavoritesDrawer: React.FC<FavoritesDrawerProps> = ({
                   href={`https://api.whatsapp.com/send?text=${encodeURIComponent(
                     `🔥 *ODDSBANTA ACCA SLIP* (${favorites.length} Picks)\n\n` +
                     favorites.map((f, i) => `${i + 1}. *${f.homeTeam} vs ${f.awayTeam}*\n   🎯 Pick: *${f.prediction}* (${f.market}) • ${Math.round(f.probability || 0)}%\n`).join('\n') +
-                    `\n🔒 Verified by Oddsbanta AI Engine\n👉 https://oddsbanta.com/dashboard`
+                    `\n🔒 Verified by Oddsbanta AI Engine\n👉 https://www.oddsbanta.com/dashboard`
                   )}`}
                   target="_blank"
                   rel="noopener noreferrer"

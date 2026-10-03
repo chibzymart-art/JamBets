@@ -45,10 +45,34 @@
       ]
     }
   ],
+  "redirects": [
+    { "source": "/predictions", "destination": "/dashboard", "permanent": true },
+    { "source": "/football", "destination": "/dashboard", "permanent": true },
+    { "source": "/analytics", "destination": "/dashboard", "permanent": true },
+    { "source": "/dashboard/predictions", "destination": "/dashboard", "permanent": true },
+    { "source": "/dashboard/football", "destination": "/dashboard", "permanent": true },
+    { "source": "/goals", "destination": "/dashboard/goals", "permanent": true },
+    { "source": "/other-markets", "destination": "/dashboard/goals", "permanent": true },
+    { "source": "/over-2-5", "destination": "/dashboard/goals", "permanent": true },
+    { "source": "/tennis", "destination": "/dashboard/tennis", "permanent": true },
+    { "source": "/basketball", "destination": "/dashboard/basketball", "permanent": true },
+    { "source": "/american-football", "destination": "/dashboard/american-football", "permanent": true },
+    { "source": "/cricket", "destination": "/dashboard/cricket", "permanent": true },
+    { "source": "/track-record", "destination": "/dashboard/track-record", "permanent": true },
+    { "source": "/settlement", "destination": "/dashboard/track-record", "permanent": true },
+    { "source": "/pricing", "destination": "/subscription", "permanent": true }
+  ],
   "rewrites": [
+    { "source": "/", "destination": "/api/ssr?path=/" },
+    { "source": "/dashboard", "destination": "/api/ssr?path=/dashboard" },
+    {
+      "source": "/dashboard/:page(goals|tennis|basketball|track-record|american-football|cricket)",
+      "destination": "/api/ssr?path=/dashboard/:page"
+    },
+    { "source": "/subscription", "destination": "/api/ssr?path=/subscription" },
     {
       "source": "/((?!api/).*)",
-      "destination": "/index.html"
+      "destination": "/app-shell.html"
     }
   ]
 }

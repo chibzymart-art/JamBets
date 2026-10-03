@@ -1,27 +1,34 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!-- Canonical host is www.oddsbanta.com (non-www 308-redirects here). Keep in sync with web/src/lib/seo.ts SITE_ORIGIN. -->
+<!-- Only public, indexable routes. /dashboard requires login; /pricing is not a route. -->
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
-    <loc>https://oddsbanta.com/</loc>
+    <loc>https://www.oddsbanta.com/</loc>
     <changefreq>daily</changefreq>
     <priority>1.0</priority>
   </url>
   <url>
-    <loc>https://oddsbanta.com/goals</loc>
+    <loc>https://www.oddsbanta.com/goals</loc>
     <changefreq>hourly</changefreq>
     <priority>0.95</priority>
   </url>
   <url>
-    <loc>https://oddsbanta.com/predictions</loc>
+    <loc>https://www.oddsbanta.com/predictions</loc>
     <changefreq>hourly</changefreq>
     <priority>0.9</priority>
   </url>
   <url>
-    <loc>https://oddsbanta.com/dashboard</loc>
+    <loc>https://www.oddsbanta.com/tennis</loc>
     <changefreq>daily</changefreq>
-    <priority>0.8</priority>
+    <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://oddsbanta.com/pricing</loc>
+    <loc>https://www.oddsbanta.com/basketball</loc>
+    <changefreq>daily</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://www.oddsbanta.com/subscription</loc>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>

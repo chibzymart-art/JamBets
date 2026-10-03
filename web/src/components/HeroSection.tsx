@@ -39,7 +39,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
         <div className="hero-main-column">
           <div className="hero-tagline-badge">
             <span className="badge-pulse-dot" />
-            <span>250,000 MONTE CARLO DRAWS • DIXON-COLES ENGINE</span>
+            <span>CALIBRATED PROBABILISTIC MODELS • DIXON-COLES ENGINE</span>
           </div>
 
           <h1 className="hero-headline">
@@ -154,7 +154,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
           <div className="hero-example-card">
             <div className="example-header">
               <div className="example-badge">EXAMPLE MODEL OUTPUT</div>
-              <div className="example-sims-tag">250,000 Sims Verified</div>
+              <div className="example-sims-tag">Score: 8.8 / 10 • Tier 2</div>
             </div>
 
             <div className="example-match-title">
@@ -172,7 +172,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
               </div>
               <p className="example-rationale">
                 Dixon-Coles bivariate distribution projects high scoring probability. 
-                221,000 of 250,000 simulated outcomes converged on ≥2 total goals.
+                Dixon-Coles bivariate distribution projects high scoring probability (8.8/10 score).
               </p>
             </div>
 
@@ -198,9 +198,9 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
 
           <div className="hero-step-card">
             <span className="step-number-tag">Step 2</span>
-            <h3 className="step-card-title">250,000 Monte Carlo runs</h3>
+            <h3 className="step-card-title">0–10 Confidence Cadence</h3>
             <p className="step-card-desc">
-              The engine simulates each fixture 250,000 times before kickoff.
+              Every prediction is mapped to a 0–10 confidence score across 4 transparent tiers.
               The outcome with the highest statistical occurrence is selected as your verified Key Pick.
             </p>
           </div>

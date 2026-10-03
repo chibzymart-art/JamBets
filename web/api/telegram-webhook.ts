@@ -264,7 +264,7 @@ export default async function handler(req: Request) {
         } else {
           await sendTelegramMessage(
             chatId,
-            `⚠️ <b>Connection Failed</b>\n${escapeHtml(linkResult.error)}\n\nPlease visit <a href="https://oddsbanta.com/dashboard">Oddsbanta Dashboard</a> to generate a fresh link code.`
+            `⚠️ <b>Connection Failed</b>\n${escapeHtml(linkResult.error)}\n\nPlease visit <a href="https://www.oddsbanta.com/dashboard">Oddsbanta Dashboard</a> to generate a fresh link code.`
           );
           return new Response(JSON.stringify({ ok: true }), { status: 200 });
         }
@@ -298,11 +298,11 @@ export default async function handler(req: Request) {
           chatId,
           `👋 <b>Welcome to Oddsbanta Sentinel VIP Bot!</b>\n\n` +
           `To access predictions on Telegram, link your Oddsbanta account:\n\n` +
-          `1. Sign in to <a href="https://oddsbanta.com/dashboard">Oddsbanta Dashboard</a>\n` +
+          `1. Sign in to <a href="https://www.oddsbanta.com/dashboard">Oddsbanta Dashboard</a>\n` +
           `2. Click <b>Connect Telegram VIP Bot</b> in your profile\n` +
           `3. Click the instant deep link, or send:\n` +
           `   <code>/link YOUR_CODE</code>\n\n` +
-          `Need an account? Register at <a href="https://oddsbanta.com">oddsbanta.com</a>.`
+          `Need an account? Register at <a href="https://www.oddsbanta.com">oddsbanta.com</a>.`
         );
       }
       return new Response(JSON.stringify({ ok: true }), { status: 200 });
@@ -314,7 +314,7 @@ export default async function handler(req: Request) {
       if (parts.length < 2 || !parts[1].trim()) {
         await sendTelegramMessage(
           chatId,
-          `ℹ️ <b>Usage:</b> <code>/link YOUR_CODE</code>\n\nGenerate your code inside your <a href="https://oddsbanta.com/dashboard">Oddsbanta Dashboard</a>.`
+          `ℹ️ <b>Usage:</b> <code>/link YOUR_CODE</code>\n\nGenerate your code inside your <a href="https://www.oddsbanta.com/dashboard">Oddsbanta Dashboard</a>.`
         );
         return new Response(JSON.stringify({ ok: true }), { status: 200 });
       }
@@ -343,7 +343,7 @@ export default async function handler(req: Request) {
       if (!user) {
         await sendTelegramMessage(
           chatId,
-          `🔒 <b>Not Linked</b>\nYour Telegram account is not connected to an Oddsbanta profile.\n\nConnect at <a href="https://oddsbanta.com/dashboard">Oddsbanta Dashboard</a>.`
+          `🔒 <b>Not Linked</b>\nYour Telegram account is not connected to an Oddsbanta profile.\n\nConnect at <a href="https://www.oddsbanta.com/dashboard">Oddsbanta Dashboard</a>.`
         );
         return new Response(JSON.stringify({ ok: true }), { status: 200 });
       }
@@ -356,7 +356,7 @@ export default async function handler(req: Request) {
         `• Access Tier: <b>${escapeHtml(authInfo.tier)}</b>\n` +
         `• VIP Status: <b>${authInfo.isPaid ? 'UNLOCKED ✅' : 'LOCKED ❌'}</b>\n` +
         `• Bot Engine: <b>Active 🟢 (v2.4 Sniper)</b>\n\n` +
-        `${authInfo.isPaid ? 'You have full access to all 250,000-simulated prediction feeds.' : 'Upgrade to Standard or BigBang VIP at <a href="https://oddsbanta.com/subscription">oddsbanta.com/subscription</a> to unlock live Telegram feeds.'}`
+        `${authInfo.isPaid ? 'You have full access to all verified prediction feeds.' : 'Upgrade to Standard or BigBang VIP at <a href="https://www.oddsbanta.com/subscription">oddsbanta.com/subscription</a> to unlock live Telegram feeds.'}`
       );
       return new Response(JSON.stringify({ ok: true }), { status: 200 });
     }
@@ -396,8 +396,8 @@ export default async function handler(req: Request) {
         `• /status - Check account &amp; VIP subscription status\n` +
         `• /link &lt;CODE&gt; - Connect your Oddsbanta web profile\n` +
         `• /help - Display this FAQ &amp; command list\n\n` +
-        `🌐 <b>Website:</b> https://oddsbanta.com\n` +
-        `📊 <b>Dashboard:</b> https://oddsbanta.com/dashboard`;
+        `🌐 <b>Website:</b> https://www.oddsbanta.com\n` +
+        `📊 <b>Dashboard:</b> https://www.oddsbanta.com/dashboard`;
 
       await sendTelegramMessage(chatId, helpText);
       return new Response(JSON.stringify({ ok: true }), { status: 200 });
@@ -440,7 +440,7 @@ export default async function handler(req: Request) {
         const pick = escapeHtml(p.prediction || '');
         reply += `• <b>${home} vs ${away}</b> (${score})\n  Pick: ${pick} → <b>${icon}</b>\n`;
       });
-      reply += `\nTrack record is 100% auditable at <a href="https://oddsbanta.com/settlement">oddsbanta.com/settlement</a>`;
+      reply += `\nTrack record is 100% auditable at <a href="https://www.oddsbanta.com/dashboard/track-record">oddsbanta.com/settlement</a>`;
 
       await sendTelegramMessage(chatId, reply);
       return new Response(JSON.stringify({ ok: true }), { status: 200 });
@@ -573,7 +573,7 @@ interface TelegramFixtureCard {
           chatId,
           `🔒 <b>Authentication Required</b>\n\n` +
           `Please link your Oddsbanta account first to pull predictions.\n\n` +
-          `1. Sign in at <a href="https://oddsbanta.com/dashboard">Oddsbanta</a>\n` +
+          `1. Sign in at <a href="https://www.oddsbanta.com/dashboard">Oddsbanta</a>\n` +
           `2. Click <b>Connect Telegram VIP Bot</b>\n` +
           `3. Enter the code here: <code>/link YOUR_CODE</code>`
         );
@@ -586,8 +586,8 @@ interface TelegramFixtureCard {
           chatId,
           `🔒 <b>VIP Access Required</b>\n\n` +
           `Your account is currently on the <b>Free Tier</b>.\n` +
-          `To unlock live 250,000-simulated predictions directly in Telegram, upgrade your plan:\n\n` +
-          `👉 <a href="https://oddsbanta.com/subscription">Upgrade to VIP (₦5,000/mo)</a>`
+          `To unlock live predictions directly in Telegram, upgrade your plan:\n\n` +
+          `👉 <a href="https://www.oddsbanta.com/subscription">Upgrade to VIP (₦5,000/mo)</a>`
         );
         return new Response(JSON.stringify({ ok: true }), { status: 200 });
       }
@@ -800,7 +800,7 @@ interface TelegramFixtureCard {
       });
 
       if (filtered.length > 10) {
-        reply += `<i>...and ${filtered.length - 10} more fixtures on <a href="https://oddsbanta.com/dashboard">Oddsbanta Dashboard</a></i>\n\n`;
+        reply += `<i>...and ${filtered.length - 10} more fixtures on <a href="https://www.oddsbanta.com/dashboard">Oddsbanta Dashboard</a></i>\n\n`;
       }
 
       reply += `Quick Commands: /today | /tomorrow | /bangers | /toppicks | /goals`;

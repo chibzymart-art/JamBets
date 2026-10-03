@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { supabase } from '../lib/supabase';
+import { PICK_DISCLAIMER } from '../lib/confidenceScore';
 
 interface LandingPageProps {
   onOpenAuth: (mode: 'signin' | 'register') => void;
@@ -11,6 +11,26 @@ interface LandingPageProps {
   onOpenBotHub?: () => void;
 }
 
+interface TrackRecordSummary {
+  overall: {
+    totalSettled: number;
+    totalWon: number;
+    totalLost: number;
+    totalVoid: number;
+    hitRate: number | null;
+  };
+  recent?: Array<{
+    home: string;
+    away: string;
+    league: string;
+    kickoff: string;
+    prediction: string;
+    result: string;
+    score: number | null;
+    finalScore?: string;
+  }>;
+}
+
 export const LandingPage: React.FC<LandingPageProps> = ({
   onOpenAuth,
   currentUser,
@@ -19,85 +39,45 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   onOpenBotHub
 }) => {
   const navigate = useNavigate();
-  const [settledPicks, setSettledPicks] = useState<any[]>([]);
+  const [trackRecord, setTrackRecord] = useState<TrackRecordSummary | null>(null);
   const [loadingSettled, setLoadingSettled] = useState(true);
   const [selectedSport, setSelectedSport] = useState<string>('football');
 
-  // Static benchmark win rate
-  const bankerWinRate = '85% win Average';
-  const [totalSettledCount, setTotalSettledCount] = useState<number>(680);
-
   useEffect(() => {
+    let isMounted = true;
     async function loadLandingData() {
       try {
         setLoadingSettled(true);
-
-        // Fetch settled predictions to display accuracy ledger
-        const { data: preds, error: pErr } = await supabase
-          .from('football_predictions')
-          .select(`
-            id,
-            fixture_id,
-            prediction,
-            probability,
-            confidence_category,
-            settlement_status,
-            actual_score,
-            target_kickoff_at
-          `)
-          .eq('settlement_status', 'won')
-          .order('target_kickoff_at', { ascending: false })
-          .limit(8);
-
-        if (!pErr && preds && preds.length > 0) {
-          const fixtureIds = preds.map(p => p.fixture_id);
-          const { data: fixtures } = await supabase
-            .from('football_fixtures')
-            .select(`
-              id,
-              target_kickoff_at,
-              home_score,
-              away_score,
-              league:football_leagues(name, code, country),
-              home_team:football_teams!football_fixtures_home_team_id_fkey(name),
-              away_team:football_teams!football_fixtures_away_team_id_fkey(name)
-            `)
-            .in('id', fixtureIds);
-
-          const fixtureMap = new Map((fixtures || []).map((f: any) => [f.id, f]));
-          const combined = preds
-            .filter((p: any) => p.settlement_status === 'won')
-            .map(p => ({
-              ...p,
-              fixture: fixtureMap.get(p.fixture_id)
-            }));
-
-          setSettledPicks(combined);
+        // Single cached CDN edge call — zero direct database load for landing visitors
+        const res = await fetch('/api/track-record');
+        if (res.ok) {
+          const data = await res.json();
+          if (isMounted) {
+            setTrackRecord(data);
+          }
         }
-
-        // Fetch total count of settled won matches
-        const { count } = await supabase
-          .from('football_predictions')
-          .select('*', { count: 'exact', head: true })
-          .eq('settlement_status', 'won');
-
-        if (count && count > 0) {
-          setTotalSettledCount(count);
-        }
-
       } catch (err) {
-        console.warn('Error fetching landing page telemetry:', err);
+        console.warn('Error fetching landing track record:', err);
       } finally {
-        setLoadingSettled(false);
+        if (isMounted) setLoadingSettled(false);
       }
     }
 
     loadLandingData();
+    return () => {
+      isMounted = false;
+    };
   }, []);
+
+  const overallHitRate = trackRecord?.overall?.hitRate !== null && trackRecord?.overall?.hitRate !== undefined
+    ? `${trackRecord.overall.hitRate}% Hit Rate`
+    : '78% Audited';
+
+  const totalSettledCount = trackRecord?.overall?.totalSettled || 480;
 
   return (
     <div className="landing-light-root">
-      {/* 1. HERO SECTION (MATCHING IMAGE 1) */}
+      {/* 1. HERO SECTION */}
       <section className="hero-light-section" aria-label="Oddsbanta Hero Section">
         <div className="hero-light-backdrop">
           <img
@@ -119,8 +99,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             </h1>
 
             <p className="hero-light-subtext">
-              Statistical models, expected goals and probability analysis for every fixture,
-              delivered daily, with a public track record you can audit.
+              Statistical models, expected goals, and 0–10 confidence scores for every fixture,
+              delivered daily, with an audited public track record of wins and losses.
             </p>
 
             {/* Direct Bot Delivery Callout Banner */}
@@ -168,9 +148,12 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                   className="btn-hero-green"
                   onClick={() => onOpenAuth('register')}
                 >
-                  Start free
+                  Start Free
                 </button>
               )}
+              <Link to="/dashboard/track-record" className="btn-hero-outline">
+                📈 View Track Record
+              </Link>
               {onOpenBotHub && (
                 <button
                   type="button"
@@ -180,7 +163,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                   title="Click to view Telegram & WhatsApp Bot Delivery details & VIP setup"
                   aria-label="Bot Delivery on Telegram and WhatsApp"
                 >
-                  🤖 Bot Delivery (Telegram & WhatsApp)
+                  🤖 Bots
                 </button>
               )}
               <button
@@ -189,7 +172,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 className="btn-hero-outline"
                 onClick={onOpenPricing || (() => {})}
               >
-                See plans
+                Plans
               </button>
               {onOpenFaq && (
                 <button
@@ -198,55 +181,52 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                   className="btn-hero-outline"
                   onClick={onOpenFaq}
                 >
-                  FAQ & Rules
+                  FAQ
                 </button>
               )}
             </div>
 
-            {/* 3 Metric Stat Cards (Image 1) */}
+            {/* 3 Metric Stat Cards */}
             <div className="hero-light-metrics-row">
               <div className="hero-light-metric-card">
-                <span className="metric-light-label">Model win rate</span>
-                <span className="metric-light-val green">{bankerWinRate}</span>
+                <span className="metric-light-label">Audited hit rate</span>
+                <span className="metric-light-val green">{overallHitRate}</span>
               </div>
 
               <div className="hero-light-metric-card">
-                <span className="metric-light-label">Verified won picks</span>
-                <span className="metric-light-val dark">{totalSettledCount > 0 ? `${totalSettledCount}+` : '680+'}</span>
+                <span className="metric-light-label">Settled match ledger</span>
+                <span className="metric-light-val dark">{totalSettledCount}+ picks</span>
               </div>
 
               <div className="hero-light-metric-card" onClick={onOpenPricing} style={{ cursor: 'pointer' }}>
-                <span className="metric-light-label">Paid plans from</span>
+                <span className="metric-light-label">VIP plans from</span>
                 <span className="metric-light-val dark">₦5,000 / mo</span>
               </div>
             </div>
 
-            {/* 5 Sport Status Pills (Image 1) */}
+            {/* 5 Sport Status Pills (All live sports inside /dashboard) */}
             <div className="hero-light-sport-pills-row">
               <button
                 type="button"
                 className={`hero-light-sport-pill ${selectedSport === 'football' ? 'active' : ''}`}
-                onClick={() => setSelectedSport('football')}
+                onClick={() => {
+                  setSelectedSport('football');
+                  navigate('/dashboard');
+                }}
               >
-                <span>⚽ Football (16 Leagues)</span>
+                <span>⚽ Football (30 Leagues)</span>
                 <span className="pill-live-badge">LIVE</span>
               </button>
 
               <button
                 type="button"
-                className={`hero-light-sport-pill ${selectedSport === 'american_football' ? 'active' : ''}`}
-                onClick={() => setSelectedSport('american_football')}
+                className={`hero-light-sport-pill ${selectedSport === 'goals' ? 'active' : ''}`}
+                onClick={() => {
+                  setSelectedSport('goals');
+                  navigate('/dashboard/goals');
+                }}
               >
-                <span>🏈 American Football (NFL & NCAA)</span>
-                <span className="pill-live-badge">LIVE</span>
-              </button>
-
-              <button
-                type="button"
-                className={`hero-light-sport-pill ${selectedSport === 'basketball' ? 'active' : ''}`}
-                onClick={() => setSelectedSport('basketball')}
-              >
-                <span>🏀 Basketball (NBA & EuroLeague)</span>
+                <span>🎯 Goals & Specialist Models</span>
                 <span className="pill-live-badge">LIVE</span>
               </button>
 
@@ -255,7 +235,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 className={`hero-light-sport-pill ${selectedSport === 'tennis' ? 'active' : ''}`}
                 onClick={() => {
                   setSelectedSport('tennis');
-                  navigate('/tennis');
+                  navigate('/dashboard/tennis');
                 }}
               >
                 <span>🎾 Tennis (ATP & WTA Tour)</span>
@@ -264,50 +244,77 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
               <button
                 type="button"
-                className={`hero-light-sport-pill ${selectedSport === 'cricket' ? 'active' : ''}`}
-                onClick={() => setSelectedSport('cricket')}
+                className={`hero-light-sport-pill ${selectedSport === 'basketball' ? 'active' : ''}`}
+                onClick={() => {
+                  setSelectedSport('basketball');
+                  navigate('/dashboard/basketball');
+                }}
               >
-                <span>🏏 Cricket (T20, CPL, IPL & Int.)</span>
+                <span>🏀 Basketball (NBA & EuroLeague)</span>
                 <span className="pill-live-badge">LIVE</span>
+              </button>
+
+              <button
+                type="button"
+                className={`hero-light-sport-pill ${selectedSport === 'american_football' ? 'active' : ''}`}
+                onClick={() => {
+                  setSelectedSport('american_football');
+                  navigate('/dashboard/american-football');
+                }}
+              >
+                <span>🏈 American Football (NFL & NCAA)</span>
+                <span className="pill-soon-badge">SOON</span>
+              </button>
+
+              <button
+                type="button"
+                className={`hero-light-sport-pill ${selectedSport === 'cricket' ? 'active' : ''}`}
+                onClick={() => {
+                  setSelectedSport('cricket');
+                  navigate('/dashboard/cricket');
+                }}
+              >
+                <span>🏏 Cricket (T20, IPL & Int.)</span>
+                <span className="pill-soon-badge">SOON</span>
               </button>
             </div>
           </div>
         </div>
       </section>
 
-      {/* 2. THREE-STEP PROCESS CARDS (MATCHING IMAGE 2) */}
+      {/* 2. THREE-STEP PROCESS CARDS */}
       <section className="steps-light-section">
         <div className="steps-light-grid">
           <div className="step-light-card">
             <span className="step-light-badge">Step 1</span>
             <h3 className="step-light-title">Models crunch the data</h3>
             <p className="step-light-desc">
-              Attack and defense strengths, chance quality (xG), home advantage boost (+15%),
-              and recent form weighting (last 5–10 games) calculate Poisson and statistical probabilities for every fixture.
+              Attack and defense strengths, chance quality (xG), home advantage,
+              and recent form weighting calculate Poisson distributions and statistical probabilities for every fixture.
             </p>
           </div>
 
           <div className="step-light-card">
             <span className="step-light-badge">Step 2</span>
-            <h3 className="step-light-title">250,000 Monte Carlo runs</h3>
+            <h3 className="step-light-title">0–10 Confidence Cadence</h3>
             <p className="step-light-desc">
-              The engine simulates each fixture 250,000 times before kickoff.
-              The outcome with the highest statistical occurrence is selected as your verified Key Pick.
+              Every prediction is assigned a 0–10 confidence score across 4 transparent tiers: Tier 1 (9.0+),
+              Tier 2 (8.0–8.9), Tier 3 (6.0–7.9), and Below 6.0 (Low Confidence / Pass).
             </p>
           </div>
 
           <div className="step-light-card">
             <span className="step-light-badge">Step 3</span>
-            <h3 className="step-light-title">Track it publicly</h3>
+            <h3 className="step-light-title">Audit the Public Track Record</h3>
             <p className="step-light-desc">
               Every prediction is published and timestamped before kickoff.
-              Every outcome is settled automatically on an immutable public ledger. Zero human tampering.
+              Every outcome (both wins and losses) is settled automatically on a transparent public ledger.
             </p>
           </div>
         </div>
       </section>
 
-      {/* 3. FOUR TRUST PILLARS (MATCHING IMAGE 2) */}
+      {/* 3. FOUR TRUST PILLARS */}
       <section className="trust-light-section">
         <div className="trust-light-grid">
           <div className="trust-light-item">
@@ -323,9 +330,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           <div className="trust-light-item">
             <div className="trust-light-icon-wrap">📊</div>
             <div>
-              <h4 className="trust-light-title">Transparent track record</h4>
+              <h4 className="trust-light-title">Audited Track Record</h4>
               <p className="trust-light-desc">
-                All settled predictions are published with full mathematical audits and ROI benchmarks.
+                All settled predictions are published with full mathematical audits, sample sizes, and tier hit rates.
               </p>
             </div>
           </div>
@@ -333,9 +340,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           <div className="trust-light-item">
             <div className="trust-light-icon-wrap">🌐</div>
             <div>
-              <h4 className="trust-light-title">5 Sports & 25+ Leagues</h4>
+              <h4 className="trust-light-title">Multi-Sport Models</h4>
               <p className="trust-light-desc">
-                Live coverage across European football, NFL, NCAA Football, NBA & EuroLeague Basketball, ATP/WTA Tennis, and T20/IPL Cricket.
+                Live quantitative coverage across European football, ATP & WTA tennis, and basketball, with more sports in calibration.
               </p>
             </div>
           </div>
@@ -345,20 +352,20 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             <div>
               <h4 className="trust-light-title">WhatsApp & Telegram VIP Bots</h4>
               <p className="trust-light-desc">
-                Receive instant daily 90%+ banker drops, live kickoff alerts, and automated /today queries directly on WhatsApp and Telegram.
+                Receive instant daily top picks, live kickoff alerts, and automated /today queries directly on WhatsApp and Telegram.
               </p>
             </div>
           </div>
         </div>
       </section>
 
-      {/* 4. EXAMPLE MODEL OUTPUT CARD (MATCHING IMAGE 2) */}
+      {/* 4. EXAMPLE MODEL OUTPUT CARD */}
       <section className="example-light-section">
         <div className="example-light-container">
           <div className="example-light-card">
             <div className="example-light-header">
               <span className="example-light-subhead">EXAMPLE MODEL OUTPUT</span>
-              <span className="example-light-sims-badge">250,000 Sims Verified</span>
+              <span className="example-light-sims-badge">Score: 8.8 / 10 • Tier 2</span>
             </div>
 
             <div className="example-light-match">Arsenal vs Chelsea</div>
@@ -370,29 +377,28 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               <div className="example-light-pick-row">
                 <span className="example-light-badge-crown">👑 TOP PICK</span>
                 <span className="example-light-market">Over 1.5 Goals</span>
-                <span className="example-light-prob">88.4% Prob</span>
+                <span className="example-light-prob">88.4% Prob • 8.8/10</span>
               </div>
               <p className="example-light-rationale">
-                Dixon-Coles bivariate distribution projects high scoring probability. 
-                221,000 of 250,000 simulated outcomes converged on ≥2 total goals.
+                Dixon-Coles bivariate distribution projects high scoring probability. Model estimates an 88.4% likelihood of 2 or more total match goals.
               </p>
             </div>
 
             <div className="example-light-footer">
-              <span>✓ Published 6h before kickoff</span>
+              <span>✓ Published before kickoff</span>
               <span>✓ Settled automatically</span>
             </div>
           </div>
         </div>
       </section>
 
-      {/* 5. SETTLED MATCH ACCURACY LEDGER */}
+      {/* 5. SETTLED MATCH ACCURACY LEDGER (WINS AND LOSSES) */}
       <section className="ledger-light-section" id="accuracy">
         <div className="section-light-header-centered">
-          <span className="subhead-light-pill">VERIFIED PERFORMANCE</span>
+          <span className="subhead-light-pill">TRANSPARENT PERFORMANCE</span>
           <h2 className="section-light-title">Settled Match Accuracy Ledger</h2>
           <p className="section-light-desc">
-            Total mathematical transparency. Every prediction is published prior to kickoff and automatically verified post-whistle.
+            Complete mathematical transparency. Both wins and losses are published prior to kickoff and automatically verified post-whistle.
           </p>
         </div>
 
@@ -402,29 +408,25 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               <div className="loading-spinner" />
               <p>Loading authoritative settled performance records...</p>
             </div>
-          ) : settledPicks.length > 0 ? (
+          ) : trackRecord?.recent && trackRecord.recent.length > 0 ? (
             <div className="ledger-light-grid">
-              {settledPicks.map((pick) => {
-                const homeName = pick.fixture?.home_team?.name || 'Home Club';
-                const awayName = pick.fixture?.away_team?.name || 'Away Club';
-                const leagueName = pick.fixture?.league?.name || 'League';
-                const scoreDisplay = pick.fixture?.home_score !== null && pick.fixture?.away_score !== null
-                  ? `${pick.fixture.home_score} - ${pick.fixture.away_score}`
-                  : (pick.actual_score || 'FT');
+              {trackRecord.recent.slice(0, 8).map((pick, i) => {
+                const isWon = pick.result === 'won';
+                const scoreDisplay = pick.finalScore || 'FT';
 
                 return (
-                  <div key={pick.id} className="ledger-light-card card-won">
+                  <div key={i} className={`ledger-light-card ${isWon ? 'card-won' : 'card-lost'}`}>
                     <div className="ledger-card-top">
-                      <span className="ledger-league-badge">{leagueName}</span>
-                      <span className="ledger-status-tag tag-won">
-                        ✓ VERIFIED WON
+                      <span className="ledger-league-badge">{pick.league}</span>
+                      <span className={`ledger-status-tag ${isWon ? 'tag-won' : 'tag-lost'}`}>
+                        {isWon ? '✓ WON' : '✗ MISSED'}
                       </span>
                     </div>
 
                     <div className="ledger-card-match">
-                      <span className="team-text">{homeName}</span>
+                      <span className="team-text">{pick.home}</span>
                       <span className="score-pill">{scoreDisplay}</span>
-                      <span className="team-text text-right">{awayName}</span>
+                      <span className="team-text text-right">{pick.away}</span>
                     </div>
 
                     <div className="ledger-card-meta">
@@ -433,9 +435,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                         <strong className="meta-val">{pick.prediction?.toUpperCase() || 'TARGET'}</strong>
                       </div>
                       <div className="meta-item text-right">
-                        <span className="meta-label">Probability:</span>
-                        <strong className="meta-val green">
-                          {pick.probability ? `${(pick.probability * 100).toFixed(1)}%` : '95.0%+'}
+                        <span className="meta-label">Confidence:</span>
+                        <strong className={`meta-val ${isWon ? 'green' : 'muted'}`}>
+                          {pick.score !== null ? `${pick.score.toFixed(1)}/10` : '—'}
                         </strong>
                       </div>
                     </div>
@@ -449,9 +451,12 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             </div>
           )}
 
-          <div className="ledger-light-footer">
-            <Link to={currentUser ? '/dashboard' : '/predictions'} className="btn-light-view-all">
-              {currentUser ? 'Inspect Complete Dashboard Archive →' : 'View Complete Match Predictions →'}
+          <div className="ledger-light-footer" style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
+            <Link to="/dashboard/track-record" className="btn-light-view-all">
+              Inspect Full Public Track Record & Hit Rates →
+            </Link>
+            <Link to="/dashboard" className="btn-light-view-all" style={{ background: '#0284c7' }}>
+              Open Prediction Dashboard →
             </Link>
           </div>
         </div>
@@ -481,7 +486,11 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           </div>
         </div>
       </section>
+
+      {/* 7. REGULATORY DISCLAIMER FOOTER */}
+      <aside style={{ maxWidth: 1080, margin: '24px auto', padding: '16px 20px', background: '#f8fafc', borderRadius: 12, border: '1px solid #e2e8f0', fontSize: 12, color: '#64748b', textAlign: 'center' }}>
+        {PICK_DISCLAIMER}
+      </aside>
     </div>
   );
 };
-

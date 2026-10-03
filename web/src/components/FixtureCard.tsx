@@ -2,6 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { QueueFixture, FootballPrediction, SecondaryPrediction, PoissonParameters, SimulationOutlines } from '../types';
 import { FavoritePredictionItem } from './FavoritesDrawer';
+import { probabilityToScore, PICK_DISCLAIMER } from '../lib/confidenceScore';
 
 export interface TierDisplayConfig {
   label: string;
@@ -12,86 +13,113 @@ export interface TierDisplayConfig {
   bgColor: string;
 }
 
-export function getTierConfig(category?: string | null): TierDisplayConfig {
-  const norm = (category || '').toUpperCase().replace(/ /g, '_');
-  switch (norm) {
-    case 'BANGER':
+export function getTierConfig(category?: string | null, probability?: number | null): TierDisplayConfig {
+  const norm = (category || '').toUpperCase().replace(/[\s-]+/g, '_');
+  if (norm === 'NO_SAFE_BANKER' || norm === 'NOSAFEBANKER' || norm === 'SKIP') {
+    return {
+      label: 'NO SAFE BANKER (PASS)',
+      icon: '🛡️',
+      badgeClass: 'tier-no-banker',
+      textColor: '#64748b',
+      borderColor: '#cbd5e1',
+      bgColor: '#f8fafc'
+    };
+  }
+  if (norm === 'LOCKED' || norm === 'HIDDEN') {
+    return {
+      label: 'PREMIUM LOCKED',
+      icon: '🔒',
+      badgeClass: 'tier-locked',
+      textColor: '#7c3aed',
+      borderColor: '#c4b5fd',
+      bgColor: '#faf5ff'
+    };
+  }
+
+  const score = probabilityToScore(probability);
+  if (score !== null) {
+    if (score >= 9.0) {
       return {
-        label: 'BANGER (96%+)',
+        label: `Tier 1 · 9+ (${score.toFixed(1)}/10)`,
         icon: '🔥',
         badgeClass: 'tier-banger',
-        textColor: '#ea580c', // Red/Orange text
-        borderColor: '#f97316',
-        bgColor: '#fff7ed'
+        textColor: '#047857',
+        borderColor: '#10b981',
+        bgColor: '#ecfdf5'
       };
+    }
+    if (score >= 8.0) {
+      return {
+        label: `Tier 2 · 8–8.9 (${score.toFixed(1)}/10)`,
+        icon: '⭐',
+        badgeClass: 'tier-top-pick',
+        textColor: '#1d4ed8',
+        borderColor: '#3b82f6',
+        bgColor: '#eff6ff'
+      };
+    }
+    if (score >= 6.0) {
+      return {
+        label: `Tier 3 · 6–7.9 (${score.toFixed(1)}/10)`,
+        icon: '🟢',
+        badgeClass: 'tier-high-conf',
+        textColor: '#b45309',
+        borderColor: '#f59e0b',
+        bgColor: '#fffbeb'
+      };
+    }
+    return {
+      label: `Below 6.0 (${score.toFixed(1)}/10)`,
+      icon: '🟡',
+      badgeClass: 'tier-low-conf',
+      textColor: '#475569',
+      borderColor: '#cbd5e1',
+      bgColor: '#f8fafc'
+    };
+  }
+
+  switch (norm) {
+    case 'BANGER':
     case 'TOP_PICK':
     case 'TOPPICK':
       return {
-        label: 'TOP PICK (90%-95%)',
-        icon: '⭐',
-        badgeClass: 'tier-top-pick',
-        textColor: '#d97706', // Gold text
-        borderColor: '#f59e0b',
-        bgColor: '#fefce8'
+        label: 'Tier 1 (9.0+)',
+        icon: '🔥',
+        badgeClass: 'tier-banger',
+        textColor: '#047857',
+        borderColor: '#10b981',
+        bgColor: '#ecfdf5'
       };
     case 'HIGH_CONFIDENCE':
     case 'HIGHCONFIDENCE':
       return {
-        label: 'HIGH CONFIDENCE (83%-89%)',
-        icon: '🟢',
-        badgeClass: 'tier-high-conf',
-        textColor: '#16a34a', // Bright Green text
-        borderColor: '#22c55e',
-        bgColor: '#f0fdf4'
+        label: 'Tier 2 (8.0–8.9)',
+        icon: '⭐',
+        badgeClass: 'tier-top-pick',
+        textColor: '#1d4ed8',
+        borderColor: '#3b82f6',
+        bgColor: '#eff6ff'
       };
     case 'MID_CONFIDENCE':
     case 'MIDCONFIDENCE':
       return {
-        label: 'MID CONFIDENCE (75%-82%)',
-        icon: '🔵',
-        badgeClass: 'tier-mid-conf',
-        textColor: '#2563eb', // Blue text
-        borderColor: '#3b82f6',
-        bgColor: '#eff6ff'
+        label: 'Tier 3 (6.0–7.9)',
+        icon: '🟢',
+        badgeClass: 'tier-high-conf',
+        textColor: '#b45309',
+        borderColor: '#f59e0b',
+        bgColor: '#fffbeb'
       };
     case 'LOW_CONFIDENCE':
     case 'LOWCONFIDENCE':
-      return {
-        label: 'LOW CONFIDENCE (65%-74%)',
-        icon: '🟡',
-        badgeClass: 'tier-low-conf',
-        textColor: '#ca8a04', // Yellow/Muted text
-        borderColor: '#eab308',
-        bgColor: '#fef9c3'
-      };
     case 'RISKY':
       return {
-        label: 'RISKY (<65%)',
-        icon: '⚠️',
-        badgeClass: 'tier-risky',
-        textColor: '#9a3412', // Grey/Orange text
-        borderColor: '#fb923c',
-        bgColor: '#fff7ed'
-      };
-    case 'NO_SAFE_BANKER':
-    case 'NOSAFEBANKER':
-      return {
-        label: 'NO SAFE BANKER',
-        icon: '🛡️',
-        badgeClass: 'tier-no-banker',
-        textColor: '#64748b',
+        label: 'Below 6.0 (Low)',
+        icon: '🟡',
+        badgeClass: 'tier-low-conf',
+        textColor: '#475569',
         borderColor: '#cbd5e1',
         bgColor: '#f8fafc'
-      };
-    case 'LOCKED':
-    case 'HIDDEN':
-      return {
-        label: 'PREMIUM LOCKED',
-        icon: '🔒',
-        badgeClass: 'tier-locked',
-        textColor: '#7c3aed',
-        borderColor: '#c4b5fd',
-        bgColor: '#faf5ff'
       };
     default:
       return {
@@ -569,7 +597,7 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
       ? prediction.confidence_category
       : 'MID_CONFIDENCE';
 
-  const tierConfig = getTierConfig(effectiveCategory);
+  const tierConfig = getTierConfig(effectiveCategory, prediction?.probability);
 
   // Parse Prediction Metadata for Change Tracking & Simulation Outlines
   const meta: Record<string, any> = React.useMemo(() => {
@@ -626,7 +654,7 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
     const topProb = o.goals.top_prob >= 85 ? o.goals.top_prob : o.moneyline.top_prob;
     const homeName = fixture.home_team_name?.replace(/-/g, ' ') || 'Home';
     const awayName = fixture.away_team_name?.replace(/-/g, ' ') || 'Away';
-    return `Poisson-Monte Carlo Analysis: ${homeName} Attack Strength (${p.home_attack_str.toFixed(2)}) vs ${awayName} Defense (${p.away_defense_str.toFixed(2)}) with +${p.home_boost_pct}% Home Advantage & Form Weighting models expected goals at ${p.xg_home.toFixed(2)} vs ${p.xg_away.toFixed(2)}. 250,000 Monte Carlo simulation runs confirm '${topPick}' (${topProb.toFixed(1)}%) as the highest-probable occurrence. Secondary edges: Over 1.5 Goals at ${o.goals.over_1_5_prob.toFixed(1)}%, Corners Over 8.5 at ${o.corners.over_8_5_prob.toFixed(1)}%, and ${o.anytime_scorer.home_scorer} anytime goal probability at ${o.anytime_scorer.home_scorer_prob.toFixed(1)}%. Recommended strategy: Core banker on ${topPick} with Over 1.5 Goals accumulator booster.`;
+    return `Poisson-Monte Carlo Analysis: ${homeName} Attack Strength (${p.home_attack_str.toFixed(2)}) vs ${awayName} Defense (${p.away_defense_str.toFixed(2)}) with +${p.home_boost_pct}% Home Advantage & Form Weighting models expected goals at ${p.xg_home.toFixed(2)} vs ${p.xg_away.toFixed(2)}. Calibrated probability distributions confirm '${topPick}' (${topProb.toFixed(1)}%) as the highest-probable occurrence. Secondary edges: Over 1.5 Goals at ${o.goals.over_1_5_prob.toFixed(1)}%, Corners Over 8.5 at ${o.corners.over_8_5_prob.toFixed(1)}%, and ${o.anytime_scorer.home_scorer} anytime goal probability at ${o.anytime_scorer.home_scorer_prob.toFixed(1)}%. Recommended strategy: Core banker on ${topPick} with Over 1.5 Goals accumulator booster.`;
   }, [prediction?.metadata, poissonData, fixture]);
 
   // If the match is live and the prediction has been met or settled while live, it settles the match by showing WON.
@@ -925,7 +953,7 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
             <div className="glance-key-pick-card locked" onClick={onToggleExpand}>
               <div className="key-pick-badge">
                 <span className="key-pick-spark">✨</span>
-                <span>KEY 250,000 SIM PICK</span>
+                <span>KEY MODEL PICK</span>
               </div>
               <div className="key-pick-outcome locked-blur">
                 ••••••••••••••••
@@ -942,11 +970,11 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
             <div
               className="glance-key-pick-card"
               onClick={onToggleExpand}
-              title="Click to expand calibrated 250,000 draw Poisson breakdown"
+              title="Click to expand calibrated Poisson &amp; probability breakdown"
             >
               <div className="key-pick-badge">
                 <span className="key-pick-spark">✨</span>
-                <span>KEY 250,000 SIM PICK</span>
+                <span>KEY MODEL PICK</span>
                 {hasNewChange && (
                   <span
                     className="badge-new-change"
@@ -1066,7 +1094,7 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
               <div className="prediction-panel-header">
                 <div className="sim-verified-pill">
                   <span className="dot"></span>
-                  <span>Exact 250,000 Draws Verified • Sniper Engine</span>
+                  <span>Calibrated Probabilistic Model • Sniper Engine</span>
                 </div>
                 <span className="model-tag">
                   PCG64 • Poisson-Monte Carlo
@@ -1156,7 +1184,7 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
                   </div>
 
                   <div style={{ padding: '8px 12px', background: '#ffffff', borderRadius: 6, border: '1px solid #e2e8f0', fontSize: 12, color: '#475569', lineHeight: 1.5, marginTop: 4 }}>
-                    ⚠️ <strong>Sniper Protection:</strong> No single market in this fixture achieved the strict <strong>≥ 80.00% banker certainty floor</strong> across 250,000 simulations. Oddsbanta advises passing on this match to protect capital.
+                    ⚠️ <strong>Sniper Protection:</strong> No single market in this fixture achieved the strict <strong>≥ 80.00% confidence floor</strong>. Oddsbanta advises passing on this match to protect capital.
                   </div>
 
                   {prediction.settlement_notes && (
@@ -1323,14 +1351,14 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
                   <div className="simulation-outlines-header">
                     <div>
                       <h4 className="simulation-outlines-title">
-                        🎲 Independent 250,000 Simulation Outlines
+                        🎲 Multidimensional Model Outlines
                       </h4>
                       <p className="simulation-outlines-subtitle">
-                        Each dimension computed via independent 250,000 randomized draws
+                        Each dimension computed via calibrated probabilistic models
                       </p>
                     </div>
                     <span className="sim-vectorized-badge">
-                      ⚡ 250,000 Vectorized Draws
+                      ⚡ Calibrated Probability Distributions
                     </span>
                   </div>
 
@@ -1466,7 +1494,7 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
                       📦 SECONDARY SIGNALS (QUALIFYING ≥60% LEANS — MAX 4)
                     </span>
                     <span className="secondary-section-desc">
-                      Alternative high-probability outcomes evaluated from 250,000 simulations
+                      Alternative high-probability outcomes evaluated from model simulations
                     </span>
                   </div>
 
@@ -1558,7 +1586,7 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
                       ✨ AI SIMULATION ANALYSIS & RECOMMENDATION
                     </span>
                     <span className="ai-simulation-status">
-                      250k Draws Synthesized
+                      Calibrated Model Output
                     </span>
                   </div>
                   <p className="ai-simulation-text">
@@ -1574,15 +1602,15 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
                   <span>Pre-publication check: Multi-market distributions cross-referenced</span>
                 </div>
                 <div className="enforcement-badge-item highlight-banker">
-                  <span>⭐ Highly Recommended Banker (&gt;=90% Win Rate Target)</span>
-                </div>
-                <div className="enforcement-badge-item">
-                  <span>⚡ Simulations: 250,000 Vectorized Trials</span>
+                  <span>⭐ 0–10 Confidence Score Cadence Applied</span>
                 </div>
                 <div className="enforcement-badge-item gate-pass">
                   <span className="badge-check-icon">✓</span>
-                  <span>Strict 250,000 Sim Enforcement Gate Passed • Automated 30-Min Free Livescore Settlement Active</span>
+                  <span>Automated Post-Match Settlement Active • Auditable on Public Track Record</span>
                 </div>
+              </div>
+              <div style={{ marginTop: 12, padding: '8px 12px', background: '#f8fafc', borderRadius: 8, fontSize: 11, color: '#64748b', lineHeight: 1.5, border: '1px solid #e2e8f0' }}>
+                {PICK_DISCLAIMER}
               </div>
             </div>
           )}

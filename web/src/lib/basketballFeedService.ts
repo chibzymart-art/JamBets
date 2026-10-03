@@ -348,7 +348,7 @@ export async function fetchBasketballFeed(
           metadata: {
             ...p.metadata,
             ai_tactical_analysis:
-              '🔒 Upgrade to Oddsbanta VIP to unlock full 250,000 Monte Carlo Dean Oliver Four Factors breakdown, projected scores, and value edge.',
+              '🔒 Upgrade to Oddsbanta VIP to unlock full Dean Oliver Four Factors breakdown, projected scores, and value edge.',
           },
           is_locked: true,
         };

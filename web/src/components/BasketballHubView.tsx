@@ -250,7 +250,7 @@ export const BasketballHubView: React.FC<BasketballHubViewProps> = ({
 
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
             <span className="bball-sim-badge">
-              ⚙️ 250,000 Sims / Match
+              ⚙️ Calibrated Four Factors Model
             </span>
             {onBackToFootball && (
               <button
@@ -426,7 +426,7 @@ export const BasketballHubView: React.FC<BasketballHubViewProps> = ({
                 🏀
               </div>
               <div style={{ fontSize: 16, fontWeight: 700, color: '#0f172a' }}>
-                Running 250,000 Monte Carlo Simulations...
+                Calibrating Basketball Prediction Models...
               </div>
               <div style={{ fontSize: 13, marginTop: 4 }}>
                 Calibrating Dean Oliver Four Factors & Schedule Fatigue

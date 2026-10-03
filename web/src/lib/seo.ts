@@ -4,6 +4,9 @@
  * and Schema.org JSON-LD injection for rich sports snippets.
  */
 
+/** Single source of truth for the canonical host. Keep in sync with index.html, sitemap.xml and robots.txt. */
+export const SITE_ORIGIN = 'https://www.oddsbanta.com';
+
 export interface PageSeoConfig {
   title: string;
   description: string;
@@ -40,9 +43,12 @@ export function updatePageSeo(config: PageSeoConfig): void {
   // 3. Primary Meta Tags
   setMeta('meta[name="description"]', 'name', 'description', config.description);
 
-  // 4. Canonical URL
-  const baseUrl = 'https://oddsbanta.com';
-  const fullUrl = config.canonicalPath ? `${baseUrl}${config.canonicalPath}` : baseUrl;
+  // 4. Canonical URL — must match the host the site is served from (non-www 308-redirects to www).
+  // Defaults to the current route; previously every route fell back to the homepage URL,
+  // which declared all pages duplicates of "/".
+  const rawPath = config.canonicalPath ?? window.location.pathname;
+  const path = rawPath === '/' || rawPath === '' ? '/' : rawPath.replace(/\/+$/, '');
+  const fullUrl = `${SITE_ORIGIN}${path}`;
   let canonicalEl = document.querySelector('link[rel="canonical"]') as HTMLLinkElement | null;
   if (!canonicalEl) {
     canonicalEl = document.createElement('link');
@@ -78,7 +84,7 @@ export function updatePageSeo(config: PageSeoConfig): void {
       '@context': 'https://schema.org',
       '@type': 'SportsEvent',
       name: `${ev.homeTeam} vs ${ev.awayTeam}`,
-      description: `Oddsbanta AI Analysis: ${ev.predictionMarket || 'Goals Pick'} (${ev.probability ? `${ev.probability}% certainty` : 'High Edge'}).`,
+      description: `Oddsbanta model estimate: ${ev.predictionMarket || 'Goals market'}${ev.probability ? ` (${ev.probability}% model probability, not a guarantee)` : ''}.`,
       startDate: ev.kickoff,
       homeTeam: {
         '@type': 'SportsTeam',
