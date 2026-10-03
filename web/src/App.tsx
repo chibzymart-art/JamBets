@@ -36,7 +36,6 @@ import { TennisHubView } from './components/TennisHubView';
 import './basketball.css';
 import { BasketballHubView } from './components/BasketballHubView';
 import { TrackRecordPage } from './pages/TrackRecord';
-import { getScoreInfo, SCORE_TIERS, ScoreTierKey } from './lib/confidenceScore';
 import { seoForPath, DASHBOARD_PATHS } from './lib/routeMeta';
 
 
@@ -1025,24 +1024,44 @@ export default function App() {
   };
 
   // Comprehensive Metrics Calculations (Strictly Cloud Supabase Derived — Zero Fallbacks)
-  // Grouped by the 0–10 confidence score tiers. Losses are counted for every visitor, so the
-  // hit rate shown to guests is the same honest figure subscribers see.
-  type ScoreBucketKey = 'all' | ScoreTierKey | 'pass';
   const scorecardStats = useMemo(() => {
-    type Bucket = { total: number; won: number; lost: number; pending: number; decided: number; winRate: number | null };
-    const mk = (): Bucket => ({ total: 0, won: 0, lost: 0, pending: 0, decided: 0, winRate: null });
-    const buckets: Record<ScoreBucketKey, Bucket> = {
-      all: mk(),
-      tier9: mk(),
-      tier8: mk(),
-      tier6: mk(),
-      tierLow: mk(),
-      pass: mk(),
-    };
+    let allWon = 0;
+    let allLost = 0;
     let allVoid = 0;
+    let allPending = 0;
 
-    // Filter predictions to only those matching current date filter if not 'all'
-    // "All Dates (this will be all predictions of current date and future dates, no past dates)"
+    let bangerTotal = 0;
+    let bangerWon = 0;
+    let bangerLost = 0;
+    let bangerPending = 0;
+
+    let topPickTotal = 0;
+    let topPickWon = 0;
+    let topPickLost = 0;
+    let topPickPending = 0;
+
+    let highTotal = 0;
+    let highWon = 0;
+    let highLost = 0;
+    let highPending = 0;
+
+    let midTotal = 0;
+    let midWon = 0;
+    let midLost = 0;
+    let midPending = 0;
+
+    let lowTotal = 0;
+    let lowWon = 0;
+    let lowLost = 0;
+    let lowPending = 0;
+
+    let antiLossTotal = 0;
+    let antiLossWon = 0;
+    let antiLossLost = 0;
+    let antiLossPending = 0;
+
+    const sourceList = predictions;
+
     const activeFixtureIds = new Set(
       (selectedDate === 'all'
         ? fixtures.filter((f) => {
@@ -1053,32 +1072,92 @@ export default function App() {
       ).map((f) => f.id)
     );
 
-    predictions.forEach((item: any) => {
+    const isPaid = isAdmin || canViewPredictions;
+
+    sourceList.forEach((item: any) => {
       if (!activeFixtureIds.has(item.fixture_id)) return;
-      const st = item.settlement_status || 'pending';
-      if (st === 'void' || st === 'voided') {
-        allVoid++;
-        return;
+      let st = item.settlement_status || 'pending';
+      const rawCat = (item.confidence_category || '').toUpperCase().replace(/ /g, '_');
+      const isAntiLoss =
+        rawCat === 'NO_SAFE_BANKER' ||
+        rawCat === 'NOSAFEBANKER' ||
+        item.market === 'NO_SAFE_BANKER' ||
+        item.prediction === 'SKIP';
+
+      if (st === 'won') allWon++;
+      else if (st === 'lost') {
+        if (isPaid) allLost++;
       }
-      const info = getScoreInfo(item.probability, item.confidence_category);
-      const isPass = info.noPick || item.market === 'NO_SAFE_BANKER' || item.prediction === 'SKIP';
-      const targets: Bucket[] = isPass
-        ? [buckets.pass]
-        : info.tier
-        ? [buckets.all, buckets[info.tier.key]]
-        : [buckets.all];
-      for (const b of targets) {
-        b.total++;
-        if (st === 'won') b.won++;
-        else if (st === 'lost') b.lost++;
-        else b.pending++;
+      else if (st === 'void' || st === 'voided') {
+        if (isPaid) allVoid++;
+      }
+      else allPending++;
+
+      if (rawCat === 'BANGER') {
+        bangerTotal++;
+        if (st === 'won') bangerWon++;
+        else if (st === 'lost') {
+          if (isPaid) bangerLost++;
+        }
+        else bangerPending++;
+      } else if (rawCat === 'TOP_PICK' || rawCat === 'TOPPICK') {
+        topPickTotal++;
+        if (st === 'won') topPickWon++;
+        else if (st === 'lost') {
+          if (isPaid) topPickLost++;
+        }
+        else topPickPending++;
+      } else if (rawCat === 'HIGH_CONFIDENCE' || rawCat === 'HIGHCONFIDENCE' || rawCat === 'HIGH') {
+        highTotal++;
+        if (st === 'won') highWon++;
+        else if (st === 'lost') {
+          if (isPaid) highLost++;
+        }
+        else highPending++;
+      } else if (rawCat === 'MID_CONFIDENCE' || rawCat === 'MIDCONFIDENCE' || rawCat === 'MID') {
+        midTotal++;
+        if (st === 'won') midWon++;
+        else if (st === 'lost') {
+          if (isPaid) midLost++;
+        }
+        else midPending++;
+      } else if (rawCat === 'LOW_CONFIDENCE' || rawCat === 'LOWCONFIDENCE' || rawCat === 'LOW' || rawCat === 'RISKY') {
+        lowTotal++;
+        if (st === 'won') lowWon++;
+        else if (st === 'lost') {
+          if (isPaid) lowLost++;
+        }
+        else lowPending++;
+      } else if (isAntiLoss) {
+        antiLossTotal++;
+        if (st === 'won') antiLossWon++;
+        else if (st === 'lost') {
+          if (isPaid) antiLossLost++;
+        }
+        else antiLossPending++;
       }
     });
 
-    for (const b of Object.values(buckets)) {
-      b.decided = b.won + b.lost;
-      b.winRate = b.decided > 0 ? Math.round((b.won / b.decided) * 100) : null;
-    }
+    const allDecided = allWon + allLost;
+    const allWinRate = allDecided > 0 ? Math.round((allWon / allDecided) * 100) : (allWon > 0 && !isPaid ? 100 : 0);
+
+    const bangerDecided = bangerWon + bangerLost;
+    const bangerWinRate = bangerDecided > 0 ? Math.round((bangerWon / bangerDecided) * 100) : (bangerWon > 0 && !isPaid ? 100 : 0);
+
+    const topPickDecided = topPickWon + topPickLost;
+    const topPickWinRate = topPickDecided > 0 ? Math.round((topPickWon / topPickDecided) * 100) : (topPickWon > 0 && !isPaid ? 100 : 0);
+
+    const highDecided = highWon + highLost;
+    const highWinRate = highDecided > 0 ? Math.round((highWon / highDecided) * 100) : (highWon > 0 && !isPaid ? 100 : 0);
+
+    const midDecided = midWon + midLost;
+    const midWinRate = midDecided > 0 ? Math.round((midWon / midDecided) * 100) : (midWon > 0 && !isPaid ? 100 : 0);
+
+    const lowDecided = lowWon + lowLost;
+    const lowWinRate = lowDecided > 0 ? Math.round((lowWon / lowDecided) * 100) : (lowWon > 0 && !isPaid ? 100 : 0);
+
+    const antiLossDecided = antiLossWon + antiLossLost;
+    const antiLossWinRate = antiLossDecided > 0 ? Math.round((antiLossWon / antiLossDecided) * 100) : (antiLossWon > 0 && !isPaid ? 100 : 0);
 
     const scopedFixtures = selectedDate === 'all'
       ? fixtures.filter((f) => {
@@ -1103,42 +1182,130 @@ export default function App() {
       return isFinished || hasSettledPred;
     }).length;
 
-    return { buckets, allVoid, liveCount, settledMatchesCount };
-  }, [fixtures, predictions, predsByFixture, selectedDate]);
+    return {
+      allWon,
+      allLost,
+      allVoid,
+      allPending,
+      allDecided,
+      allWinRate,
+      allTotal: allWon + allLost + allPending,
+      bangerTotal,
+      bangerWon,
+      bangerLost,
+      bangerPending,
+      bangerDecided,
+      bangerWinRate,
+      topPickTotal,
+      topPickWon,
+      topPickLost,
+      topPickPending,
+      topPickDecided,
+      topPickWinRate,
+      highTotal,
+      highWon,
+      highLost,
+      highPending,
+      highDecided,
+      highWinRate,
+      midTotal,
+      midWon,
+      midLost,
+      midPending,
+      midDecided,
+      midWinRate,
+      lowTotal,
+      lowWon,
+      lowLost,
+      lowPending,
+      lowDecided,
+      lowWinRate,
+      antiLossTotal,
+      antiLossWon,
+      antiLossLost,
+      antiLossPending,
+      antiLossDecided,
+      antiLossWinRate,
+      liveCount,
+      settledMatchesCount
+    };
+  }, [fixtures, predictions, predsByFixture, canViewPredictions, isAdmin, selectedDate]);
 
   // Dynamic Tier-specific activity and settlement stats wired to Card 2
   const activeTierStats = useMemo(() => {
-    const key: ScoreBucketKey = selectedTier in scorecardStats.buckets ? (selectedTier as ScoreBucketKey) : 'all';
-    const b = scorecardStats.buckets[key];
-    return { ...b, settled: key === 'all' ? scorecardStats.settledMatchesCount : b.decided };
+    switch (selectedTier) {
+      case 'BANGER':
+        return {
+          won: scorecardStats.bangerWon,
+          lost: scorecardStats.bangerLost,
+          pending: scorecardStats.bangerPending,
+          decided: scorecardStats.bangerDecided,
+          winRate: scorecardStats.bangerWinRate,
+          total: scorecardStats.bangerTotal,
+          settled: scorecardStats.bangerDecided,
+        };
+      case 'TOP PICK':
+        return {
+          won: scorecardStats.topPickWon,
+          lost: scorecardStats.topPickLost,
+          pending: scorecardStats.topPickPending,
+          decided: scorecardStats.topPickDecided,
+          winRate: scorecardStats.topPickWinRate,
+          total: scorecardStats.topPickTotal,
+          settled: scorecardStats.topPickDecided,
+        };
+      case 'HIGH':
+        return {
+          won: scorecardStats.highWon,
+          lost: scorecardStats.highLost,
+          pending: scorecardStats.highPending,
+          decided: scorecardStats.highDecided,
+          winRate: scorecardStats.highWinRate,
+          total: scorecardStats.highTotal,
+          settled: scorecardStats.highDecided,
+        };
+      case 'MID':
+        return {
+          won: scorecardStats.midWon,
+          lost: scorecardStats.midLost,
+          pending: scorecardStats.midPending,
+          decided: scorecardStats.midDecided,
+          winRate: scorecardStats.midWinRate,
+          total: scorecardStats.midTotal,
+          settled: scorecardStats.midDecided,
+        };
+      case 'LOW':
+        return {
+          won: scorecardStats.lowWon,
+          lost: scorecardStats.lowLost,
+          pending: scorecardStats.lowPending,
+          decided: scorecardStats.lowDecided,
+          winRate: scorecardStats.lowWinRate,
+          total: scorecardStats.lowTotal,
+          settled: scorecardStats.lowDecided,
+        };
+      case 'NO_SAFE_BANKER':
+        return {
+          won: scorecardStats.antiLossWon,
+          lost: scorecardStats.antiLossLost,
+          pending: scorecardStats.antiLossPending,
+          decided: scorecardStats.antiLossDecided,
+          winRate: scorecardStats.antiLossWinRate,
+          total: scorecardStats.antiLossTotal,
+          settled: scorecardStats.antiLossDecided,
+        };
+      default:
+        return {
+          won: scorecardStats.allWon,
+          lost: scorecardStats.allLost,
+          pending: scorecardStats.allPending,
+          decided: scorecardStats.allDecided,
+          winRate: scorecardStats.allWinRate,
+          total: scorecardStats.allTotal,
+          settled: scorecardStats.settledMatchesCount,
+        };
+    }
   }, [selectedTier, scorecardStats]);
-
-  const fmtRate = (v: number | null) => (v === null ? '–' : `${v}%`);
-
-  const renderTierSegment = (key: ScoreTierKey | 'pass', styleKey: string) => {
-    const b = scorecardStats.buckets[key];
-    const tier = key === 'pass' ? null : SCORE_TIERS[key];
-    const label = tier ? `${tier.icon} ${tier.range}` : '⏸ No pick';
-    const title = tier
-      ? `Filter by score ${tier.range} (${tier.name})`
-      : 'Matches where the model declined to make a pick';
-    return (
-      <div
-        className={`compact-kpi-subsegment ${styleKey}-subseg ${selectedTier === key ? 'active-seg' : ''}`}
-        onClick={() => setSelectedTier(selectedTier === key ? 'all' : key)}
-        title={title}
-      >
-        <div className="compact-kpi-header">
-          <span className="compact-kpi-title">{label}</span>
-          <span className={`compact-kpi-pill ${styleKey}-pill`}>{b.total}M</span>
-        </div>
-        <div className="compact-kpi-val-row">
-          <span className={`compact-kpi-pct ${styleKey}-text`}>{fmtRate(b.winRate)}</span>
-          <span className="compact-kpi-ratio">{b.won}W • {b.lost}L</span>
-        </div>
-      </div>
-    );
-  };
 
   // Filtered fixtures for General Market view
   const filteredFixtures = useMemo(() => {
@@ -1176,13 +1343,17 @@ export default function App() {
         if (scoreStatusFilter === 'scheduled' && (isLive || isFinished)) return false;
       }
 
-      // Tier filter (0–10 confidence score tiers, or "pass" for no-pick matches)
+      // Tier filter
       if (selectedTier !== 'all') {
         const hasTier = signals.some((s) => {
-          const info = getScoreInfo(s.probability, s.confidence_category);
-          const isPass = info.noPick || s.market === 'NO_SAFE_BANKER' || s.prediction === 'SKIP';
-          if (selectedTier === 'pass') return isPass;
-          return !isPass && info.tier?.key === selectedTier;
+          const sCat = (s.confidence_category || '').toUpperCase().replace(/ /g, '_');
+          if (selectedTier === 'BANGER') return sCat === 'BANGER';
+          if (selectedTier === 'TOP PICK') return sCat === 'TOP_PICK' || sCat === 'TOPPICK';
+          if (selectedTier === 'HIGH') return sCat === 'HIGH_CONFIDENCE' || sCat === 'HIGHCONFIDENCE' || sCat === 'HIGH';
+          if (selectedTier === 'MID') return sCat === 'MID_CONFIDENCE' || sCat === 'MIDCONFIDENCE' || sCat === 'MID';
+          if (selectedTier === 'LOW') return sCat === 'LOW_CONFIDENCE' || sCat === 'LOWCONFIDENCE' || sCat === 'LOW' || sCat === 'RISKY';
+          if (selectedTier === 'NO_SAFE_BANKER') return sCat === 'NO_SAFE_BANKER' || sCat === 'NOSAFEBANKER' || s.market === 'NO_SAFE_BANKER' || s.prediction === 'SKIP';
+          return s.confidence_category === selectedTier;
         });
         if (!hasTier) return false;
       }
@@ -2182,7 +2353,7 @@ export default function App() {
 
           {/* 4. DECONGESTED SCORECARD KPI SECTION (TWO COMPACT CARDS WITH INNER DIVIDER LINES) */}
           <div className="scorecard-two-cards-row">
-            {/* Card 1: 0-10 Confidence Score Tiers inside one single-card footprint */}
+            {/* Card 1: Confidence Tiers inside one single-card footprint */}
             <div className="compact-kpi-card winrates-kpi-card">
               {/* Tab 1: All Predictions */}
               <div
@@ -2196,31 +2367,117 @@ export default function App() {
               >
                 <div className="compact-kpi-header">
                   <span className="compact-kpi-title">All Preds</span>
-                  <span className="compact-kpi-pill">{scorecardStats.buckets.all.total}M</span>
+                  <span className="compact-kpi-pill">{scorecardStats.allTotal}M</span>
                 </div>
                 <div className="compact-kpi-val-row">
-                  <span className="compact-kpi-pct">{fmtRate(scorecardStats.buckets.all.winRate)}</span>
-                  <span className="compact-kpi-ratio">{scorecardStats.buckets.all.won}W • {scorecardStats.buckets.all.lost}L</span>
+                  <span className="compact-kpi-pct">{scorecardStats.allWinRate}%</span>
+                  <span className="compact-kpi-ratio">{scorecardStats.allWon}W • {scorecardStats.allLost}L</span>
                 </div>
               </div>
 
-              {/* Grouped: 9+ and 8-8.9 */}
+              {/* Tab 2: Bangers & Top Picks Grouped Tab */}
               <div className="compact-kpi-grouped-tab">
-                {renderTierSegment('tier9', 'banger')}
+                <div
+                  className={`compact-kpi-subsegment banger-subseg ${selectedTier === 'BANGER' ? 'active-seg' : ''}`}
+                  onClick={() => setSelectedTier(selectedTier === 'BANGER' ? 'all' : 'BANGER')}
+                  title="Click to filter by 96%+ Bangers"
+                >
+                  <div className="compact-kpi-header">
+                    <span className="compact-kpi-title">⭐ Banger</span>
+                    <span className="compact-kpi-pill banger-pill">{scorecardStats.bangerTotal}M</span>
+                  </div>
+                  <div className="compact-kpi-val-row">
+                    <span className="compact-kpi-pct banger-text">{scorecardStats.bangerWinRate}%</span>
+                    <span className="compact-kpi-ratio">{scorecardStats.bangerWon}W • {scorecardStats.bangerLost}L</span>
+                  </div>
+                </div>
+
                 <div className="compact-kpi-inner-divider" />
-                {renderTierSegment('tier8', 'toppick')}
+
+                <div
+                  className={`compact-kpi-subsegment toppick-subseg ${selectedTier === 'TOP PICK' ? 'active-seg' : ''}`}
+                  onClick={() => setSelectedTier(selectedTier === 'TOP PICK' ? 'all' : 'TOP PICK')}
+                  title="Click to filter by 90%-95% Top Picks"
+                >
+                  <div className="compact-kpi-header">
+                    <span className="compact-kpi-title">👑 Top Pick</span>
+                    <span className="compact-kpi-pill toppick-pill">{scorecardStats.topPickTotal}M</span>
+                  </div>
+                  <div className="compact-kpi-val-row">
+                    <span className="compact-kpi-pct toppick-text">{scorecardStats.topPickWinRate}%</span>
+                    <span className="compact-kpi-ratio">{scorecardStats.topPickWon}W • {scorecardStats.topPickLost}L</span>
+                  </div>
+                </div>
               </div>
 
-              {/* Grouped: 6-7.9 and Below 6 */}
+              {/* Tab 3: High & Mid Confidence Grouped Tab */}
               <div className="compact-kpi-grouped-tab">
-                {renderTierSegment('tier6', 'high')}
+                <div
+                  className={`compact-kpi-subsegment high-subseg ${selectedTier === 'HIGH' ? 'active-seg' : ''}`}
+                  onClick={() => setSelectedTier(selectedTier === 'HIGH' ? 'all' : 'HIGH')}
+                  title="Click to filter by 83%-89% High Confidence"
+                >
+                  <div className="compact-kpi-header">
+                    <span className="compact-kpi-title">🟢 High</span>
+                    <span className="compact-kpi-pill high-pill">{scorecardStats.highTotal}M</span>
+                  </div>
+                  <div className="compact-kpi-val-row">
+                    <span className="compact-kpi-pct high-text">{scorecardStats.highWinRate}%</span>
+                    <span className="compact-kpi-ratio">{scorecardStats.highWon}W • {scorecardStats.highLost}L</span>
+                  </div>
+                </div>
+
                 <div className="compact-kpi-inner-divider" />
-                {renderTierSegment('tierLow', 'low')}
+
+                <div
+                  className={`compact-kpi-subsegment mid-subseg ${selectedTier === 'MID' ? 'active-seg' : ''}`}
+                  onClick={() => setSelectedTier(selectedTier === 'MID' ? 'all' : 'MID')}
+                  title="Click to filter by 75%-82% Mid Confidence"
+                >
+                  <div className="compact-kpi-header">
+                    <span className="compact-kpi-title">🔵 Mid</span>
+                    <span className="compact-kpi-pill mid-pill">{scorecardStats.midTotal}M</span>
+                  </div>
+                  <div className="compact-kpi-val-row">
+                    <span className="compact-kpi-pct mid-text">{scorecardStats.midWinRate}%</span>
+                    <span className="compact-kpi-ratio">{scorecardStats.midWon}W • {scorecardStats.midLost}L</span>
+                  </div>
+                </div>
               </div>
 
-              {/* Pass / No Safe Banker */}
+              {/* Tab 4: Low & Anti Loss Grouped Tab */}
               <div className="compact-kpi-grouped-tab">
-                {renderTierSegment('pass', 'antiloss')}
+                <div
+                  className={`compact-kpi-subsegment low-subseg ${selectedTier === 'LOW' ? 'active-seg' : ''}`}
+                  onClick={() => setSelectedTier(selectedTier === 'LOW' ? 'all' : 'LOW')}
+                  title="Click to filter by 65%-74% Low Confidence"
+                >
+                  <div className="compact-kpi-header">
+                    <span className="compact-kpi-title">🟡 Low</span>
+                    <span className="compact-kpi-pill low-pill">{scorecardStats.lowTotal}M</span>
+                  </div>
+                  <div className="compact-kpi-val-row">
+                    <span className="compact-kpi-pct low-text">{scorecardStats.lowWinRate}%</span>
+                    <span className="compact-kpi-ratio">{scorecardStats.lowWon}W • {scorecardStats.lowLost}L</span>
+                  </div>
+                </div>
+
+                <div className="compact-kpi-inner-divider" />
+
+                <div
+                  className={`compact-kpi-subsegment antiloss-subseg ${selectedTier === 'NO_SAFE_BANKER' ? 'active-seg' : ''}`}
+                  onClick={() => setSelectedTier(selectedTier === 'NO_SAFE_BANKER' ? 'all' : 'NO_SAFE_BANKER')}
+                  title="Click to filter by Anti-Loss (No Safe Banker)"
+                >
+                  <div className="compact-kpi-header">
+                    <span className="compact-kpi-title">🛡️ Anti Loss</span>
+                    <span className="compact-kpi-pill antiloss-pill">{scorecardStats.antiLossTotal}M</span>
+                  </div>
+                  <div className="compact-kpi-val-row">
+                    <span className="compact-kpi-pct antiloss-text">{scorecardStats.antiLossWinRate}%</span>
+                    <span className="compact-kpi-ratio">{scorecardStats.antiLossWon}W • {scorecardStats.antiLossLost}L</span>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -2269,7 +2526,7 @@ export default function App() {
                 title="Click to reset win/loss filters"
               >
                 <span className="act-seg-label">Win Rate</span>
-                <span className="act-seg-val won-text">{fmtRate(activeTierStats.winRate)}</span>
+                <span className="act-seg-val won-text">{activeTierStats.winRate}%</span>
                 <span className="act-seg-sub">{activeTierStats.won}/{activeTierStats.decided}</span>
               </div>
 

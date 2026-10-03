@@ -54,33 +54,6 @@ const MARKET_TABS: MarketTabConfig[] = [
     description: 'Negative Binomial Set-Piece GLM analyzing wing width & cross deflection volume',
     accentColor: '#d97706',
   },
-  {
-    id: 'home_win',
-    label: 'Home Win',
-    icon: '🏠',
-    badgeTag: 'SOON',
-    description: 'Home Advantage & Pitch Familiarity GLM',
-    accentColor: '#6366f1',
-    isComingSoon: true,
-  },
-  {
-    id: 'away_win',
-    label: 'Away Win',
-    icon: '✈️',
-    badgeTag: 'SOON',
-    description: 'Counter-Attack & Travel Fatigue Discrepancy Model',
-    accentColor: '#8b5cf6',
-    isComingSoon: true,
-  },
-  {
-    id: 'draw',
-    label: 'Draw Hunter',
-    icon: '🤝',
-    badgeTag: 'SOON',
-    description: 'Low-Variance Poisson Convergence & Stalemate Classifier',
-    accentColor: '#64748b',
-    isComingSoon: true,
-  },
 ];
 
 export const MarketSwitchboardNav: React.FC<MarketSwitchboardNavProps> = ({

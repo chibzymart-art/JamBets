@@ -2,10 +2,9 @@
  * Oddsbanta — Autonomous Basketball Predictions & 250,000 Monte Carlo Hub
  * Phase 5: Master Basketball Hub View Component
  */
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { fetchBasketballFeed, BasketballFeedResponse } from '../lib/basketballFeedService';
-import { BasketballMarket } from '../types/basketball';
+import { BasketballMarket, BasketballPrediction } from '../types/basketball';
 import {
   getDateDetailsByOffset,
   getPastDatesList,
@@ -123,9 +122,26 @@ export const BasketballHubView: React.FC<BasketballHubViewProps> = ({
     return [...pastDates, ...futureDates];
   }, [allPredictions, isSubscriber]);
 
+  // Date-scoped predictions for calculating daily scorecard metrics
+  const dateScopedPredictions = useMemo(() => {
+    return allPredictions.filter((p) => {
+      if (!isSubscriber) {
+        const isWon = p.settlement_status === 'won' || p.settlement_status === 'half_won';
+        const isLost = p.settlement_status === 'lost' || p.settlement_status === 'half_lost';
+        const isVoid = (p.settlement_status as string) === 'void' || (p.settlement_status as string) === 'voided';
+        const isFinished = p.fixture?.status === 'finished' || Boolean(p.settled_at);
+        if (isLost || isVoid || (isFinished && !isWon)) return false;
+      }
+      if (selectedDate === 'all') return true;
+      const kickoff = p.target_kickoff_at || p.fixture?.target_kickoff_at;
+      const d = getFixtureWatDate(kickoff);
+      return d === selectedDate;
+    });
+  }, [allPredictions, selectedDate, isSubscriber]);
+
   // Filtered Predictions
   const filteredPredictions = useMemo(() => {
-    return allPredictions.filter((p) => {
+    const list = allPredictions.filter((p) => {
       // Strict Paywall: Free users & visitors strictly see only won fixtures (never lost, void, or un-won finished fixtures)
       if (!isSubscriber) {
         const isWon = p.settlement_status === 'won' || p.settlement_status === 'half_won';
@@ -137,8 +153,8 @@ export const BasketballHubView: React.FC<BasketballHubViewProps> = ({
         }
       }
 
-      // 1. Date Filter (ignore if viewing past results)
-      if (settlementFilter === 'all') {
+      // 1. Date Filter (ignore if viewing past results or all dates)
+      if (selectedDate !== 'all' && settlementFilter === 'all') {
         const kickoff = p.target_kickoff_at || p.fixture?.target_kickoff_at;
         const d = getFixtureWatDate(kickoff);
         if (selectedDate && d !== selectedDate) {
@@ -166,75 +182,176 @@ export const BasketballHubView: React.FC<BasketballHubViewProps> = ({
 
       // 5. Tier Filter
       if (selectedTier !== 'all') {
-        const cat = (p.confidence_category || '').toUpperCase();
-        if (selectedTier === 'bangers' && cat !== 'BANGER') return false;
-        if (selectedTier === 'top_picks' && cat !== 'TOP PICK' && cat !== 'TOP_PICK') return false;
-        if (selectedTier === 'high_confidence' && cat !== 'HIGH CONFIDENCE') return false;
+        const tier = (p.confidence_category || '').toUpperCase().replace(/ /g, '_');
+        const target = selectedTier.toUpperCase().replace(/ /g, '_');
+        if (target === 'NO_SAFE_BANKER') {
+          const m = (p.market || '').toUpperCase().replace(/ /g, '_');
+          const pred = (p.prediction || '').toUpperCase().replace(/ /g, '_');
+          if (!tier.includes('NO_SAFE_BANKER') && !m.includes('NO_SAFE_BANKER') && !pred.includes('NO_SAFE_BANKER')) {
+            return false;
+          }
+        } else if (target === 'BANGER' || target === 'BANGERS') {
+          if (tier !== 'BANGER') return false;
+        } else if (target === 'TOP_PICK' || target === 'TOP_PICKS') {
+          if (tier !== 'TOP_PICK' && tier !== 'TOP PICK') return false;
+        } else if (target === 'HIGH_CONFIDENCE') {
+          if (tier !== 'HIGH_CONFIDENCE' && tier !== 'HIGH CONFIDENCE') return false;
+        } else if (target === 'MID_CONFIDENCE') {
+          if (tier !== 'MID_CONFIDENCE' && tier !== 'MID CONFIDENCE') return false;
+        } else if (tier !== target) {
+          return false;
+        }
       }
 
       return true;
     });
+
+    const getConfidenceWeight = (p: BasketballPrediction): number => {
+      const market = (p.market || '').toUpperCase().replace(/ /g, '_');
+      const pred = (p.prediction || '').toUpperCase().replace(/ /g, '_');
+      const cat = (p.confidence_category || '').toUpperCase().replace(/ /g, '_');
+
+      // NO SAFE BANKER (High Volatility) sinks to bottom
+      if (cat.includes('NO_SAFE_BANKER') || market.includes('NO_SAFE_BANKER') || pred.includes('NO_SAFE_BANKER')) {
+        return -1;
+      }
+      if (cat.includes('BANGER')) return 6;
+      if (cat.includes('TOP_PICK') || cat.includes('TOPPICK')) return 5;
+      if (cat.includes('HIGH_CONFIDENCE') || cat.includes('HIGHCONFIDENCE')) return 4;
+      if (cat.includes('MID_CONFIDENCE') || cat.includes('MIDCONFIDENCE')) return 3;
+      if (cat.includes('LOW_CONFIDENCE') || cat.includes('LOWCONFIDENCE')) return 2;
+      return 1;
+    };
+
+    return [...list].sort((a, b) => {
+      const weightA = getConfidenceWeight(a);
+      const weightB = getConfidenceWeight(b);
+      if (weightB !== weightA) {
+        return weightB - weightA;
+      }
+      const probA = a.probability != null ? (a.probability <= 1 ? a.probability * 100 : a.probability) : 0;
+      const probB = b.probability != null ? (b.probability <= 1 ? b.probability * 100 : b.probability) : 0;
+      if (Math.abs(probB - probA) > 0.01) {
+        return probB - probA;
+      }
+      const timeA = new Date(a.target_kickoff_at || a.fixture?.target_kickoff_at || 0).getTime();
+      const timeB = new Date(b.target_kickoff_at || b.fixture?.target_kickoff_at || 0).getTime();
+      return timeA - timeB;
+    });
   }, [allPredictions, selectedDate, selectedLeague, selectedMarket, settlementFilter, selectedTier, isSubscriber]);
 
-  // Dynamic Lagos WAT Daily Metrics strictly calculated for active selectedDate
-  const dailyStats = useMemo(() => {
-    let dayTotal = 0;
-    let dayWon = 0;
-    let dayLost = 0;
-    let dayVoid = 0;
-    let dayPending = 0;
-    let dayBangers = 0;
-    let dayTopPicks = 0;
+  // Compute live scorecard KPI statistics from date-scoped predictions
+  const scorecardStats = useMemo(() => {
+    let allTotal = dateScopedPredictions.length;
+    let allWon = 0;
+    let allLost = 0;
+    let allVoid = 0;
+    let allPending = 0;
 
-    allPredictions.forEach((p) => {
-      const kickoff = p.target_kickoff_at || p.fixture?.target_kickoff_at;
-      const d = getFixtureWatDate(kickoff);
-      // Strictly ground metrics to the active selectedDate unless 'all' is explicitly chosen
-      if (selectedDate && selectedDate !== 'all' && d !== selectedDate) {
-        return;
+    let bangerTotal = 0;
+    let bangerWon = 0;
+    let bangerLost = 0;
+
+    let topPickTotal = 0;
+    let topPickWon = 0;
+    let topPickLost = 0;
+
+    let highTotal = 0;
+    let highWon = 0;
+    let highLost = 0;
+
+    let midTotal = 0;
+    let midWon = 0;
+    let midLost = 0;
+
+    let noSafeTotal = 0;
+    let noSafeWon = 0;
+    let noSafeLost = 0;
+
+    for (const p of dateScopedPredictions) {
+      const tier = (p.confidence_category || '').toUpperCase().replace(/ /g, '_');
+      const market = (p.market || '').toUpperCase().replace(/ /g, '_');
+      const pred = (p.prediction || '').toUpperCase().replace(/ /g, '_');
+      const status = (p.settlement_status || 'pending').toLowerCase();
+
+      if (status === 'won' || status === 'half_won') allWon++;
+      else if (status === 'lost' || status === 'half_lost') {
+        if (isSubscriber) allLost++;
       }
-
-      if (!isSubscriber) {
-        const isWon = p.settlement_status === 'won' || p.settlement_status === 'half_won';
-        const isLost = p.settlement_status === 'lost' || p.settlement_status === 'half_lost';
-        const isVoid = (p.settlement_status as string) === 'void' || (p.settlement_status as string) === 'voided';
-        const isFinished = p.fixture?.status === 'finished' || Boolean(p.settled_at);
-        if (isLost || isVoid || (isFinished && !isWon)) return;
+      else if (status === 'void' || status === 'voided') {
+        if (isSubscriber) allVoid++;
       }
+      else allPending++;
 
-      dayTotal++;
-      const c = (p.confidence_category || '').toUpperCase();
-      if (c === 'BANGER') dayBangers++;
-      else if (c === 'TOP PICK' || c === 'TOP_PICK') dayTopPicks++;
+      const isNoSafe = tier.includes('NO_SAFE_BANKER') || market.includes('NO_SAFE_BANKER') || pred.includes('NO_SAFE_BANKER');
 
-      const st = (p.settlement_status || 'pending').toLowerCase();
-      if (st === 'won') dayWon++;
-      else if (st === 'lost') {
-        if (isSubscriber) dayLost++;
+      if (isNoSafe) {
+        noSafeTotal++;
+        if (status === 'won' || status === 'half_won') noSafeWon++;
+        else if (status === 'lost' || status === 'half_lost') {
+          if (isSubscriber) noSafeLost++;
+        }
+      } else if (tier === 'BANGER') {
+        bangerTotal++;
+        if (status === 'won' || status === 'half_won') bangerWon++;
+        else if (status === 'lost' || status === 'half_lost') {
+          if (isSubscriber) bangerLost++;
+        }
+      } else if (tier === 'TOP_PICK' || tier === 'TOP PICK') {
+        topPickTotal++;
+        if (status === 'won' || status === 'half_won') topPickWon++;
+        else if (status === 'lost' || status === 'half_lost') {
+          if (isSubscriber) topPickLost++;
+        }
+      } else if (tier === 'HIGH_CONFIDENCE' || tier === 'HIGH CONFIDENCE') {
+        highTotal++;
+        if (status === 'won' || status === 'half_won') highWon++;
+        else if (status === 'lost' || status === 'half_lost') {
+          if (isSubscriber) highLost++;
+        }
+      } else if (tier === 'MID_CONFIDENCE' || tier === 'MID CONFIDENCE') {
+        midTotal++;
+        if (status === 'won' || status === 'half_won') midWon++;
+        else if (status === 'lost' || status === 'half_lost') {
+          if (isSubscriber) midLost++;
+        }
       }
-      else if (st === 'void') {
-        if (isSubscriber) dayVoid++;
-      }
-      else dayPending++;
-    });
+    }
 
-    const decided = dayWon + dayLost;
-    const winRate = decided > 0 ? Math.round((dayWon / decided) * 100) : (dayWon > 0 && !isSubscriber ? 100 : null);
+    const calcWinRate = (w: number, l: number) => {
+      const decisive = w + l;
+      return decisive > 0 ? String(Math.round((w / decisive) * 100)) : (w > 0 && !isSubscriber ? '100' : '0');
+    };
 
     return {
-      total: dayTotal,
-      won: dayWon,
-      lost: dayLost,
-      void: dayVoid,
-      pending: dayPending,
-      decided,
-      bangers: dayBangers,
-      topPicks: dayTopPicks,
-      settled: isSubscriber ? (dayWon + dayLost + dayVoid) : dayWon,
-      winRate,
-      isDaily: Boolean(selectedDate && selectedDate !== 'all'),
+      allTotal,
+      allWon,
+      allLost,
+      allVoid,
+      allPending,
+      allWinRate: calcWinRate(allWon, allLost),
+      bangerTotal,
+      bangerWon,
+      bangerLost,
+      bangerWinRate: calcWinRate(bangerWon, bangerLost),
+      topPickTotal,
+      topPickWon,
+      topPickLost,
+      topPickWinRate: calcWinRate(topPickWon, topPickLost),
+      highTotal,
+      highWon,
+      highLost,
+      highWinRate: calcWinRate(highWon, highLost),
+      midTotal,
+      midWon,
+      midLost,
+      midWinRate: calcWinRate(midWon, midLost),
+      noSafeTotal,
+      noSafeWon,
+      noSafeLost,
+      noSafeWinRate: calcWinRate(noSafeWon, noSafeLost),
     };
-  }, [allPredictions, selectedDate, isSubscriber]);
+  }, [dateScopedPredictions, isSubscriber]);
 
   return (
     <div className="bball-page-root" style={{ minHeight: '80vh', width: '100%', maxWidth: '1480px', margin: '0 auto', padding: '0 16px 40px' }}>
@@ -251,59 +368,145 @@ export const BasketballHubView: React.FC<BasketballHubViewProps> = ({
 
         </div>
 
-        {/* Compact Scorecard Telemetry Grid */}
-        <div className="bball-stats-grid">
-          <div
-            className={`bball-stat-card ${selectedTier === 'all' && settlementFilter === 'all' ? 'active' : ''}`}
-            style={{ cursor: 'pointer' }}
-            onClick={() => { setSelectedTier('all'); setSettlementFilter('all'); }}
-            title={dailyStats.isDaily ? `Daily Win Rate (${dailyStats.won}W - ${dailyStats.lost}L)` : 'Overall Win Rate'}
-          >
-            <span className="bball-stat-val green">
-              {dailyStats.winRate != null ? `${dailyStats.winRate}%` : dailyStats.pending > 0 ? '—' : '0%'}
-            </span>
-            <span className="bball-stat-lbl">
-              {dailyStats.isDaily ? 'Daily Win Rate' : 'Overall Win Rate'}
-            </span>
-          </div>
-          <div
-            className={`bball-stat-card ${selectedTier === 'bangers' ? 'active' : ''}`}
-            style={{ cursor: 'pointer' }}
-            onClick={() => setSelectedTier(selectedTier === 'bangers' ? 'all' : 'bangers')}
-            title="Filter by 96%+ Bangers"
-          >
-            <span className="bball-stat-val accent">
-              {dailyStats.bangers}
-            </span>
-            <span className="bball-stat-lbl">⭐ Bangers Active</span>
-          </div>
-          <div
-            className={`bball-stat-card ${selectedTier === 'top_picks' ? 'active' : ''}`}
-            style={{ cursor: 'pointer' }}
-            onClick={() => setSelectedTier(selectedTier === 'top_picks' ? 'all' : 'top_picks')}
-            title="Filter by Top Picks"
-          >
-            <span className="bball-stat-val gold">
-              {dailyStats.topPicks}
-            </span>
-            <span className="bball-stat-lbl">👑 Top Picks</span>
-          </div>
-          <div className="bball-stat-card">
-            <span className="bball-stat-val">
-              {dailyStats.total}
-            </span>
-            <span className="bball-stat-lbl">Scheduled Matches</span>
-          </div>
-          <div
-            className={`bball-stat-card ${settlementFilter === 'won' ? 'active' : ''}`}
-            style={{ cursor: 'pointer' }}
-            onClick={() => setSettlementFilter(settlementFilter === 'won' ? 'all' : 'won')}
-            title="View Settled Won Matches"
-          >
-            <span className="bball-stat-val">
-              {dailyStats.settled}
-            </span>
-            <span className="bball-stat-lbl">Settled Predictions</span>
+        {/* 2. DECONGESTED SCORECARD KPI SECTION (REFLECTING ALL PREDICTION TYPES AND WINS/LOSSES JUST LIKE TENNIS) */}
+        <div className="scorecard-two-cards-row" style={{ marginTop: '10px', marginBottom: '10px' }}>
+          {/* Unified Confidence Tabs & Won Tab inside single-card footprint */}
+          <div className="compact-kpi-card winrates-kpi-card tennis-winrates-kpi-card">
+            {/* Tab 1: All Predictions */}
+            <div
+              className={`compact-kpi-segment all-preds-seg ${selectedTier === 'all' && settlementFilter === 'all' ? 'active-seg' : ''}`}
+              onClick={() => {
+                setSelectedTier('all');
+                setSettlementFilter('all');
+              }}
+              title="Click to view all basketball predictions"
+            >
+              <div className="compact-kpi-header">
+                <span className="compact-kpi-title">All</span>
+                <span className="compact-kpi-pill">{scorecardStats.allTotal}M</span>
+              </div>
+              <div className="compact-kpi-val-row">
+                <span className="compact-kpi-pct">{scorecardStats.allWinRate}%</span>
+                <span className="compact-kpi-ratio">{scorecardStats.allWon}W • {scorecardStats.allLost}L</span>
+              </div>
+            </div>
+
+            {/* Tab 2: Banger */}
+            <div
+              className={`compact-kpi-segment banger-subseg ${selectedTier === 'BANGER' ? 'active-seg' : ''}`}
+              onClick={() => {
+                setSettlementFilter('all');
+                setSelectedTier(selectedTier === 'BANGER' ? 'all' : 'BANGER');
+              }}
+              title="Click to filter by 96%+ Bangers"
+            >
+              <div className="compact-kpi-header">
+                <span className="compact-kpi-title">⭐ Banger</span>
+                <span className="compact-kpi-pill banger-pill">{scorecardStats.bangerTotal}M</span>
+              </div>
+              <div className="compact-kpi-val-row">
+                <span className="compact-kpi-pct banger-text">{scorecardStats.bangerWinRate}%</span>
+                <span className="compact-kpi-ratio">{scorecardStats.bangerWon}W • {scorecardStats.bangerLost}L</span>
+              </div>
+            </div>
+
+            {/* Tab 3: Top Pick */}
+            <div
+              className={`compact-kpi-segment toppick-subseg ${selectedTier === 'TOP PICK' ? 'active-seg' : ''}`}
+              onClick={() => {
+                setSettlementFilter('all');
+                setSelectedTier(selectedTier === 'TOP PICK' ? 'all' : 'TOP PICK');
+              }}
+              title="Click to filter by 90%-95% Top Picks"
+            >
+              <div className="compact-kpi-header">
+                <span className="compact-kpi-title">👑 Top Pick</span>
+                <span className="compact-kpi-pill toppick-pill">{scorecardStats.topPickTotal}M</span>
+              </div>
+              <div className="compact-kpi-val-row">
+                <span className="compact-kpi-pct toppick-text">{scorecardStats.topPickWinRate}%</span>
+                <span className="compact-kpi-ratio">{scorecardStats.topPickWon}W • {scorecardStats.topPickLost}L</span>
+              </div>
+            </div>
+
+            {/* Tab 4: High Confidence */}
+            <div
+              className={`compact-kpi-segment high-subseg ${selectedTier === 'HIGH CONFIDENCE' ? 'active-seg' : ''}`}
+              onClick={() => {
+                setSettlementFilter('all');
+                setSelectedTier(selectedTier === 'HIGH CONFIDENCE' ? 'all' : 'HIGH CONFIDENCE');
+              }}
+              title="Click to filter by 83%-89% High Confidence"
+            >
+              <div className="compact-kpi-header">
+                <span className="compact-kpi-title">⚡ High</span>
+                <span className="compact-kpi-pill high-pill">{scorecardStats.highTotal}M</span>
+              </div>
+              <div className="compact-kpi-val-row">
+                <span className="compact-kpi-pct high-text">{scorecardStats.highWinRate}%</span>
+                <span className="compact-kpi-ratio">{scorecardStats.highWon}W • {scorecardStats.highLost}L</span>
+              </div>
+            </div>
+
+            {/* Tab 5: Mid Confidence */}
+            <div
+              className={`compact-kpi-segment mid-subseg ${selectedTier === 'MID CONFIDENCE' ? 'active-seg' : ''}`}
+              onClick={() => {
+                setSettlementFilter('all');
+                setSelectedTier(selectedTier === 'MID CONFIDENCE' ? 'all' : 'MID CONFIDENCE');
+              }}
+              title="Click to filter by 75%-82% Mid Confidence"
+            >
+              <div className="compact-kpi-header">
+                <span className="compact-kpi-title">🛡️ Mid</span>
+                <span className="compact-kpi-pill mid-pill">{scorecardStats.midTotal}M</span>
+              </div>
+              <div className="compact-kpi-val-row">
+                <span className="compact-kpi-pct mid-text">{scorecardStats.midWinRate}%</span>
+                <span className="compact-kpi-ratio">{scorecardStats.midWon}W • {scorecardStats.midLost}L</span>
+              </div>
+            </div>
+
+            {/* Tab 6: No Safe Banker (High Volatility) */}
+            <div
+              className={`compact-kpi-segment nosafe-subseg ${selectedTier === 'NO_SAFE_BANKER' ? 'active-seg' : ''}`}
+              onClick={() => {
+                setSettlementFilter('all');
+                setSelectedTier(selectedTier === 'NO_SAFE_BANKER' ? 'all' : 'NO_SAFE_BANKER');
+              }}
+              title="Click to filter High Volatility / No Safe Banker predictions"
+            >
+              <div className="compact-kpi-header">
+                <span className="compact-kpi-title">⚠️ No Safe</span>
+                <span className="compact-kpi-pill nosafe-pill">{scorecardStats.noSafeTotal}M</span>
+              </div>
+              <div className="compact-kpi-val-row">
+                <span className="compact-kpi-pct nosafe-text">{scorecardStats.noSafeWinRate}%</span>
+                <span className="compact-kpi-ratio">{scorecardStats.noSafeWon}W • {scorecardStats.noSafeLost}L</span>
+              </div>
+            </div>
+
+            {/* Tab 7: Won */}
+            <div
+              className={`compact-kpi-segment won-seg ${settlementFilter === 'won' ? 'active-seg' : ''}`}
+              onClick={() => {
+                const nextState = settlementFilter === 'won' ? 'all' : 'won';
+                setSettlementFilter(nextState);
+                if (nextState === 'won') {
+                  setSelectedTier('all');
+                }
+              }}
+              title="Click to filter Won basketball predictions"
+            >
+              <div className="compact-kpi-header">
+                <span className="compact-kpi-title">✓ Won</span>
+                <span className="compact-kpi-pill won-pill">{scorecardStats.allWon}</span>
+              </div>
+              <div className="compact-kpi-val-row">
+                <span className="compact-kpi-pct won-text">{scorecardStats.allWon}W</span>
+                <span className="compact-kpi-ratio">{scorecardStats.allLost} Lost</span>
+              </div>
+            </div>
           </div>
         </div>
 
