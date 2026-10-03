@@ -2,7 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { QueueFixture, FootballPrediction, SecondaryPrediction, PoissonParameters, SimulationOutlines } from '../types';
 import { FavoritePredictionItem } from './FavoritesDrawer';
-import { probabilityToScore, PICK_DISCLAIMER } from '../lib/confidenceScore';
+import { PICK_DISCLAIMER } from '../lib/confidenceScore';
 
 export interface TierDisplayConfig {
   label: string;
@@ -13,122 +13,96 @@ export interface TierDisplayConfig {
   bgColor: string;
 }
 
-export function getTierConfig(category?: string | null, probability?: number | null): TierDisplayConfig {
+export function getTierConfig(category?: string | null, _probability?: number | null): TierDisplayConfig {
   const norm = (category || '').toUpperCase().replace(/[\s-]+/g, '_');
-  if (norm === 'NO_SAFE_BANKER' || norm === 'NOSAFEBANKER' || norm === 'SKIP') {
-    return {
-      label: 'NO SAFE BANKER (PASS)',
-      icon: '🛡️',
-      badgeClass: 'tier-no-banker',
-      textColor: '#64748b',
-      borderColor: '#cbd5e1',
-      bgColor: '#f8fafc'
-    };
-  }
-  if (norm === 'LOCKED' || norm === 'HIDDEN') {
-    return {
-      label: 'PREMIUM LOCKED',
-      icon: '🔒',
-      badgeClass: 'tier-locked',
-      textColor: '#7c3aed',
-      borderColor: '#c4b5fd',
-      bgColor: '#faf5ff'
-    };
-  }
-
-  const score = probabilityToScore(probability);
-  if (score !== null) {
-    if (score >= 9.0) {
-      return {
-        label: `Tier 1 · 9+ (${score.toFixed(1)}/10)`,
-        icon: '🔥',
-        badgeClass: 'tier-banger',
-        textColor: '#047857',
-        borderColor: '#10b981',
-        bgColor: '#ecfdf5'
-      };
-    }
-    if (score >= 8.0) {
-      return {
-        label: `Tier 2 · 8–8.9 (${score.toFixed(1)}/10)`,
-        icon: '⭐',
-        badgeClass: 'tier-top-pick',
-        textColor: '#1d4ed8',
-        borderColor: '#3b82f6',
-        bgColor: '#eff6ff'
-      };
-    }
-    if (score >= 6.0) {
-      return {
-        label: `Tier 3 · 6–7.9 (${score.toFixed(1)}/10)`,
-        icon: '🟢',
-        badgeClass: 'tier-high-conf',
-        textColor: '#b45309',
-        borderColor: '#f59e0b',
-        bgColor: '#fffbeb'
-      };
-    }
-    return {
-      label: `Below 6.0 (${score.toFixed(1)}/10)`,
-      icon: '🟡',
-      badgeClass: 'tier-low-conf',
-      textColor: '#475569',
-      borderColor: '#cbd5e1',
-      bgColor: '#f8fafc'
-    };
-  }
-
   switch (norm) {
     case 'BANGER':
+      return {
+        label: 'BANGER (96%+)',
+        icon: '🔥',
+        badgeClass: 'tier-banger',
+        textColor: '#ea580c', // Red/Orange text
+        borderColor: '#f97316',
+        bgColor: '#fff7ed'
+      };
     case 'TOP_PICK':
     case 'TOPPICK':
       return {
-        label: 'Tier 1 (9.0+)',
-        icon: '🔥',
-        badgeClass: 'tier-banger',
-        textColor: '#047857',
-        borderColor: '#10b981',
-        bgColor: '#ecfdf5'
+        label: 'TOP PICK (90%-95%)',
+        icon: '⭐',
+        badgeClass: 'tier-top-pick',
+        textColor: '#d97706', // Gold text
+        borderColor: '#f59e0b',
+        bgColor: '#fefce8'
       };
     case 'HIGH_CONFIDENCE':
     case 'HIGHCONFIDENCE':
       return {
-        label: 'Tier 2 (8.0–8.9)',
-        icon: '⭐',
-        badgeClass: 'tier-top-pick',
-        textColor: '#1d4ed8',
-        borderColor: '#3b82f6',
-        bgColor: '#eff6ff'
+        label: 'HIGH CONFIDENCE (83%-89%)',
+        icon: '🟢',
+        badgeClass: 'tier-high-conf',
+        textColor: '#16a34a', // Bright Green text
+        borderColor: '#22c55e',
+        bgColor: '#f0fdf4'
       };
     case 'MID_CONFIDENCE':
     case 'MIDCONFIDENCE':
       return {
-        label: 'Tier 3 (6.0–7.9)',
-        icon: '🟢',
-        badgeClass: 'tier-high-conf',
-        textColor: '#b45309',
-        borderColor: '#f59e0b',
-        bgColor: '#fffbeb'
+        label: 'MID CONFIDENCE (75%-82%)',
+        icon: '🔵',
+        badgeClass: 'tier-mid-conf',
+        textColor: '#2563eb', // Blue text
+        borderColor: '#3b82f6',
+        bgColor: '#eff6ff'
       };
     case 'LOW_CONFIDENCE':
     case 'LOWCONFIDENCE':
-    case 'RISKY':
       return {
-        label: 'Below 6.0 (Low)',
+        label: 'LOW CONFIDENCE (65%-74%)',
         icon: '🟡',
         badgeClass: 'tier-low-conf',
-        textColor: '#475569',
+        textColor: '#ca8a04', // Yellow/Muted text
+        borderColor: '#eab308',
+        bgColor: '#fef9c3'
+      };
+    case 'RISKY':
+      return {
+        label: 'RISKY (<65%)',
+        icon: '⚠️',
+        badgeClass: 'tier-risky',
+        textColor: '#9a3412', // Grey/Orange text
+        borderColor: '#fb923c',
+        bgColor: '#fff7ed'
+      };
+    case 'NO_SAFE_BANKER':
+    case 'NOSAFEBANKER':
+    case 'SKIP':
+      return {
+        label: 'NO SAFE BANKER',
+        icon: '🛡️',
+        badgeClass: 'tier-no-banker',
+        textColor: '#64748b',
         borderColor: '#cbd5e1',
         bgColor: '#f8fafc'
       };
+    case 'LOCKED':
+    case 'HIDDEN':
+      return {
+        label: 'PREMIUM LOCKED',
+        icon: '🔒',
+        badgeClass: 'tier-locked',
+        textColor: '#7c3aed',
+        borderColor: '#c4b5fd',
+        bgColor: '#faf5ff'
+      };
     default:
       return {
-        label: category || 'MODEL SIGNAL',
-        icon: '🎯',
-        badgeClass: 'tier-default',
-        textColor: '#0f172a',
-        borderColor: '#e2e8f0',
-        bgColor: '#f8fafc'
+        label: category || 'MID CONFIDENCE (75%-82%)',
+        icon: '🔵',
+        badgeClass: 'tier-mid-conf',
+        textColor: '#2563eb',
+        borderColor: '#3b82f6',
+        bgColor: '#eff6ff'
       };
   }
 }

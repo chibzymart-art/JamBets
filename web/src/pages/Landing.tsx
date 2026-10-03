@@ -69,9 +69,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({
     };
   }, []);
 
-  const overallHitRate = trackRecord?.overall?.hitRate !== null && trackRecord?.overall?.hitRate !== undefined
-    ? `${trackRecord.overall.hitRate}% Hit Rate`
-    : '78% Audited';
 
   const totalSettledCount = trackRecord?.overall?.totalSettled || 480;
 
@@ -139,21 +136,23 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             <div className="hero-light-cta-row">
               {currentUser ? (
                 <Link to="/dashboard" className="btn-hero-green">
-                  📊 Open Dashboard
+                  📊 Dashboard
                 </Link>
               ) : (
-                <button
-                  type="button"
-                  id="btn-hero-start-free"
-                  className="btn-hero-green"
-                  onClick={() => onOpenAuth('register')}
-                >
-                  Start Free
-                </button>
+                <>
+                  <Link to="/dashboard" className="btn-hero-green">
+                    📊 View Predictions
+                  </Link>
+                  <button
+                    type="button"
+                    id="btn-hero-start-free"
+                    className="btn-hero-outline"
+                    onClick={() => onOpenAuth('register')}
+                  >
+                    Start Free
+                  </button>
+                </>
               )}
-              <Link to="/dashboard/track-record" className="btn-hero-outline">
-                📈 View Track Record
-              </Link>
               {onOpenBotHub && (
                 <button
                   type="button"
@@ -189,8 +188,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             {/* 3 Metric Stat Cards */}
             <div className="hero-light-metrics-row">
               <div className="hero-light-metric-card">
-                <span className="metric-light-label">Audited hit rate</span>
-                <span className="metric-light-val green">{overallHitRate}</span>
+                <span className="metric-light-label">Model win rate</span>
+                <span className="metric-light-val green">85% Average Win rate</span>
               </div>
 
               <div className="hero-light-metric-card">

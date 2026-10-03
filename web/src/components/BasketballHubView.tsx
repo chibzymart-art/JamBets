@@ -42,7 +42,7 @@ export const BasketballHubView: React.FC<BasketballHubViewProps> = ({
   onOpenFavoritesDrawer,
   onOpenAuth,
   onOpenSubscription,
-  onBackToFootball,
+  onBackToFootball: _onBackToFootball,
 }) => {
   const [selectedDate, setSelectedDate] = useState<string>(() => getDateDetailsByOffset(0).iso);
   const [selectedTier, setSelectedTier] = useState<string>('all');
@@ -248,20 +248,7 @@ export const BasketballHubView: React.FC<BasketballHubViewProps> = ({
             </h1>
           </div>
 
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-            <span className="bball-sim-badge">
-              ⚙️ Calibrated Four Factors Model
-            </span>
-            {onBackToFootball && (
-              <button
-                type="button"
-                className="bball-league-btn"
-                onClick={onBackToFootball}
-              >
-                ⚽ Back to Football
-              </button>
-            )}
-          </div>
+
         </div>
 
         {/* Compact Scorecard Telemetry Grid */}
