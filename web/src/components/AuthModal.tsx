@@ -107,6 +107,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       setSuccessMessage(null);
       setQueueNotice(null);
       setLoading(false);
+      setAgeAccepted(false);
+      setFinancialAccepted(false);
     }
   }, [isOpen, initialMode]);
 
@@ -114,8 +116,21 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   useEffect(() => {
     if (!isOpen) return;
 
-    const unsubSuccess = onGoogleAuthSuccess(() => {
+    const unsubSuccess = onGoogleAuthSuccess(async (authData: any) => {
       setLoading(false);
+      const userId = authData?.user?.id || authData?.session?.user?.id;
+      if (userId && (mode === 'register' || (ageAccepted && financialAccepted))) {
+        try {
+          await supabase.from('profiles').update({
+            disclaimer_age_accepted: true,
+            disclaimer_financial_accepted: true,
+            disclaimer_age_accepted_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          }).eq('id', userId);
+        } catch (e) {
+          console.warn('Could not record disclaimers on profile:', e);
+        }
+      }
       onAuthSuccess();
       onClose();
     });
@@ -159,12 +174,22 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       unsubSuccess();
       unsubError();
     };
-  }, [isOpen, mode, onAuthSuccess, onClose]);
+  }, [isOpen, mode, ageAccepted, financialAccepted, onAuthSuccess, onClose]);
 
   if (!isOpen) return null;
 
   const handleGoogleSignIn = async () => {
     if (loading) return;
+    if (mode === 'register' && (!ageAccepted || !financialAccepted)) {
+      if (!ageAccepted && !financialAccepted) {
+        setErrorMessage('You must confirm you are 18+ and accept the financial indemnity disclaimer to register.');
+      } else if (!ageAccepted) {
+        setErrorMessage('You must confirm you are 18 years or older and at the legal age for sports betting.');
+      } else {
+        setErrorMessage('You must accept the educational purpose and financial indemnity disclaimer to register.');
+      }
+      return;
+    }
     setErrorMessage(null);
     setSuccessMessage(null);
     setQueueNotice(null);
@@ -550,35 +575,120 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         {/* Form Body: Register */}
         {mode === 'register' && (
           <div className="auth-form-wrapper">
+            {/* MANDATORY LEGAL & AGE DISCLAIMERS (Section 15) */}
+            <div className="disclaimer-container" style={{ marginBottom: '14px' }}>
+              <div className="disclaimer-header">
+                <span className="disclaimer-badge">MANDATORY LEGAL ACKNOWLEDGMENTS</span>
+                <span className="disclaimer-version">Version v1.0</span>
+              </div>
+
+              {/* Disclaimer 1 */}
+              <label className="disclaimer-checkbox-label" htmlFor="disclaimer-age">
+                <input
+                  type="checkbox"
+                  id="disclaimer-age"
+                  checked={ageAccepted}
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    setAgeAccepted(checked);
+                    if (checked && financialAccepted) {
+                      setErrorMessage(null);
+                    }
+                  }}
+                  className="disclaimer-checkbox"
+                  required
+                />
+                <span className="disclaimer-text">
+                  <strong>Age Verification:</strong> I confirm I am 18 years and above and at the legal age for sports betting.
+                </span>
+              </label>
+
+              {/* Disclaimer 2 */}
+              <label className="disclaimer-checkbox-label" htmlFor="disclaimer-financial">
+                <input
+                  type="checkbox"
+                  id="disclaimer-financial"
+                  checked={financialAccepted}
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    setFinancialAccepted(checked);
+                    if (checked && ageAccepted) {
+                      setErrorMessage(null);
+                    }
+                  }}
+                  className="disclaimer-checkbox"
+                  required
+                />
+                <span className="disclaimer-text">
+                  <strong>Financial Indemnity & Educational Notice:</strong> I understand that the information provided is not financial advice, is for educational/informational purposes only, and I indemnify Oddsbanta from financial losses arising from reliance on the information provided.
+                </span>
+              </label>
+            </div>
+
             {/* Google / Gmail 1-Click Registration (GIS Branded - Zero Supabase URL Exposure) */}
             <div className="social-auth-section">
               <div
-                ref={registerGoogleBtnRef}
-                className="gis-btn-wrapper"
-                style={{ display: 'flex', justifyContent: 'center', width: '100%', minHeight: '44px' }}
-              />
+                style={{
+                  position: 'relative',
+                  width: '100%',
+                  display: 'flex',
+                  justifyContent: 'center',
+                  opacity: (!ageAccepted || !financialAccepted) ? 0.6 : 1,
+                  transition: 'opacity 0.2s ease',
+                }}
+              >
+                {/* Click-interceptor overlay when disclaimers are not accepted */}
+                {(!ageAccepted || !financialAccepted) && (
+                  <div
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      if (!ageAccepted && !financialAccepted) {
+                        setErrorMessage('You must confirm you are 18+ and accept the financial indemnity disclaimer to register.');
+                      } else if (!ageAccepted) {
+                        setErrorMessage('You must confirm you are 18 years or older and at the legal age for sports betting.');
+                      } else {
+                        setErrorMessage('You must accept the educational purpose and financial indemnity disclaimer to register.');
+                      }
+                    }}
+                    title="Please confirm age and disclaimers above first"
+                    style={{
+                      position: 'absolute',
+                      inset: 0,
+                      zIndex: 20,
+                      cursor: 'not-allowed',
+                    }}
+                  />
+                )}
 
-              {!gisLoaded && (
-                <button
-                  type="button"
-                  id="btn-google-signup"
-                  disabled={loading}
-                  onClick={handleGoogleSignIn}
-                  className="google-oauth-btn"
-                  title="Instant 1-Click Sign Up with Gmail / Google"
-                >
-                  <svg className="google-icon-svg" viewBox="0 0 24 24" width="20" height="20">
-                    <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z"/>
-                    <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.35 24 12 24z"/>
-                    <path fill="#FBBC05" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 10.03 0 12s.45 3.82 1.25 5.42l4.03-3.15z"/>
-                    <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.35 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"/>
-                  </svg>
-                  <span>Sign Up with Google / Gmail</span>
-                </button>
-              )}
+                <div
+                  ref={registerGoogleBtnRef}
+                  className="gis-btn-wrapper"
+                  style={{ display: 'flex', justifyContent: 'center', width: '100%', minHeight: '44px' }}
+                />
+
+                {!gisLoaded && (
+                  <button
+                    type="button"
+                    id="btn-google-signup"
+                    disabled={loading || !ageAccepted || !financialAccepted}
+                    onClick={handleGoogleSignIn}
+                    className="google-oauth-btn"
+                    title="Instant 1-Click Sign Up with Gmail / Google"
+                  >
+                    <svg className="google-icon-svg" viewBox="0 0 24 24" width="20" height="20">
+                      <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z"/>
+                      <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.35 24 12 24z"/>
+                      <path fill="#FBBC05" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 10.03 0 12s.45 3.82 1.25 5.42l4.03-3.15z"/>
+                      <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.35 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"/>
+                    </svg>
+                    <span>Sign Up with Google / Gmail</span>
+                  </button>
+                )}
+              </div>
 
               <p className="google-oauth-disclaimer">
-                By continuing with Google, you verify you are 18+ and agree to Oddsbanta's Terms of Service & Financial Indemnity.
+                Confirm legal disclaimers above to register via Google or email.
               </p>
 
               <div className="auth-divider">
@@ -629,44 +739,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   autoComplete="new-password"
                   className="form-input"
                 />
-              </div>
-
-              {/* MANDATORY LEGAL & AGE DISCLAIMERS (Section 15) */}
-              <div className="disclaimer-container">
-                <div className="disclaimer-header">
-                  <span className="disclaimer-badge">MANDATORY LEGAL ACKNOWLEDGMENTS</span>
-                  <span className="disclaimer-version">Version v1.0</span>
-                </div>
-
-                {/* Disclaimer 1 */}
-                <label className="disclaimer-checkbox-label" htmlFor="disclaimer-age">
-                  <input
-                    type="checkbox"
-                    id="disclaimer-age"
-                    checked={ageAccepted}
-                    onChange={(e) => setAgeAccepted(e.target.checked)}
-                    className="disclaimer-checkbox"
-                    required
-                  />
-                  <span className="disclaimer-text">
-                    <strong>Age Verification:</strong> I confirm I am 18 years and above and at the legal age for sports betting.
-                  </span>
-                </label>
-
-                {/* Disclaimer 2 */}
-                <label className="disclaimer-checkbox-label" htmlFor="disclaimer-financial">
-                  <input
-                    type="checkbox"
-                    id="disclaimer-financial"
-                    checked={financialAccepted}
-                    onChange={(e) => setFinancialAccepted(e.target.checked)}
-                    className="disclaimer-checkbox"
-                    required
-                  />
-                  <span className="disclaimer-text">
-                    <strong>Financial Indemnity & Educational Notice:</strong> I understand that the information provided is not financial advice, is for educational/informational purposes only, and I indemnify Oddsbanta from financial losses arising from reliance on the information provided.
-                  </span>
-                </label>
               </div>
 
               <button
