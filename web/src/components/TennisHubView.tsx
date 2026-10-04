@@ -493,7 +493,7 @@ export const TennisHubView: React.FC<TennisHubViewProps> = ({
   }, [dateScopedPredictions, isSubscriber]);
 
   return (
-    <div className="tennis-hub-view-wrapper" style={{ width: '100%', maxWidth: '1480px', margin: '0 auto', padding: '0 16px 80px 16px' }}>
+    <div className="tennis-hub-view-wrapper">
       {error && (
         <div style={{ background: '#fef2f2', border: '1px solid #fecaca', color: '#dc2626', padding: '12px 16px', borderRadius: '12px', marginBottom: '16px', fontSize: '0.86rem' }}>
           <strong>Notice:</strong> {error}

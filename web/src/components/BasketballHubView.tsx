@@ -354,7 +354,7 @@ export const BasketballHubView: React.FC<BasketballHubViewProps> = ({
   }, [dateScopedPredictions, isSubscriber]);
 
   return (
-    <div className="bball-page-root" style={{ minHeight: '80vh', width: '100%', maxWidth: '1480px', margin: '0 auto', padding: '0 16px 40px' }}>
+    <div className="bball-page-root">
       {/* 1. REDUCED HERO BANNER WITH INTEGRATED LAGOS WAT DATE SELECTOR */}
       <section className="bball-hero-banner">
         <div className="bball-hero-header">
