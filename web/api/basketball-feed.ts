@@ -248,9 +248,10 @@ async function fetchBasketballFromUpstream(isPaidOrAdmin: boolean): Promise<Bask
     `id,prediction_id,fixture_id,status,final_home_score,final_away_score,score_margin,total_points,notes,settled_at`
   );
 
+  const nowIso = new Date().toISOString();
   const [predsRes, leaguesRes, settleRes] = await Promise.all([
     fetch(
-      `${SUPABASE_URL}/rest/v1/${predTable}?select=${predSelect}&order=target_kickoff_at.asc&limit=1000`,
+      `${SUPABASE_URL}/rest/v1/${predTable}?select=${predSelect}&target_kickoff_at=gte.${nowIso}&order=target_kickoff_at.asc&limit=1000`,
       { headers }
     ),
     fetch(

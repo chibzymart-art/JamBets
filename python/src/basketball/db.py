@@ -162,6 +162,32 @@ class BasketballDbClient:
         res = resp.json()
         return res[0] if res else {}
 
+    def purge_stale_predictions(self, before_iso: str) -> int:
+        """
+        Deletes predictions whose kickoff is strictly before before_iso.
+        Cascades to basketball_settlements automatically.
+        """
+        headers = dict(self.headers)
+        headers["Prefer"] = "return=representation"
+        resp = self.client.delete("/basketball_predictions", params={"target_kickoff_at": f"lt.{before_iso}"}, headers=headers)
+        if resp.status_code in (200, 204):
+            res = resp.json() if resp.status_code == 200 else []
+            return len(res)
+        return 0
+
+    def wipe_all_predictions(self) -> int:
+        """
+        Wipes all predictions from public.basketball_predictions.
+        Cascades to basketball_settlements automatically.
+        """
+        headers = dict(self.headers)
+        headers["Prefer"] = "return=representation"
+        resp = self.client.delete("/basketball_predictions", params={"id": "not.is.null"}, headers=headers)
+        if resp.status_code in (200, 204):
+            res = resp.json() if resp.status_code == 200 else []
+            return len(res)
+        return 0
+
     # ------------------------------------------------------------------
     # Settlements
     # ------------------------------------------------------------------

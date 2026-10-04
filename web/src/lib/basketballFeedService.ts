@@ -227,6 +227,7 @@ export async function fetchBasketballFeed(
       const predQuery = supabase
         .from(predTable)
         .select(PRED_SELECT)
+        .gte('target_kickoff_at', new Date().toISOString())
         .order('target_kickoff_at', { ascending: true })
         .limit(1000);
 

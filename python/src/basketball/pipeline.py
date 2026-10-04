@@ -152,23 +152,26 @@ class BasketballIngestionPipeline:
 
     def ingest_horizon(
         self,
-        days_back: int = 1,
-        days_forward: int = 3,
+        days_back: int = 0,
+        days_forward: int = 4,
         target_leagues: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """
         Ingests basketball fixtures across the temporal window.
+        Strict invariant: Only current time forward fixtures are ingested and scheduled.
         """
         # 1. Sync leagues first
         self.sync_leagues()
 
         leagues_to_scrape = target_leagues or list(LEAGUE_REGISTRY.keys())
         today = datetime.now(timezone.utc)
+        now_utc = today
 
         raw_fixtures: Dict[str, Dict[str, Any]] = {}  # canonical_key -> fixture dict
 
-        # 2. Iterate through each day in the horizon
-        for day_offset in range(-days_back, days_forward + 1):
+        # 2. Iterate through each day in the horizon (from current day forward)
+        start_day_offset = max(0, -days_back)
+        for day_offset in range(start_day_offset, days_forward + 1):
             current_date = today + timedelta(days=day_offset)
             date_str = current_date.strftime("%Y%m%d")
 
@@ -203,12 +206,17 @@ class BasketballIngestionPipeline:
             self._team_schedule.setdefault(fix["home_team_name"], []).append(kickoff)
             self._team_schedule.setdefault(fix["away_team_name"], []).append(kickoff)
 
-        # 4. Synchronize fixtures to Cloud Supabase
+        # 4. Synchronize fixtures to Cloud Supabase (strictly current time forward)
         synced_count = 0
         live_count = 0
         finished_count = 0
 
         for key, fix in raw_fixtures.items():
+            kickoff_dt = datetime.fromisoformat(fix["target_kickoff_at"].replace("Z", "+00:00"))
+            if kickoff_dt < now_utc:
+                logger.debug("Skipping past fixture %s (kickoff: %s < current: %s)", key, kickoff_dt.isoformat(), now_utc.isoformat())
+                continue
+
             home_raw = fix.get("home_team_name", "").strip().lower()
             away_raw = fix.get("away_team_name", "").strip().lower()
             if home_raw in ("tbd", "to be decided", "unknown team", "") or away_raw in ("tbd", "to be decided", "unknown team", ""):

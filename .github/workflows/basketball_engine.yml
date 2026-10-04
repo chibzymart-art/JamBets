@@ -60,7 +60,7 @@ jobs:
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
         run: |
           echo "=== RUNNING BASKETBALL SCOREBOARD & SCHEDULE INGESTION ==="
-          python -m python.src.basketball.daemon --once --days-back 2 --days-forward 4
+          python -m python.src.basketball.daemon --once --days-back 0 --days-forward 4
 
       - name: Execute 250,000 Monte Carlo Basketball Prediction Engine
         if: ${{ github.event_name == 'schedule' || inputs.action == 'all' || inputs.action == 'predict-only' }}

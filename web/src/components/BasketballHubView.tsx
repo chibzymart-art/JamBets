@@ -7,7 +7,6 @@ import { fetchBasketballFeed, BasketballFeedResponse } from '../lib/basketballFe
 import { BasketballMarket, BasketballPrediction } from '../types/basketball';
 import {
   getDateDetailsByOffset,
-  getPastDatesList,
   getFixtureWatDate,
 } from '../lib/dateUtils';
 import { BasketballPredictionCard } from './BasketballPredictionCard';
@@ -100,14 +99,6 @@ export const BasketballHubView: React.FC<BasketballHubViewProps> = ({
       }
     });
 
-    const pastDates = getPastDatesList(1).map((item) => ({
-      iso: item.iso,
-      dayLabel: 'Past',
-      dateSub: item.shortFormatted,
-      count: fixtureCountByDate.get(item.iso) || 0,
-      isPast: true,
-    }));
-
     const futureDates = [0, 1, 2, 3].map((offset) => {
       const item = getDateDetailsByOffset(offset);
       return {
@@ -119,7 +110,7 @@ export const BasketballHubView: React.FC<BasketballHubViewProps> = ({
       };
     });
 
-    return [...pastDates, ...futureDates];
+    return futureDates;
   }, [allPredictions, isSubscriber]);
 
   // Date-scoped predictions for calculating daily scorecard metrics

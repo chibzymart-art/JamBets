@@ -49,9 +49,9 @@ class BasketballScraperDaemon:
         logger.info("Termination signal received. Shutting down Basketball Scraper Daemon...")
         self.running = False
 
-    def run_cycle(self, days_back: int = 1, days_forward: int = 3, target_leagues: Optional[List[str]] = None):
+    def run_cycle(self, days_back: int = 0, days_forward: int = 4, target_leagues: Optional[List[str]] = None):
         """
-        Executes a single data acquisition cycle.
+        Executes a single data acquisition cycle (strictly current time forward).
         """
         logger.info("Starting basketball data acquisition cycle (horizon -%dd to +%dd)...", days_back, days_forward)
         try:
@@ -86,8 +86,8 @@ class BasketballScraperDaemon:
 def main():
     parser = argparse.ArgumentParser(description="Oddsbanta Autonomous Basketball Scraper Daemon")
     parser.add_argument("--once", "--run-once", dest="once", action="store_true", help="Run a single acquisition cycle and exit")
-    parser.add_argument("--days-back", type=int, default=1, help="Number of past days to check for scores")
-    parser.add_argument("--days-forward", type=int, default=3, help="Number of forward days to schedule")
+    parser.add_argument("--days-back", type=int, default=0, help="Number of past days to check for scores")
+    parser.add_argument("--days-forward", type=int, default=4, help="Number of forward days to schedule")
     parser.add_argument("--leagues", nargs="+", help="Specific league codes to ingest (e.g. NBA WNBA)")
     args = parser.parse_args()
 
