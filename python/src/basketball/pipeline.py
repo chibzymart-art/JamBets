@@ -155,10 +155,12 @@ class BasketballIngestionPipeline:
         days_back: int = 0,
         days_forward: int = 4,
         target_leagues: Optional[List[str]] = None,
+        only_upcoming: bool = True,
     ) -> Dict[str, Any]:
         """
         Ingests basketball fixtures across the temporal window.
-        Strict invariant: Only current time forward fixtures are ingested and scheduled.
+        When only_upcoming=True: strictly current time forward fixtures are ingested and scheduled.
+        When only_upcoming=False: refreshes completed match scores from past days for settlement.
         """
         # 1. Sync leagues first
         self.sync_leagues()
@@ -169,8 +171,8 @@ class BasketballIngestionPipeline:
 
         raw_fixtures: Dict[str, Dict[str, Any]] = {}  # canonical_key -> fixture dict
 
-        # 2. Iterate through each day in the horizon (from current day forward)
-        start_day_offset = max(0, -days_back)
+        # 2. Iterate through each day in the horizon
+        start_day_offset = -days_back if not only_upcoming else max(0, -days_back)
         for day_offset in range(start_day_offset, days_forward + 1):
             current_date = today + timedelta(days=day_offset)
             date_str = current_date.strftime("%Y%m%d")
@@ -206,14 +208,14 @@ class BasketballIngestionPipeline:
             self._team_schedule.setdefault(fix["home_team_name"], []).append(kickoff)
             self._team_schedule.setdefault(fix["away_team_name"], []).append(kickoff)
 
-        # 4. Synchronize fixtures to Cloud Supabase (strictly current time forward)
+        # 4. Synchronize fixtures to Cloud Supabase
         synced_count = 0
         live_count = 0
         finished_count = 0
 
         for key, fix in raw_fixtures.items():
             kickoff_dt = datetime.fromisoformat(fix["target_kickoff_at"].replace("Z", "+00:00"))
-            if kickoff_dt < now_utc:
+            if only_upcoming and kickoff_dt < now_utc:
                 logger.debug("Skipping past fixture %s (kickoff: %s < current: %s)", key, kickoff_dt.isoformat(), now_utc.isoformat())
                 continue
 

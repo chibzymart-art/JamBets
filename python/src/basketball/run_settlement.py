@@ -51,8 +51,9 @@ def run_settlement_cycle(
     # 1. Optionally refresh completed scores from live APIs
     if refresh_scores:
         try:
-            logger.info("Refreshing recent completed basketball scores from ESPN & LiveScore...")
-            pipeline.ingest_horizon(days_back=2, days_forward=0)
+            days_back = max(2, (lookback_hours // 24) + 1)
+            logger.info("Refreshing recent completed basketball scores from ESPN & LiveScore (lookback %dd)...", days_back)
+            pipeline.ingest_horizon(days_back=days_back, days_forward=0, only_upcoming=False)
         except Exception as e:
             logger.warning("Scoreboard refresh encountered a non-fatal error: %s", e)
 

@@ -1,0 +1,79 @@
+name: JamBets Autonomous Basketball Settlement Engine (1-Hour Cadence)
+
+on:
+  schedule:
+    # Run every 1 hour for real-time game resolution and settlement of pending basketball predictions
+    - cron: '0 * * * *'
+  workflow_dispatch:
+    inputs:
+      lookback_hours:
+        description: 'Settlement temporal lookback horizon in hours (default: 72)'
+        required: false
+        default: '72'
+      dry_run:
+        description: 'Simulate without mutating Cloud Supabase'
+        type: boolean
+        required: false
+        default: false
+
+concurrency:
+  group: basketball-settlement-engine
+  cancel-in-progress: false
+
+jobs:
+  basketball-settlement-cycle:
+    name: Autonomous Basketball Score Refresh & Prediction Settlement Pass
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: 'python/requirements.txt'
+
+      - name: Install Python Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r python/requirements.txt
+
+      - name: Execute Autonomous Basketball Settlement Engine
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          ALERT_EMAIL_SENDER: ${{ secrets.ALERT_EMAIL_SENDER }}
+          ALERT_EMAIL_PASSWORD: ${{ secrets.ALERT_EMAIL_PASSWORD }}
+          ALERT_EMAIL_RECIPIENTS: ${{ secrets.ALERT_EMAIL_RECIPIENTS }}
+        run: |
+          echo "=== RUNNING AUTONOMOUS BASKETBALL SETTLEMENT ENGINE (1-HOUR CADENCE) ==="
+          LOOKBACK="${{ github.event.inputs.lookback_hours || '72' }}"
+          DRY_RUN_FLAG=""
+          if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
+            DRY_RUN_FLAG="--dry-run"
+          fi
+          python -m python.src.basketball.run_settlement --lookback-hours $LOOKBACK $DRY_RUN_FLAG
+
+      - name: Dispatch Basketball Settlement Failure Alert
+        if: failure()
+        env:
+          ALERT_EMAIL_SENDER: ${{ secrets.ALERT_EMAIL_SENDER }}
+          ALERT_EMAIL_PASSWORD: ${{ secrets.ALERT_EMAIL_PASSWORD }}
+          ALERT_EMAIL_RECIPIENTS: ${{ secrets.ALERT_EMAIL_RECIPIENTS }}
+        run: |
+          python -c "
+          try:
+              from python.src.alerts.email_notifier import send_pipeline_failure_alert
+              send_pipeline_failure_alert(
+                  'Basketball Settlement Engine (GitHub Actions)',
+                  Exception('GitHub Actions Basketball 1-hour settlement workflow step failed'),
+                  {'run_id': '${{ github.run_id }}', 'run_url': 'https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}'}
+              )
+          except Exception as e:
+              print(f'Failed to dispatch email alert: {e}')
+          "

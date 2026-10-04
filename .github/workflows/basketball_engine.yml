@@ -1,38 +1,38 @@
-name: JamBets Autonomous Basketball Engine (Predictions & Settlement)
+name: JamBets Autonomous Basketball Prediction Engine (12-Hour Cadence)
 
 on:
   schedule:
-    # Run every 2 hours for automated settlement and prediction maintenance
-    - cron: '0 */2 * * *'
+    # Run every 12 hours for fresh schedule ingestion and 250k Monte Carlo prediction generation
+    - cron: '0 */12 * * *'
+  push:
+    branches:
+      - main
+    paths:
+      - 'python/src/basketball/**'
+      - '.github/workflows/basketball_engine.yml'
   workflow_dispatch:
     inputs:
-      action:
-        description: 'Engine action to execute'
-        required: true
-        default: 'all'
-        type: choice
-        options:
-          - all
-          - predict-only
-          - settle-only
-          - scrape-only
-      lookback_hours:
-        description: 'Settlement temporal lookback horizon in hours'
+      days_forward:
+        description: 'Forward horizon window in days (default: 4)'
         required: false
-        default: '48'
-      dry_run:
-        description: 'Simulate without mutating Cloud Supabase'
+        default: '4'
+      simulations:
+        description: 'Monte Carlo simulations count per match (default: 250000)'
+        required: false
+        default: '250000'
+      wipe_all:
+        description: 'Wipe all existing basketball predictions before running fresh pass'
         type: boolean
         required: false
         default: false
 
 concurrency:
-  group: basketball-engine
+  group: basketball-prediction-engine
   cancel-in-progress: false
 
 jobs:
-  basketball-cycle:
-    name: Autonomous Basketball Ingestion, Simulation & Settlement
+  basketball-prediction-cycle:
+    name: Autonomous Basketball Ingestion & 250k Monte Carlo Simulation Cycle
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
@@ -52,45 +52,31 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r python/requirements.txt
 
-      - name: Execute Scoreboard Ingestion & Score Refresh
-        if: ${{ github.event_name == 'schedule' || inputs.action == 'all' || inputs.action == 'scrape-only' || inputs.action == 'settle-only' }}
+      - name: Execute Scoreboard Ingestion & Schedule
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
         run: |
-          echo "=== RUNNING BASKETBALL SCOREBOARD & SCHEDULE INGESTION ==="
-          python -m python.src.basketball.daemon --once --days-back 0 --days-forward 4
+          echo "=== RUNNING BASKETBALL SCOREBOARD & SCHEDULE INGESTION (CURRENT TIME FORWARD) ==="
+          python -m python.src.basketball.daemon --once --days-back 0 --days-forward ${{ github.event.inputs.days_forward || '4' }}
 
       - name: Execute 250,000 Monte Carlo Basketball Prediction Engine
-        if: ${{ github.event_name == 'schedule' || inputs.action == 'all' || inputs.action == 'predict-only' }}
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
         run: |
           echo "=== RUNNING BASKETBALL 250K MONTE CARLO PREDICTION ENGINE ==="
-          python -m python.src.basketball.run_predictions --days-forward 4
-
-      - name: Execute Autonomous Basketball Settlement Engine
-        if: ${{ github.event_name == 'schedule' || inputs.action == 'all' || inputs.action == 'settle-only' }}
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-          ALERT_EMAIL_SENDER: ${{ secrets.ALERT_EMAIL_SENDER }}
-          ALERT_EMAIL_PASSWORD: ${{ secrets.ALERT_EMAIL_PASSWORD }}
-          ALERT_EMAIL_RECIPIENTS: ${{ secrets.ALERT_EMAIL_RECIPIENTS }}
-        run: |
-          echo "=== RUNNING AUTONOMOUS BASKETBALL SETTLEMENT ENGINE ==="
-          LOOKBACK="${{ github.event.inputs.lookback_hours || '48' }}"
-          DRY_RUN_FLAG=""
-          if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
-            DRY_RUN_FLAG="--dry-run"
+          DAYS="${{ github.event.inputs.days_forward || '4' }}"
+          SIMS="${{ github.event.inputs.simulations || '250000' }}"
+          WIPE_FLAG=""
+          if [ "${{ github.event.inputs.wipe_all }}" = "true" ]; then
+            WIPE_FLAG="--wipe-all"
           fi
-          python -m python.src.basketball.run_settlement --lookback-hours $LOOKBACK $DRY_RUN_FLAG
+          python -m python.src.basketball.run_predictions --days-forward $DAYS --sims $SIMS $WIPE_FLAG
 
-      - name: Dispatch Basketball Failure Email Alert
+      - name: Dispatch Basketball Prediction Failure Alert
         if: failure()
         env:
           ALERT_EMAIL_SENDER: ${{ secrets.ALERT_EMAIL_SENDER }}
@@ -101,8 +87,8 @@ jobs:
           try:
               from python.src.alerts.email_notifier import send_pipeline_failure_alert
               send_pipeline_failure_alert(
-                  'Basketball Engine (GitHub Actions)',
-                  Exception('GitHub Actions Basketball workflow step failed'),
+                  'Basketball Prediction Engine (GitHub Actions)',
+                  Exception('GitHub Actions Basketball prediction workflow step failed'),
                   {'run_id': '${{ github.run_id }}', 'run_url': 'https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}'}
               )
           except Exception as e:

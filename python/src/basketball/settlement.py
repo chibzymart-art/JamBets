@@ -206,7 +206,8 @@ class BasketballSettlementEngine:
                 "settlement_status": "eq.pending",
                 "target_kickoff_at": f"lte.{now.isoformat()}",
                 "select": "id,fixture_id,market,prediction,target_kickoff_at,fixture:basketball_fixtures(*,league:basketball_leagues(*),home_team:basketball_teams!basketball_fixtures_home_team_id_fkey(*),away_team:basketball_teams!basketball_fixtures_away_team_id_fkey(*))",
-                "limit": "200"
+                "order": "target_kickoff_at.asc",
+                "limit": "1000"
             }
 
             try:
