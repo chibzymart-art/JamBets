@@ -365,7 +365,41 @@ export const BasketballHubView: React.FC<BasketballHubViewProps> = ({
             </h1>
           </div>
 
-
+          {/* LAGOS WAT CALENDAR DATE DROPDOWN ON THE SAME LINE */}
+          <div className="bball-date-dropdown-wrap">
+            <span className="bball-date-dropdown-icon" aria-hidden="true">📅</span>
+            <select
+              id="bball-date-select"
+              aria-label="Filter Basketball Matches by Date"
+              className="bball-date-select"
+              value={selectedDate}
+              onChange={(e) => {
+                setSelectedDate(e.target.value);
+                setSettlementFilter('all');
+              }}
+            >
+              <option value="all">
+                All Dates ({allPredictions.length} {allPredictions.length === 1 ? 'game' : 'games'})
+              </option>
+              {dynamicDateTabs.map((tab) => {
+                const label = tab.dayLabel === 'Past'
+                  ? `Past (${tab.dateSub})`
+                  : tab.dayLabel === 'Today' || tab.dayLabel === 'Tomorrow'
+                    ? `${tab.dayLabel}, ${tab.dateSub}`
+                    : `${tab.dayLabel}, ${tab.dateSub}`;
+                return (
+                  <option key={tab.iso} value={tab.iso}>
+                    {label} ({tab.count} {tab.count === 1 ? 'game' : 'games'})
+                  </option>
+                );
+              })}
+            </select>
+            <span className="bball-date-dropdown-arrow" aria-hidden="true">
+              <svg width="10" height="6" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M1 1L5 5L9 1" stroke="#ea580c" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </span>
+          </div>
         </div>
 
         {/* 2. DECONGESTED SCORECARD KPI SECTION (REFLECTING ALL PREDICTION TYPES AND WINS/LOSSES JUST LIKE TENNIS) */}
@@ -507,46 +541,6 @@ export const BasketballHubView: React.FC<BasketballHubViewProps> = ({
                 <span className="compact-kpi-ratio">{scorecardStats.allLost} Lost</span>
               </div>
             </div>
-          </div>
-        </div>
-
-        {/* INTEGRATED LAGOS WAT CALENDAR DATE RIBBON INSIDE HERO BANNER */}
-        <div className="bball-hero-date-row">
-          <div className="bball-date-ribbon" role="tablist" aria-label="Basketball Match Dates">
-            <button
-              type="button"
-              role="tab"
-              aria-selected={selectedDate === 'all' && settlementFilter === 'all'}
-              className={`bball-date-pill ${selectedDate === 'all' && settlementFilter === 'all' ? 'active' : ''}`}
-              onClick={() => {
-                setSelectedDate('all');
-                setSettlementFilter('all');
-              }}
-            >
-              <span className="bball-date-day">All Dates</span>
-              <span className="bball-date-num">All</span>
-              <span className="bball-date-count">{allPredictions.length} games</span>
-            </button>
-            {dynamicDateTabs.map((tab) => {
-              const isActive = selectedDate === tab.iso && settlementFilter === 'all';
-              return (
-                <button
-                  key={tab.iso}
-                  type="button"
-                  role="tab"
-                  aria-selected={isActive}
-                  className={`bball-date-pill ${isActive ? 'active' : ''}`}
-                  onClick={() => {
-                    setSelectedDate(tab.iso);
-                    setSettlementFilter('all');
-                  }}
-                >
-                  <span className="bball-date-day">{tab.dayLabel}</span>
-                  <span className="bball-date-num">{tab.dateSub}</span>
-                  <span className="bball-date-count">{tab.count} games</span>
-                </button>
-              );
-            })}
           </div>
         </div>
       </section>

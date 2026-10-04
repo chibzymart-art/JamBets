@@ -57,8 +57,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 8px;
+  flex-wrap: nowrap;
+  gap: 12px;
   margin-bottom: 8px;
 }
 
@@ -66,6 +66,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-shrink: 0;
 }
 
 .bball-hero-icon-ring {
@@ -176,15 +177,104 @@
 }
 
 /* -------------------------------------------------------------
-   2. LAGOS WAT CALENDAR DATE RIBBON & FILTERS
+   2. LAGOS WAT CALENDAR DATE SELECTOR DROPDOWN & RIBBON
    ------------------------------------------------------------- */
+.bball-date-dropdown-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  height: 32px;
+  background: #ffffff;
+  border: 1px solid #fed7aa;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(249, 115, 22, 0.08);
+  transition: all 0.18s ease;
+  box-sizing: border-box;
+  flex-shrink: 0;
+}
+
+.bball-date-dropdown-wrap:hover {
+  border-color: #f97316;
+  box-shadow: 0 2px 6px rgba(249, 115, 22, 0.16);
+}
+
+.bball-date-dropdown-wrap:focus-within {
+  border-color: #ea580c;
+  box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.22);
+}
+
+.bball-date-dropdown-icon {
+  position: absolute;
+  left: 9px;
+  font-size: 13px;
+  pointer-events: none;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+}
+
+.bball-date-select {
+  height: 32px;
+  line-height: 30px;
+  padding: 0 26px 0 28px;
+  background: transparent;
+  border: none;
+  outline: none;
+  font-size: 12px;
+  font-weight: 700;
+  color: #1e293b;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  border-radius: 8px;
+  box-sizing: border-box;
+  font-family: inherit;
+}
+
+.bball-date-select option {
+  background: #ffffff;
+  color: #1e293b;
+  font-size: 12.5px;
+  padding: 6px 10px;
+}
+
+.bball-date-dropdown-arrow {
+  position: absolute;
+  right: 9px;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+[data-theme="dark"] .bball-date-dropdown-wrap,
+.dark .bball-date-dropdown-wrap {
+  background: #1e293b;
+  border-color: #475569;
+}
+
+[data-theme="dark"] .bball-date-select,
+.dark .bball-date-select {
+  color: #f8fafc;
+}
+
+[data-theme="dark"] .bball-date-select option,
+.dark .bball-date-select option {
+  background: #1e293b;
+  color: #f8fafc;
+}
+
 .bball-date-ribbon {
   display: flex;
   align-items: center;
   gap: 5px;
   overflow-x: auto;
-  padding-bottom: 2px;
   scrollbar-width: none;
+  flex: 1;
+  min-width: 0;
+  justify-content: flex-end;
+  height: 32px;
 }
 
 .bball-date-ribbon::-webkit-scrollbar {
@@ -196,15 +286,18 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 3px 7px;
+  height: 32px;
+  box-sizing: border-box;
+  padding: 1px 7px;
   border-radius: 6px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid #fed7aa;
   background: #ffffff;
   color: #334155;
   cursor: pointer;
   transition: all 0.18s ease;
-  min-width: 60px;
+  min-width: 58px;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+  flex-shrink: 0;
 }
 
 .bball-date-pill:hover {
@@ -221,26 +314,30 @@
 }
 
 .bball-date-day {
-  font-size: 8.5px;
+  font-size: 8px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.02em;
+  line-height: 1;
+  margin: 0;
 }
 
 .bball-date-num {
-  font-size: 10.5px;
+  font-size: 9.5px;
   font-weight: 800;
   line-height: 1.15;
+  margin: 0;
 }
 
 .bball-date-count {
-  font-size: 8px;
+  font-size: 7.5px;
   background: #f1f5f9;
   color: #475569;
   padding: 0 4px;
-  border-radius: 6px;
+  border-radius: 4px;
   margin-top: 1px;
   font-weight: 600;
+  line-height: 1;
 }
 
 .bball-date-pill.active .bball-date-count {
@@ -905,13 +1002,11 @@
     letter-spacing: 0.01em;
   }
 
-  .bball-hero-date-row {
-    padding-top: 5px;
-  }
-
   .bball-date-ribbon {
     gap: 4px;
     scrollbar-width: none;
+    justify-content: flex-start;
+    height: 32px;
   }
 
   .bball-date-ribbon::-webkit-scrollbar {
@@ -920,7 +1015,9 @@
 
   .bball-date-pill {
     min-width: 52px;
-    padding: 2px 5px;
+    height: 32px;
+    box-sizing: border-box;
+    padding: 1px 5px;
     border-radius: 5px;
   }
 
