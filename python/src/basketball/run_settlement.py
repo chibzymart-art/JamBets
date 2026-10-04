@@ -30,6 +30,7 @@ if str(PROJECT_ROOT / "python") not in sys.path:
 from python.src.basketball.db import BasketballDbClient
 from python.src.basketball.pipeline import BasketballIngestionPipeline
 from python.src.basketball.settlement import BasketballSettlementEngine
+from python.src.basketball.rating_engine import BasketballRatingEngine
 from python.src.alerts.email_notifier import send_pipeline_failure_alert
 
 logger = logging.getLogger("basketball.settlement.runner")
@@ -64,6 +65,14 @@ def run_settlement_cycle(
         dry_run=dry_run,
         predictions=predictions
     )
+
+    # 3. Dynamic self-calibration: recalculate rolling team ratings from all completed match scores
+    try:
+        rating_engine = BasketballRatingEngine(db)
+        cal_res = rating_engine.backfill_all_historical_matches()
+        logger.info("Self-calibrated team ratings from match results: %s", cal_res)
+    except Exception as e:
+        logger.warning("Rating self-calibration encountered an error: %s", e)
 
     db.close()
     pipeline.close()

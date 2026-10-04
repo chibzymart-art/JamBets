@@ -98,6 +98,18 @@ class BasketballIngestionPipeline:
 
         slug = short_name or get_team_slug(canonical_name)
 
+        # Resolve league config to set proper baseline parameters
+        league_code = None
+        for code, l_uuid in self._league_cache.items():
+            if l_uuid == league_id:
+                league_code = code
+                break
+        
+        cfg = LEAGUE_REGISTRY.get(league_code.upper()) if league_code else None
+        base_pace = cfg.default_pace if cfg else 75.0
+        base_ortg = cfg.avg_offensive_rating if cfg else 106.0
+        base_efg = 0.535 if (cfg and cfg.quarter_minutes == 12) else 0.520
+
         record = {
             "canonical_name": canonical_name,
             "short_name": slug,
@@ -106,13 +118,13 @@ class BasketballIngestionPipeline:
             "city": city,
             "state": state,
             "altitude_ft": altitude_ft,
-            "offensive_rating": 112.0,
-            "defensive_rating": 112.0,
+            "offensive_rating": base_ortg,
+            "defensive_rating": base_ortg,
             "net_rating": 0.0,
-            "pace": 99.5,
+            "pace": base_pace,
             "four_factors": {
-                "efg_pct": 0.535,
-                "tov_pct": 0.125,
+                "efg_pct": base_efg,
+                "tov_pct": 0.130,
                 "orb_pct": 0.250,
                 "ftr": 0.220,
             },
@@ -188,7 +200,8 @@ class BasketballIngestionPipeline:
             # B. Fetch from LiveScore
             ls_fixtures = self.livescore.fetch_matches_by_date(date_str)
             for fix in ls_fixtures:
-                if fix["league_code"] in leagues_to_scrape:
+                l_code = fix["league_code"]
+                if target_leagues is None or l_code in target_leagues:
                     key = fix["canonical_key"]
                     if key not in raw_fixtures:
                         raw_fixtures[key] = fix

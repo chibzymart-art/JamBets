@@ -13,7 +13,7 @@ import httpx
 from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional
 
-from python.src.basketball.config import LEAGUE_REGISTRY, ALTITUDE_VENUES
+from python.src.basketball.config import LEAGUE_REGISTRY, ALTITUDE_VENUES, BasketballLeagueConfig
 from python.src.basketball.identity import normalize_team_name, generate_canonical_key
 
 logger = logging.getLogger("basketball.scraper.livescore")
@@ -50,21 +50,51 @@ class LivescoreBasketballScraper:
 
     def _match_league_code(self, stage_name: str, comp_name: str) -> Optional[str]:
         combined = f"{stage_name} {comp_name}".lower()
-        # Sort leagues by keyword length descending so more specific keywords (e.g. "wnba") match before "nba"
-        sorted_leagues = sorted(
-            [(c, cfg) for c, cfg in LEAGUE_REGISTRY.items() if cfg.livescore_keyword],
-            key=lambda x: len(x[1].livescore_keyword or ""),
-            reverse=True,
-        )
-        for code, cfg in sorted_leagues:
-            kw = (cfg.livescore_keyword or "").lower()
-            if not kw:
-                continue
-            # Match using word boundaries so "nba" does not match within "wnba"
-            pattern = r'\b' + re.escape(kw) + r'\b'
-            if re.search(pattern, combined):
-                return code
-        return None
+
+        # Build list of (keyword, code) pairs from all registered leagues
+        kw_pairs = []
+        for code, cfg in LEAGUE_REGISTRY.items():
+            keywords = list(cfg.livescore_keywords) if cfg.livescore_keywords else []
+            if cfg.livescore_keyword and cfg.livescore_keyword not in keywords:
+                keywords.append(cfg.livescore_keyword)
+            for kw in keywords:
+                if kw:
+                    kw_pairs.append((kw.lower(), code))
+
+        # Sort by keyword length descending so more specific phrases match first
+        kw_pairs.sort(key=lambda x: len(x[0]), reverse=True)
+
+        for kw, code in kw_pairs:
+            # Word-boundary match or direct substring if keyword contains punctuation/spaces
+            if " " in kw or "-" in kw:
+                if kw in combined:
+                    return code
+            else:
+                pattern = r'\b' + re.escape(kw) + r'\b'
+                if re.search(pattern, combined):
+                    return code
+
+        # Dynamic fallback registration: do not discard any legitimate basketball fixture!
+        clean_c = re.sub(r'[^a-zA-Z0-9]', '', comp_name).upper()[:3]
+        clean_s = re.sub(r'[^a-zA-Z0-9]', '', stage_name).upper()[:4]
+        gen_code = f"{clean_c}_{clean_s}" if clean_c and clean_s else (clean_c or clean_s or "INT_BB")
+
+        if gen_code not in LEAGUE_REGISTRY:
+            is_nba = "nba" in combined
+            is_pba = "pba" in combined
+            LEAGUE_REGISTRY[gen_code] = BasketballLeagueConfig(
+                code=gen_code,
+                name=f"{comp_name} {stage_name}".strip() or gen_code,
+                country=comp_name or "International",
+                quarter_minutes=12 if (is_nba or is_pba) else 10,
+                periods_count=4,
+                default_pace=99.5 if is_nba else 75.0,
+                avg_offensive_rating=115.0 if is_nba else 106.0,
+                hca_points=2.85,
+            )
+            logger.info("Dynamically registered global basketball league: %s (%s)", gen_code, f"{comp_name} {stage_name}")
+
+        return gen_code
 
     def _parse_stages(self, data: Dict[str, Any], date_str: str) -> List[Dict[str, Any]]:
         stages = data.get("Stages", [])

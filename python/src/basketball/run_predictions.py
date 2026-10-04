@@ -15,6 +15,8 @@ from typing import Dict, Any, List
 from python.src.basketball.db import BasketballDbClient
 from python.src.basketball.models import BasketballFourFactors
 from python.src.basketball.prediction_engine import BasketballPredictionEngine
+from python.src.basketball.rating_engine import BasketballRatingEngine
+from python.src.basketball.config import LEAGUE_REGISTRY
 
 logging.basicConfig(
     level=logging.INFO,
@@ -35,6 +37,14 @@ def run_basketball_predictions(
     """
     db = BasketballDbClient()
     engine = BasketballPredictionEngine()
+
+    # Dynamic calibration pass: recalculate all team metrics from finished match scores
+    try:
+        rating_engine = BasketballRatingEngine(db)
+        cal_res = rating_engine.backfill_all_historical_matches()
+        logger.info("Realtime team rating calibration complete: %s", cal_res)
+    except Exception as e:
+        logger.warning("Rating calibration warning: %s", e)
 
     now = datetime.now(timezone.utc)
     start_iso = now.isoformat()
@@ -68,33 +78,35 @@ def run_basketball_predictions(
             home_name = home.get("canonical_name", "Home Team")
             away_name = away.get("canonical_name", "Away Team")
 
-            is_nba = (league_code.upper() in ("NBA", "NBA_GL"))
-            default_pace = 99.5 if is_nba else 75.0
-            default_ortg = 115.0 if is_nba else 106.0
+            cfg = LEAGUE_REGISTRY.get(league_code.upper())
+            league_pace = cfg.default_pace if cfg else 75.0
+            league_ortg = cfg.avg_offensive_rating if cfg else 106.0
+            default_efg = 0.535 if (cfg and cfg.quarter_minutes == 12) else 0.520
 
-            home_pace = float(home.get("pace") or default_pace)
-            away_pace = float(away.get("pace") or default_pace)
+            # Dynamic Team Pace & Efficiency Ratings
+            home_pace = float(home.get("pace") or league_pace)
+            away_pace = float(away.get("pace") or league_pace)
 
-            home_ortg = float(home.get("offensive_rating") or default_ortg)
-            home_drtg = float(home.get("defensive_rating") or default_ortg)
-            away_ortg = float(away.get("offensive_rating") or default_ortg)
-            away_drtg = float(away.get("defensive_rating") or default_ortg)
+            home_ortg = float(home.get("offensive_rating") or league_ortg)
+            home_drtg = float(home.get("defensive_rating") or league_ortg)
+            away_ortg = float(away.get("offensive_rating") or league_ortg)
+            away_drtg = float(away.get("defensive_rating") or league_ortg)
 
-            # Four Factors
+            # Dynamic Four Factors
             home_ff_raw = home.get("four_factors") or {}
             away_ff_raw = away.get("four_factors") or {}
 
             home_ff = BasketballFourFactors(
-                efg_pct=float(home_ff_raw.get("efg_pct", 0.535)),
-                tov_pct=float(home_ff_raw.get("tov_pct", 0.125)),
-                orb_pct=float(home_ff_raw.get("orb_pct", 0.250)),
-                ftr=float(home_ff_raw.get("ftr", 0.220)),
+                efg_pct=float(home_ff_raw.get("efg_pct") or default_efg),
+                tov_pct=float(home_ff_raw.get("tov_pct") or 0.130),
+                orb_pct=float(home_ff_raw.get("orb_pct") or 0.250),
+                ftr=float(home_ff_raw.get("ftr") or 0.220),
             )
             away_ff = BasketballFourFactors(
-                efg_pct=float(away_ff_raw.get("efg_pct", 0.535)),
-                tov_pct=float(away_ff_raw.get("tov_pct", 0.125)),
-                orb_pct=float(away_ff_raw.get("orb_pct", 0.250)),
-                ftr=float(away_ff_raw.get("ftr", 0.220)),
+                efg_pct=float(away_ff_raw.get("efg_pct") or default_efg),
+                tov_pct=float(away_ff_raw.get("tov_pct") or 0.130),
+                orb_pct=float(away_ff_raw.get("orb_pct") or 0.250),
+                ftr=float(away_ff_raw.get("ftr") or 0.220),
             )
 
             # Rest & Fatigue
