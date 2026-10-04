@@ -658,20 +658,29 @@ export const BasketballHubView: React.FC<BasketballHubViewProps> = ({
             </div>
           ) : (
             <div className="bball-grid">
-              {filteredPredictions.map((pred) => (
-                <BasketballPredictionCard
-                  key={pred.id}
-                  prediction={pred}
-                  isSubscriber={isSubscriber}
-                  isAdmin={isAdmin}
-                  canViewPredictions={canViewPredictions}
-                  isFavorite={isFavoriteItem ? isFavoriteItem(pred.fixture_id, pred.market || 'Spread', pred.prediction) : false}
-                  isFavoriteItem={isFavoriteItem}
-                  onToggleFavorite={onToggleFavoriteItem}
-                  onOpenUpgrade={onOpenSubscription}
-                  onOpenAuth={onOpenAuth}
-                />
-              ))}
+              {filteredPredictions.map((pred) => {
+                const standardMarket = (() => {
+                  const s = (pred.market || '').toLowerCase();
+                  if (s.includes('spread')) return 'Point Spread';
+                  if (s.includes('total') || s.includes('over') || s.includes('under')) return 'Game Totals';
+                  return 'Moneyline';
+                })();
+
+                return (
+                  <BasketballPredictionCard
+                    key={pred.id}
+                    prediction={pred}
+                    isSubscriber={isSubscriber}
+                    isAdmin={isAdmin}
+                    canViewPredictions={canViewPredictions}
+                    isFavorite={isFavoriteItem ? isFavoriteItem(pred.fixture_id, standardMarket, pred.prediction) : false}
+                    isFavoriteItem={isFavoriteItem}
+                    onToggleFavorite={onToggleFavoriteItem}
+                    onOpenUpgrade={onOpenSubscription}
+                    onOpenAuth={onOpenAuth}
+                  />
+                );
+              })}
             </div>
           )}
         </main>

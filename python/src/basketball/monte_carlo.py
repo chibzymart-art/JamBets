@@ -86,8 +86,8 @@ class BasketballMonteCarloSimulator:
         home_wins = (margins > 0).mean()
         away_wins = (margins < 0).mean()
 
-        # Dynamic spread cover evaluations (-20.5 to +20.5 in 0.5 increments, plus market_spread)
-        spread_lines = [round(x * 0.5, 1) for x in range(-41, 42) if x != 0]
+        # Dynamic spread cover evaluations (-35.5 to +35.5 in 0.5 increments, plus market_spread)
+        spread_lines = [round(x * 0.5, 1) for x in range(-71, 72) if x != 0]
         if market_spread is not None:
             spread_lines.append(float(market_spread))
         spread_lines = sorted(list(set(spread_lines)))
@@ -97,11 +97,12 @@ class BasketballMonteCarloSimulator:
             # Home covers if margin > -sp (e.g. if spread is -5.5, home covers if margin > 5.5)
             spread_probs[str(float(sp))] = round(float((margins > -sp).mean()), 4)
 
-        # Dynamic Over/Under total evaluations around benchmark total
+        # Dynamic Over/Under total evaluations around benchmark total (clean half-points)
         benchmark_total = home_mean + away_mean
-        total_lines = [round(benchmark_total + (x * 0.5), 1) for x in range(-40, 41)]
+        rounded_benchmark = round(benchmark_total * 2) / 2.0
+        total_lines = [round(rounded_benchmark + (x * 0.5), 1) for x in range(-60, 61)]
         if market_total is not None:
-            total_lines.append(float(market_total))
+            total_lines.append(round(float(market_total) * 2) / 2.0)
         total_lines = sorted(list(set(total_lines)))
 
         totals_probs = {}

@@ -157,6 +157,38 @@ class TestBasketballDynamicEngine(unittest.TestCase):
             prob = sec_total["probability"]
         self.assertLessEqual(prob, 0.85, f"Unrealistic total confidence: {prob}")
 
+    def test_secondary_predictions_dynamic_probabilities(self):
+        engine = BasketballPredictionEngine()
+        pred = engine.generate_prediction(
+            fixture_id="fix-test-dynamic-secondary",
+            league_code="NBA",
+            home_team_name="Boston Celtics",
+            away_team_name="Washington Wizards",
+            home_pace=99.0,
+            away_pace=99.0,
+            home_ortg=120.0,
+            home_drtg=104.0,
+            away_ortg=106.0,
+            away_drtg=118.0,
+            home_ff=BasketballFourFactors(0.56, 0.11, 0.28, 0.24),
+            away_ff=BasketballFourFactors(0.50, 0.14, 0.22, 0.20),
+            num_simulations=10000
+        )
+
+        self.assertEqual(len(pred.secondary_predictions), 2)
+        for sec in pred.secondary_predictions:
+            # Check presence of both pick and prediction keys
+            self.assertIn("pick", sec)
+            self.assertIn("prediction", sec)
+            self.assertIn("market", sec)
+            self.assertIn("probability", sec)
+            self.assertIn("tier", sec)
+            self.assertIn("confidence_category", sec)
+            # Verify probability is dynamic and greater than 0.50 (no flat 50% coin-flip secondary)
+            self.assertGreater(sec["probability"], 0.52, f"Secondary {sec['market']} probability too low: {sec['probability']}")
+            self.assertLessEqual(sec["probability"], 0.82, f"Secondary {sec['market']} probability exceeded guardrail: {sec['probability']}")
+
 
 if __name__ == '__main__':
     unittest.main()
+

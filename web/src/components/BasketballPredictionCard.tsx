@@ -26,7 +26,7 @@ export const BasketballPredictionCard: React.FC<BasketballPredictionCardProps> =
   isSubscriber,
   isAdmin = false,
   canViewPredictions = false,
-  isFavorite = false,
+  isFavorite: isFavoriteProp = false,
   isFavoriteItem,
   onToggleFavorite,
   onOpenUpgrade,
@@ -115,17 +115,30 @@ export const BasketballPredictionCard: React.FC<BasketballPredictionCardProps> =
   const expectedPace = simulation?.expected_pace || (league?.default_pace || 99.5);
   const altitudeBonus = homeTeam?.altitude_ft && homeTeam.altitude_ft >= 4000;
 
+  const primaryMarketStandard = useMemo(() => {
+    const m = (prediction.market || '').toLowerCase();
+    if (m.includes('spread')) return 'Point Spread';
+    if (m.includes('total') || m.includes('over') || m.includes('under')) return 'Game Totals';
+    return 'Moneyline';
+  }, [prediction.market]);
+
+  const isFavorite = Boolean(
+    isFavoriteItem
+      ? isFavoriteItem(prediction.fixture_id, primaryMarketStandard, prediction.prediction)
+      : isFavoriteProp
+  );
+
   const handleFavoriteClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!onToggleFavorite) return;
     const favoriteItem: FavoritePredictionItem = {
-      id: `${prediction.fixture_id}::${prediction.market || 'Spread'}::${prediction.prediction}`,
+      id: `${prediction.fixture_id}::${primaryMarketStandard}::${prediction.prediction}`,
       fixtureId: prediction.fixture_id,
       homeTeam: homeName,
       awayTeam: awayName,
       league: `${leagueName} (${leagueCode})`,
       targetKickoffAt: prediction.target_kickoff_at || fixture?.target_kickoff_at || new Date().toISOString(),
-      market: prediction.market === 'point_spread' ? 'Point Spread' : prediction.market === 'game_total_over_under' ? 'Game Totals' : 'Moneyline',
+      market: primaryMarketStandard,
       prediction: prediction.prediction,
       probability: (probPct ? Number(probPct) / 100 : prediction.probability) || 0.72,
       confidenceCategory: prediction.confidence_category,
@@ -248,16 +261,67 @@ export const BasketballPredictionCard: React.FC<BasketballPredictionCardProps> =
         </div>
       </div>
 
-      {/* 3. PRIMARY BANKER SELECTION BOX */}
+      {/* 2.5 250k MONTE CARLO SIMULATED SCORELINE RIBBON */}
+      {prediction.simulated_home_score != null && prediction.simulated_away_score != null && (
+        <div
+          style={{
+            background: 'linear-gradient(90deg, #fff7ed 0%, #ffedd5 50%, #fff7ed 100%)',
+            border: '1px solid #fed7aa',
+            borderRadius: 7,
+            padding: '4px 10px',
+            margin: '4px 0 10px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: 6,
+            fontSize: '11px',
+            color: '#7c2d12',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 700 }}>
+            <span>📊 250k Sims Projected Score:</span>
+            <span style={{ fontSize: '12.5px', fontWeight: 900, color: '#c2410c' }}>
+              {prediction.simulated_home_score} - {prediction.simulated_away_score}
+            </span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '10.5px', fontWeight: 700, color: '#9a3412' }}>
+            <span>
+              Margin: {(prediction.simulated_home_score - prediction.simulated_away_score > 0 ? '+' : '') + (prediction.simulated_home_score - prediction.simulated_away_score).toFixed(1)} pts
+            </span>
+            <span>•</span>
+            <span>
+              Total: {(prediction.simulated_home_score + prediction.simulated_away_score).toFixed(1)} pts
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* 3. PRIMARY SUPER BANKER SELECTION BOX */}
       <div className={`bball-banker-box ${isWon ? 'box-won' : isLost ? 'box-lost' : isVoid ? 'box-void' : ''}`}>
         <div className="bball-banker-left">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            <span
+              style={{
+                fontSize: '10px',
+                fontWeight: 900,
+                padding: '2px 7px',
+                borderRadius: '4px',
+                background: 'linear-gradient(135deg, #ea580c 0%, #c2410c 100%)',
+                color: '#ffffff',
+                letterSpacing: '0.04em',
+                textTransform: 'uppercase',
+                boxShadow: '0 1px 3px rgba(234, 88, 12, 0.3)',
+              }}
+            >
+              🔥 PRIMARY BANKER
+            </span>
             <span className="bball-market-label">
               {prediction.market === 'point_spread'
-                ? '🎯 Primary Point Spread Banker'
+                ? 'Point Spread (Handicap)'
                 : prediction.market === 'game_total_over_under'
-                ? '🎯 Primary Total Points Pick'
-                : '🎯 Primary Moneyline Banker'}
+                ? 'Game Totals (Over/Under)'
+                : 'Moneyline Winner'}
             </span>
             <span
               style={{
@@ -273,7 +337,7 @@ export const BasketballPredictionCard: React.FC<BasketballPredictionCardProps> =
             </span>
           </div>
 
-          <div className="bball-prediction-text">
+          <div className="bball-prediction-text" style={{ marginTop: 4 }}>
             {isLocked ? (
               <span style={{ color: '#64748b' }}>🔒 VIP Locked Prediction</span>
             ) : (
