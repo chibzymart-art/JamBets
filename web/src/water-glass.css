@@ -1,0 +1,844 @@
+/**
+ * Oddsbanta — "Water Glass" (Liquid Refractive Crystal Glass on Clean White Background)
+ * Retains the full former landing page structure, clear hero image, and crisp white theme.
+ * Adds animated kinetic typography and interactive glowing sport tabs.
+ */
+
+/* =====================================================================
+   0. ANIMATION KEYFRAMES
+   ===================================================================== */
+@keyframes textShimmer {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+@keyframes radarBeacon {
+  0% {
+    transform: scale(0.9);
+    box-shadow: 0 0 0 0 rgba(22, 163, 74, 0.7);
+  }
+  70% {
+    transform: scale(1.2);
+    box-shadow: 0 0 0 5px rgba(22, 163, 74, 0);
+  }
+  100% {
+    transform: scale(0.9);
+    box-shadow: 0 0 0 0 rgba(22, 163, 74, 0);
+  }
+}
+
+@keyframes metricGlow {
+  0%, 100% {
+    filter: drop-shadow(0 0 0 rgba(22, 163, 74, 0));
+  }
+  50% {
+    filter: drop-shadow(0 0 8px rgba(22, 163, 74, 0.25));
+  }
+}
+
+@keyframes cardFloat {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-2px);
+  }
+}
+
+/* =====================================================================
+   1. ROOT CANVAS (CRISP WHITE & SUBTLE WATER REFRACTION)
+   ===================================================================== */
+.landing-light-root {
+  min-height: 100vh;
+  background-color: #f8fafc !important;
+  color: #0f172a !important;
+  position: relative;
+  overflow-x: hidden;
+  box-sizing: border-box;
+}
+
+/* Subtle ambient water highlights */
+.landing-light-root::before {
+  content: '';
+  position: absolute;
+  top: -120px;
+  left: 20%;
+  width: 500px;
+  height: 500px;
+  background: radial-gradient(circle, rgba(22, 163, 74, 0.05) 0%, transparent 70%);
+  filter: blur(60px);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.landing-light-root::after {
+  content: '';
+  position: absolute;
+  top: 300px;
+  right: 15%;
+  width: 450px;
+  height: 450px;
+  background: radial-gradient(circle, rgba(2, 132, 199, 0.04) 0%, transparent 70%);
+  filter: blur(60px);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* =====================================================================
+   2. HERO SECTION & HERO IMAGE (FULL BRIGHTNESS & CLEAR ACTION PHOTO)
+   ===================================================================== */
+.landing-light-root .hero-light-section {
+  position: relative;
+  min-height: 560px;
+  background: #f8fafc !important;
+  overflow: hidden;
+  border-bottom: 1px solid #e2e8f0 !important;
+}
+
+.landing-light-root .hero-light-backdrop {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 58% !important;
+  z-index: 1;
+  overflow: hidden;
+  opacity: 0.92 !important; /* Full clarity of the football action image */
+  mix-blend-mode: normal !important;
+}
+
+.landing-light-root .hero-light-bg-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 25%;
+  filter: contrast(1.06) saturate(1.15) !important;
+}
+
+.landing-light-root .hero-light-gradient-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    #f8fafc 0%,
+    rgba(248, 250, 252, 0.97) 22%,
+    rgba(248, 250, 252, 0.6) 62%,
+    rgba(248, 250, 252, 0.15) 100%
+  ),
+  linear-gradient(
+    180deg,
+    rgba(248, 250, 252, 0.05) 0%,
+    rgba(248, 250, 252, 0.75) 85%,
+    #f8fafc 100%
+  ) !important;
+  pointer-events: none;
+}
+
+.landing-light-root .hero-light-container {
+  position: relative;
+  z-index: 2;
+  max-width: 1320px;
+  margin: 0 auto;
+  padding: 60px 24px 50px;
+}
+
+.landing-light-root .hero-light-text-col {
+  max-width: 650px;
+}
+
+/* =====================================================================
+   3. ANIMATED KEY TEXTS
+   ===================================================================== */
+.landing-light-root .hero-light-headline {
+  font-family: var(--font-heading, sans-serif);
+  font-size: clamp(34px, 4.6vw, 54px);
+  font-weight: 900;
+  line-height: 1.12;
+  color: #0f172a !important;
+  letter-spacing: -0.03em;
+  margin: 0 0 16px;
+}
+
+/* Animated Shimmer on Key Text "before it happens." */
+.landing-light-root .hero-light-green-text {
+  background: linear-gradient(
+    90deg,
+    #16a34a 0%,
+    #10b981 25%,
+    #059669 50%,
+    #22c55e 75%,
+    #16a34a 100%
+  ) !important;
+  background-size: 200% auto !important;
+  -webkit-background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+  animation: textShimmer 4s ease-in-out infinite !important;
+  display: inline-block;
+  font-weight: 900;
+}
+
+.landing-light-root .hero-light-subtext {
+  font-size: 16px;
+  line-height: 1.6;
+  color: #475569 !important;
+  margin: 0 0 24px;
+}
+
+/* Direct Bot Delivery Banner */
+.landing-light-root .hero-bot-callout {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  background: rgba(255, 255, 255, 0.88) !important;
+  backdrop-filter: blur(16px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(16px) saturate(180%) !important;
+  border: 1px solid rgba(2, 132, 199, 0.3) !important;
+  border-radius: 12px !important;
+  padding: 8px 16px;
+  margin: 8px 0 20px;
+  cursor: pointer;
+  box-shadow: 0 4px 16px -2px rgba(2, 132, 199, 0.08), inset 0 1px 1px #ffffff !important;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+.landing-light-root .hero-bot-callout:hover {
+  background: #ffffff !important;
+  border-color: rgba(2, 132, 199, 0.5) !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 6px 20px -2px rgba(2, 132, 199, 0.16), inset 0 1px 1px #ffffff !important;
+}
+
+.landing-light-root .hero-bot-callout-title {
+  font-size: 13px;
+  font-weight: 800;
+  color: #0f172a !important;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.landing-light-root .hero-bot-callout-badge {
+  background: #22c55e !important;
+  color: #ffffff !important;
+  font-size: 9px;
+  font-weight: 900;
+  padding: 1px 6px;
+  border-radius: 9999px;
+  letter-spacing: 0.3px;
+  position: relative;
+}
+
+.landing-light-root .hero-bot-callout-sub {
+  font-size: 11.5px;
+  color: #475569 !important;
+}
+
+.landing-light-root .hero-bot-pill.telegram {
+  background: #0284c7 !important;
+  box-shadow: 0 2px 6px rgba(2, 132, 199, 0.35);
+  transition: transform 0.15s ease;
+}
+
+.landing-light-root .hero-bot-pill.whatsapp {
+  background: #16a34a !important;
+  box-shadow: 0 2px 6px rgba(22, 163, 74, 0.35);
+  transition: transform 0.15s ease;
+}
+
+.landing-light-root .hero-bot-pill:hover {
+  transform: translateY(-1px);
+}
+
+/* =====================================================================
+   4. CTA BUTTONS ROW
+   ===================================================================== */
+.landing-light-root .btn-hero-green {
+  background: #16a34a !important;
+  color: #ffffff !important;
+  font-family: var(--font-heading, sans-serif);
+  font-size: 14.5px;
+  font-weight: 700;
+  padding: 12px 24px;
+  border-radius: 9999px !important;
+  border: 1px solid #16a34a !important;
+  box-shadow: 0 4px 14px rgba(22, 163, 74, 0.28), inset 0 1px 1px rgba(255, 255, 255, 0.3) !important;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+.landing-light-root .btn-hero-green:hover {
+  background: #15803d !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 6px 18px rgba(22, 163, 74, 0.38), inset 0 1px 1px rgba(255, 255, 255, 0.4) !important;
+}
+
+.landing-light-root .btn-hero-outline {
+  background: rgba(255, 255, 255, 0.9) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+  color: #0f172a !important;
+  font-family: var(--font-heading, sans-serif);
+  font-size: 14.5px;
+  font-weight: 700;
+  padding: 12px 24px;
+  border-radius: 9999px !important;
+  border: 1px solid #cbd5e1 !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04), inset 0 1px 1px #ffffff !important;
+  transition: all 0.2s ease !important;
+}
+
+.landing-light-root .btn-hero-outline:hover {
+  background: #ffffff !important;
+  border-color: #94a3b8 !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08), inset 0 1px 1px #ffffff !important;
+}
+
+.landing-light-root .btn-hero-bots-highlight {
+  border-color: #0284c7 !important;
+  color: #0284c7 !important;
+  background: rgba(2, 132, 199, 0.05) !important;
+}
+
+.landing-light-root .btn-hero-bots-highlight:hover {
+  background: rgba(2, 132, 199, 0.12) !important;
+  border-color: #0369a1 !important;
+  box-shadow: 0 4px 12px rgba(2, 132, 199, 0.2) !important;
+}
+
+/* =====================================================================
+   5. THREE METRIC STAT CARDS
+   ===================================================================== */
+.landing-light-root .hero-light-metric-card {
+  background: rgba(255, 255, 255, 0.88) !important;
+  backdrop-filter: blur(20px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(180%) !important;
+  border: 1px solid rgba(226, 232, 240, 0.9) !important;
+  border-radius: 14px !important;
+  padding: 16px 18px;
+  box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.05), inset 0 1px 1px 0 #ffffff !important;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+.landing-light-root .hero-light-metric-card:hover {
+  transform: translateY(-2px) !important;
+  border-color: #cbd5e1 !important;
+  box-shadow: 0 8px 24px -2px rgba(15, 23, 42, 0.09), inset 0 1px 1px 0 #ffffff !important;
+}
+
+.landing-light-root .metric-light-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b !important;
+  margin-bottom: 4px;
+}
+
+.landing-light-root .metric-light-val {
+  font-family: var(--font-heading, sans-serif);
+  font-size: 26px;
+  font-weight: 900;
+  letter-spacing: -0.5px;
+}
+
+.landing-light-root .metric-light-val.green {
+  color: #16a34a !important;
+  animation: metricGlow 3s ease-in-out infinite;
+}
+
+.landing-light-root .metric-light-val.dark {
+  color: #0f172a !important;
+}
+
+/* =====================================================================
+   6. ANIMATED SPORT STATUS TABS & PILLS
+   ===================================================================== */
+.landing-light-root .hero-light-sport-pills-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  max-width: 640px;
+}
+
+.landing-light-root .hero-light-sport-pill {
+  background: rgba(255, 255, 255, 0.85) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 9999px !important;
+  padding: 6px 13px !important;
+  font-size: 12px;
+  font-weight: 700;
+  color: #334155 !important;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.03), inset 0 1px 1px #ffffff !important;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  position: relative;
+  overflow: hidden;
+}
+
+.landing-light-root .hero-light-sport-pill:hover {
+  background: #f0fdf4 !important;
+  border-color: #86efac !important;
+  color: #15803d !important;
+  transform: translateY(-2px) !important;
+  box-shadow: 0 4px 14px rgba(22, 163, 74, 0.15), inset 0 1px 1px #ffffff !important;
+}
+
+/* Active tab style with vivid animated indicator */
+.landing-light-root .hero-light-sport-pill.active {
+  background: #ecfdf5 !important;
+  border-color: #16a34a !important;
+  color: #15803d !important;
+  box-shadow: 0 0 0 1px #16a34a, 0 4px 14px rgba(22, 163, 74, 0.2), inset 0 1px 1px #ffffff !important;
+  transform: translateY(-1px) !important;
+}
+
+/* Pulsing radar dot inside LIVE badge */
+.landing-light-root .pill-live-badge {
+  background: #dcfce7 !important;
+  color: #16a34a !important;
+  font-size: 9.5px;
+  font-weight: 800;
+  padding: 2px 7px !important;
+  border-radius: 9999px;
+  letter-spacing: 0.3px;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 5px !important;
+  border: 1px solid rgba(22, 163, 74, 0.25) !important;
+}
+
+.landing-light-root .pill-live-badge::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #16a34a;
+  animation: radarBeacon 1.8s infinite;
+  flex-shrink: 0;
+}
+
+.landing-light-root .pill-soon-badge {
+  background: #f1f5f9 !important;
+  color: #64748b !important;
+  font-size: 9.5px;
+  font-weight: 800;
+  padding: 2px 6px;
+  border-radius: 9999px;
+  border: 1px solid #e2e8f0;
+}
+
+/* =====================================================================
+   7. 3-STEP PROCESS CARDS (FROSTED CRYSTAL GLASS)
+   ===================================================================== */
+.landing-light-root .steps-light-section {
+  max-width: 1320px;
+  margin: 0 auto;
+  padding: 56px 24px 40px;
+}
+
+.landing-light-root .step-light-card {
+  background: rgba(255, 255, 255, 0.9) !important;
+  backdrop-filter: blur(20px) !important;
+  -webkit-backdrop-filter: blur(20px) !important;
+  border: 1px solid rgba(226, 232, 240, 0.9) !important;
+  border-radius: 18px !important;
+  padding: 28px 24px;
+  box-shadow: 0 6px 24px -4px rgba(15, 23, 42, 0.04), inset 0 1px 1px 0 #ffffff !important;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+.landing-light-root .step-light-card:hover {
+  transform: translateY(-3px) !important;
+  box-shadow: 0 12px 32px -4px rgba(15, 23, 42, 0.08), inset 0 1px 1px 0 #ffffff !important;
+  border-color: #cbd5e1 !important;
+}
+
+.landing-light-root .step-light-badge {
+  background: #dcfce7 !important;
+  color: #16a34a !important;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  display: inline-block;
+  margin-bottom: 14px;
+  letter-spacing: 0.4px;
+  border: 1px solid rgba(22, 163, 74, 0.2);
+}
+
+.landing-light-root .step-light-title {
+  font-family: var(--font-heading, sans-serif);
+  font-size: 19px;
+  font-weight: 800;
+  color: #0f172a !important;
+  margin: 0 0 10px;
+}
+
+.landing-light-root .step-light-desc {
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: #64748b !important;
+  margin: 0;
+}
+
+/* =====================================================================
+   8. TRUST PILLARS
+   ===================================================================== */
+.landing-light-root .trust-light-section {
+  max-width: 1320px;
+  margin: 0 auto;
+  padding: 20px 24px 50px;
+}
+
+.landing-light-root .trust-light-icon-wrap {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: #f0fdf4 !important;
+  border: 1px solid #dcfce7 !important;
+  box-shadow: 0 2px 6px rgba(22, 163, 74, 0.1), inset 0 1px 1px #ffffff !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.landing-light-root .trust-light-title {
+  font-family: var(--font-heading, sans-serif);
+  font-size: 14.5px;
+  font-weight: 800;
+  color: #0f172a !important;
+  margin: 0 0 4px 0;
+}
+
+.landing-light-root .trust-light-desc {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: #64748b !important;
+  margin: 0;
+}
+
+/* =====================================================================
+   9. EXAMPLE MODEL OUTPUT CARD
+   ===================================================================== */
+.landing-light-root .example-light-section {
+  max-width: 1320px;
+  margin: 0 auto;
+  padding: 0 24px 56px;
+}
+
+.landing-light-root .example-light-card {
+  background: rgba(255, 255, 255, 0.94) !important;
+  backdrop-filter: blur(24px) !important;
+  -webkit-backdrop-filter: blur(24px) !important;
+  border: 1px solid rgba(226, 232, 240, 0.9) !important;
+  border-radius: 20px !important;
+  padding: 28px;
+  box-shadow: 0 12px 36px -6px rgba(15, 23, 42, 0.07), inset 0 1px 2px 0 #ffffff !important;
+}
+
+.landing-light-root .example-light-subhead {
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  font-weight: 800;
+  color: #64748b !important;
+  letter-spacing: 0.05em;
+}
+
+.landing-light-root .example-light-sims-badge {
+  background: #dcfce7 !important;
+  color: #16a34a !important;
+  font-size: 10.5px;
+  font-weight: 800;
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(22, 163, 74, 0.2);
+}
+
+.landing-light-root .example-light-match {
+  font-family: var(--font-heading, sans-serif);
+  font-size: 22px;
+  font-weight: 800;
+  color: #0f172a !important;
+  margin-bottom: 4px;
+}
+
+.landing-light-root .example-light-poisson {
+  font-size: 13px;
+  color: #64748b !important;
+  margin-bottom: 16px;
+}
+
+.landing-light-root .example-light-pick-box {
+  background: #f8fafc !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 16px;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.02);
+}
+
+.landing-light-root .example-light-badge-crown {
+  background: #fef3c7 !important;
+  color: #b45309 !important;
+  font-size: 10px;
+  font-weight: 800;
+  padding: 3px 7px;
+  border-radius: 4px;
+  border: 1px solid rgba(180, 83, 9, 0.2);
+}
+
+.landing-light-root .example-light-market {
+  font-size: 15px;
+  font-weight: 800;
+  color: #0f172a !important;
+}
+
+.landing-light-root .example-light-prob {
+  font-size: 14px;
+  font-weight: 800;
+  color: #16a34a !important;
+  margin-left: auto;
+}
+
+.landing-light-root .example-light-rationale {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: #475569 !important;
+  margin: 0;
+}
+
+.landing-light-root .example-light-footer {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #94a3b8 !important;
+}
+
+/* =====================================================================
+   10. SETTLED MATCH ACCURACY LEDGER
+   ===================================================================== */
+.landing-light-root .ledger-light-section {
+  max-width: 1320px;
+  margin: 0 auto;
+  padding: 20px 24px 60px;
+}
+
+.landing-light-root .subhead-light-pill {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: #16a34a !important;
+  background: #dcfce7 !important;
+  padding: 4px 12px;
+  border-radius: 9999px;
+  margin-bottom: 10px;
+  border: 1px solid rgba(22, 163, 74, 0.2);
+}
+
+.landing-light-root .section-light-title {
+  font-family: var(--font-heading, sans-serif);
+  font-size: clamp(24px, 3.5vw, 36px);
+  font-weight: 900;
+  color: #0f172a !important;
+  margin: 0 0 10px;
+}
+
+.landing-light-root .section-light-desc {
+  font-size: 14.5px;
+  color: #64748b !important;
+  margin: 0;
+}
+
+.landing-light-root .ledger-light-card {
+  background: rgba(255, 255, 255, 0.9) !important;
+  backdrop-filter: blur(16px) !important;
+  -webkit-backdrop-filter: blur(16px) !important;
+  border: 1px solid rgba(226, 232, 240, 0.85) !important;
+  border-radius: 14px !important;
+  padding: 16px;
+  box-shadow: 0 4px 16px -2px rgba(15, 23, 42, 0.04), inset 0 1px 1px 0 #ffffff !important;
+  transition: all 0.2s ease !important;
+}
+
+.landing-light-root .ledger-light-card:hover {
+  transform: translateY(-2px) !important;
+  border-color: #cbd5e1 !important;
+  box-shadow: 0 8px 24px -2px rgba(15, 23, 42, 0.07), inset 0 1px 1px 0 #ffffff !important;
+}
+
+.landing-light-root .ledger-status-tag.tag-won {
+  background: #dcfce7 !important;
+  color: #15803d !important;
+  font-weight: 800;
+}
+
+.landing-light-root .ledger-status-tag.tag-lost {
+  background: #fee2e2 !important;
+  color: #b91c1c !important;
+  font-weight: 800;
+}
+
+.landing-light-root .team-text {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #0f172a !important;
+}
+
+.landing-light-root .score-pill {
+  font-family: var(--font-mono, monospace);
+  font-size: 13px;
+  font-weight: 800;
+  background: #f1f5f9 !important;
+  padding: 3px 8px;
+  border-radius: 6px;
+  color: #0f172a !important;
+}
+
+.landing-light-root .meta-label {
+  font-size: 11px;
+  color: #64748b !important;
+}
+
+.landing-light-root .meta-val {
+  font-size: 12px;
+  font-weight: 800;
+  color: #0f172a !important;
+}
+
+.landing-light-root .meta-val.green {
+  color: #16a34a !important;
+}
+
+.landing-light-root .btn-light-view-all {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #ffffff !important;
+  color: #16a34a !important;
+  border: 1px solid #86efac !important;
+  border-radius: 9999px !important;
+  padding: 12px 24px;
+  font-weight: 700;
+  font-size: 14px;
+  box-shadow: 0 2px 8px rgba(22, 163, 74, 0.12), inset 0 1px 1px #ffffff !important;
+  transition: all 0.2s ease !important;
+}
+
+.landing-light-root .btn-light-view-all:hover {
+  background: #f0fdf4 !important;
+  border-color: #16a34a !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 4px 14px rgba(22, 163, 74, 0.2), inset 0 1px 1px #ffffff !important;
+}
+
+/* =====================================================================
+   11. PRICING BANNER
+   ===================================================================== */
+.landing-light-root .pricing-light-banner-section {
+  max-width: 1320px;
+  margin: 0 auto;
+  padding: 0 24px 60px;
+}
+
+.landing-light-root .pricing-light-card {
+  background: rgba(255, 255, 255, 0.94) !important;
+  backdrop-filter: blur(24px) !important;
+  -webkit-backdrop-filter: blur(24px) !important;
+  border: 1px solid rgba(226, 232, 240, 0.9) !important;
+  border-radius: 20px !important;
+  padding: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 32px;
+  box-shadow: 0 12px 36px -6px rgba(15, 23, 42, 0.06), inset 0 1px 2px 0 #ffffff !important;
+}
+
+.landing-light-root .pricing-light-pill {
+  display: inline-block;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: #16a34a !important;
+  background: #dcfce7 !important;
+  padding: 3px 10px;
+  border-radius: 9999px;
+  margin-bottom: 8px;
+  border: 1px solid rgba(22, 163, 74, 0.2);
+}
+
+.landing-light-root .pricing-light-title {
+  font-family: var(--font-heading, sans-serif);
+  font-size: 26px;
+  font-weight: 900;
+  color: #0f172a !important;
+  margin: 0 0 8px;
+}
+
+.landing-light-root .pricing-light-desc {
+  font-size: 14px;
+  color: #64748b !important;
+  margin: 0;
+  max-width: 580px;
+}
+
+.landing-light-root .pricing-curr {
+  font-size: 22px;
+  font-weight: 800;
+  color: #16a34a !important;
+}
+
+.landing-light-root .pricing-amt {
+  font-family: var(--font-heading, sans-serif);
+  font-size: 38px;
+  font-weight: 900;
+  color: #0f172a !important;
+}
+
+.landing-light-root .pricing-mo {
+  font-size: 13px;
+  color: #64748b !important;
+}
+
+.landing-light-root .btn-pricing-action {
+  background: #16a34a !important;
+  color: #ffffff !important;
+  padding: 12px 24px;
+  border-radius: 9999px !important;
+  font-weight: 700;
+  font-size: 14px;
+  box-shadow: 0 4px 14px rgba(22, 163, 74, 0.28), inset 0 1px 1px rgba(255, 255, 255, 0.3) !important;
+  transition: all 0.15s ease;
+}
+
+.landing-light-root .btn-pricing-action:hover {
+  background: #15803d !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 6px 18px rgba(22, 163, 74, 0.38), inset 0 1px 1px rgba(255, 255, 255, 0.4) !important;
+}
+
+/* =====================================================================
+   12. REGULATORY DISCLAIMER FOOTER
+   ===================================================================== */
+.landing-light-root aside {
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  color: #64748b !important;
+  border-radius: 12px !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02) !important;
+}
