@@ -666,6 +666,7 @@ export const BasketballHubView: React.FC<BasketballHubViewProps> = ({
                   isAdmin={isAdmin}
                   canViewPredictions={canViewPredictions}
                   isFavorite={isFavoriteItem ? isFavoriteItem(pred.fixture_id, pred.market || 'Spread', pred.prediction) : false}
+                  isFavoriteItem={isFavoriteItem}
                   onToggleFavorite={onToggleFavoriteItem}
                   onOpenUpgrade={onOpenSubscription}
                   onOpenAuth={onOpenAuth}

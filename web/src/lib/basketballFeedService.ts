@@ -10,6 +10,7 @@
 import { supabase } from './supabase';
 import {
   BasketballPrediction,
+  BasketballSecondaryPrediction,
   BasketballLeague,
   BasketballSettlement,
   BasketballConfidenceTier,
@@ -329,9 +330,21 @@ export async function fetchBasketballFeed(
 
     // 3. Map predictions and enforce proper paywall gating
     const finalPredictions: BasketballPrediction[] = filteredPredictions.map((p) => {
+      let parsedSec: BasketballSecondaryPrediction[] = [];
+      if (Array.isArray(p.secondary_predictions)) {
+        parsedSec = p.secondary_predictions;
+      } else if (typeof p.secondary_predictions === 'string') {
+        try {
+          parsedSec = JSON.parse(p.secondary_predictions);
+        } catch {
+          parsedSec = [];
+        }
+      }
+
       if (isUnlocked) {
         return {
           ...p,
+          secondary_predictions: parsedSec,
           is_locked: false,
         };
       }
@@ -344,7 +357,12 @@ export async function fetchBasketballFeed(
           prediction: '🔒 Subscriber Only',
           probability: null,
           confidence_category: (p.confidence_category === 'BANGER' ? 'BANGER' : 'TOP PICK') as BasketballConfidenceTier,
-          secondary_predictions: [],
+          secondary_predictions: parsedSec.map(sec => ({
+            ...sec,
+            pick: '••••••••',
+            probability: 0,
+            locked: true,
+          } as any)),
           metadata: {
             ...p.metadata,
             ai_tactical_analysis:
@@ -356,6 +374,7 @@ export async function fetchBasketballFeed(
 
       return {
         ...p,
+        secondary_predictions: parsedSec,
         is_locked: false,
       };
     });

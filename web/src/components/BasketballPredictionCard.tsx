@@ -1,9 +1,10 @@
 /**
  * Oddsbanta — Autonomous Basketball Prediction Card
  * Phase 5: Precision Card Component with Dean Oliver Four Factors & 250k Monte Carlo
+ * Dynamic Primary and Secondary Market Predictions (Strictly Deduplicated)
  */
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { BasketballPrediction } from '../types/basketball';
 import { getTierConfig } from './FixtureCard';
 import { FavoritePredictionItem } from './FavoritesDrawer';
@@ -14,6 +15,7 @@ export interface BasketballPredictionCardProps {
   isAdmin?: boolean;
   canViewPredictions?: boolean;
   isFavorite?: boolean;
+  isFavoriteItem?: (fixtureId: string, market: string, pick: string) => boolean;
   onToggleFavorite?: (item: FavoritePredictionItem) => void;
   onOpenUpgrade?: () => void;
   onOpenAuth?: (mode: 'signin' | 'register') => void;
@@ -25,6 +27,7 @@ export const BasketballPredictionCard: React.FC<BasketballPredictionCardProps> =
   isAdmin = false,
   canViewPredictions = false,
   isFavorite = false,
+  isFavoriteItem,
   onToggleFavorite,
   onOpenUpgrade,
   onOpenAuth,
@@ -84,6 +87,26 @@ export const BasketballPredictionCard: React.FC<BasketballPredictionCardProps> =
   const leagueCode = league?.code || 'NBA';
   const leagueName = league?.name || 'Basketball';
 
+  // Strictly filter out primary market to guarantee non-duplication
+  const displayedSecondaryPreds = useMemo(() => {
+    const list = prediction.secondary_predictions || [];
+    let arr: any[] = [];
+    if (Array.isArray(list)) {
+      arr = list;
+    } else if (typeof list === 'string') {
+      try {
+        arr = JSON.parse(list);
+      } catch {
+        arr = [];
+      }
+    }
+    const primaryMarket = (prediction.market || '').toLowerCase();
+    return arr.filter((sec: any) => {
+      const secMarket = (sec.market || '').toLowerCase();
+      return secMarket !== primaryMarket;
+    });
+  }, [prediction.secondary_predictions, prediction.market]);
+
   // Four Factors Data
   const homeFF = homeTeam?.four_factors || { efg_pct: 0.535, tov_pct: 0.125, orb_pct: 0.250, ftr: 0.220 };
   const awayFF = awayTeam?.four_factors || { efg_pct: 0.535, tov_pct: 0.125, orb_pct: 0.250, ftr: 0.220 };
@@ -106,6 +129,30 @@ export const BasketballPredictionCard: React.FC<BasketballPredictionCardProps> =
       prediction: prediction.prediction,
       probability: (probPct ? Number(probPct) / 100 : prediction.probability) || 0.72,
       confidenceCategory: prediction.confidence_category,
+    };
+    onToggleFavorite(favoriteItem);
+  };
+
+  const handleSecondaryFavoriteToggle = (
+    e: React.MouseEvent,
+    sec: any,
+    secMarket: string,
+    secPick: string,
+    secProb: number | null
+  ) => {
+    e.stopPropagation();
+    if (!onToggleFavorite) return;
+    const favoriteItem: FavoritePredictionItem = {
+      id: `${prediction.fixture_id}::${secMarket}::${secPick}`,
+      fixtureId: prediction.fixture_id,
+      homeTeam: homeName,
+      awayTeam: awayName,
+      league: `${leagueName} (${leagueCode})`,
+      targetKickoffAt: prediction.target_kickoff_at || fixture?.target_kickoff_at || new Date().toISOString(),
+      market: secMarket,
+      prediction: secPick,
+      probability: secProb != null ? secProb : 65,
+      confidenceCategory: sec.tier || 'HIGH CONFIDENCE',
     };
     onToggleFavorite(favoriteItem);
   };
@@ -275,6 +322,121 @@ export const BasketballPredictionCard: React.FC<BasketballPredictionCardProps> =
         </div>
       </div>
 
+      {/* 3.5 DYNAMIC SECONDARY PREDICTIONS GRID (STRICTLY DEDUPLICATED FROM PRIMARY) */}
+      {displayedSecondaryPreds.length > 0 && (
+        <div
+          className="bball-secondary-section"
+          style={{ marginTop: 10, marginBottom: 12 }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+            <span style={{ fontSize: 11, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: 5 }}>
+              ⚡ Secondary Market Leans
+            </span>
+            <span style={{ fontSize: 10.5, fontWeight: 700, color: '#94a3b8' }}>
+              Distinct Derivative Markets
+            </span>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))', gap: 10 }}>
+            {displayedSecondaryPreds.map((sec: any, idx: number) => {
+              const secMarket = sec.market || 'Market';
+              const displayMarketTitle = (() => {
+                const m = secMarket.toLowerCase();
+                if (m.includes('spread') || m.includes('point_spread')) return '⚡ Point Spread (Handicap)';
+                if (m.includes('total') || m.includes('over')) return '📊 Total Points (Over/Under)';
+                if (m.includes('moneyline') || m.includes('winner')) return '🏆 Moneyline Lean';
+                return secMarket.replace(/_/g, ' ').toUpperCase();
+              })();
+
+              const marketName = (() => {
+                const m = secMarket.toLowerCase();
+                if (m.includes('spread')) return 'Point Spread';
+                if (m.includes('total')) return 'Game Totals';
+                return 'Moneyline';
+              })();
+
+              const isSecLocked = Boolean(isLocked || sec.locked || sec.probability == null || sec.probability === 0);
+              const pickVal = isSecLocked ? '••••••••' : (sec.pick || sec.prediction || 'Pick');
+              const probNum = sec.probability != null && sec.probability > 0
+                ? Math.round(sec.probability <= 1 ? sec.probability * 100 : sec.probability)
+                : null;
+
+              const isSecFav = Boolean(
+                isFavoriteItem ? isFavoriteItem(prediction.fixture_id, marketName, pickVal) : false
+              );
+
+              return (
+                <div
+                  key={idx}
+                  className="bball-secondary-tile"
+                  style={{
+                    background: '#ffffff',
+                    border: isSecFav ? '1.5px solid #10b981' : '1.5px solid #fed7aa',
+                    borderRadius: 10,
+                    padding: '10px 12px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'space-between',
+                    boxShadow: isSecFav ? '0 2px 8px rgba(16, 185, 129, 0.15)' : '0 1px 3px rgba(0, 0, 0, 0.03)',
+                    gap: 6,
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                    <span style={{ fontSize: 10.5, fontWeight: 800, color: '#9a3412', textTransform: 'uppercase', letterSpacing: '0.02em' }}>
+                      {displayMarketTitle}
+                    </span>
+                    {probNum != null ? (
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 3, background: probNum >= 65 ? '#ecfdf5' : '#eff6ff', border: `1px solid ${probNum >= 65 ? '#a7f3d0' : '#bfdbfe'}`, padding: '1px 6px', borderRadius: 5 }}>
+                        <span style={{ fontSize: 11.5, fontWeight: 900, color: probNum >= 65 ? '#15803d' : '#1d4ed8' }}>
+                          {probNum}%
+                        </span>
+                        <span style={{ fontSize: 9, fontWeight: 700, color: probNum >= 65 ? '#166534' : '#1e40af' }}>
+                          Prob
+                        </span>
+                      </div>
+                    ) : isSecLocked ? (
+                      <span style={{ fontSize: 10, fontWeight: 800, color: '#d97706', background: '#fef3c7', padding: '1px 6px', borderRadius: 4 }}>
+                        🔒 Locked
+                      </span>
+                    ) : null}
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 2 }}>
+                    <div style={{ fontSize: 13.5, fontWeight: 800, color: '#0f172a', wordBreak: 'break-word', whiteSpace: 'normal', flex: 1 }}>
+                      {pickVal}
+                    </div>
+
+                    {onToggleFavorite && !isSecLocked && (
+                      <button
+                        type="button"
+                        className={`bball-secondary-slip-btn ${isSecFav ? 'active' : ''}`}
+                        onClick={(e) => handleSecondaryFavoriteToggle(e, sec, marketName, pickVal, probNum)}
+                        title={isSecFav ? 'In Accumulator Slip' : 'Add to Accumulator Slip'}
+                        style={{
+                          background: isSecFav ? '#10b981' : '#ffffff',
+                          color: isSecFav ? '#ffffff' : '#ea580c',
+                          border: isSecFav ? '1px solid #10b981' : '1px solid #ea580c',
+                          borderRadius: 6,
+                          padding: '4px 8px',
+                          fontSize: '10.5px',
+                          fontWeight: 800,
+                          cursor: 'pointer',
+                          whiteSpace: 'nowrap',
+                          transition: 'all 0.15s ease',
+                        }}
+                      >
+                        {isSecFav ? '✓ IN SLIP' : '+ ADD TO SLIP'}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* 4. SETTLEMENT RESULT (IF SETTLED) */}
       {(isWon || isLost || isVoid) && (
         <div className={`bball-settled-bar ${isWon ? 'won' : isLost ? 'lost' : 'void'}`}>
@@ -377,36 +539,6 @@ export const BasketballPredictionCard: React.FC<BasketballPredictionCardProps> =
                 <span>🤖 AI Tactical Matchup Analysis</span>
               </div>
               <div>{prediction.metadata.ai_tactical_analysis}</div>
-            </div>
-          )}
-
-          {/* Secondary Predictions Grid */}
-          {prediction.secondary_predictions && prediction.secondary_predictions.length > 0 && (
-            <div style={{ marginTop: '14px' }}>
-              <div style={{ fontSize: 11, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', marginBottom: 6 }}>
-                Secondary Market Leans
-              </div>
-              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                {prediction.secondary_predictions.map((sp, idx) => (
-                  <div
-                    key={idx}
-                    style={{
-                      background: '#ffffff',
-                      border: '1px solid #e2e8f0',
-                      borderRadius: '6px',
-                      padding: '4px 8px',
-                      fontSize: '11px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                      boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
-                    }}
-                  >
-                    <span style={{ color: '#0f172a', fontWeight: 700 }}>{sp.pick}</span>
-                    <span style={{ color: '#16a34a', fontWeight: 800 }}>{(sp.probability * 100).toFixed(0)}%</span>
-                  </div>
-                ))}
-              </div>
             </div>
           )}
         </div>

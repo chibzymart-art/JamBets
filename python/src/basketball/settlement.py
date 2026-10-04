@@ -278,6 +278,30 @@ class BasketballSettlementEngine:
                             "Settled Basketball Prediction %s -> %s: %s",
                             pred_id, status.upper(), notes
                         )
+
+                        # Autonomous Dynamic Feedback: Immediately update teams' Elo & ratings
+                        try:
+                            from python.src.basketball.rating_engine import BasketballRatingEngine
+                            re_engine = BasketballRatingEngine(db=self.db)
+                            home_t = fixture.get("home_team")
+                            away_t = fixture.get("away_team")
+                            league_code = (fixture.get("league") or {}).get("code", "NBA")
+                            if home_t and away_t and home_score is not None and away_score is not None:
+                                up_h, up_a = re_engine.update_team_ratings_from_match(
+                                    home_team=home_t,
+                                    away_team=away_t,
+                                    home_score=home_score,
+                                    away_score=away_score,
+                                    league_code=league_code
+                                )
+                                self.db.update_team(home_t["id"], up_h)
+                                self.db.update_team(away_t["id"], up_a)
+                                logger.info(
+                                    "Calibrated Dynamic Ratings for %s and %s following settlement.",
+                                    home_t.get("canonical_name"), away_t.get("canonical_name")
+                                )
+                        except Exception as re_err:
+                            logger.warning("Could not recalibrate team ratings on settlement: %s", re_err)
                 except Exception as e:
                     logger.error("Failed to persist settlement for prediction %s: %s", pred_id, e)
 

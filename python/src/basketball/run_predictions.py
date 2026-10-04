@@ -55,13 +55,17 @@ def run_basketball_predictions(days_forward: int = 3, num_sims: int = 250000) ->
             home_name = home.get("canonical_name", "Home Team")
             away_name = away.get("canonical_name", "Away Team")
 
-            home_pace = float(home.get("pace") or 99.5)
-            away_pace = float(away.get("pace") or 99.5)
+            is_nba = (league_code.upper() in ("NBA", "NBA_GL"))
+            default_pace = 99.5 if is_nba else 75.0
+            default_ortg = 115.0 if is_nba else 106.0
 
-            home_ortg = float(home.get("offensive_rating") or 112.0)
-            home_drtg = float(home.get("defensive_rating") or 112.0)
-            away_ortg = float(away.get("offensive_rating") or 112.0)
-            away_drtg = float(away.get("defensive_rating") or 112.0)
+            home_pace = float(home.get("pace") or default_pace)
+            away_pace = float(away.get("pace") or default_pace)
+
+            home_ortg = float(home.get("offensive_rating") or default_ortg)
+            home_drtg = float(home.get("defensive_rating") or default_ortg)
+            away_ortg = float(away.get("offensive_rating") or default_ortg)
+            away_drtg = float(away.get("defensive_rating") or default_ortg)
 
             # Four Factors
             home_ff_raw = home.get("four_factors") or {}

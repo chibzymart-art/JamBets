@@ -78,6 +78,14 @@ class BasketballDbClient:
         res = resp.json()
         return res[0] if res else {}
 
+    def update_team(self, team_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
+        headers = dict(self.headers)
+        headers["Prefer"] = "return=representation"
+        resp = self.client.patch("/basketball_teams", params={"id": f"eq.{team_id}"}, json=data, headers=headers)
+        resp.raise_for_status()
+        res = resp.json()
+        return res[0] if res else {}
+
     # ------------------------------------------------------------------
     # Players
     # ------------------------------------------------------------------

@@ -97,32 +97,46 @@ class BasketballPredictionEngine:
         candidates = []
 
         # A. Moneyline Market
+        has_real_ml = (home_ml_odds is not None and away_ml_odds is not None)
         if sim_res.home_win_prob >= 0.50:
-            odds = home_ml_odds or round(1.0 / max(0.01, sim_res.home_win_prob), 2)
-            fair, edge = self.simulator.calculate_ev_edge(sim_res.home_win_prob, odds)
+            odds = home_ml_odds if has_real_ml else round(1.0 / max(0.01, sim_res.home_win_prob), 2)
+            fair, edge = self.simulator.calculate_ev_edge(sim_res.home_win_prob, odds) if has_real_ml else (round(1.0 / max(0.01, sim_res.home_win_prob), 2), 0.0)
             candidates.append({
                 "market": BasketballMarket.MONEYLINE,
                 "prediction": f"{home_team_name} To Win",
                 "probability": sim_res.home_win_prob,
                 "fair_odds": fair,
-                "market_odds": odds,
+                "market_odds": odds if has_real_ml else None,
                 "edge_pct": edge,
+                "has_real_odds": has_real_ml,
             })
         else:
-            odds = away_ml_odds or round(1.0 / max(0.01, sim_res.away_win_prob), 2)
-            fair, edge = self.simulator.calculate_ev_edge(sim_res.away_win_prob, odds)
+            odds = away_ml_odds if has_real_ml else round(1.0 / max(0.01, sim_res.away_win_prob), 2)
+            fair, edge = self.simulator.calculate_ev_edge(sim_res.away_win_prob, odds) if has_real_ml else (round(1.0 / max(0.01, sim_res.away_win_prob), 2), 0.0)
             candidates.append({
                 "market": BasketballMarket.MONEYLINE,
                 "prediction": f"{away_team_name} To Win",
                 "probability": sim_res.away_win_prob,
                 "fair_odds": fair,
-                "market_odds": odds,
+                "market_odds": odds if has_real_ml else None,
                 "edge_pct": edge,
+                "has_real_odds": has_real_ml,
             })
 
         # B. Point Spread Market
-        # If market spread given, evaluate; else pick closest integer spread to median margin
-        chosen_spread = market_spread if market_spread is not None else round(expectation.expected_margin)
+        # If market spread given, evaluate; else pick closest half-point spread to median margin
+        if market_spread is not None:
+            chosen_spread = float(market_spread)
+        else:
+            exp_margin = expectation.expected_margin
+            # Sports betting convention: Favorite gives points (negative spread)
+            # If Home is favored by 5.2 points, Home handicap is -5.5.
+            # If Away is favored by 5.2 points, Home handicap is +5.5 (gets points).
+            half_spread = round(abs(exp_margin) * 2) / 2.0
+            if half_spread == 0.0:
+                half_spread = 1.5
+            chosen_spread = -half_spread if exp_margin >= 0 else half_spread
+
         spread_key = str(float(chosen_spread))
         cover_prob = sim_res.spread_cover_probs.get(spread_key, 0.50)
 
@@ -134,21 +148,29 @@ class BasketballPredictionEngine:
             pred_text = f"{away_team_name} {opp_spread:+.1f} Points"
             prob = round(1.0 - cover_prob, 4)
 
-        spread_odds = 1.90  # Standard consensus spread price (-110 American)
-        fair_sp, edge_sp = self.simulator.calculate_ev_edge(prob, spread_odds)
+        has_real_spread_line = (market_spread is not None)
+        fair_sp = round(1.0 / max(0.01, prob), 2)
         candidates.append({
             "market": BasketballMarket.POINT_SPREAD,
             "prediction": pred_text,
             "probability": prob,
             "fair_odds": fair_sp,
-            "market_odds": spread_odds,
-            "edge_pct": edge_sp,
+            "market_odds": 1.90 if has_real_spread_line else None,
+            "edge_pct": round(((prob * 1.90) - 1.0) * 100.0, 2) if has_real_spread_line else 0.0,
+            "has_real_odds": has_real_spread_line,
         })
 
         # C. Game Totals Market (Over / Under)
-        chosen_total = market_total if market_total is not None else round(expectation.expected_total)
+        if market_total is not None:
+            chosen_total = float(market_total)
+        else:
+            exp_tot = expectation.expected_total
+            chosen_total = round(exp_tot * 2) / 2.0
+
         total_key = str(float(chosen_total))
-        over_prob = sim_res.totals_over_probs.get(total_key, 0.50)
+        raw_over_prob = sim_res.totals_over_probs.get(total_key, 0.50)
+        # Cap totals probability at 0.82 to guard against impossible 100% total predictions
+        over_prob = max(0.18, min(0.82, raw_over_prob))
 
         if over_prob >= 0.50:
             pred_total_text = f"Over {chosen_total:.1f} Total Points"
@@ -157,31 +179,34 @@ class BasketballPredictionEngine:
             pred_total_text = f"Under {chosen_total:.1f} Total Points"
             total_prob = round(1.0 - over_prob, 4)
 
-        total_odds = 1.90
-        fair_tot, edge_tot = self.simulator.calculate_ev_edge(total_prob, total_odds)
+        has_real_total_line = (market_total is not None)
+        fair_tot = round(1.0 / max(0.01, total_prob), 2)
         candidates.append({
             "market": BasketballMarket.GAME_TOTAL_OVER_UNDER,
             "prediction": pred_total_text,
             "probability": total_prob,
             "fair_odds": fair_tot,
-            "market_odds": total_odds,
-            "edge_pct": edge_tot,
+            "market_odds": 1.90 if has_real_total_line else None,
+            "edge_pct": round(((total_prob * 1.90) - 1.0) * 100.0, 2) if has_real_total_line else 0.0,
+            "has_real_odds": has_real_total_line,
         })
 
-        # 4. Select Primary Super Banker (prioritizes highest Edge % and highest Probability)
-        candidates.sort(key=lambda c: (c["edge_pct"] * 0.6) + (c["probability"] * 40.0), reverse=True)
+        # 4. Select Primary Super Banker & Secondary Markets (Strictly Deduplicated)
+        # Sort candidates prioritizing true probability and genuine bookmaker edge
+        candidates.sort(key=lambda c: (c["edge_pct"] * 0.4 if c["has_real_odds"] else 0.0) + (c["probability"] * 50.0), reverse=True)
         primary = candidates[0]
         secondary = candidates[1:]
 
         # 5. Determine Confidence Tier
         p = primary["probability"]
         edge = primary["edge_pct"]
+        has_edge = primary["has_real_odds"] and edge >= 3.5
 
-        if p >= 0.72 or edge >= 7.5:
+        if p >= 0.74 or (p >= 0.68 and has_edge):
             tier = BasketballConfidenceTier.BANGER
-        elif p >= 0.64 or edge >= 4.5:
+        elif p >= 0.65 or (p >= 0.60 and has_edge):
             tier = BasketballConfidenceTier.TOP_PICK
-        elif p >= 0.58 or edge >= 2.5:
+        elif p >= 0.58:
             tier = BasketballConfidenceTier.HIGH_CONFIDENCE
         elif p >= 0.52:
             tier = BasketballConfidenceTier.MID_CONFIDENCE
@@ -192,14 +217,14 @@ class BasketballPredictionEngine:
         else:
             tier = BasketballConfidenceTier.NO_SAFE_BANKER
 
-        # Secondary predictions list
+        # Secondary predictions list (strictly distinct derivative markets)
         secondary_list = [
             {
                 "market": c["market"].value,
                 "pick": c["prediction"],
                 "probability": c["probability"],
                 "tier": (
-                    BasketballConfidenceTier.TOP_PICK.value if c["probability"] >= 0.64
+                    BasketballConfidenceTier.TOP_PICK.value if c["probability"] >= 0.65
                     else BasketballConfidenceTier.HIGH_CONFIDENCE.value if c["probability"] >= 0.58
                     else BasketballConfidenceTier.MID_CONFIDENCE.value
                 ),

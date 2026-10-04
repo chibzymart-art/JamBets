@@ -86,8 +86,8 @@ class BasketballMonteCarloSimulator:
         home_wins = (margins > 0).mean()
         away_wins = (margins < 0).mean()
 
-        # Spread cover evaluations (-14.5 to +14.5 in 1.0 increments, plus market_spread if given)
-        spread_lines = [-10.5, -8.5, -6.5, -5.5, -4.5, -3.5, -2.5, -1.5, 1.5, 2.5, 3.5, 4.5, 5.5, 6.5, 8.5, 10.5]
+        # Dynamic spread cover evaluations (-20.5 to +20.5 in 0.5 increments, plus market_spread)
+        spread_lines = [round(x * 0.5, 1) for x in range(-41, 42) if x != 0]
         if market_spread is not None:
             spread_lines.append(float(market_spread))
         spread_lines = sorted(list(set(spread_lines)))
@@ -95,26 +95,18 @@ class BasketballMonteCarloSimulator:
         spread_probs = {}
         for sp in spread_lines:
             # Home covers if margin > -sp (e.g. if spread is -5.5, home covers if margin > 5.5)
-            spread_probs[str(sp)] = round(float((margins > -sp).mean()), 4)
+            spread_probs[str(float(sp))] = round(float((margins > -sp).mean()), 4)
 
-        # Over/Under total evaluations
+        # Dynamic Over/Under total evaluations around benchmark total
         benchmark_total = home_mean + away_mean
-        total_lines = [
-            round(benchmark_total - 10.0, 1),
-            round(benchmark_total - 6.0, 1),
-            round(benchmark_total - 3.0, 1),
-            round(benchmark_total, 1),
-            round(benchmark_total + 3.0, 1),
-            round(benchmark_total + 6.0, 1),
-            round(benchmark_total + 10.0, 1),
-        ]
+        total_lines = [round(benchmark_total + (x * 0.5), 1) for x in range(-40, 41)]
         if market_total is not None:
             total_lines.append(float(market_total))
         total_lines = sorted(list(set(total_lines)))
 
         totals_probs = {}
         for tl in total_lines:
-            totals_probs[str(tl)] = round(float((totals > tl).mean()), 4)
+            totals_probs[str(float(tl))] = round(float((totals > tl).mean()), 4)
 
         # First half breakdown (~48.5% of total points, with slightly lower pace in Q1)
         fh_home = round(float(home_scores.mean() * 0.485), 1)
