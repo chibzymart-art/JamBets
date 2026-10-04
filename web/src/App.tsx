@@ -639,7 +639,9 @@ export default function App() {
           prediction: isLocked ? 'LOCKED' : item.prediction,
           market: item.market,
           probability: isLocked ? 0 : item.probability,
-          confidence_category: isLocked ? 'LOCKED' : ((item.confidence_category && item.confidence_category !== 'LOCKED') ? item.confidence_category : 'MID_CONFIDENCE'),
+          confidence_category: (item.confidence_category && item.confidence_category !== 'LOCKED')
+            ? item.confidence_category
+            : (isLocked ? 'TOP_PICK' : 'MID_CONFIDENCE'),
           secondary_predictions: item.secondary_predictions || [],
           metadata: itemMeta,
           settlement_status: item.settlement_status,

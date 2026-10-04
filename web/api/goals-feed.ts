@@ -161,14 +161,21 @@ async function fetchGoalsFromUpstream(headers: Record<string, string>): Promise<
     `id,fixture_id,market,predicted_outcome,probability,confidence_tier,xg_combined,home_over25_rate,away_over25_rate,h2h_over25_rate,ht_goal_frequency,avg_first_goal_minute,target_kickoff_at,settlement_status,settled_at,actual_score,ht_score,settlement_notes,metadata,is_locked,fixture:football_fixtures!inner(id,canonical_key,target_kickoff_at,status,queue_day,in_prediction_queue,home_score,away_score,match_minute,period,half_time_home_score,half_time_away_score,corners_home,corners_away,postponed_at,cancelled_at,venue,metadata,league:football_leagues!inner(id,name,code,country),home_team:football_teams!football_fixtures_home_team_id_fkey(id,name,short_name),away_team:football_teams!football_fixtures_away_team_id_fkey(id,name,short_name))`
   );
 
+  const authKey = SUPABASE_SERVICE_ROLE_KEY || SUPABASE_ANON_KEY;
+  const upstreamHeaders = {
+    apikey: authKey,
+    Authorization: `Bearer ${authKey}`,
+    Accept: 'application/json',
+  };
+
   const [goalsRes, leagueRes] = await Promise.all([
     fetch(
-      `${SUPABASE_URL}/rest/v1/goals_predictions_paywall?select=${selectQuery}&order=probability.desc&limit=1000`,
-      { headers }
+      `${SUPABASE_URL}/rest/v1/goals_predictions?select=${selectQuery}&order=probability.desc&limit=1000`,
+      { headers: upstreamHeaders }
     ),
     fetch(
       `${SUPABASE_URL}/rest/v1/football_leagues?select=id,name,code,country&order=name.asc`,
-      { headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` } }
+      { headers: upstreamHeaders }
     ),
   ]);
 
@@ -186,6 +193,47 @@ async function fetchGoalsFromUpstream(headers: Record<string, string>): Promise<
     leagues,
     cached_at: new Date().toISOString(),
   };
+}
+
+function applyGoalsPaywallRedaction(preds: any[]): any[] {
+  return preds
+    .filter((p: any) => {
+      const status = (p.settlement_status || '').toLowerCase();
+      if (status === 'lost' || status === 'void') return false;
+      return true;
+    })
+    .map((p: any) => {
+      if (p.settlement_status === 'won') {
+        return {
+          ...p,
+          is_locked: false,
+        };
+      }
+
+      const tier = (p.confidence_tier || '').toUpperCase();
+      let prob = p.probability;
+      if (prob != null && typeof prob === 'number' && prob > 1) prob = prob / 100;
+      const isVipTier =
+        tier === 'GOAL_MACHINE' ||
+        tier === 'OVER_25_LOCK' ||
+        tier === 'EARLY_STRIKE' ||
+        (prob != null && prob >= 0.80);
+
+      if (isVipTier) {
+        return {
+          ...p,
+          is_locked: true,
+          predicted_outcome: 'LOCKED',
+          probability: null,
+          metadata: {},
+        };
+      }
+
+      return {
+        ...p,
+        is_locked: false,
+      };
+    });
 }
 
 export default async function handler(req: Request) {
@@ -231,13 +279,6 @@ export default async function handler(req: Request) {
   const userAuthToken = req.headers.get('Authorization');
   const isVipOrAdmin = await checkIsPaidOrAdmin(userAuthToken);
 
-  const upstreamAuth = isVipOrAdmin && userAuthToken ? userAuthToken : `Bearer ${SUPABASE_ANON_KEY}`;
-  const headers = {
-    apikey: SUPABASE_ANON_KEY,
-    Authorization: upstreamAuth.startsWith('Bearer ') ? upstreamAuth : `Bearer ${upstreamAuth}`,
-    Accept: 'application/json',
-  };
-
   const corsOrigin = getCorsOrigin(req);
   const responseHeaders: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -256,42 +297,50 @@ export default async function handler(req: Request) {
   try {
     const now = Date.now();
 
-    // 1. Return fresh in-memory cache if available (STRICTLY for unauthenticated / non-paid requests)
-    if (!isVipOrAdmin && memoryCache && now < memoryCache.expiresAt) {
+    // 1. Return fresh in-memory cache if available
+    if (memoryCache && now < memoryCache.expiresAt) {
+      const payload = !isVipOrAdmin
+        ? { ...memoryCache.data, predictions: applyGoalsPaywallRedaction(memoryCache.data.predictions) }
+        : memoryCache.data;
       return new Response(
-        JSON.stringify({ success: true, ...memoryCache.data }),
+        JSON.stringify({ success: true, ...payload }),
         { status: 200, headers: responseHeaders }
       );
     }
 
-    // 2. Anti-stampede fetch: deduplicate concurrent in-flight requests for guest users
+    // 2. Anti-stampede fetch: deduplicate concurrent in-flight requests
     let feedData: GoalsFeedData;
-    if (!isVipOrAdmin) {
-      if (!inflightPromise) {
-        inflightPromise = fetchGoalsFromUpstream(headers)
-          .then((data) => {
-            memoryCache = { data, expiresAt: Date.now() + CACHE_TTL_MS };
-            inflightPromise = null;
-            return data;
-          })
-          .catch((err) => {
-            inflightPromise = null;
-            throw err;
-          });
-      }
-      feedData = await inflightPromise;
-    } else {
-      feedData = await fetchGoalsFromUpstream(headers);
+    if (!inflightPromise) {
+      inflightPromise = fetchGoalsFromUpstream()
+        .then((data) => {
+          memoryCache = { data, expiresAt: Date.now() + CACHE_TTL_MS };
+          inflightPromise = null;
+          return data;
+        })
+        .catch((err) => {
+          inflightPromise = null;
+          throw err;
+        });
     }
+    feedData = await inflightPromise;
+
+    const payload = !isVipOrAdmin
+      ? { ...feedData, predictions: applyGoalsPaywallRedaction(feedData.predictions) }
+      : feedData;
 
     return new Response(
-      JSON.stringify({ success: true, ...feedData }),
+      JSON.stringify({ success: true, ...payload }),
       { status: 200, headers: responseHeaders }
     );
   } catch (err: any) {
     if (!isVipOrAdmin && memoryCache) {
       return new Response(
-        JSON.stringify({ success: true, ...memoryCache.data, stale: true }),
+        JSON.stringify({
+          success: true,
+          ...memoryCache.data,
+          predictions: applyGoalsPaywallRedaction(memoryCache.data.predictions),
+          stale: true,
+        }),
         { status: 200, headers: responseHeaders }
       );
     }

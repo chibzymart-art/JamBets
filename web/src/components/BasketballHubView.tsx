@@ -565,12 +565,12 @@ export const BasketballHubView: React.FC<BasketballHubViewProps> = ({
                 <span style={{ fontSize: '24px' }}>🏀</span>
                 <div>
                   <div style={{ fontWeight: 800, fontSize: '13px', letterSpacing: '-0.01em', color: '#fbbf24' }}>
-                    {userRole === 'standard' ? 'Standard Plan Active — Upgrade to BigBang VIP' : 'BigBang VIP Basketball Analytics'}
+                    {userRole === 'standard' ? 'Standard Plan Active — Upgrade to BigBang VIP' : 'Oddsbanta VIP Basketball Analytics'}
                   </div>
                   <div style={{ fontSize: '12px', color: '#c7d2fe', marginTop: '2px', lineHeight: 1.4 }}>
                     {userRole === 'standard'
-                      ? 'Your Standard Plan includes full Football coverage. Basketball predictions & Dean Oliver Four Factors models are unlocked with BigBang VIP (₦10,000/mo).'
-                      : 'Live & upcoming basketball predictions require BigBang VIP (₦10,000/mo). Free visitors see verified won proofs only.'}
+                      ? 'Your Standard Plan includes full Football coverage. Basketball predictions & Dean Oliver Four Factors models are unlocked with BigBang VIP.'
+                      : 'Free visitors get full access to Mid-Confidence basketball picks. High-accuracy models (85%+ hit rate) in High Confidence & Bangers require VIP.'}
                   </div>
                 </div>
               </div>
@@ -589,7 +589,7 @@ export const BasketballHubView: React.FC<BasketballHubViewProps> = ({
                   whiteSpace: 'nowrap',
                 }}
               >
-                Upgrade to BigBang VIP (₦10,000/mo) →
+                {userRole === 'standard' ? 'Upgrade to BigBang VIP →' : 'Upgrade to VIP (₦5,000/mo) →'}
               </button>
             </div>
           )}

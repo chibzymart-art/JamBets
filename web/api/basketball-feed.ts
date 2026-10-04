@@ -238,7 +238,7 @@ async function fetchBasketballFromUpstream(isPaidOrAdmin: boolean): Promise<Bask
     Accept: 'application/json',
   };
 
-  const predTable = isPaidOrAdmin ? 'basketball_predictions' : 'basketball_predictions_paywall';
+  const predTable = 'basketball_predictions';
 
   const predSelect = encodeURIComponent(
     `id,fixture_id,market,prediction,probability,confidence_category,secondary_predictions,metadata,simulations_count,simulated_home_score,simulated_away_score,edge_percentage,fair_odds,market_odds,tier_required,publication_status,target_kickoff_at,settlement_status,settlement_notes,settled_at,actual_result,fixture:basketball_fixtures(id,canonical_key,target_kickoff_at,status,home_score,away_score,period_scores,current_period,time_remaining,market_spread,market_total,home_moneyline_odds,away_moneyline_odds,home_rest_days,away_rest_days,is_home_b2b,is_away_b2b,league:basketball_leagues(id,code,name,country,quarter_minutes,periods_count,default_pace),home_team:basketball_teams!basketball_fixtures_home_team_id_fkey(id,canonical_name,short_name,city,state,arena_name,altitude_ft,offensive_rating,defensive_rating,net_rating,pace,four_factors,logo_url),away_team:basketball_teams!basketball_fixtures_away_team_id_fkey(id,canonical_name,short_name,city,state,arena_name,altitude_ft,offensive_rating,defensive_rating,net_rating,pace,four_factors,logo_url))`
@@ -248,10 +248,9 @@ async function fetchBasketballFromUpstream(isPaidOrAdmin: boolean): Promise<Bask
     `id,prediction_id,fixture_id,status,final_home_score,final_away_score,score_margin,total_points,notes,settled_at`
   );
 
-  const nowIso = new Date().toISOString();
   const [predsRes, leaguesRes, settleRes] = await Promise.all([
     fetch(
-      `${SUPABASE_URL}/rest/v1/${predTable}?select=${predSelect}&target_kickoff_at=gte.${nowIso}&order=target_kickoff_at.asc&limit=1000`,
+      `${SUPABASE_URL}/rest/v1/${predTable}?select=${predSelect}&order=target_kickoff_at.asc&limit=1000`,
       { headers }
     ),
     fetch(
@@ -288,10 +287,11 @@ async function fetchBasketballFromUpstream(isPaidOrAdmin: boolean): Promise<Bask
   let settledLost = 0;
   let settledVoid = 0;
 
-// Strict Paywall Redaction for Basketball:
-// 1. Non-paid users only see WON predictions for finished matches (unlocked as proof)
-// 2. Non-paid users NEVER see lost, void, or un-won finished predictions (completely hidden)
-// 3. Upcoming predictions are locked
+// Universal Tier Paywall Redaction for Basketball:
+// 1. Mid-Confidence (6.0–7.9) is visible to everyone across the board
+// 2. High Confidence (8.0–8.9), Top Picks (9.0+), and Bangers (9.0+) are strictly hidden/locked from free users and visitors
+// 3. Won settled predictions are visible as historical proof
+// 4. Lost, void, or un-won finished predictions are hidden from free users
 function applyBasketballPaywallRedaction(preds: any[]): any[] {
   return preds
     .filter((p: any) => {
@@ -310,14 +310,41 @@ function applyBasketballPaywallRedaction(preds: any[]): any[] {
           is_locked: false,
         };
       }
+
+      const cat = (p.confidence_category || '').toUpperCase().replace(/[\s-]+/g, '_');
+      let prob = p.probability;
+      if (prob != null && typeof prob === 'number') {
+        if (prob > 1) prob = prob / 100;
+      }
+      const isVipTier =
+        cat === 'BANGER' ||
+        cat.includes('BANGER') ||
+        cat === 'TOP_PICK' ||
+        cat === 'TOPPICK' ||
+        cat.includes('TOP') ||
+        cat === 'HIGH_CONFIDENCE' ||
+        cat === 'HIGHCONFIDENCE' ||
+        cat.includes('HIGH') ||
+        (prob !== null && typeof prob === 'number' && prob >= 0.80);
+
+      if (isVipTier) {
+        return {
+          ...p,
+          is_locked: true,
+          probability: null,
+          confidence_category: p.confidence_category || 'TOP PICK',
+          prediction: '🔒 Premium VIP Pick',
+          secondary_predictions: [],
+          metadata: {},
+        };
+      }
+
+      // Mid-Confidence (6.0–7.9) is visible to everyone across the board
       return {
         ...p,
-        is_locked: true,
-        probability: null,
-        confidence_category: p.confidence_category === 'BANGER' ? 'BANGER' : 'TOP PICK',
-        prediction: '🔒 Subscriber Only',
-        secondary_predictions: [],
-        metadata: {},
+        is_locked: false,
+        confidence_category: p.confidence_category || 'MID CONFIDENCE',
+        publication_status: p.publication_status || 'published',
       };
     });
 }

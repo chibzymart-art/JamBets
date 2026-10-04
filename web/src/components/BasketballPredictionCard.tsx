@@ -52,8 +52,26 @@ export const BasketballPredictionCard: React.FC<BasketballPredictionCardProps> =
     return null;
   }
 
-  // Admins & entitled subscribers are NEVER locked; visitors only see won games unlocked
-  const isLocked = !isUserEntitled && !isWon;
+  // Categorize tier: High Confidence, Top Picks, Bangers are strictly VIP tiers
+  const cat = (prediction.confidence_category || '').toUpperCase().replace(/[\s-]+/g, '_');
+  let prob = prediction.probability;
+  if (prob != null && typeof prob === 'number' && prob > 1) prob = prob / 100;
+
+  const isVipTier =
+    cat === 'BANGER' ||
+    cat.includes('BANGER') ||
+    cat === 'TOP_PICK' ||
+    cat === 'TOPPICK' ||
+    cat.includes('TOP') ||
+    cat === 'HIGH_CONFIDENCE' ||
+    cat === 'HIGHCONFIDENCE' ||
+    cat.includes('HIGH') ||
+    (prob !== null && typeof prob === 'number' && prob >= 0.80) ||
+    prediction.is_locked === true;
+
+  // Universal Tier Paywall: Mid-Confidence (6.0–7.9) is visible to everyone across the board
+  // Only VIP tiers (High Confidence, Top Picks, Bangers) are locked for non-paid visitors
+  const isLocked = !isUserEntitled && !isWon && isVipTier;
 
   // Kickoff formatting in Lagos WAT (UTC+1)
   const kickoffDate = new Date(prediction.target_kickoff_at || fixture?.target_kickoff_at || Date.now());
@@ -70,7 +88,9 @@ export const BasketballPredictionCard: React.FC<BasketballPredictionCardProps> =
   });
 
   // Confidence Tier Configuration
-  const effectiveCategory = isLocked ? 'LOCKED' : (prediction.confidence_category || 'TOP PICK');
+  const effectiveCategory = isLocked
+    ? (prediction.confidence_category && prediction.confidence_category !== 'LOCKED' ? prediction.confidence_category : 'TOP PICK')
+    : (prediction.confidence_category && prediction.confidence_category !== 'LOCKED' ? prediction.confidence_category : 'MID CONFIDENCE');
   const tierConfig = getTierConfig(effectiveCategory);
   const cleanTierLabel = (tierConfig.label || '').replace(/\s*\([^)]*\)/g, '').trim();
 
@@ -339,7 +359,12 @@ export const BasketballPredictionCard: React.FC<BasketballPredictionCardProps> =
 
           <div className="bball-prediction-text" style={{ marginTop: 4 }}>
             {isLocked ? (
-              <span style={{ color: '#64748b' }}>🔒 VIP Locked Prediction</span>
+              <div>
+                <span style={{ color: '#ea580c', fontWeight: 700 }}>🔒 Premium VIP Pick (Restricted)</span>
+                <div style={{ fontSize: 11, color: '#b45309', marginTop: 2, fontWeight: 500 }}>
+                  High-accuracy models (85%+ hit rate) are reserved for VIP.
+                </div>
+              </div>
             ) : (
               <span>{displayedPrediction}</span>
             )}
@@ -356,7 +381,7 @@ export const BasketballPredictionCard: React.FC<BasketballPredictionCardProps> =
                 onOpenUpgrade ? onOpenUpgrade() : onOpenAuth ? onOpenAuth('signin') : null;
               }}
             >
-              👑 Unlock BigBang VIP (₦10,000/mo) →
+              👑 Unlock VIP (₦5,000/mo) →
             </button>
           ) : (
             <>

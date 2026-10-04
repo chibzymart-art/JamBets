@@ -563,10 +563,30 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
   }
 
   const isWon = prediction.settlement_status === 'won';
-  const isLocked = !isAdmin && !canViewPredictions && !isWon;
+
+  // Categorize tier: High Confidence, Top Picks, Bangers are strictly VIP tiers
+  const cat = (prediction.confidence_category || '').toUpperCase().replace(/[\s-]+/g, '_');
+  let prob = prediction.probability;
+  if (prob != null && typeof prob === 'number' && prob > 1) prob = prob / 100;
+
+  const isVipTier =
+    cat === 'BANGER' ||
+    cat.includes('BANGER') ||
+    cat === 'TOP_PICK' ||
+    cat === 'TOPPICK' ||
+    cat.includes('TOP') ||
+    cat === 'HIGH_CONFIDENCE' ||
+    cat === 'HIGHCONFIDENCE' ||
+    cat.includes('HIGH') ||
+    (prob !== null && typeof prob === 'number' && prob >= 0.80) ||
+    prediction.is_locked === true;
+
+  // Universal Tier Paywall: Mid-Confidence (6.0–7.9) is visible to everyone across the board
+  // Only VIP tiers (High Confidence, Top Picks, Bangers) are locked for non-paid visitors
+  const isLocked = !isAdmin && !canViewPredictions && !isWon && isVipTier;
 
   const effectiveCategory = isLocked
-    ? 'LOCKED'
+    ? (prediction.confidence_category && prediction.confidence_category !== 'LOCKED' ? prediction.confidence_category : 'TOP_PICK')
     : (prediction.confidence_category && prediction.confidence_category !== 'LOCKED')
       ? prediction.confidence_category
       : 'MID_CONFIDENCE';
@@ -1054,12 +1074,12 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
 
               <div className="paywall-overlay-prompt">
                 <div className="paywall-lock-icon">🔒</div>
-                <h4>Premium Pick - Upgrade to Standard/VIP to View</h4>
+                <h4>More accurate predictions (85%+ hit rate) are in High Confidence, Top Picks, and Bangers.</h4>
                 <p>
-                  High-probability Banker consensus (80%+), Top Pick, and Banger (96%+) signals are protected for active members.
+                  Free visitors get full access to live Mid-Confidence models across all sports. Upgrade to VIP to unlock our highest conviction signals.
                 </p>
                 <Link to="/subscription" className="btn-paywall-unlock-prominent">
-                  ⚡ Unlock with Standard Plan (₦5,000/mo) →
+                  ⚡ Unlock VIP Picks (₦5,000/mo) →
                 </Link>
               </div>
             </div>

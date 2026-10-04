@@ -490,15 +490,34 @@ export async function fetchMarketFeed(
     const start = (safePage - 1) * limit;
     const paged = targetList.slice(start, start + limit);
 
-    // Apply Freemium 3/7 rule in continuous stream if not admin and not entitled
+    // Universal Tier Paywall: Mid-Confidence is visible to everyone; High/VIP tiers are locked
     const isSubscriber = isAdmin || canViewPredictions;
-    const finalData = paged.map((pred, idx) => {
-      const globalIdx = start + idx;
-      const isLocked = !isSubscriber && globalIdx >= 3;
+    const finalData = paged.map((pred) => {
+      const isWon = pred.settlement_status === 'won';
+      const cat = (pred.confidence_category || pred.confidence_tier || '').toUpperCase().replace(/[\s-]+/g, '_');
+      let prob = pred.probability;
+      if (prob != null && typeof prob === 'number' && prob > 1) prob = prob / 100;
+      const isVipTier =
+        cat === 'BANGER' ||
+        cat.includes('BANGER') ||
+        cat === 'TOP_PICK' ||
+        cat === 'TOPPICK' ||
+        cat.includes('TOP') ||
+        cat === 'HIGH_CONFIDENCE' ||
+        cat === 'HIGHCONFIDENCE' ||
+        cat.includes('HIGH') ||
+        cat === 'GOAL_MACHINE' ||
+        cat === 'OVER_25_LOCK' ||
+        cat === 'EARLY_STRIKE' ||
+        (prob != null && prob >= 0.80) ||
+        pred.is_locked === true;
+
+      const isLocked = !isSubscriber && !isWon && isVipTier;
       if (isLocked) {
         return {
           ...pred,
           is_locked: true,
+          prediction: '🔒 Premium VIP Pick',
           probability: null,
           display_probability: null,
         };

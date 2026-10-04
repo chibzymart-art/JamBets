@@ -266,11 +266,11 @@ const FIXTURE_JOIN =
 
 const SELECTS: Record<string, { table: string; select: string }> = {
   corners: {
-    table: 'corner_predictions_paywall',
+    table: 'corner_predictions',
     select: `id,fixture_id,prediction,market,probability,confidence_category,corner_tier,predicted_total_corners,home_corners_avg,away_corners_avg,over_8_5_prob,over_9_5_prob,over_10_5_prob,target_kickoff_at,settlement_status,settled_at,actual_corners,settlement_notes,publication_status,is_locked,${FIXTURE_JOIN}`,
   },
   goals: {
-    table: 'goals_predictions_paywall',
+    table: 'goals_predictions',
     select: `id,fixture_id,market,predicted_outcome,probability,confidence_tier,xg_combined,home_over25_rate,away_over25_rate,h2h_over25_rate,ht_goal_frequency,avg_first_goal_minute,target_kickoff_at,settlement_status,settled_at,actual_score,ht_score,settlement_notes,metadata,is_locked,${FIXTURE_JOIN}`,
   },
 };
@@ -557,8 +557,8 @@ async function computeAllMarketCounts(
 
   try {
     const [cr, gl] = await Promise.all([
-      fetch(`${SUPABASE_URL}/rest/v1/corner_predictions_paywall?select=id,target_kickoff_at,settlement_status,publication_status,settlement_notes,fixture:football_fixtures!inner(id,status)&settlement_status=neq.void&publication_status=neq.archived&limit=1000`, { headers }).then((r) => r.json()),
-      fetch(`${SUPABASE_URL}/rest/v1/goals_predictions_paywall?select=id,market,target_kickoff_at,settlement_status,publication_status,fixture:football_fixtures!inner(id,status)&settlement_status=neq.void&publication_status=neq.archived&limit=1000`, { headers }).then((r) => r.json()),
+      fetch(`${SUPABASE_URL}/rest/v1/corner_predictions?select=id,target_kickoff_at,settlement_status,publication_status,settlement_notes,fixture:football_fixtures!inner(id,status)&settlement_status=neq.void&publication_status=neq.archived&limit=1000`, { headers }).then((r) => r.json()),
+      fetch(`${SUPABASE_URL}/rest/v1/goals_predictions?select=id,market,target_kickoff_at,settlement_status,publication_status,fixture:football_fixtures!inner(id,status)&settlement_status=neq.void&publication_status=neq.archived&limit=1000`, { headers }).then((r) => r.json()),
     ]);
 
     let targetDateStr = dateParam;
@@ -691,10 +691,10 @@ export default async function handler(req: Request) {
 
   const userAuthToken = req.headers.get('Authorization');
   const isVipOrAdmin = await checkIsPaidOrAdmin(userAuthToken);
-  const upstreamAuth = isVipOrAdmin && userAuthToken ? userAuthToken : `Bearer ${SUPABASE_ANON_KEY}`;
+  const authKey = SUPABASE_SERVICE_ROLE_KEY || SUPABASE_ANON_KEY;
   const headers: Record<string, string> = {
-    apikey: SUPABASE_ANON_KEY,
-    Authorization: upstreamAuth.startsWith('Bearer ') ? upstreamAuth : `Bearer ${upstreamAuth}`,
+    apikey: authKey,
+    Authorization: `Bearer ${authKey}`,
     Accept: 'application/json',
   };
 
@@ -809,18 +809,48 @@ export default async function handler(req: Request) {
               };
             }
 
-            // ALL pending predictions are locked
+            // Check if VIP tier: High Confidence, Top Pick, Banger, Goal Machine, Early Strike, Over 25 Lock
+            const cat = (item.confidence_category || item.confidence_tier || '').toUpperCase().replace(/[\s-]+/g, '_');
+            let prob = item.probability;
+            if (prob != null && typeof prob === 'number') {
+              if (prob > 1) prob = prob / 100;
+            }
+
+            const isVipTier =
+              cat === 'BANGER' ||
+              cat.includes('BANGER') ||
+              cat === 'TOP_PICK' ||
+              cat === 'TOPPICK' ||
+              cat.includes('TOP') ||
+              cat === 'HIGH_CONFIDENCE' ||
+              cat === 'HIGHCONFIDENCE' ||
+              cat.includes('HIGH') ||
+              cat === 'GOAL_MACHINE' ||
+              cat === 'OVER_25_LOCK' ||
+              cat === 'EARLY_STRIKE' ||
+              (prob !== null && typeof prob === 'number' && prob >= 0.80);
+
+            if (isVipTier) {
+              return {
+                ...item,
+                is_locked: true,
+                prediction: '🔒 Premium VIP Pick',
+                probability: null,
+                display_probability: null,
+                confidence_tier: item.confidence_tier || 'TOP_PICK',
+                confidence_category: item.confidence_category || 'TOP PICK',
+                metrics: {},
+                tactical_rationale: null,
+                tactical_tag: null,
+              };
+            }
+
+            // Mid-Confidence (6.0–7.9) is free and visible to all users
             return {
               ...item,
-              is_locked: true,
-              prediction: 'LOCKED',
-              probability: null,
-              display_probability: null,
-              confidence_tier: 'LOCKED',
-              confidence_category: 'LOCKED',
-              metrics: {},
-              tactical_rationale: null,
-              tactical_tag: null,
+              is_locked: false,
+              confidence_tier: item.confidence_tier || 'MID_CONFIDENCE',
+              confidence_category: item.confidence_category || 'MID CONFIDENCE',
             };
           });
 

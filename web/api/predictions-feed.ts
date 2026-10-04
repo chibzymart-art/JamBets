@@ -152,15 +152,16 @@ async function checkIsPaidOrAdmin(authToken: string | null): Promise<boolean> {
   }
 }
 
-// Strict Paywall Redaction:
-// 1. Non-paid users are locked from seeing any pending predictions (0 free picks)
-// 2. Non-paid users only see WON predictions for the day (unlocked as proof)
-// 3. Non-paid users NEVER see lost or void predictions (completely hidden)
+// Universal Tier Paywall Redaction:
+// 1. Mid-Confidence (6.0–7.9) is visible to everyone across the board as live proof of work
+// 2. High Confidence (8.0–8.9), Top Picks (9.0+), and Bangers (9.0+) are strictly hidden/locked from free users and visitors
+// 3. Won settled predictions are visible as historical proof
+// 4. Lost, void, or un-won finished predictions are hidden from free users
 function applyPaywallRedaction(predictions: any[]): any[] {
   return predictions
     .filter((p: any) => {
       const status = p.settlement_status;
-      // Rule: Hide all lost and void predictions completely
+      // Rule: Hide all lost and void predictions completely from non-paid visitors
       if (status === 'lost' || status === 'void' || status === 'voided') {
         return false;
       }
@@ -176,16 +177,40 @@ function applyPaywallRedaction(predictions: any[]): any[] {
         };
       }
 
-      // Rule: 100% of upcoming/pending predictions are strictly locked
+      // Check if prediction is High Confidence, Top Pick, or Banger
+      const cat = (p.confidence_category || '').toUpperCase().replace(/[\s-]+/g, '_');
+      let prob = p.probability;
+      if (prob != null && typeof prob === 'number') {
+        if (prob > 1) prob = prob / 100;
+      }
+      const isVipTier =
+        cat === 'BANGER' ||
+        cat === 'TOP_PICK' ||
+        cat === 'TOPPICK' ||
+        cat === 'HIGH_CONFIDENCE' ||
+        cat === 'HIGHCONFIDENCE' ||
+        (prob !== null && typeof prob === 'number' && prob >= 0.80);
+
+      // VIP Tiers (High Confidence, Top Pick, Banger) are strictly hidden/locked
+      if (isVipTier) {
+        return {
+          ...p,
+          is_locked: true,
+          probability: null,
+          confidence_category: cat || 'TOP_PICK',
+          prediction: '🔒 Premium VIP Pick',
+          publication_status: p.publication_status || 'published',
+          secondary_predictions: [], // Strip data to prevent leakage
+          metadata: {},              // Strip simulation details to prevent leakage
+        };
+      }
+
+      // Mid-Confidence (6.0–7.9) is free and visible to all users
       return {
         ...p,
-        is_locked: true,
-        probability: null,
-        confidence_category: 'LOCKED',
-        prediction: 'LOCKED',
+        is_locked: false,
+        confidence_category: p.confidence_category || 'MID_CONFIDENCE',
         publication_status: p.publication_status || 'published',
-        secondary_predictions: [], // Strip data to prevent leakage
-        metadata: {},              // Strip simulation details to prevent leakage
       };
     });
 }

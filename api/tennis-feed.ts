@@ -199,7 +199,7 @@ async function fetchTennisDataFromUpstream(rawToken?: string | null): Promise<Te
 
   const [predsRes, tourneysRes, settleRes] = await Promise.all([
     fetch(
-      `${SUPABASE_URL}/rest/v1/tennis_predictions_paywall?select=${predSelect}&target_kickoff_at=gte.${minDate}&target_kickoff_at=lte.${maxDate}&order=target_kickoff_at.asc&limit=1000`,
+      `${SUPABASE_URL}/rest/v1/tennis_predictions?select=${predSelect}&target_kickoff_at=gte.${minDate}&target_kickoff_at=lte.${maxDate}&order=target_kickoff_at.asc&limit=1000`,
       { headers }
     ),
     fetch(
@@ -385,24 +385,49 @@ export default async function handler(req: Request): Promise<Response> {
           };
         }
 
-        // Masked for Free / Unauthenticated tier
+        const cat = (p.confidence_category || '').toUpperCase().replace(/[\s-]+/g, '_');
+        let prob = p.probability;
+        if (prob != null && typeof prob === 'number') {
+          if (prob > 1) prob = prob / 100;
+        }
+        const isVipTier =
+          cat === 'BANGER' ||
+          cat.includes('BANGER') ||
+          cat === 'TOP_PICK' ||
+          cat === 'TOPPICK' ||
+          cat.includes('TOP') ||
+          cat === 'HIGH_CONFIDENCE' ||
+          cat === 'HIGHCONFIDENCE' ||
+          cat.includes('HIGH') ||
+          (prob !== null && typeof prob === 'number' && prob >= 0.80);
+
+        if (isVipTier) {
+          return {
+            ...p,
+            prediction: '🔒 Premium VIP Pick',
+            probability: null,
+            confidence_category: p.confidence_category || 'TOP PICK',
+            secondary_predictions: [
+              { market: 'game_handicap', prediction: '🔒 VIP Spread Pick', probability: null, locked: true },
+              { market: 'first_set_winner', prediction: '🔒 VIP 1st Set Winner', probability: null, locked: true },
+              { market: 'set_handicap', prediction: '🔒 VIP Set Handicap', probability: null, locked: true },
+              { market: 'total_games_over_under', prediction: '🔒 VIP Over/Under Total', probability: null, locked: true },
+            ],
+            metadata: {
+              ...p.metadata,
+              ai_tactical_analysis: '🔒 Upgrade to Oddsbanta VIP to unlock comprehensive probability distributions and AI tactical breakdown.',
+              markov: undefined,
+            },
+            is_locked: true,
+          };
+        }
+
+        // Mid-Confidence (6.0–7.9) is visible to everyone across the board
         return {
           ...p,
-          prediction: '🔒 Subscriber Only',
-          probability: null,
-          confidence_category: p.confidence_category === 'BANGER' ? 'BANGER' : 'TOP PICK',
-          secondary_predictions: [
-            { market: 'game_handicap', prediction: '🔒 VIP Spread Pick', probability: null, locked: true },
-            { market: 'first_set_winner', prediction: '🔒 VIP 1st Set Winner', probability: null, locked: true },
-            { market: 'set_handicap', prediction: '🔒 VIP Set Handicap', probability: null, locked: true },
-            { market: 'total_games_over_under', prediction: '🔒 VIP Over/Under Total', probability: null, locked: true },
-          ],
-          metadata: {
-            ...p.metadata,
-            ai_tactical_analysis: '🔒 Upgrade to Oddsbanta VIP to unlock comprehensive probability distributions and AI tactical breakdown.',
-            markov: undefined,
-          },
-          is_locked: true,
+          is_locked: false,
+          confidence_category: p.confidence_category || 'MID CONFIDENCE',
+          publication_status: p.publication_status || 'published',
         };
       });
 

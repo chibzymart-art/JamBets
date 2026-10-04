@@ -685,7 +685,18 @@ export const StandaloneGoalCard: React.FC<StandaloneGoalCardProps> = ({
   const scoreLabel = isOver25 ? 'FT Score' : 'HT Score';
 
   // Effective Probability & Lock state
-  const isLocked = (p.is_locked ?? true) && !isPaidUser;
+  const tierName = (p.confidence_tier || '').toUpperCase();
+  const probVal = typeof p.probability === 'number' ? p.probability : 0;
+  const isVipTier =
+    tierName === 'GOAL_MACHINE' ||
+    tierName === 'OVER_25_LOCK' ||
+    tierName === 'EARLY_STRIKE' ||
+    probVal >= 0.80 ||
+    p.is_locked === true;
+
+  // Universal Tier Paywall: Mid-Confidence (LEAN_OVER, TEMPO_HIGH) is visible to everyone
+  const isLocked = !isPaidUser && !isWon && isVipTier;
+
   const effectiveProb = p.probability ?? (
     !isLocked
       ? (isOver25
@@ -864,9 +875,9 @@ export const StandaloneGoalCard: React.FC<StandaloneGoalCardProps> = ({
               <div className="paywall-glass-content">
                 <span className="lock-icon">🔒</span>
                 <span className="lock-heading">{isOver25 ? 'Over 2.5 VIP Edge' : '1H Blitz VIP Edge'}</span>
-                <span className="lock-subtext">Audited Models &amp; Transparent Track Record</span>
+                <span className="lock-subtext">More accurate predictions (85%+ hit rate) are in High Confidence &amp; Bangers</span>
                 <button className="subcard-lock-btn" type="button">
-                  Unlock VIP Signal →
+                  Unlock VIP (₦5,000/mo) →
                 </button>
               </div>
             </div>
