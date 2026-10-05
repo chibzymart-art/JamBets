@@ -287,49 +287,32 @@ async function fetchBasketballFromUpstream(isPaidOrAdmin: boolean): Promise<Bask
   let settledLost = 0;
   let settledVoid = 0;
 
-// Multi-Sport VIP Shield for Basketball:
-// 1. Won settled predictions remain visible as historical track-record proof
-// 2. Lost, void, or un-won finished predictions are hidden from free users/visitors
-// 3. ALL upcoming & pending predictions are locked behind BigBang VIP teasers
+// Multi-Sport VIP Paywall Redaction for Basketball:
+// ALL basketball predictions (including settled) are locked as BigBang VIP teasers without exposing won/lost results
 function applyBasketballPaywallRedaction(preds: any[]): any[] {
-  return preds
-    .filter((p: any) => {
-      const status = (p.settlement_status || '').toLowerCase();
-      const isFinished = p.fixture?.status === 'finished' || Boolean(p.settled_at);
-      if (status === 'lost' || status === 'void' || status === 'voided' || (isFinished && status !== 'won')) {
-        return false;
-      }
-      return true;
-    })
-    .map((p: any) => {
-      const isWon = (p.settlement_status || '').toLowerCase() === 'won';
-      if (isWon) {
-        return {
-          ...p,
-          is_locked: false,
-        };
-      }
-
-      // All active/scheduled basketball predictions are locked as BigBang VIP teasers
-      return {
-        ...p,
-        is_locked: true,
-        probability: null,
-        confidence_category: (p.confidence_category === 'BANGER' ? 'BANGER' : 'TOP PICK'),
-        prediction: '🔒 BigBang VIP Pick',
-        simulated_home_score: null,
-        simulated_away_score: null,
-        edge_percentage: null,
-        fair_odds: null,
-        market_odds: null,
-        secondary_predictions: [],
-        metadata: {
-          ai_tactical_analysis: '🔒 Basketball predictions and 250,000 Monte Carlo simulations are reserved for BigBang VIP members.',
-          simulation: null,
-          secondary_locked: true,
-        },
-      };
-    });
+  return preds.map((p: any) => {
+    return {
+      ...p,
+      is_locked: true,
+      probability: null,
+      confidence_category: (p.confidence_category === 'BANGER' ? 'BANGER' : 'TOP PICK'),
+      prediction: '🔒 BigBang VIP Pick',
+      settlement_status: 'pending',
+      settlement_notes: null,
+      actual_result: null,
+      simulated_home_score: null,
+      simulated_away_score: null,
+      edge_percentage: null,
+      fair_odds: null,
+      market_odds: null,
+      secondary_predictions: [],
+      metadata: {
+        ai_tactical_analysis: '🔒 Basketball predictions and 250,000 Monte Carlo simulations are reserved for BigBang VIP members.',
+        simulation: null,
+        secondary_locked: true,
+      },
+    };
+  });
 }
 
   for (const s of settlements) {
@@ -340,25 +323,25 @@ function applyBasketballPaywallRedaction(preds: any[]): any[] {
   }
 
   const finishedDecisive = settledWon + settledLost;
-  const winRate = finishedDecisive > 0 ? Math.round((settledWon / finishedDecisive) * 100) : 85.0;
+  const winRate = isPaidOrAdmin ? (finishedDecisive > 0 ? Math.round((settledWon / finishedDecisive) * 100) : 85.0) : 0;
 
   const sanitizedPredictions = !isPaidOrAdmin ? applyBasketballPaywallRedaction(predictions) : predictions;
 
   return {
     predictions: sanitizedPredictions,
     leagues,
-    settlements: isPaidOrAdmin ? settlements : settlements.filter((s: any) => (s.status || '').toLowerCase() === 'won'),
+    settlements: isPaidOrAdmin ? settlements : [],
     stats: {
       total_matches: sanitizedPredictions.length,
       bangers_count: bangers,
       top_picks_count: topPicks,
       high_confidence_count: highConf,
       leagues_count: leagues.length,
-      settled_count: isPaidOrAdmin ? settlements.length : settledWon,
-      settled_won: settledWon,
+      settled_count: isPaidOrAdmin ? settlements.length : 0,
+      settled_won: isPaidOrAdmin ? settledWon : 0,
       settled_lost: isPaidOrAdmin ? settledLost : 0,
       settled_void: isPaidOrAdmin ? settledVoid : 0,
-      win_rate: isPaidOrAdmin ? winRate : (settledWon > 0 ? 100 : 0),
+      win_rate: isPaidOrAdmin ? winRate : 0,
     },
     cached_at: new Date().toISOString(),
   };

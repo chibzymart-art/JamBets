@@ -82,26 +82,22 @@ export const TennisPredictionCard: React.FC<TennisPredictionCardProps> = ({
 
   const isFinished = fixture?.status === 'finished' || fixture?.status === 'retired' || Boolean(prediction.settled_at);
   const isLive = fixture?.status === 'live';
-  const isWon = prediction.settlement_status === 'won' || prediction.settlement_status === 'half_won';
-  const isLost = prediction.settlement_status === 'lost' || prediction.settlement_status === 'half_lost';
-  const isVoid = (prediction.settlement_status as string) === 'void' || (prediction.settlement_status as string) === 'voided';
 
   // Entitlement: Admins or entitled subscribers have full access
   const isUserEntitled = Boolean(isAdmin || canViewPredictions || isSubscriber);
 
-  // Strict Paywall: Free users and visitors strictly see only won fixtures (never lost, void, or un-won finished)
-  if (!isUserEntitled && (isLost || isVoid || (isFinished && !isWon))) {
-    return null;
-  }
+  // Settlement indicators are strictly for paid VIP users. Free users & visitors never see won/lost/void.
+  const isWon = isUserEntitled && (prediction.settlement_status === 'won' || prediction.settlement_status === 'half_won');
+  const isLost = isUserEntitled && (prediction.settlement_status === 'lost' || prediction.settlement_status === 'half_lost');
+  const isVoid = isUserEntitled && ((prediction.settlement_status as string) === 'void' || (prediction.settlement_status as string) === 'voided');
 
   // Categorize tier: High Confidence, Top Picks, Bangers are strictly VIP tiers
   const cat = (prediction.confidence_category || '').toUpperCase().replace(/[\s-]+/g, '_');
   let prob = prediction.probability;
   if (prob != null && typeof prob === 'number' && prob > 1) prob = prob / 100;
 
-  // Multi-Sport VIP Shield: All live & upcoming tennis predictions are locked for visitors as marketing teasers.
-  // Won settled matches remain visible as historical track-record win proof.
-  const isLocked = !isUserEntitled && !isWon;
+  // Multi-Sport VIP Shield: ALL tennis predictions (including settled ones) are locked for non-VIP visitors as teasers.
+  const isLocked = !isUserEntitled;
 
   // Confidence tier configuration (matching Football FixtureCard exactly)
   const effectiveCategory = isLocked
@@ -110,9 +106,9 @@ export const TennisPredictionCard: React.FC<TennisPredictionCardProps> = ({
   const tierConfig = getTierConfig(effectiveCategory);
   const cleanTierLabel = (tierConfig.label || '').replace(/\s*\([^)]*\)/g, '').trim();
 
-  const displayedPrediction = (!isLocked && prediction.prediction === '🔒 Subscriber Only')
-    ? `${leaderName} Win`
-    : prediction.prediction;
+  const displayedPrediction = isLocked
+    ? '🔒 BigBang VIP Pick'
+    : (prediction.prediction === '🔒 Subscriber Only' ? `${leaderName} Win` : prediction.prediction);
 
   const probPct = prediction.probability != null
     ? ((prediction.probability <= 1 ? prediction.probability * 100 : prediction.probability)).toFixed(1)
@@ -406,7 +402,7 @@ export const TennisPredictionCard: React.FC<TennisPredictionCardProps> = ({
                 <span>KEY MODEL PICK</span>
               </div>
               <div className="key-pick-outcome locked-blur">
-                ••••••••••••••••
+                🔒 BigBang VIP Pick
               </div>
               <button
                 type="button"

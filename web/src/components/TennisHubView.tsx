@@ -96,14 +96,6 @@ export const TennisHubView: React.FC<TennisHubViewProps> = ({
     // Map prediction counts by WAT kickoff date
     const fixtureCountByDate = new Map<string, number>();
     allPredictions.forEach((p) => {
-      // Free users & visitors strictly see only won fixtures (never lost, void, or un-won finished fixtures)
-      if (!isSubscriber) {
-        const isWon = p.settlement_status === 'won' || p.settlement_status === 'half_won';
-        const isLost = p.settlement_status === 'lost' || p.settlement_status === 'half_lost';
-        const isVoid = (p.settlement_status as string) === 'void' || (p.settlement_status as string) === 'voided';
-        const isFinished = p.fixture?.status === 'finished' || p.fixture?.status === 'retired' || Boolean(p.settled_at);
-        if (isLost || isVoid || (isFinished && !isWon)) return;
-      }
       const kickoff = p.target_kickoff_at || p.fixture?.target_kickoff_at;
       const d = getFixtureWatDate(kickoff);
       if (d) {
@@ -127,13 +119,6 @@ export const TennisHubView: React.FC<TennisHubViewProps> = ({
     // Count fixtures for current date and future dates (strictly no past dates)
     let currentAndFutureCount = 0;
     allPredictions.forEach((p) => {
-      if (!isSubscriber) {
-        const isWon = p.settlement_status === 'won' || p.settlement_status === 'half_won';
-        const isLost = p.settlement_status === 'lost' || p.settlement_status === 'half_lost';
-        const isVoid = (p.settlement_status as string) === 'void' || (p.settlement_status as string) === 'voided';
-        const isFinished = p.fixture?.status === 'finished' || p.fixture?.status === 'retired' || Boolean(p.settled_at);
-        if (isLost || isVoid || (isFinished && !isWon)) return;
-      }
       const kickoff = p.target_kickoff_at || p.fixture?.target_kickoff_at;
       const d = getFixtureWatDate(kickoff);
       if (!d || d >= today.iso) currentAndFutureCount++;
@@ -189,17 +174,7 @@ export const TennisHubView: React.FC<TennisHubViewProps> = ({
 
   // Active predictions matching the selected date
   const dateScopedPredictions = useMemo(() => {
-    let baseList = allPredictions;
-    if (!isSubscriber) {
-      baseList = baseList.filter((p) => {
-        const isWon = p.settlement_status === 'won' || p.settlement_status === 'half_won';
-        const isLost = p.settlement_status === 'lost' || p.settlement_status === 'half_lost';
-        const isVoid = (p.settlement_status as string) === 'void' || (p.settlement_status as string) === 'voided';
-        const isFinished = p.fixture?.status === 'finished' || p.fixture?.status === 'retired' || Boolean(p.settled_at);
-        if (isLost || isVoid || (isFinished && !isWon)) return false;
-        return true;
-      });
-    }
+    const baseList = allPredictions;
 
     if (selectedDate === 'all') {
       return baseList.filter((p) => {
@@ -213,7 +188,7 @@ export const TennisHubView: React.FC<TennisHubViewProps> = ({
       const d = getFixtureWatDate(kickoff);
       return d === selectedDate;
     });
-  }, [allPredictions, selectedDate, dynamicDateTabs.todayIso, isSubscriber]);
+  }, [allPredictions, selectedDate, dynamicDateTabs.todayIso]);
 
   // Dynamic competition category match counts for selected date horizon
   const competitionCounts = useMemo(() => {
@@ -269,27 +244,9 @@ export const TennisHubView: React.FC<TennisHubViewProps> = ({
     }
   }, [availableTournaments, selectedTournament]);
 
-  // Helper to determine if a tennis prediction is free/unlocked for guests
-  const isFreeAccessible = (p: TennisPrediction): boolean => {
-    const isWon = p.settlement_status === 'won' || p.settlement_status === 'half_won';
-    if (isWon) return true;
-    const cat = (p.confidence_category || '').toUpperCase().replace(/[\s-]+/g, '_');
-    let prob = p.probability;
-    if (prob != null && typeof prob === 'number' && prob > 1) prob = prob / 100;
-    const isVipTier =
-      cat === 'BANGER' ||
-      cat.includes('BANGER') ||
-      cat === 'TOP_PICK' ||
-      cat === 'TOPPICK' ||
-      cat.includes('TOP') ||
-      cat === 'HIGH_CONFIDENCE' ||
-      cat === 'HIGHCONFIDENCE' ||
-      cat.includes('HIGH') ||
-      (prob !== null && typeof prob === 'number' && prob >= 0.80) ||
-      p.prediction === '🔒 VIP Locked Prediction' ||
-      p.prediction === 'LOCKED' ||
-      (p as any).is_locked === true;
-    return !isVipTier;
+  // Helper to determine if a tennis prediction is free/unlocked for guests (all tennis predictions are locked VIP teasers)
+  const isFreeAccessible = (_p: TennisPrediction): boolean => {
+    return false;
   };
 
   const filteredPredictions = useMemo(() => {
@@ -452,53 +409,54 @@ export const TennisHubView: React.FC<TennisHubViewProps> = ({
       const pred = (p.prediction || '').toUpperCase().replace(/ /g, '_');
       const status = (p.settlement_status || 'pending').toLowerCase();
 
-      if (status === 'won') allWon++;
-      else if (status === 'lost') {
-        if (isSubscriber) allLost++;
+      if (!isSubscriber) {
+        allPending++;
+      } else {
+        if (status === 'won') allWon++;
+        else if (status === 'lost') allLost++;
+        else if (status === 'void' || status === 'voided') allVoid++;
+        else allPending++;
       }
-      else if (status === 'void' || status === 'voided') {
-        if (isSubscriber) allVoid++;
-      }
-      else allPending++;
 
       const isNoSafe = tier.includes('NO_SAFE_BANKER') || market.includes('NO_SAFE_BANKER') || pred.includes('NO_SAFE_BANKER');
 
       if (isNoSafe) {
         noSafeTotal++;
-        if (status === 'won') noSafeWon++;
-        else if (status === 'lost') {
-          if (isSubscriber) noSafeLost++;
+        if (isSubscriber) {
+          if (status === 'won') noSafeWon++;
+          else if (status === 'lost') noSafeLost++;
         }
       } else if (tier === 'BANGER') {
         bangerTotal++;
-        if (status === 'won') bangerWon++;
-        else if (status === 'lost') {
-          if (isSubscriber) bangerLost++;
+        if (isSubscriber) {
+          if (status === 'won') bangerWon++;
+          else if (status === 'lost') bangerLost++;
         }
       } else if (tier === 'TOP_PICK' || tier === 'TOP PICK') {
         topPickTotal++;
-        if (status === 'won') topPickWon++;
-        else if (status === 'lost') {
-          if (isSubscriber) topPickLost++;
+        if (isSubscriber) {
+          if (status === 'won') topPickWon++;
+          else if (status === 'lost') topPickLost++;
         }
       } else if (tier === 'HIGH_CONFIDENCE' || tier === 'HIGH CONFIDENCE') {
         highTotal++;
-        if (status === 'won') highWon++;
-        else if (status === 'lost') {
-          if (isSubscriber) highLost++;
+        if (isSubscriber) {
+          if (status === 'won') highWon++;
+          else if (status === 'lost') highLost++;
         }
       } else if (tier === 'MID_CONFIDENCE' || tier === 'MID CONFIDENCE') {
         midTotal++;
-        if (status === 'won') midWon++;
-        else if (status === 'lost') {
-          if (isSubscriber) midLost++;
+        if (isSubscriber) {
+          if (status === 'won') midWon++;
+          else if (status === 'lost') midLost++;
         }
       }
     }
 
     const calcWinRate = (w: number, l: number) => {
+      if (!isSubscriber) return '🔒';
       const decisive = w + l;
-      return decisive > 0 ? String(Math.round((w / decisive) * 100)) : (w > 0 && !isSubscriber ? '100' : '0');
+      return decisive > 0 ? String(Math.round((w / decisive) * 100)) : '0';
     };
 
     return {
@@ -696,8 +654,8 @@ export const TennisHubView: React.FC<TennisHubViewProps> = ({
                 <span className="compact-kpi-pill">{scorecardStats.allTotal}M</span>
               </div>
               <div className="compact-kpi-val-row">
-                <span className="compact-kpi-pct">{scorecardStats.allWinRate}%</span>
-                <span className="compact-kpi-ratio">{scorecardStats.allWon}W • {scorecardStats.allLost}L</span>
+                <span className="compact-kpi-pct">{isSubscriber ? `${scorecardStats.allWinRate}%` : '🔒 VIP'}</span>
+                <span className="compact-kpi-ratio">{isSubscriber ? `${scorecardStats.allWon}W • ${scorecardStats.allLost}L` : 'VIP Only'}</span>
               </div>
             </div>
 
@@ -715,8 +673,8 @@ export const TennisHubView: React.FC<TennisHubViewProps> = ({
                 <span className="compact-kpi-pill banger-pill">{scorecardStats.bangerTotal}M</span>
               </div>
               <div className="compact-kpi-val-row">
-                <span className="compact-kpi-pct banger-text">{scorecardStats.bangerWinRate}%</span>
-                <span className="compact-kpi-ratio">{scorecardStats.bangerWon}W • {scorecardStats.bangerLost}L</span>
+                <span className="compact-kpi-pct banger-text">{isSubscriber ? `${scorecardStats.bangerWinRate}%` : '🔒 VIP'}</span>
+                <span className="compact-kpi-ratio">{isSubscriber ? `${scorecardStats.bangerWon}W • ${scorecardStats.bangerLost}L` : 'VIP Only'}</span>
               </div>
             </div>
 
@@ -734,8 +692,8 @@ export const TennisHubView: React.FC<TennisHubViewProps> = ({
                 <span className="compact-kpi-pill toppick-pill">{scorecardStats.topPickTotal}M</span>
               </div>
               <div className="compact-kpi-val-row">
-                <span className="compact-kpi-pct toppick-text">{scorecardStats.topPickWinRate}%</span>
-                <span className="compact-kpi-ratio">{scorecardStats.topPickWon}W • {scorecardStats.topPickLost}L</span>
+                <span className="compact-kpi-pct toppick-text">{isSubscriber ? `${scorecardStats.topPickWinRate}%` : '🔒 VIP'}</span>
+                <span className="compact-kpi-ratio">{isSubscriber ? `${scorecardStats.topPickWon}W • ${scorecardStats.topPickLost}L` : 'VIP Only'}</span>
               </div>
             </div>
 
@@ -753,8 +711,8 @@ export const TennisHubView: React.FC<TennisHubViewProps> = ({
                 <span className="compact-kpi-pill high-pill">{scorecardStats.highTotal}M</span>
               </div>
               <div className="compact-kpi-val-row">
-                <span className="compact-kpi-pct high-text">{scorecardStats.highWinRate}%</span>
-                <span className="compact-kpi-ratio">{scorecardStats.highWon}W • {scorecardStats.highLost}L</span>
+                <span className="compact-kpi-pct high-text">{isSubscriber ? `${scorecardStats.highWinRate}%` : '🔒 VIP'}</span>
+                <span className="compact-kpi-ratio">{isSubscriber ? `${scorecardStats.highWon}W • ${scorecardStats.highLost}L` : 'VIP Only'}</span>
               </div>
             </div>
 
@@ -772,8 +730,8 @@ export const TennisHubView: React.FC<TennisHubViewProps> = ({
                 <span className="compact-kpi-pill mid-pill">{scorecardStats.midTotal}M</span>
               </div>
               <div className="compact-kpi-val-row">
-                <span className="compact-kpi-pct mid-text">{scorecardStats.midWinRate}%</span>
-                <span className="compact-kpi-ratio">{scorecardStats.midWon}W • {scorecardStats.midLost}L</span>
+                <span className="compact-kpi-pct mid-text">{isSubscriber ? `${scorecardStats.midWinRate}%` : '🔒 VIP'}</span>
+                <span className="compact-kpi-ratio">{isSubscriber ? `${scorecardStats.midWon}W • ${scorecardStats.midLost}L` : 'VIP Only'}</span>
               </div>
             </div>
 
@@ -791,8 +749,8 @@ export const TennisHubView: React.FC<TennisHubViewProps> = ({
                 <span className="compact-kpi-pill nosafe-pill">{scorecardStats.noSafeTotal}M</span>
               </div>
               <div className="compact-kpi-val-row">
-                <span className="compact-kpi-pct nosafe-text">{scorecardStats.noSafeWinRate}%</span>
-                <span className="compact-kpi-ratio">{scorecardStats.noSafeWon}W • {scorecardStats.noSafeLost}L</span>
+                <span className="compact-kpi-pct nosafe-text">{isSubscriber ? `${scorecardStats.noSafeWinRate}%` : '🔒 VIP'}</span>
+                <span className="compact-kpi-ratio">{isSubscriber ? `${scorecardStats.noSafeWon}W • ${scorecardStats.noSafeLost}L` : 'VIP Only'}</span>
               </div>
             </div>
 
@@ -800,21 +758,25 @@ export const TennisHubView: React.FC<TennisHubViewProps> = ({
             <div
               className={`compact-kpi-segment won-seg ${settlementFilter === 'won' ? 'active-seg' : ''}`}
               onClick={() => {
+                if (!isSubscriber) {
+                  if (onOpenSubscription) onOpenSubscription();
+                  return;
+                }
                 const nextState = settlementFilter === 'won' ? 'all' : 'won';
                 setSettlementFilter(nextState);
                 if (nextState === 'won') {
                   setSelectedTier('all');
                 }
               }}
-              title="Click to filter Won tennis predictions"
+              title={isSubscriber ? "Click to filter Won tennis predictions" : "Unlock VIP to view settled results"}
             >
               <div className="compact-kpi-header">
                 <span className="compact-kpi-title">✓ Won</span>
-                <span className="compact-kpi-pill won-pill">{scorecardStats.allWon}</span>
+                <span className="compact-kpi-pill won-pill">{isSubscriber ? scorecardStats.allWon : '🔒'}</span>
               </div>
               <div className="compact-kpi-val-row">
-                <span className="compact-kpi-pct won-text">{scorecardStats.allWon}W</span>
-                <span className="compact-kpi-ratio">{scorecardStats.allLost} Lost</span>
+                <span className="compact-kpi-pct won-text">{isSubscriber ? `${scorecardStats.allWon}W` : '🔒 VIP'}</span>
+                <span className="compact-kpi-ratio">{isSubscriber ? `${scorecardStats.allLost} Lost` : 'VIP Results'}</span>
               </div>
             </div>
           </div>

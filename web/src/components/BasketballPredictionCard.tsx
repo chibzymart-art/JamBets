@@ -40,26 +40,22 @@ export const BasketballPredictionCard: React.FC<BasketballPredictionCardProps> =
 
   const isFinished = fixture?.status === 'finished' || Boolean(prediction.settled_at);
   const isLive = fixture?.status === 'live';
-  const isWon = prediction.settlement_status === 'won' || prediction.settlement_status === 'half_won';
-  const isLost = prediction.settlement_status === 'lost' || prediction.settlement_status === 'half_lost';
-  const isVoid = (prediction.settlement_status as string) === 'void' || (prediction.settlement_status as string) === 'voided';
 
   // Entitlement: Admins or entitled subscribers have full access
   const isUserEntitled = Boolean(isAdmin || canViewPredictions || isSubscriber);
 
-  // Strict Paywall: Free users and visitors strictly see only won fixtures (never lost, void, or un-won finished)
-  if (!isUserEntitled && (isLost || isVoid || (isFinished && !isWon))) {
-    return null;
-  }
+  // Settlement indicators are strictly VIP-only
+  const isWon = isUserEntitled && (prediction.settlement_status === 'won' || prediction.settlement_status === 'half_won');
+  const isLost = isUserEntitled && (prediction.settlement_status === 'lost' || prediction.settlement_status === 'half_lost');
+  const isVoid = isUserEntitled && ((prediction.settlement_status as string) === 'void' || (prediction.settlement_status as string) === 'voided');
 
   // Categorize tier: High Confidence, Top Picks, Bangers are strictly VIP tiers
   const cat = (prediction.confidence_category || '').toUpperCase().replace(/[\s-]+/g, '_');
   let prob = prediction.probability;
   if (prob != null && typeof prob === 'number' && prob > 1) prob = prob / 100;
 
-  // Multi-Sport VIP Shield: All live & upcoming basketball predictions are locked for visitors as marketing teasers.
-  // Won settled matches remain visible as historical track-record win proof.
-  const isLocked = !isUserEntitled && !isWon;
+  // Multi-Sport VIP Shield: All basketball predictions are locked teasers for visitors
+  const isLocked = !isUserEntitled;
 
   // Kickoff formatting in Lagos WAT (UTC+1)
   const kickoffDate = new Date(prediction.target_kickoff_at || fixture?.target_kickoff_at || Date.now());
@@ -89,9 +85,11 @@ export const BasketballPredictionCard: React.FC<BasketballPredictionCardProps> =
   const homeName = homeTeam?.canonical_name || 'Home Team';
   const awayName = awayTeam?.canonical_name || 'Away Team';
 
-  const displayedPrediction = (!isLocked && (prediction.prediction?.includes('🔒') || prediction.prediction === 'LOCKED'))
-    ? (prediction.market === 'moneyline' ? `${homeName} Win` : `${homeName} +2.5`)
-    : prediction.prediction;
+  const displayedPrediction = isLocked
+    ? '🔒 BigBang VIP Pick'
+    : ((prediction.prediction?.includes('🔒') || prediction.prediction === 'LOCKED')
+      ? (prediction.market === 'moneyline' ? `${homeName} Win` : `${homeName} +2.5`)
+      : prediction.prediction);
   const leagueCode = league?.code || 'NBA';
   const leagueName = league?.name || 'Basketball';
 
@@ -536,9 +534,9 @@ export const BasketballPredictionCard: React.FC<BasketballPredictionCardProps> =
               );
 
               const secSettlement = (sec as any).settlement_status as string | undefined;
-              const isSecWon = secSettlement === 'won' || secSettlement === 'half_won';
-              const isSecLost = secSettlement === 'lost' || secSettlement === 'half_lost';
-              const isSecVoid = secSettlement === 'void' || secSettlement === 'voided';
+              const isSecWon = isUserEntitled && (secSettlement === 'won' || secSettlement === 'half_won');
+              const isSecLost = isUserEntitled && (secSettlement === 'lost' || secSettlement === 'half_lost');
+              const isSecVoid = isUserEntitled && (secSettlement === 'void' || secSettlement === 'voided');
 
               return (
                 <div

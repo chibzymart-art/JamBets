@@ -82,14 +82,6 @@ export const BasketballHubView: React.FC<BasketballHubViewProps> = ({
   const dynamicDateTabs = useMemo(() => {
     const fixtureCountByDate = new Map<string, number>();
     allPredictions.forEach((p) => {
-      // Free users & visitors strictly see only won fixtures (never lost, void, or un-won finished fixtures)
-      if (!isSubscriber) {
-        const isWon = p.settlement_status === 'won' || p.settlement_status === 'half_won';
-        const isLost = p.settlement_status === 'lost' || p.settlement_status === 'half_lost';
-        const isVoid = (p.settlement_status as string) === 'void' || (p.settlement_status as string) === 'voided';
-        const isFinished = p.fixture?.status === 'finished' || Boolean(p.settled_at);
-        if (isLost || isVoid || (isFinished && !isWon)) return;
-      }
       const kickoff = p.target_kickoff_at || p.fixture?.target_kickoff_at;
       const d = getFixtureWatDate(kickoff);
       if (d) {
@@ -109,43 +101,26 @@ export const BasketballHubView: React.FC<BasketballHubViewProps> = ({
     });
 
     return futureDates;
-  }, [allPredictions, isSubscriber]);
+  }, [allPredictions]);
 
   // Date-scoped predictions for calculating daily scorecard metrics
   const dateScopedPredictions = useMemo(() => {
     return allPredictions.filter((p) => {
-      if (!isSubscriber) {
-        const isWon = p.settlement_status === 'won' || p.settlement_status === 'half_won';
-        const isLost = p.settlement_status === 'lost' || p.settlement_status === 'half_lost';
-        const isVoid = (p.settlement_status as string) === 'void' || (p.settlement_status as string) === 'voided';
-        const isFinished = p.fixture?.status === 'finished' || Boolean(p.settled_at);
-        if (isLost || isVoid || (isFinished && !isWon)) return false;
-      }
       if (selectedDate === 'all') return true;
       const kickoff = p.target_kickoff_at || p.fixture?.target_kickoff_at;
       const d = getFixtureWatDate(kickoff);
       return d === selectedDate;
     });
-  }, [allPredictions, selectedDate, isSubscriber]);
+  }, [allPredictions, selectedDate]);
 
-  // Helper to determine if a basketball prediction is free/unlocked for guests (strictly settled won games only)
-  const isFreeAccessible = (p: BasketballPrediction): boolean => {
-    return (p.settlement_status || '').toLowerCase() === 'won';
+  // Helper to determine if a basketball prediction is free/unlocked for guests (all basketball predictions are locked VIP teasers)
+  const isFreeAccessible = (_p: BasketballPrediction): boolean => {
+    return false;
   };
 
   // Filtered Predictions
   const filteredPredictions = useMemo(() => {
     const list = allPredictions.filter((p) => {
-      // Strict Paywall: Free users & visitors strictly see only won fixtures (never lost, void, or un-won finished fixtures)
-      if (!isSubscriber) {
-        const isWon = p.settlement_status === 'won' || p.settlement_status === 'half_won';
-        const isLost = p.settlement_status === 'lost' || p.settlement_status === 'half_lost';
-        const isVoid = (p.settlement_status as string) === 'void' || (p.settlement_status as string) === 'voided';
-        const isFinished = p.fixture?.status === 'finished' || Boolean(p.settled_at);
-        if (isLost || isVoid || (isFinished && !isWon)) {
-          return false;
-        }
-      }
 
       // 1. Date Filter (ignore if viewing past results or all dates)
       if (selectedDate !== 'all' && settlementFilter === 'all') {
@@ -280,53 +255,54 @@ export const BasketballHubView: React.FC<BasketballHubViewProps> = ({
       const pred = (p.prediction || '').toUpperCase().replace(/ /g, '_');
       const status = (p.settlement_status || 'pending').toLowerCase();
 
-      if (status === 'won' || status === 'half_won') allWon++;
-      else if (status === 'lost' || status === 'half_lost') {
-        if (isSubscriber) allLost++;
+      if (!isSubscriber) {
+        allPending++;
+      } else {
+        if (status === 'won' || status === 'half_won') allWon++;
+        else if (status === 'lost' || status === 'half_lost') allLost++;
+        else if (status === 'void' || status === 'voided') allVoid++;
+        else allPending++;
       }
-      else if (status === 'void' || status === 'voided') {
-        if (isSubscriber) allVoid++;
-      }
-      else allPending++;
 
       const isNoSafe = tier.includes('NO_SAFE_BANKER') || market.includes('NO_SAFE_BANKER') || pred.includes('NO_SAFE_BANKER');
 
       if (isNoSafe) {
         noSafeTotal++;
-        if (status === 'won' || status === 'half_won') noSafeWon++;
-        else if (status === 'lost' || status === 'half_lost') {
-          if (isSubscriber) noSafeLost++;
+        if (isSubscriber) {
+          if (status === 'won' || status === 'half_won') noSafeWon++;
+          else if (status === 'lost' || status === 'half_lost') noSafeLost++;
         }
       } else if (tier === 'BANGER') {
         bangerTotal++;
-        if (status === 'won' || status === 'half_won') bangerWon++;
-        else if (status === 'lost' || status === 'half_lost') {
-          if (isSubscriber) bangerLost++;
+        if (isSubscriber) {
+          if (status === 'won' || status === 'half_won') bangerWon++;
+          else if (status === 'lost' || status === 'half_lost') bangerLost++;
         }
       } else if (tier === 'TOP_PICK' || tier === 'TOP PICK') {
         topPickTotal++;
-        if (status === 'won' || status === 'half_won') topPickWon++;
-        else if (status === 'lost' || status === 'half_lost') {
-          if (isSubscriber) topPickLost++;
+        if (isSubscriber) {
+          if (status === 'won' || status === 'half_won') topPickWon++;
+          else if (status === 'lost' || status === 'half_lost') topPickLost++;
         }
       } else if (tier === 'HIGH_CONFIDENCE' || tier === 'HIGH CONFIDENCE') {
         highTotal++;
-        if (status === 'won' || status === 'half_won') highWon++;
-        else if (status === 'lost' || status === 'half_lost') {
-          if (isSubscriber) highLost++;
+        if (isSubscriber) {
+          if (status === 'won' || status === 'half_won') highWon++;
+          else if (status === 'lost' || status === 'half_lost') highLost++;
         }
       } else if (tier === 'MID_CONFIDENCE' || tier === 'MID CONFIDENCE') {
         midTotal++;
-        if (status === 'won' || status === 'half_won') midWon++;
-        else if (status === 'lost' || status === 'half_lost') {
-          if (isSubscriber) midLost++;
+        if (isSubscriber) {
+          if (status === 'won' || status === 'half_won') midWon++;
+          else if (status === 'lost' || status === 'half_lost') midLost++;
         }
       }
     }
 
     const calcWinRate = (w: number, l: number) => {
+      if (!isSubscriber) return '🔒';
       const decisive = w + l;
-      return decisive > 0 ? String(Math.round((w / decisive) * 100)) : (w > 0 && !isSubscriber ? '100' : '0');
+      return decisive > 0 ? String(Math.round((w / decisive) * 100)) : '0';
     };
 
     return {
@@ -426,8 +402,8 @@ export const BasketballHubView: React.FC<BasketballHubViewProps> = ({
                 <span className="compact-kpi-pill">{scorecardStats.allTotal}M</span>
               </div>
               <div className="compact-kpi-val-row">
-                <span className="compact-kpi-pct">{scorecardStats.allWinRate}%</span>
-                <span className="compact-kpi-ratio">{scorecardStats.allWon}W • {scorecardStats.allLost}L</span>
+                <span className="compact-kpi-pct">{isSubscriber ? `${scorecardStats.allWinRate}%` : '🔒 VIP'}</span>
+                <span className="compact-kpi-ratio">{isSubscriber ? `${scorecardStats.allWon}W • ${scorecardStats.allLost}L` : 'VIP Only'}</span>
               </div>
             </div>
 
@@ -445,8 +421,8 @@ export const BasketballHubView: React.FC<BasketballHubViewProps> = ({
                 <span className="compact-kpi-pill banger-pill">{scorecardStats.bangerTotal}M</span>
               </div>
               <div className="compact-kpi-val-row">
-                <span className="compact-kpi-pct banger-text">{scorecardStats.bangerWinRate}%</span>
-                <span className="compact-kpi-ratio">{scorecardStats.bangerWon}W • {scorecardStats.bangerLost}L</span>
+                <span className="compact-kpi-pct banger-text">{isSubscriber ? `${scorecardStats.bangerWinRate}%` : '🔒 VIP'}</span>
+                <span className="compact-kpi-ratio">{isSubscriber ? `${scorecardStats.bangerWon}W • ${scorecardStats.bangerLost}L` : 'VIP Only'}</span>
               </div>
             </div>
 
@@ -464,8 +440,8 @@ export const BasketballHubView: React.FC<BasketballHubViewProps> = ({
                 <span className="compact-kpi-pill toppick-pill">{scorecardStats.topPickTotal}M</span>
               </div>
               <div className="compact-kpi-val-row">
-                <span className="compact-kpi-pct toppick-text">{scorecardStats.topPickWinRate}%</span>
-                <span className="compact-kpi-ratio">{scorecardStats.topPickWon}W • {scorecardStats.topPickLost}L</span>
+                <span className="compact-kpi-pct toppick-text">{isSubscriber ? `${scorecardStats.topPickWinRate}%` : '🔒 VIP'}</span>
+                <span className="compact-kpi-ratio">{isSubscriber ? `${scorecardStats.topPickWon}W • ${scorecardStats.topPickLost}L` : 'VIP Only'}</span>
               </div>
             </div>
 
@@ -483,8 +459,8 @@ export const BasketballHubView: React.FC<BasketballHubViewProps> = ({
                 <span className="compact-kpi-pill high-pill">{scorecardStats.highTotal}M</span>
               </div>
               <div className="compact-kpi-val-row">
-                <span className="compact-kpi-pct high-text">{scorecardStats.highWinRate}%</span>
-                <span className="compact-kpi-ratio">{scorecardStats.highWon}W • {scorecardStats.highLost}L</span>
+                <span className="compact-kpi-pct high-text">{isSubscriber ? `${scorecardStats.highWinRate}%` : '🔒 VIP'}</span>
+                <span className="compact-kpi-ratio">{isSubscriber ? `${scorecardStats.highWon}W • ${scorecardStats.highLost}L` : 'VIP Only'}</span>
               </div>
             </div>
 
@@ -502,8 +478,8 @@ export const BasketballHubView: React.FC<BasketballHubViewProps> = ({
                 <span className="compact-kpi-pill mid-pill">{scorecardStats.midTotal}M</span>
               </div>
               <div className="compact-kpi-val-row">
-                <span className="compact-kpi-pct mid-text">{scorecardStats.midWinRate}%</span>
-                <span className="compact-kpi-ratio">{scorecardStats.midWon}W • {scorecardStats.midLost}L</span>
+                <span className="compact-kpi-pct mid-text">{isSubscriber ? `${scorecardStats.midWinRate}%` : '🔒 VIP'}</span>
+                <span className="compact-kpi-ratio">{isSubscriber ? `${scorecardStats.midWon}W • ${scorecardStats.midLost}L` : 'VIP Only'}</span>
               </div>
             </div>
 
@@ -521,8 +497,8 @@ export const BasketballHubView: React.FC<BasketballHubViewProps> = ({
                 <span className="compact-kpi-pill nosafe-pill">{scorecardStats.noSafeTotal}M</span>
               </div>
               <div className="compact-kpi-val-row">
-                <span className="compact-kpi-pct nosafe-text">{scorecardStats.noSafeWinRate}%</span>
-                <span className="compact-kpi-ratio">{scorecardStats.noSafeWon}W • {scorecardStats.noSafeLost}L</span>
+                <span className="compact-kpi-pct nosafe-text">{isSubscriber ? `${scorecardStats.noSafeWinRate}%` : '🔒 VIP'}</span>
+                <span className="compact-kpi-ratio">{isSubscriber ? `${scorecardStats.noSafeWon}W • ${scorecardStats.noSafeLost}L` : 'VIP Only'}</span>
               </div>
             </div>
 
@@ -530,21 +506,25 @@ export const BasketballHubView: React.FC<BasketballHubViewProps> = ({
             <div
               className={`compact-kpi-segment won-seg ${settlementFilter === 'won' ? 'active-seg' : ''}`}
               onClick={() => {
+                if (!isSubscriber) {
+                  if (onOpenSubscription) onOpenSubscription();
+                  return;
+                }
                 const nextState = settlementFilter === 'won' ? 'all' : 'won';
                 setSettlementFilter(nextState);
                 if (nextState === 'won') {
                   setSelectedTier('all');
                 }
               }}
-              title="Click to filter Won basketball predictions"
+              title={isSubscriber ? "Click to filter Won basketball predictions" : "Unlock VIP to view settled results"}
             >
               <div className="compact-kpi-header">
                 <span className="compact-kpi-title">✓ Won</span>
-                <span className="compact-kpi-pill won-pill">{scorecardStats.allWon}</span>
+                <span className="compact-kpi-pill won-pill">{isSubscriber ? scorecardStats.allWon : '🔒'}</span>
               </div>
               <div className="compact-kpi-val-row">
-                <span className="compact-kpi-pct won-text">{scorecardStats.allWon}W</span>
-                <span className="compact-kpi-ratio">{scorecardStats.allLost} Lost</span>
+                <span className="compact-kpi-pct won-text">{isSubscriber ? `${scorecardStats.allWon}W` : '🔒 VIP'}</span>
+                <span className="compact-kpi-ratio">{isSubscriber ? `${scorecardStats.allLost} Lost` : 'VIP Results'}</span>
               </div>
             </div>
           </div>

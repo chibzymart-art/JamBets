@@ -357,15 +357,6 @@ export default async function handler(req: Request): Promise<Response> {
           if (st !== statusFilter) return false;
         }
 
-        // Strict Paywall: Non-paid users ONLY see won games for finished fixtures (never lost, void, or un-won)
-        if (!isPaidOrAdmin) {
-          const status = (p.settlement_status || '').toLowerCase();
-          const isFinished = p.fixture?.status === 'finished' || p.fixture?.status === 'retired' || Boolean(p.settled_at);
-          if (status === 'lost' || status === 'void' || status === 'voided' || (isFinished && status !== 'won')) {
-            return false;
-          }
-        }
-
         return true;
       })
       .map((p) => {
@@ -376,16 +367,7 @@ export default async function handler(req: Request): Promise<Response> {
           };
         }
 
-        // Free users & visitors see WON matches unlocked as proof
-        const isWon = (p.settlement_status || '').toLowerCase() === 'won';
-        if (isWon) {
-          return {
-            ...p,
-            is_locked: false,
-          };
-        }
-
-        // All live, scheduled & pending tennis predictions are locked for visitors as BigBang VIP conversion teasers
+        // For free users & visitors: ALL tennis predictions (including settled) are locked teasers without exposing won/lost
         return {
           ...p,
           prediction: '🔒 BigBang VIP Pick',
@@ -393,6 +375,9 @@ export default async function handler(req: Request): Promise<Response> {
           confidence_category: p.confidence_category || 'TOP PICK',
           fair_odds: null,
           market_odds: null,
+          settlement_status: 'pending',
+          settlement_notes: null,
+          actual_result: null,
           secondary_predictions: [],
           metadata: {
             ...p.metadata,
@@ -405,10 +390,11 @@ export default async function handler(req: Request): Promise<Response> {
 
     const sanitizedStats = isPaidOrAdmin ? feedData.stats : {
       ...feedData.stats,
-      settled_count: feedData.stats.settled_won,
+      settled_count: 0,
+      settled_won: 0,
       settled_lost: 0,
       settled_void: 0,
-      win_rate: feedData.stats.settled_won > 0 ? 100 : 0,
+      win_rate: 0,
     };
 
     return new Response(
@@ -417,7 +403,7 @@ export default async function handler(req: Request): Promise<Response> {
         is_subscriber: isPaidOrAdmin,
         stats: sanitizedStats,
         tournaments: feedData.tournaments,
-        settlements: isPaidOrAdmin ? feedData.settlements : feedData.settlements.filter((s: any) => (s.status || '').toLowerCase() === 'won'),
+        settlements: isPaidOrAdmin ? feedData.settlements : [],
         predictions: processedPredictions,
         cached_at: feedData.cached_at,
       }),

@@ -351,22 +351,15 @@ export async function fetchBasketballFeed(
         };
       }
 
-      // Won matches remain visible to all visitors as historical track-record win proof
-      const isWon = (p.settlement_status || '').toLowerCase() === 'won';
-      if (isWon) {
-        return {
-          ...p,
-          secondary_predictions: parsedSec,
-          is_locked: false,
-        };
-      }
-
-      // All live & pending basketball predictions are locked for visitors as VIP conversion teasers
+      // All basketball predictions (including settled) are locked for non-VIP visitors as BigBang VIP conversion teasers
       return {
         ...p,
         prediction: '🔒 BigBang VIP Pick',
         probability: null,
         confidence_category: (p.confidence_category === 'BANGER' ? 'BANGER' : 'TOP PICK') as BasketballConfidenceTier,
+        settlement_status: 'pending',
+        settlement_notes: null,
+        actual_result: null,
         simulated_home_score: null,
         simulated_away_score: null,
         edge_percentage: null,
@@ -423,20 +416,33 @@ export async function fetchBasketballFeed(
     const response: BasketballFeedResponse = {
       success: true,
       is_subscriber: isUnlocked,
-      stats: {
-        total_matches: rawPredictions.length,
-        bangers_count: bangers,
-        top_picks_count: topPicks,
-        high_confidence_count: highConf,
-        leagues_count: rawLeagues.length || 6,
-        settled_count: settledWon + settledLost + settledVoid,
-        settled_won: settledWon,
-        settled_lost: settledLost,
-        settled_void: settledVoid,
-        win_rate: winRate,
-      },
+      stats: isUnlocked
+        ? {
+            total_matches: rawPredictions.length,
+            bangers_count: bangers,
+            top_picks_count: topPicks,
+            high_confidence_count: highConf,
+            leagues_count: rawLeagues.length || 6,
+            settled_count: settledWon + settledLost + settledVoid,
+            settled_won: settledWon,
+            settled_lost: settledLost,
+            settled_void: settledVoid,
+            win_rate: winRate,
+          }
+        : {
+            total_matches: rawPredictions.length,
+            bangers_count: bangers,
+            top_picks_count: topPicks,
+            high_confidence_count: highConf,
+            leagues_count: rawLeagues.length || 6,
+            settled_count: 0,
+            settled_won: 0,
+            settled_lost: 0,
+            settled_void: 0,
+            win_rate: 0,
+          },
       leagues: rawLeagues,
-      settlements: rawSettlements,
+      settlements: isUnlocked ? rawSettlements : [],
       predictions: finalPredictions,
       cached_at: new Date().toISOString(),
     };

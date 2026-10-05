@@ -307,22 +307,16 @@ export async function fetchTennisFeed(options: FetchTennisFeedOptions = {}): Pro
         };
       }
 
-      // Won matches are visible to all visitors as historical track record proof
-      const isWon = (p.settlement_status || '').toLowerCase() === 'won';
-      if (isWon) {
-        return {
-          ...p,
-          is_locked: false,
-        };
-      }
-
-      // All live, scheduled & pending tennis predictions are locked for visitors as VIP conversion teasers
+      // All tennis predictions (including settled) are locked for non-VIP visitors as BigBang VIP conversion teasers
       return {
         ...p,
         prediction: '🔒 BigBang VIP Pick',
         probability: null,
         fair_odds: null,
         market_odds: null,
+        settlement_status: 'pending',
+        settlement_notes: null,
+        actual_result: null,
         secondary_predictions: [],
         metadata: {
           ...p.metadata,
@@ -367,20 +361,33 @@ export async function fetchTennisFeed(options: FetchTennisFeedOptions = {}): Pro
     const response: TennisFeedResponse = {
       success: true,
       is_subscriber: isUnlocked,
-      stats: {
-        total_matches: rawPredictions.length,
-        bangers_count: bangers,
-        top_picks_count: topPicks,
-        high_confidence_count: highConf,
-        tournaments_count: rawTournaments.length,
-        settled_count: settledWon + settledLost + settledVoid,
-        settled_won: settledWon,
-        settled_lost: settledLost,
-        settled_void: settledVoid,
-        win_rate: winRate,
-      },
+      stats: isUnlocked
+        ? {
+            total_matches: rawPredictions.length,
+            bangers_count: bangers,
+            top_picks_count: topPicks,
+            high_confidence_count: highConf,
+            tournaments_count: rawTournaments.length,
+            settled_count: settledWon + settledLost + settledVoid,
+            settled_won: settledWon,
+            settled_lost: settledLost,
+            settled_void: settledVoid,
+            win_rate: winRate,
+          }
+        : {
+            total_matches: rawPredictions.length,
+            bangers_count: bangers,
+            top_picks_count: topPicks,
+            high_confidence_count: highConf,
+            tournaments_count: rawTournaments.length,
+            settled_count: 0,
+            settled_won: 0,
+            settled_lost: 0,
+            settled_void: 0,
+            win_rate: 0,
+          },
       tournaments: rawTournaments,
-      settlements: rawSettlements as TennisSettlement[],
+      settlements: isUnlocked ? (rawSettlements as TennisSettlement[]) : [],
       predictions: finalPredictions,
       cached_at: new Date().toISOString(),
     };
