@@ -1,0 +1,68 @@
+name: JamBets Automated Football Goals & Specialists Engine (Daily Cadence)
+
+on:
+  schedule:
+    # Run daily at 12:30 AM WAT (23:30 UTC) - 30 minutes after Core Football Ingestion completes
+    - cron: '30 23 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: football-goals-specialists-engine
+  cancel-in-progress: true
+
+jobs:
+  predict-goals-and-specialists:
+    name: Goals & Decoupled Specialists Prediction Engines
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: 'python/requirements.txt'
+
+      - name: Install Python Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r python/requirements.txt
+
+      - name: Execute Goals Specialist Engine
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          ALERT_EMAIL_SENDER: ${{ secrets.ALERT_EMAIL_SENDER }}
+          ALERT_EMAIL_PASSWORD: ${{ secrets.ALERT_EMAIL_PASSWORD }}
+          ALERT_EMAIL_RECIPIENTS: ${{ secrets.ALERT_EMAIL_RECIPIENTS }}
+        run: |
+          echo "=== RUNNING Goals Specialist Engine ==="
+          python -m python.src.goals.run_goals_cycle --predict-only
+
+      - name: Execute Decoupled Specialists Engine
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          ALERT_EMAIL_SENDER: ${{ secrets.ALERT_EMAIL_SENDER }}
+          ALERT_EMAIL_PASSWORD: ${{ secrets.ALERT_EMAIL_PASSWORD }}
+          ALERT_EMAIL_RECIPIENTS: ${{ secrets.ALERT_EMAIL_RECIPIENTS }}
+        run: |
+          echo "=== RUNNING Decoupled Specialists Engine (Corners, 1X2) ==="
+          python -m python.src.engines.run_all_specialists --predict-only
+
+      - name: Dispatch Prediction Failure Email Alert
+        if: failure()
+        env:
+          ALERT_EMAIL_SENDER: ${{ secrets.ALERT_EMAIL_SENDER }}
+          ALERT_EMAIL_PASSWORD: ${{ secrets.ALERT_EMAIL_PASSWORD }}
+          ALERT_EMAIL_RECIPIENTS: ${{ secrets.ALERT_EMAIL_RECIPIENTS }}
+        run: |
+          python -c "from python.src.alerts.email_notifier import send_pipeline_failure_alert; send_pipeline_failure_alert('Goals & Decoupled Specialists Engine (GitHub Actions)', Exception('Workflow job failed'), {'run_id': '${{ github.run_id }}', 'run_url': 'https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}'})"

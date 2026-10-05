@@ -2,8 +2,9 @@ name: JamBets Autonomous Tennis Settlement Engine (30-Min)
 
 on:
   schedule:
-    # Run every 30 minutes for real-time set and match settlements
-    - cron: '*/30 * * * *'
+    # Run hourly at minute :50 between 3:50 AM and 11:50 PM WAT (02:50 - 22:50 UTC)
+    # Automatically paused between 11:30 PM and 3:00 AM WAT for the nightly prediction window
+    - cron: '50 2-22 * * *'
   workflow_dispatch:
     inputs:
       lookback_hours:
@@ -18,13 +19,13 @@ on:
 
 concurrency:
   group: tennis-settlement-engine
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   settle-tennis:
     name: Settle Current Tennis Fixtures & In-Play State
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 5
 
     steps:
       - name: Checkout Repository

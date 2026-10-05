@@ -1,9 +1,9 @@
-name: JamBets Autonomous Basketball Prediction Engine (12-Hour Cadence)
+name: JamBets Autonomous Basketball Prediction Engine (Daily Cadence)
 
 on:
   schedule:
-    # Run every 12 hours for fresh schedule ingestion and 250k Monte Carlo prediction generation
-    - cron: '0 */12 * * *'
+    # Run daily at 1:00 AM WAT (00:00 UTC) - 30 minutes after Football Goals completes
+    - cron: '0 0 * * *'
   push:
     branches:
       - main
@@ -28,7 +28,7 @@ on:
 
 concurrency:
   group: basketball-prediction-engine
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   basketball-prediction-cycle:

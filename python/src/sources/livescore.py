@@ -129,9 +129,14 @@ class LiveScoreAdapter(BaseSourceAdapter):
                         stage_country == league.country.lower().replace(" ", "-")
                     )
                     allowed_stages = self.LIVESCORE_STAGE_ALIASES.get(league.code, [league.livescore_stage])
+                    is_tournament_country = league.livescore_country in [
+                        "uefa-nations-league", "concacaf-nations-league", "uefa-champions-league",
+                        "champions-league", "europa-league", "conference-league", "international-friendlies"
+                    ]
                     stage_matches = (
                         stage_code in allowed_stages or
-                        stage_name in allowed_stages
+                        stage_name in allowed_stages or
+                        (is_tournament_country and stage_country == league.livescore_country)
                     )
                     if not (country_matches and stage_matches):
                         continue

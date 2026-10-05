@@ -136,7 +136,8 @@ class LiveMonitorEngine:
         canonical_key: str,
         scheduled_kickoff: datetime,
         source_payloads: List[RawFixturePayload],
-        now_utc: Optional[datetime] = None
+        now_utc: Optional[datetime] = None,
+        fallback_status: Optional[FixtureStatus] = None
     ) -> LiveMatchState:
         """
         Multi-source reconciliation:
@@ -145,13 +146,14 @@ class LiveMonitorEngine:
         - If critical sources disagree (e.g. Source A says 2-1, Source B says 1-1): CONFLICT.
         """
         if not source_payloads:
-            # No data retrieved — keep PENDING / SCHEDULED with no fake score
+            # No data retrieved — keep PENDING / SCHEDULED (or preserve existing DB status like POSTPONED/CANCELLED)
+            eff_status = fallback_status or FixtureStatus.SCHEDULED
             return LiveMatchState(
                 fixture_id=fixture_id,
                 canonical_key=canonical_key,
                 provider_event_id="unknown",
                 source_name="none",
-                status=FixtureStatus.SCHEDULED,
+                status=eff_status,
                 raw_status="NO_DATA",
                 scheduled_kickoff=scheduled_kickoff,
                 is_stale=False,

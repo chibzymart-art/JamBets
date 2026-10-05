@@ -273,8 +273,25 @@ class SettlementScheduler:
             if not leagues_in_play:
                 leagues_in_play = {"ENG_PL", "ESP_LL", "ITA_SA", "GER_BL", "FRA_L1", "JPN_J1", "MEX_LMX"}
 
-            print(f"  • Ingesting feeds across {len(leagues_in_play)} active competitions: {', '.join(sorted(leagues_in_play))}...")
-            date_from = now_utc - timedelta(days=1)
+            # Calculate dynamic date_from to cover backlogged predictions (up to 30 days back)
+            earliest_kickoff = None
+            for p_list in unsettled_by_fix_id.values():
+                for p in p_list:
+                    k_str = p.get("target_kickoff_at")
+                    if k_str:
+                        try:
+                            k_dt = datetime.fromisoformat(k_str.replace("Z", "+00:00"))
+                            if earliest_kickoff is None or k_dt < earliest_kickoff:
+                                earliest_kickoff = k_dt
+                        except Exception:
+                            pass
+
+            if earliest_kickoff:
+                earliest_allowed = now_utc - timedelta(days=30)
+                date_from = max(earliest_kickoff - timedelta(days=1), earliest_allowed)
+            else:
+                date_from = now_utc - timedelta(days=1)
+
             date_to = now_utc + timedelta(days=1)
 
             ls_count = 0
@@ -418,12 +435,21 @@ class SettlementScheduler:
                         except Exception as g_err:
                             print(f"  [NOTE] Google score check error: {g_err}")
 
+                    # Derive fallback status from fixture record if feeds have no data
+                    db_status = (fix.get("status") or "").lower()
+                    fallback_st = None
+                    if db_status == "postponed":
+                        fallback_st = FixtureStatus.POSTPONED
+                    elif db_status in ("cancelled", "abandoned"):
+                        fallback_st = FixtureStatus.CANCELLED
+
                     match_state = LiveMonitorEngine.reconcile_multi_sources(
                         fixture_id=fix_id,
                         canonical_key=canonical_key,
                         scheduled_kickoff=kickoff_dt,
                         source_payloads=source_payloads,
-                        now_utc=now_utc
+                        now_utc=now_utc,
+                        fallback_status=fallback_st
                     )
 
                     if match_state.has_conflict:

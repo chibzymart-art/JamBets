@@ -86,8 +86,29 @@ class SettlementEngine:
             )
 
         # 3. Postponed Match Protection
-        # Do NOT automatically settle as LOST or VOID prematurely
+        # If postponed for > 48 hours past scheduled kickoff, void the prediction with full protection
         if match_state.status == FixtureStatus.POSTPONED:
+            is_stale_postponement = False
+            if match_state.scheduled_kickoff:
+                ko = match_state.scheduled_kickoff
+                if ko.tzinfo is None:
+                    ko = ko.replace(tzinfo=timezone.utc)
+                hours_since_kickoff = (now - ko.astimezone(timezone.utc)).total_seconds() / 3600
+                if hours_since_kickoff > 48:
+                    is_stale_postponement = True
+
+            if is_stale_postponement:
+                return SettlementDecision(
+                    prediction_id=pred_id,
+                    fixture_id=fixture_id,
+                    market=market,
+                    prediction=outcome,
+                    status=SettlementStatus.VOID,
+                    settled_at=now,
+                    notes="VOID: Fixture postponed >48 hours past scheduled kickoff.",
+                    actual_score=match_state.score_string
+                )
+
             return SettlementDecision(
                 prediction_id=pred_id,
                 fixture_id=fixture_id,
@@ -112,6 +133,23 @@ class SettlementEngine:
 
         # 5. Scheduled Match (Kickoff not verified started)
         if match_state.status == FixtureStatus.SCHEDULED:
+            if match_state.scheduled_kickoff:
+                ko = match_state.scheduled_kickoff
+                if ko.tzinfo is None:
+                    ko = ko.replace(tzinfo=timezone.utc)
+                hours_since_kickoff = (now - ko.astimezone(timezone.utc)).total_seconds() / 3600
+                if hours_since_kickoff > 48:
+                    return SettlementDecision(
+                        prediction_id=pred_id,
+                        fixture_id=fixture_id,
+                        market=market,
+                        prediction=outcome,
+                        status=SettlementStatus.VOID,
+                        settled_at=now,
+                        notes="VOID: Fixture unplayed >48 hours past scheduled kickoff.",
+                        actual_score=match_state.score_string
+                    )
+
             return SettlementDecision(
                 prediction_id=pred_id,
                 fixture_id=fixture_id,

@@ -2,8 +2,8 @@ name: JamBets Autonomous Tennis Prediction Engine (Daily Cadence)
 
 on:
   schedule:
-    # Run daily at 23:00 UTC to ingest newly scheduled knockout rounds and 4-day forward slate
-    - cron: '0 23 * * *'
+    # Run daily at 2:00 AM WAT (01:00 UTC) - 60 minutes after Basketball Prediction completes
+    - cron: '0 1 * * *'
   push:
     branches:
       - main
@@ -33,7 +33,7 @@ on:
 
 concurrency:
   group: tennis-prediction-engine
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   tennis-prediction-cycle:
