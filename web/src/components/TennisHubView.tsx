@@ -269,6 +269,29 @@ export const TennisHubView: React.FC<TennisHubViewProps> = ({
     }
   }, [availableTournaments, selectedTournament]);
 
+  // Helper to determine if a tennis prediction is free/unlocked for guests
+  const isFreeAccessible = (p: TennisPrediction): boolean => {
+    const isWon = p.settlement_status === 'won' || p.settlement_status === 'half_won';
+    if (isWon) return true;
+    const cat = (p.confidence_category || '').toUpperCase().replace(/[\s-]+/g, '_');
+    let prob = p.probability;
+    if (prob != null && typeof prob === 'number' && prob > 1) prob = prob / 100;
+    const isVipTier =
+      cat === 'BANGER' ||
+      cat.includes('BANGER') ||
+      cat === 'TOP_PICK' ||
+      cat === 'TOPPICK' ||
+      cat.includes('TOP') ||
+      cat === 'HIGH_CONFIDENCE' ||
+      cat === 'HIGHCONFIDENCE' ||
+      cat.includes('HIGH') ||
+      (prob !== null && typeof prob === 'number' && prob >= 0.80) ||
+      p.prediction === '🔒 VIP Locked Prediction' ||
+      p.prediction === 'LOCKED' ||
+      (p as any).is_locked === true;
+    return !isVipTier;
+  };
+
   const filteredPredictions = useMemo(() => {
     let list = dateScopedPredictions;
 
@@ -333,7 +356,8 @@ export const TennisHubView: React.FC<TennisHubViewProps> = ({
     }
 
     // UI ORDERING RULE:
-    // Make Banger predictions top of the list, then Top Pick, then High Confidence, etc. (highest rating first)
+    // For free visitors/non-subscribers: Prioritize unlocked Mid-Confidence & Low-Confidence so visitors see live, playable models first!
+    // For subscribers: Make Banger predictions top of the list, then Top Pick, then High Confidence, etc. (highest rating first)
     // Predictions with NO SAFE BANKER (High Volatility) strictly come below them.
     const getConfidenceWeight = (p: TennisPrediction): number => {
       const market = (p.market || '').toUpperCase().replace(/ /g, '_');
@@ -344,6 +368,21 @@ export const TennisHubView: React.FC<TennisHubViewProps> = ({
       if (cat.includes('NO_SAFE_BANKER') || market.includes('NO_SAFE_BANKER') || pred.includes('NO_SAFE_BANKER')) {
         return -1;
       }
+
+      // For non-subscribers: Prioritize unlocked Mid-Confidence & Low-Confidence picks upfront
+      if (!isSubscriber) {
+        if (cat.includes('MID_CONFIDENCE') || cat.includes('MIDCONFIDENCE') || cat === 'MID') return 10;
+        if (cat.includes('LOW_CONFIDENCE') || cat.includes('LOWCONFIDENCE') || cat === 'LOW') return 9;
+        if (cat.includes('BANGER')) return 6;
+        if (cat.includes('TOP_PICK') || cat.includes('TOPPICK')) return 5;
+        if (cat.includes('HIGH_CONFIDENCE') || cat.includes('HIGHCONFIDENCE')) return 4;
+        if (cat.includes('RISKY')) return 1;
+        if (market === 'SET_HANDICAP') return 6;
+        if (market === 'MATCH_WINNER') return 5;
+        return 1;
+      }
+
+      // For paying subscribers: Standard VIP priority
       if (cat.includes('BANGER')) return 6;
       if (cat.includes('TOP_PICK') || cat.includes('TOPPICK')) return 5;
       if (cat.includes('HIGH_CONFIDENCE') || cat.includes('HIGHCONFIDENCE')) return 4;
@@ -377,7 +416,7 @@ export const TennisHubView: React.FC<TennisHubViewProps> = ({
       const timeB = new Date(b.target_kickoff_at || b.fixture?.target_kickoff_at || 0).getTime();
       return timeA - timeB;
     });
-  }, [dateScopedPredictions, selectedTour, selectedTournament, selectedTier, settlementFilter, searchQuery]);
+  }, [dateScopedPredictions, selectedTour, selectedTournament, selectedTier, settlementFilter, searchQuery, isSubscriber]);
 
   // Compute live scorecard KPI statistics from date-scoped predictions
   const scorecardStats = useMemo(() => {
@@ -952,24 +991,95 @@ export const TennisHubView: React.FC<TennisHubViewProps> = ({
                 )}
               </div>
             ) : (
-              filteredPredictions.map((prediction) => (
-                <TennisPredictionCard
-                  key={prediction.id}
-                  prediction={prediction}
-                  isSubscriber={isSubscriber}
-                  isAdmin={isAdmin}
-                  canViewPredictions={canViewPredictions}
-                  isFavorite={
-                    isFavoriteItem
-                      ? isFavoriteItem(prediction.fixture_id, 'Match Winner', prediction.prediction)
-                      : false
-                  }
-                  isFavoriteItem={isFavoriteItem}
-                  onToggleFavorite={onToggleFavoriteItem}
-                  onOpenUpgrade={onOpenSubscription}
-                  onOpenAuth={onOpenAuth}
-                />
-              ))
+              filteredPredictions.map((prediction, idx) => {
+                const prevPred = idx > 0 ? filteredPredictions[idx - 1] : null;
+                const isTransitionToLocked = !isSubscriber && prevPred &&
+                  isFreeAccessible(prevPred) && !isFreeAccessible(prediction);
+
+                return (
+                  <React.Fragment key={prediction.id}>
+                    {isTransitionToLocked && (
+                      <div
+                        className="tennis-vip-banner-card"
+                        style={{
+                          background: 'linear-gradient(135deg, #1e1b4b 0%, #312e81 100%)',
+                          border: '1px solid rgba(245, 158, 11, 0.4)',
+                          borderRadius: '14px',
+                          padding: '20px 24px',
+                          margin: '14px 0 18px 0',
+                          color: '#ffffff',
+                          boxShadow: '0 8px 24px rgba(30, 27, 75, 0.25)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          gap: '16px',
+                          flexWrap: 'wrap'
+                        }}
+                      >
+                        <div style={{ flex: '1 1 300px' }}>
+                          <div style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            background: 'rgba(245, 158, 11, 0.2)',
+                            color: '#fbbf24',
+                            fontSize: '11px',
+                            fontWeight: 800,
+                            padding: '4px 10px',
+                            borderRadius: '6px',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.05em',
+                            marginBottom: '8px'
+                          }}>
+                            👑 VIP Tennis Vault
+                          </div>
+                          <h4 style={{ margin: '0 0 6px 0', fontSize: '17px', fontWeight: 800, color: '#ffffff' }}>
+                            Want 85%+ High-Confidence Tennis Picks?
+                          </h4>
+                          <p style={{ margin: 0, fontSize: '13px', color: '#c7d2fe', lineHeight: 1.5 }}>
+                            You've tested our free Mid-Confidence simulations above. Unlock today's highest-conviction <strong>Bangers</strong>, <strong>Top Picks</strong>, and Markov chain set handicap models with VIP access.
+                          </p>
+                        </div>
+                        {onOpenSubscription && (
+                          <button
+                            type="button"
+                            onClick={onOpenSubscription}
+                            style={{
+                              background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                              color: '#0f172a',
+                              border: 'none',
+                              borderRadius: '10px',
+                              padding: '12px 22px',
+                              fontWeight: 800,
+                              fontSize: '13px',
+                              cursor: 'pointer',
+                              boxShadow: '0 4px 14px rgba(245, 158, 11, 0.4)',
+                              whiteSpace: 'nowrap'
+                            }}
+                          >
+                            ⚡ Unlock All VIP Picks Now →
+                          </button>
+                        )}
+                      </div>
+                    )}
+                    <TennisPredictionCard
+                      prediction={prediction}
+                      isSubscriber={isSubscriber}
+                      isAdmin={isAdmin}
+                      canViewPredictions={canViewPredictions}
+                      isFavorite={
+                        isFavoriteItem
+                          ? isFavoriteItem(prediction.fixture_id, 'Match Winner', prediction.prediction)
+                          : false
+                      }
+                      isFavoriteItem={isFavoriteItem}
+                      onToggleFavorite={onToggleFavoriteItem}
+                      onOpenUpgrade={onOpenSubscription}
+                      onOpenAuth={onOpenAuth}
+                    />
+                  </React.Fragment>
+                );
+              })
             )}
           </div>
         </div>

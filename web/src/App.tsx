@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef, Fragment } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef, Fragment } from 'react';
 import { Routes, Route, Navigate, useNavigate, useLocation, Link } from 'react-router-dom';
 import { supabase } from './lib/supabase';
 import { initGoogleIdentityServices, promptGoogleOneTap } from './lib/googleAuth';
@@ -1309,9 +1309,33 @@ export default function App() {
     }
   }, [selectedTier, scorecardStats]);
 
+  // Helper to determine if a fixture has an unlocked/free prediction for guest marketing
+  const isFixtureUnlocked = useCallback((f: QueueFixture) => {
+    const p = predsByFixture.get(f.id)?.[0];
+    if (!p) return false;
+    if (p.settlement_status === 'won') return true;
+    const pCat = (p.confidence_category || '').toUpperCase().replace(/[\s-]+/g, '_');
+    let pProb = p.probability;
+    if (pProb != null && typeof pProb === 'number' && pProb > 1) pProb = pProb / 100;
+    const isVip =
+      pCat === 'BANGER' ||
+      pCat.includes('BANGER') ||
+      pCat === 'TOP_PICK' ||
+      pCat === 'TOPPICK' ||
+      pCat.includes('TOP') ||
+      pCat === 'HIGH_CONFIDENCE' ||
+      pCat === 'HIGHCONFIDENCE' ||
+      pCat.includes('HIGH') ||
+      (pProb !== null && typeof pProb === 'number' && pProb >= 0.80) ||
+      p.is_locked === true ||
+      p.prediction === 'LOCKED' ||
+      p.prediction === '🔒 Premium VIP Pick';
+    return !isVip;
+  }, [predsByFixture]);
+
   // Filtered fixtures for General Market view
   const filteredFixtures = useMemo(() => {
-    return fixtures.filter((f) => {
+    const list = fixtures.filter((f) => {
       const fixturePreds = predsByFixture.get(f.id) || [];
       const signals: any[] = fixturePreds;
       const isFinished = f.status === 'finished' || f.period === 'FT';
@@ -1386,6 +1410,28 @@ export default function App() {
 
       return true;
     });
+
+    // Marketing Prioritization Rule:
+    // When the user is NOT a paid subscriber (!canViewPredictions && !isAdmin):
+    // Prioritize fixtures that have UNLOCKED actionable predictions (Mid Confidence & Low Confidence) first!
+    // Followed by locked VIP fixtures (Bangers, Top Picks, High Confidence).
+    // Within each group, preserve earliest kickoff time.
+    // When the user IS a paid subscriber (canViewPredictions):
+    // Maintain natural earliest kickoff order.
+    if (!canViewPredictions && !isAdmin) {
+      return [...list].sort((a, b) => {
+        const unlockedA = isFixtureUnlocked(a);
+        const unlockedB = isFixtureUnlocked(b);
+        if (unlockedA && !unlockedB) return -1;
+        if (!unlockedA && unlockedB) return 1;
+
+        const timeDiff = new Date(a.target_kickoff_at).getTime() - new Date(b.target_kickoff_at).getTime();
+        if (timeDiff !== 0) return timeDiff;
+        return a.id.localeCompare(b.id);
+      });
+    }
+
+    return list;
   }, [
     fixtures,
     predsByFixture,
@@ -1395,7 +1441,9 @@ export default function App() {
     selectedTier,
     settlementFilter,
     canViewPredictions,
+    isAdmin,
     searchQuery,
+    isFixtureUnlocked,
   ]);
 
   // Helpers
@@ -2645,8 +2693,73 @@ export default function App() {
                         prevKickoff.timeStr !== kickoff.timeStr ||
                         prevKickoff.dateStr !== kickoff.dateStr;
 
+                      const isTransitionToLocked = !canViewPredictions && !isAdmin && idx > 0 && prevFixture &&
+                        isFixtureUnlocked(prevFixture) && !isFixtureUnlocked(fixture);
+
                       return (
                         <Fragment key={fixture.id}>
+                          {isTransitionToLocked && (
+                            <div
+                              className="football-vip-banner-card"
+                              style={{
+                                background: 'linear-gradient(135deg, #1e1b4b 0%, #312e81 100%)',
+                                border: '1px solid rgba(245, 158, 11, 0.4)',
+                                borderRadius: '14px',
+                                padding: '20px 24px',
+                                margin: '20px 0',
+                                color: '#ffffff',
+                                boxShadow: '0 8px 24px rgba(30, 27, 75, 0.25)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                gap: '16px',
+                                flexWrap: 'wrap'
+                              }}
+                            >
+                              <div style={{ flex: '1 1 300px' }}>
+                                <div style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '6px',
+                                  background: 'rgba(245, 158, 11, 0.2)',
+                                  color: '#fbbf24',
+                                  fontSize: '11px',
+                                  fontWeight: 800,
+                                  padding: '4px 10px',
+                                  borderRadius: '6px',
+                                  textTransform: 'uppercase',
+                                  letterSpacing: '0.05em',
+                                  marginBottom: '8px'
+                                }}>
+                                  👑 VIP Football Bankers Vault
+                                </div>
+                                <h4 style={{ margin: '0 0 6px 0', fontSize: '17px', fontWeight: 800, color: '#ffffff' }}>
+                                  Want 85%+ High-Confidence Football Picks?
+                                </h4>
+                                <p style={{ margin: 0, fontSize: '13px', color: '#c7d2fe', lineHeight: 1.5 }}>
+                                  You've explored our free Mid-Confidence simulations above. Unlock today's highest-conviction <strong>Bangers</strong>, <strong>Top Picks</strong>, and Poisson Goal cards with VIP access.
+                                </p>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setIsPricingModalOpen(true)}
+                                style={{
+                                  background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                                  color: '#0f172a',
+                                  border: 'none',
+                                  borderRadius: '10px',
+                                  padding: '12px 22px',
+                                  fontWeight: 800,
+                                  fontSize: '13px',
+                                  cursor: 'pointer',
+                                  boxShadow: '0 4px 14px rgba(245, 158, 11, 0.4)',
+                                  whiteSpace: 'nowrap'
+                                }}
+                              >
+                                ⚡ Unlock All VIP Picks Now →
+                              </button>
+                            </div>
+                          )}
                           {isTimeSlotStart && (
                             <div className="kickoff-slot-divider">
                               <div className="kickoff-slot-badge">
