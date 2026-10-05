@@ -177,7 +177,7 @@ class TennisDbClient:
         }
         if actual_result:
             pred_update["actual_result"] = actual_result
-        if secondary_predictions is not None:
+        if secondary_predictions:
             pred_update["secondary_predictions"] = secondary_predictions
         self.client.patch("/tennis_predictions", json=pred_update, params={"id": f"eq.{prediction_id}"})
 

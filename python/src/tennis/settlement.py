@@ -342,7 +342,7 @@ class TennisSettlementEngine:
                     "settlement_status": "eq.pending",
                     "target_kickoff_at": f"gte.{min_kickoff}",
                     "and": f"(target_kickoff_at.lte.{max_kickoff})",
-                    "select": "id,fixture_id,market,prediction,target_kickoff_at,fixture:tennis_fixtures(*,tournament:tennis_tournaments(*),player1:tennis_players!tennis_fixtures_player1_id_fkey(*),player2:tennis_players!tennis_fixtures_player2_id_fkey(*))",
+                    "select": "id,fixture_id,market,prediction,probability,confidence_category,secondary_predictions,metadata,target_kickoff_at,fixture:tennis_fixtures(*,tournament:tennis_tournaments(*),player1:tennis_players!tennis_fixtures_player1_id_fkey(*),player2:tennis_players!tennis_fixtures_player2_id_fkey(*))",
                     "order": "target_kickoff_at.asc"
                 }
             )

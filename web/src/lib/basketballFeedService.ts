@@ -162,6 +162,7 @@ export async function fetchBasketballFeed(
     forceRefresh = false,
   } = options;
 
+
   const isUnlocked = Boolean(canViewPredictions);
   const cacheKey = `bball_${league || 'all'}_${market || 'all'}_${tier || 'all'}_${isUnlocked ? 'vip' : 'free'}`;
 
@@ -350,33 +351,35 @@ export async function fetchBasketballFeed(
         };
       }
 
-      const isRecordLocked = (p.is_locked !== false && p.prediction === 'LOCKED');
-
-      if (isRecordLocked) {
+      // Won matches remain visible to all visitors as historical track-record win proof
+      const isWon = (p.settlement_status || '').toLowerCase() === 'won';
+      if (isWon) {
         return {
           ...p,
-          prediction: '🔒 Subscriber Only',
-          probability: null,
-          confidence_category: (p.confidence_category === 'BANGER' ? 'BANGER' : 'TOP PICK') as BasketballConfidenceTier,
-          secondary_predictions: parsedSec.map(sec => ({
-            ...sec,
-            pick: '••••••••',
-            probability: 0,
-            locked: true,
-          } as any)),
-          metadata: {
-            ...p.metadata,
-            ai_tactical_analysis:
-              '🔒 Upgrade to Oddsbanta VIP to unlock full Dean Oliver Four Factors breakdown, projected scores, and value edge.',
-          },
-          is_locked: true,
+          secondary_predictions: parsedSec,
+          is_locked: false,
         };
       }
 
+      // All live & pending basketball predictions are locked for visitors as VIP conversion teasers
       return {
         ...p,
-        secondary_predictions: parsedSec,
-        is_locked: false,
+        prediction: '🔒 BigBang VIP Pick',
+        probability: null,
+        confidence_category: (p.confidence_category === 'BANGER' ? 'BANGER' : 'TOP PICK') as BasketballConfidenceTier,
+        simulated_home_score: null,
+        simulated_away_score: null,
+        edge_percentage: null,
+        fair_odds: null,
+        market_odds: null,
+        secondary_predictions: [],
+        metadata: {
+          ...p.metadata,
+          ai_tactical_analysis:
+            '🔒 Basketball predictions and 250,000 Monte Carlo simulations are reserved for BigBang VIP members.',
+          simulation: undefined,
+        },
+        is_locked: true,
       };
     });
 

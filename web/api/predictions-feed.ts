@@ -205,6 +205,36 @@ function applyPaywallRedaction(predictions: any[]): any[] {
         };
       }
 
+      const isNoBanker =
+        cat === 'NO_SAFE_BANKER' ||
+        cat === 'NOSAFEBANKER' ||
+        cat.includes('NO_SAFE') ||
+        cat.includes('NOSAFE') ||
+        p.market === 'NO_SAFE_BANKER' ||
+        p.prediction === 'SKIP';
+
+      // Anti-Loss Protection (No Safe Banker): The card is visible as capital protection proof,
+      // but secondary derivative predictions and Poisson simulation outlines are strictly redacted for non-subscribers
+      if (isNoBanker) {
+        return {
+          ...p,
+          is_locked: false,
+          confidence_category: 'NO_SAFE_BANKER',
+          prediction: 'SKIP',
+          market: 'NO_SAFE_BANKER',
+          publication_status: p.publication_status || 'published',
+          secondary_predictions: [
+            { market: 'derivative_locked', prediction: '🔒 VIP Secondary Lean', probability: null, locked: true },
+          ],
+          metadata: {
+            ai_summary: '🔒 High volatility detected on 1X2 moneyline. Upgrade to Oddsbanta VIP to unlock Monte-Carlo secondary market outlines (Goals, BTTS, Corners).',
+            simulation_outlines: null,
+            poisson_parameters: null,
+            secondary_locked: true,
+          },
+        };
+      }
+
       // Mid-Confidence (6.0–7.9) is free and visible to all users
       return {
         ...p,

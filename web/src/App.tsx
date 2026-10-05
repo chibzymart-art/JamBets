@@ -123,21 +123,6 @@ export default function App() {
   const [isAllLeaguesModalOpen, setIsAllLeaguesModalOpen] = useState(false);
   const [isHamburgerOpen, setIsHamburgerOpen] = useState(false);
 
-  useEffect(() => {
-    setIsHamburgerOpen(false);
-    const p = location.pathname.replace(/\/+$/, '') || '/';
-    const sportByPath: Record<string, string> = {
-      [DASHBOARD_PATHS.football]: 'football',
-      [DASHBOARD_PATHS.goals]: 'football',
-      [DASHBOARD_PATHS.tennis]: 'tennis',
-      [DASHBOARD_PATHS.basketball]: 'basketball',
-      [DASHBOARD_PATHS.american_football]: 'american_football',
-      [DASHBOARD_PATHS.cricket]: 'cricket',
-    };
-    if (sportByPath[p]) setSelectedSport(sportByPath[p]);
-    // OtherMarketsPage sets its own market-specific SEO on /dashboard/goals.
-    if (p !== DASHBOARD_PATHS.goals) updatePageSeo(seoForPath(p));
-  }, [location.pathname]);
 
   // Multi-Filters
   const [selectedLeague, setSelectedLeague] = useState<string>('all');
@@ -448,6 +433,24 @@ export default function App() {
 
   // Backward compatibility alias for football predictions
   const canViewPredictions = canViewFootball;
+
+  useEffect(() => {
+    setIsHamburgerOpen(false);
+    const p = location.pathname.replace(/\/+$/, '') || '/';
+    const sportByPath: Record<string, string> = {
+      [DASHBOARD_PATHS.football]: 'football',
+      [DASHBOARD_PATHS.goals]: 'football',
+      [DASHBOARD_PATHS.tennis]: 'tennis',
+      [DASHBOARD_PATHS.basketball]: 'basketball',
+      [DASHBOARD_PATHS.american_football]: 'american_football',
+      [DASHBOARD_PATHS.cricket]: 'cricket',
+    };
+    if (sportByPath[p]) {
+      setSelectedSport(sportByPath[p]);
+    }
+    // OtherMarketsPage sets its own market-specific SEO on /dashboard/goals.
+    if (p !== DASHBOARD_PATHS.goals) updatePageSeo(seoForPath(p));
+  }, [location.pathname]);
 
   const handleAuthSuccess = async () => {
     setIsAuthModalOpen(false);
@@ -1330,7 +1333,16 @@ export default function App() {
       p.is_locked === true ||
       p.prediction === 'LOCKED' ||
       p.prediction === '🔒 Premium VIP Pick';
-    return !isVip;
+    const isNoBanker =
+      pCat === 'NO_SAFE_BANKER' ||
+      pCat === 'NOSAFEBANKER' ||
+      pCat.includes('NO_SAFE') ||
+      pCat.includes('NOSAFE') ||
+      p.market === 'NO_SAFE_BANKER' ||
+      p.prediction === 'SKIP';
+
+    // Strictly playable Mid/Low confidence games are considered unlocked free bets
+    return !isVip && !isNoBanker;
   }, [predsByFixture]);
 
   // Filtered fixtures for General Market view
@@ -1420,10 +1432,43 @@ export default function App() {
     // Maintain natural earliest kickoff order.
     if (!canViewPredictions && !isAdmin) {
       return [...list].sort((a, b) => {
-        const unlockedA = isFixtureUnlocked(a);
-        const unlockedB = isFixtureUnlocked(b);
-        if (unlockedA && !unlockedB) return -1;
-        if (!unlockedA && unlockedB) return 1;
+        const getFixtureWeight = (f: QueueFixture): number => {
+          const p = predsByFixture.get(f.id)?.[0];
+          if (!p) return 0;
+          if (p.settlement_status === 'won') return 10;
+          const pCat = (p.confidence_category || '').toUpperCase().replace(/[\s-]+/g, '_');
+          const isNoBanker =
+            pCat === 'NO_SAFE_BANKER' ||
+            pCat === 'NOSAFEBANKER' ||
+            pCat.includes('NO_SAFE') ||
+            pCat.includes('NOSAFE') ||
+            p.market === 'NO_SAFE_BANKER' ||
+            p.prediction === 'SKIP';
+          if (isNoBanker) return -1;
+
+          let pProb = p.probability;
+          if (pProb != null && typeof pProb === 'number' && pProb > 1) pProb = pProb / 100;
+          const isVip =
+            pCat === 'BANGER' ||
+            pCat.includes('BANGER') ||
+            pCat === 'TOP_PICK' ||
+            pCat === 'TOPPICK' ||
+            pCat.includes('TOP') ||
+            pCat === 'HIGH_CONFIDENCE' ||
+            pCat === 'HIGHCONFIDENCE' ||
+            pCat.includes('HIGH') ||
+            (pProb !== null && typeof pProb === 'number' && pProb >= 0.80) ||
+            p.is_locked === true ||
+            p.prediction === 'LOCKED' ||
+            p.prediction === '🔒 Premium VIP Pick';
+
+          if (!isVip) return 5;
+          return 1;
+        };
+
+        const wA = getFixtureWeight(a);
+        const wB = getFixtureWeight(b);
+        if (wB !== wA) return wB - wA;
 
         const timeDiff = new Date(a.target_kickoff_at).getTime() - new Date(b.target_kickoff_at).getTime();
         if (timeDiff !== 0) return timeDiff;
@@ -1922,6 +1967,7 @@ export default function App() {
                 }}
                 currentUser={currentUser}
                 userRole={profile?.role}
+                canViewMultiSport={canViewMultiSport}
                 onOpenFaq={() => setIsFaqModalOpen(true)}
                 onOpenPricing={() => setIsPricingModalOpen(true)}
                 onOpenBotHub={() => setIsBotHubModalOpen(true)}

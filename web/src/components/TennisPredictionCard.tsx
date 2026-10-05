@@ -99,21 +99,9 @@ export const TennisPredictionCard: React.FC<TennisPredictionCardProps> = ({
   let prob = prediction.probability;
   if (prob != null && typeof prob === 'number' && prob > 1) prob = prob / 100;
 
-  const isVipTier =
-    cat === 'BANGER' ||
-    cat.includes('BANGER') ||
-    cat === 'TOP_PICK' ||
-    cat === 'TOPPICK' ||
-    cat.includes('TOP') ||
-    cat === 'HIGH_CONFIDENCE' ||
-    cat === 'HIGHCONFIDENCE' ||
-    cat.includes('HIGH') ||
-    (prob !== null && typeof prob === 'number' && prob >= 0.80) ||
-    prediction.is_locked === true;
-
-  // Universal Tier Paywall: Mid-Confidence (6.0–7.9) is visible to everyone across the board
-  // Only VIP tiers (High Confidence, Top Picks, Bangers) are locked for non-paid visitors
-  const isLocked = !isUserEntitled && !isWon && isVipTier;
+  // Multi-Sport VIP Shield: All live & upcoming tennis predictions are locked for visitors as marketing teasers.
+  // Won settled matches remain visible as historical track-record win proof.
+  const isLocked = !isUserEntitled && !isWon;
 
   // Confidence tier configuration (matching Football FixtureCard exactly)
   const effectiveCategory = isLocked
@@ -134,15 +122,29 @@ export const TennisPredictionCard: React.FC<TennisPredictionCardProps> = ({
     : null;
   const scoreRating = probNum != null ? (probNum / 10).toFixed(1) : null;
 
+  const isNoBanker =
+    cat === 'NO_SAFE_BANKER' ||
+    cat === 'NOSAFEBANKER' ||
+    cat.includes('NO_SAFE') ||
+    cat.includes('NOSAFE') ||
+    (prediction.market || '').toUpperCase() === 'NO_SAFE_BANKER' ||
+    (prediction.prediction || '').toUpperCase() === 'SKIP';
+
+  const isSettledOrFinished = isFinished || Boolean(prediction.settled_at) || (Boolean(prediction.settlement_status) && prediction.settlement_status !== 'pending');
+
+  // Secondary predictions are only redacted for active/unsettled matches for non-subscribers
+  const isSecondaryRedacted = !isUserEntitled && !isWon && isNoBanker && !isSettledOrFinished;
+
   // Resolve secondary predictions from dynamic database record or empty array
   // Filter out legacy match_winner so secondary grid is strictly distinct derivative markets
   const displayedSecondaryPreds = useMemo(() => {
+    if (isSecondaryRedacted || isLocked) return [];
     const list = prediction.secondary_predictions || [];
     return list.filter(sec => {
       const m = (sec.market || '').toLowerCase();
       return m !== 'match_winner';
     });
-  }, [prediction.secondary_predictions]);
+  }, [prediction.secondary_predictions, isSecondaryRedacted, isLocked]);
 
   const category = (tournament?.category || '250').toUpperCase();
   const round = fixture?.round;
@@ -195,6 +197,25 @@ export const TennisPredictionCard: React.FC<TennisPredictionCardProps> = ({
   const p2RankText = player2?.current_rank ? ` #${player2.current_rank}` : '';
 
   const markov = prediction.metadata?.markov;
+  const p1HoldRate = markov?.p_hold_player1 ?? (prediction.metadata?.p1_hold_rate != null ? Number(prediction.metadata.p1_hold_rate) : null);
+  const p2HoldRate = markov?.p_hold_player2 ?? (prediction.metadata?.p2_hold_rate != null ? Number(prediction.metadata.p2_hold_rate) : null);
+  const drP1 = markov?.dominance_ratio_player1 ?? (prediction.metadata?.dominance_ratio_player1 != null ? Number(prediction.metadata.dominance_ratio_player1) : null);
+  const drP2 = markov?.dominance_ratio_player2 ?? (prediction.metadata?.dominance_ratio_player2 != null ? Number(prediction.metadata.dominance_ratio_player2) : null);
+
+  const dominanceRatioText = (() => {
+    if (drP1 != null && drP2 != null) {
+      return `${drP1.toFixed(2)} vs ${drP2.toFixed(2)}`;
+    }
+    if (p1HoldRate != null && p2HoldRate != null && p2HoldRate > 0) {
+      const ratio = p1HoldRate / p2HoldRate;
+      return `${ratio.toFixed(2)} vs ${(1 / ratio).toFixed(2)}`;
+    }
+    return '-- vs --';
+  })();
+
+  const tacticalAnalysis = prediction.metadata?.ai_tactical_analysis || prediction.metadata?.tactical_reasoning;
+  const expectedTotalGames = prediction.metadata?.expected_total_games;
+  const expectedGameMargin = prediction.metadata?.expected_game_margin;
 
   const primaryMarket = 'Match Winner';
   const primaryPick = displayedPrediction || prediction.prediction;
@@ -397,7 +418,7 @@ export const TennisPredictionCard: React.FC<TennisPredictionCardProps> = ({
                   else if (onOpenAuth) onOpenAuth('register');
                 }}
               >
-                Unlock VIP (₦5,000/mo) →
+                Unlock BigBang VIP (₦10,000/mo) →
               </button>
             </div>
           ) : (
@@ -492,9 +513,9 @@ export const TennisPredictionCard: React.FC<TennisPredictionCardProps> = ({
 
               <div className="paywall-overlay-prompt">
                 <div className="paywall-lock-icon">🔒</div>
-                <h4>More accurate predictions (85%+ hit rate) are in High Confidence, Top Picks, and Bangers.</h4>
+                <h4>Oddsbanta BigBang VIP Tennis Match Radar</h4>
                 <p>
-                  Free visitors get full access to live Mid-Confidence models across all sports. Upgrade to VIP to unlock our highest conviction signals.
+                  ATP &amp; WTA match predictions, Markov probability models, game spreads, and set totals are reserved exclusively for BigBang VIP members.
                 </p>
                 <button
                   type="button"
@@ -505,7 +526,7 @@ export const TennisPredictionCard: React.FC<TennisPredictionCardProps> = ({
                     else if (onOpenAuth) onOpenAuth('register');
                   }}
                 >
-                  ⚡ Unlock VIP Picks (₦5,000/mo) →
+                  ⚡ Unlock BigBang VIP (₦10,000/mo) →
                 </button>
               </div>
             </div>
@@ -566,121 +587,235 @@ export const TennisPredictionCard: React.FC<TennisPredictionCardProps> = ({
                 </div>
               </div>
 
-              {/* Secondary Markets Grid (Game Spread, 1st Set, Set Handicap, Total Games) */}
-              {displayedSecondaryPreds && displayedSecondaryPreds.length > 0 && (
-                <div className="tennis-secondary-markets-section" style={{ marginTop: 14 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                    <span style={{ fontSize: 11.5, fontWeight: 800, color: '#334155', textTransform: 'uppercase', letterSpacing: '0.4px', display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <span>📊</span> SECONDARY PREDICTIONS & MARKETS (SPREAD / OVERS / HANDICAPS)
-                    </span>
-                    <span style={{ fontSize: 10, fontWeight: 700, color: '#059669', background: '#ecfdf5', padding: '1px 8px', borderRadius: 9999, border: '1px solid #a7f3d0' }}>
-                      Markov Calibrated
+              {/* If isSecondaryRedacted (No Safe Banker for non-subscribers): Render Anti-Loss VIP Derivative Markets Teaser */}
+              {isSecondaryRedacted ? (
+                <div
+                  className="tennis-anti-loss-teaser-box"
+                  style={{
+                    marginTop: 14,
+                    padding: '16px 18px',
+                    background: 'linear-gradient(135deg, rgba(248, 250, 252, 0.98), rgba(241, 245, 249, 0.95))',
+                    border: '1.5px dashed #cbd5e1',
+                    borderRadius: 12,
+                    position: 'relative',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, flexWrap: 'wrap', gap: 6 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span style={{ fontSize: 15 }}>🔒</span>
+                      <span style={{ fontSize: 12.5, fontWeight: 900, color: '#0f172a', textTransform: 'uppercase', letterSpacing: '0.02em' }}>
+                        VIP Derivative Markets Detected
+                      </span>
+                    </div>
+                    <span style={{
+                      fontSize: 10,
+                      fontWeight: 800,
+                      color: '#b45309',
+                      background: '#fef3c7',
+                      border: '1px solid #fde68a',
+                      padding: '2px 8px',
+                      borderRadius: 9999,
+                      textTransform: 'uppercase',
+                    }}>
+                      Volatile Match Protection
                     </span>
                   </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))', gap: 12 }}>
-                    {displayedSecondaryPreds.map((sec, idx) => {
-                      const marketName = (() => {
-                        const m = (sec.market || '').toLowerCase();
-                        if (m.includes('game_handicap')) return 'Game Handicap';
-                        if (m.includes('first_set') || m.includes('1st_set')) return '1st Set Winner';
-                        if (m.includes('set_handicap')) return 'Set Handicap';
-                        if (m.includes('total_games') || m.includes('over')) return 'Total Games';
-                        if (m.includes('match_winner')) return 'Match Winner';
-                        if (m.includes('correct_set')) return 'Correct Score';
-                        return (sec.market || 'Market').replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase());
-                      })();
+                  <p style={{ fontSize: 12, color: '#475569', lineHeight: 1.5, margin: '0 0 12px 0' }}>
+                    Match winner volatility is high. Our Markov engine identified <strong>qualifying derivative edges</strong> (Game Handicap, 1st Set Winner, and Total Games). Upgrade to VIP to reveal all derivative market lines and probabilities.
+                  </p>
 
-                      const displayMarketTitle = (() => {
-                        const m = (sec.market || '').toLowerCase();
-                        if (m.includes('game_handicap')) return '⚡ Game Handicap (Spread)';
-                        if (m.includes('first_set') || m.includes('1st_set')) return '🥇 1st Set Winner';
-                        if (m.includes('set_handicap')) return '🎾 Set Handicap';
-                        if (m.includes('total_games') || m.includes('over')) return '📊 Total Games';
-                        if (m.includes('match_winner')) return '🏆 Match Winner';
-                        if (m.includes('correct_set')) return '🎯 Correct Score';
-                        return (sec.market || 'Market').replace(/_/g, ' ').toUpperCase();
-                      })();
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 8, filter: 'blur(3.5px)', opacity: 0.65, userSelect: 'none', pointerEvents: 'none', marginBottom: 12 }}>
+                    <div style={{ padding: '8px 10px', background: '#fff', borderRadius: 6, border: '1px solid #e2e8f0' }}>
+                      <div style={{ fontSize: 9.5, fontWeight: 800, color: '#64748b' }}>⚡ GAME HANDICAP</div>
+                      <div style={{ fontSize: 12, fontWeight: 900, color: '#1e293b' }}>+3.5 Games • 7X.X%</div>
+                    </div>
+                    <div style={{ padding: '8px 10px', background: '#fff', borderRadius: 6, border: '1px solid #e2e8f0' }}>
+                      <div style={{ fontSize: 9.5, fontWeight: 800, color: '#64748b' }}>🥇 1ST SET WINNER</div>
+                      <div style={{ fontSize: 12, fontWeight: 900, color: '#1e293b' }}>Player 1 • 7X.X%</div>
+                    </div>
+                    <div style={{ padding: '8px 10px', background: '#fff', borderRadius: 6, border: '1px solid #e2e8f0' }}>
+                      <div style={{ fontSize: 9.5, fontWeight: 800, color: '#64748b' }}>📊 TOTAL GAMES</div>
+                      <div style={{ fontSize: 12, fontWeight: 900, color: '#1e293b' }}>Over 21.5 • 7X.X%</div>
+                    </div>
+                  </div>
 
-                      const isSecLocked = Boolean((sec as any).locked || sec.probability == null);
-                      const pickVal = (sec as any).prediction || sec.pick || 'Pick';
-                      const probVal = sec.probability != null
-                        ? Math.round(sec.probability <= 1 ? sec.probability * 100 : sec.probability)
-                        : null;
-
-                      const isSecFav = Boolean(
-                        isFavoriteItem ? isFavoriteItem(prediction.fixture_id, marketName, pickVal) : false
-                      );
-
-                      return (
-                        <div
-                          key={idx}
-                          className="tennis-secondary-pred-tile"
-                          style={{
-                            background: '#ffffff',
-                            border: isSecFav ? '1.5px solid #10b981' : '1.5px solid #e2e8f0',
-                            borderRadius: 10,
-                            padding: '12px 14px',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            justifyContent: 'space-between',
-                            boxShadow: isSecFav ? '0 2px 8px rgba(16, 185, 129, 0.15)' : '0 1px 3px rgba(0,0,0,0.03)',
-                            transition: 'all 0.15s ease',
-                            gap: 8,
-                          }}
-                        >
-                          {/* Top Header: Market Title on Left, Probability Badge on Right */}
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                            <span style={{ fontSize: 11, fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.25px', display: 'flex', alignItems: 'center', gap: 4 }}>
-                              {displayMarketTitle}
-                            </span>
-
-                            {probVal != null ? (
-                              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: probVal >= 75 ? '#ecfdf5' : '#eff6ff', border: `1px solid ${probVal >= 75 ? '#a7f3d0' : '#bfdbfe'}`, padding: '2px 8px', borderRadius: 6, flexShrink: 0 }}>
-                                <span style={{ fontSize: 12.5, fontWeight: 900, color: probVal >= 75 ? '#15803d' : '#1d4ed8' }}>
-                                  {probVal}%
-                                </span>
-                                <span style={{ fontSize: 9.5, fontWeight: 700, color: probVal >= 75 ? '#166534' : '#1e40af' }}>
-                                  Prob
-                                </span>
-                              </div>
-                            ) : isSecLocked ? (
-                              <div style={{ fontSize: 11, fontWeight: 800, color: '#d97706', background: '#fef3c7', padding: '2px 8px', borderRadius: 6, border: '1px solid #fde68a', flexShrink: 0 }}>
-                                🔒 VIP Lock
-                              </div>
-                            ) : null}
-                          </div>
-
-                          {/* Bottom Row: Full Pick Name & Line in Bold without any Truncation + Add to Slip */}
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginTop: 2 }}>
-                            <div style={{ fontSize: 14, fontWeight: 900, color: '#0f172a', lineHeight: 1.35, wordBreak: 'break-word', whiteSpace: 'normal', flex: 1 }}>
-                              {pickVal}
-                            </div>
-
-                            {onToggleFavorite && !isSecLocked && (
-                              <button
-                                type="button"
-                                className={`secondary-card-fav-btn ${isSecFav ? 'active' : ''}`}
-                                onClick={(e) => handleSecondaryFavoriteToggle(e, sec, marketName, pickVal, probVal)}
-                                title={isSecFav ? 'Remove from slip' : 'Add to slip'}
-                                style={{ flexShrink: 0 }}
-                              >
-                                {isSecFav ? '✓ IN SLIP' : '+ ADD TO SLIP'}
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+                    <span style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>
+                      ⚡ Reveal Markov game handicap &amp; set totals
+                    </span>
+                    <button
+                      type="button"
+                      className="btn-paywall-unlock-prominent"
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+                        color: '#ffffff',
+                        fontWeight: 800,
+                        fontSize: 12,
+                        padding: '6px 14px',
+                        borderRadius: 6,
+                        border: 'none',
+                        cursor: 'pointer',
+                        boxShadow: '0 2px 6px rgba(217, 119, 6, 0.25)',
+                      }}
+                      onClick={() => {
+                        if (onOpenUpgrade) onOpenUpgrade();
+                        else if (onOpenAuth) onOpenAuth('register');
+                      }}
+                    >
+                      ⚡ Unlock BigBang VIP (₦10,000/mo) →
+                    </button>
                   </div>
                 </div>
+              ) : (
+                /* Secondary Markets Grid (Game Spread, 1st Set, Set Handicap, Total Games) */
+                !isLocked && displayedSecondaryPreds && displayedSecondaryPreds.length > 0 && (
+                  <div className="tennis-secondary-markets-section" style={{ marginTop: 14 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                      <span style={{ fontSize: 11.5, fontWeight: 800, color: '#334155', textTransform: 'uppercase', letterSpacing: '0.4px', display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span>📊</span> SECONDARY PREDICTIONS & MARKETS (SPREAD / OVERS / HANDICAPS)
+                      </span>
+                      <span style={{ fontSize: 10, fontWeight: 700, color: '#059669', background: '#ecfdf5', padding: '1px 8px', borderRadius: 9999, border: '1px solid #a7f3d0' }}>
+                        Markov Calibrated
+                      </span>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))', gap: 12 }}>
+                      {displayedSecondaryPreds.map((sec, idx) => {
+                        const marketName = (() => {
+                          const m = (sec.market || '').toLowerCase();
+                          if (m.includes('game_handicap')) return 'Game Handicap';
+                          if (m.includes('first_set') || m.includes('1st_set')) return '1st Set Winner';
+                          if (m.includes('set_handicap')) return 'Set Handicap';
+                          if (m.includes('total_games') || m.includes('over')) return 'Total Games';
+                          if (m.includes('match_winner')) return 'Match Winner';
+                          if (m.includes('correct_set')) return 'Correct Score';
+                          return (sec.market || 'Market').replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase());
+                        })();
+
+                        const displayMarketTitle = (() => {
+                          const m = (sec.market || '').toLowerCase();
+                          if (m.includes('game_handicap')) return '⚡ Game Handicap (Spread)';
+                          if (m.includes('first_set') || m.includes('1st_set')) return '🥇 1st Set Winner';
+                          if (m.includes('set_handicap')) return '🎾 Set Handicap';
+                          if (m.includes('total_games') || m.includes('over')) return '📊 Total Games';
+                          if (m.includes('match_winner')) return '🏆 Match Winner';
+                          if (m.includes('correct_set')) return '🎯 Correct Score';
+                          return (sec.market || 'Market').replace(/_/g, ' ').toUpperCase();
+                        })();
+
+                        const isSecLocked = Boolean((sec as any).locked || sec.probability == null);
+                        const pickVal = (sec as any).prediction || sec.pick || 'Pick';
+                        const probVal = sec.probability != null
+                          ? Math.round(sec.probability <= 1 ? sec.probability * 100 : sec.probability)
+                          : null;
+
+                        const secSettlement = (sec as any).settlement_status as string | undefined;
+                        const isSecWon = secSettlement === 'won' || secSettlement === 'half_won';
+                        const isSecLost = secSettlement === 'lost' || secSettlement === 'half_lost';
+                        const isSecVoid = secSettlement === 'void' || secSettlement === 'voided';
+
+                        const isSecFav = Boolean(
+                          isFavoriteItem ? isFavoriteItem(prediction.fixture_id, marketName, pickVal) : false
+                        );
+
+                        return (
+                          <div
+                            key={idx}
+                            className="tennis-secondary-pred-tile"
+                            style={{
+                              background: '#ffffff',
+                              border: isSecFav ? '1.5px solid #10b981' : isSecWon ? '1.5px solid #86efac' : isSecLost ? '1.5px solid #fca5a5' : '1.5px solid #e2e8f0',
+                              borderRadius: 10,
+                              padding: '12px 14px',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              justifyContent: 'space-between',
+                              boxShadow: isSecFav ? '0 2px 8px rgba(16, 185, 129, 0.15)' : '0 1px 3px rgba(0,0,0,0.03)',
+                              transition: 'all 0.15s ease',
+                              gap: 8,
+                            }}
+                          >
+                            {/* Top Header: Market Title on Left, Settlement / Probability Badge on Right */}
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                              <span style={{ fontSize: 11, fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.25px', display: 'flex', alignItems: 'center', gap: 4 }}>
+                                {displayMarketTitle}
+                              </span>
+
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
+                                {isSecWon && (
+                                  <span style={{ fontSize: 10, fontWeight: 900, color: '#ffffff', background: '#16a34a', padding: '2px 7px', borderRadius: 4, letterSpacing: '0.02em', display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+                                    ✓ WON
+                                  </span>
+                                )}
+                                {isSecLost && (
+                                  <span style={{ fontSize: 10, fontWeight: 900, color: '#ffffff', background: '#dc2626', padding: '2px 7px', borderRadius: 4, letterSpacing: '0.02em', display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+                                    ✗ LOST
+                                  </span>
+                                )}
+                                {isSecVoid && (
+                                  <span style={{ fontSize: 10, fontWeight: 900, color: '#475569', background: '#e2e8f0', padding: '2px 7px', borderRadius: 4, letterSpacing: '0.02em', display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+                                    ⊘ VOID
+                                  </span>
+                                )}
+
+                                {probVal != null ? (
+                                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: probVal >= 75 ? '#ecfdf5' : '#eff6ff', border: `1px solid ${probVal >= 75 ? '#a7f3d0' : '#bfdbfe'}`, padding: '2px 8px', borderRadius: 6, flexShrink: 0 }}>
+                                    <span style={{ fontSize: 12, fontWeight: 900, color: probVal >= 75 ? '#15803d' : '#1d4ed8' }}>
+                                      {probVal}%
+                                    </span>
+                                    <span style={{ fontSize: 9.5, fontWeight: 700, color: probVal >= 75 ? '#166534' : '#1e40af' }}>
+                                      Prob
+                                    </span>
+                                  </div>
+                                ) : isSecLocked ? (
+                                  <div style={{ fontSize: 11, fontWeight: 800, color: '#d97706', background: '#fef3c7', padding: '2px 8px', borderRadius: 6, border: '1px solid #fde68a', flexShrink: 0 }}>
+                                    🔒 VIP Lock
+                                  </div>
+                                ) : null}
+                              </div>
+                            </div>
+
+                            {/* Bottom Row: Full Pick Name & Line in Bold without any Truncation + Add to Slip */}
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginTop: 2 }}>
+                              <div style={{ fontSize: 14, fontWeight: 900, color: '#0f172a', lineHeight: 1.35, wordBreak: 'break-word', whiteSpace: 'normal', flex: 1 }}>
+                                {pickVal}
+                              </div>
+
+                              {onToggleFavorite && !isSecLocked && (
+                                <button
+                                  type="button"
+                                  className={`secondary-card-fav-btn ${isSecFav ? 'active' : ''}`}
+                                  onClick={(e) => handleSecondaryFavoriteToggle(e, sec, marketName, pickVal, probVal)}
+                                  title={isSecFav ? 'Remove from slip' : 'Add to slip'}
+                                  style={{ flexShrink: 0 }}
+                                >
+                                  {isSecFav ? '✓ IN SLIP' : '+ ADD TO SLIP'}
+                                </button>
+                              )}
+                            </div>
+
+                            {(sec as any).settlement_notes && (
+                              <div style={{ fontSize: 11, color: isSecWon ? '#15803d' : isSecLost ? '#b91c1c' : '#64748b', marginTop: 2, fontStyle: 'italic', lineHeight: 1.3 }}>
+                                {(sec as any).settlement_notes}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )
               )}
 
               {/* Markov Service Hold Rates & Surface ELO Diagnostics */}
               <div
                 style={{
                   display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
                   gap: 8,
                   marginTop: 12,
                   background: '#f8fafc',
@@ -694,7 +829,7 @@ export const TennisPredictionCard: React.FC<TennisPredictionCardProps> = ({
                     {p1DisplayName.split(' ').pop()} Hold Est.
                   </div>
                   <div style={{ fontSize: 14, fontWeight: 800, color: '#0f172a', marginTop: 2 }}>
-                    {markov?.p_hold_player1 != null ? `${Math.round(markov.p_hold_player1 * 100)}% • ${p1Elo} ELO` : `${p1Elo} ELO`}
+                    {p1HoldRate != null ? `${Math.round(p1HoldRate <= 1 ? p1HoldRate * 100 : p1HoldRate)}% • ${p1Elo} ELO` : `${p1Elo} ELO`}
                   </div>
                 </div>
                 <div>
@@ -702,7 +837,7 @@ export const TennisPredictionCard: React.FC<TennisPredictionCardProps> = ({
                     {p2DisplayName.split(' ').pop()} Hold Est.
                   </div>
                   <div style={{ fontSize: 14, fontWeight: 800, color: '#0f172a', marginTop: 2 }}>
-                    {markov?.p_hold_player2 != null ? `${Math.round(markov.p_hold_player2 * 100)}% • ${p2Elo} ELO` : `${p2Elo} ELO`}
+                    {p2HoldRate != null ? `${Math.round(p2HoldRate <= 1 ? p2HoldRate * 100 : p2HoldRate)}% • ${p2Elo} ELO` : `${p2Elo} ELO`}
                   </div>
                 </div>
                 <div>
@@ -710,15 +845,33 @@ export const TennisPredictionCard: React.FC<TennisPredictionCardProps> = ({
                     Dominance Ratio (DR)
                   </div>
                   <div style={{ fontSize: 14, fontWeight: 800, color: '#0f172a', marginTop: 2 }}>
-                    {markov?.dominance_ratio_player1 != null && markov?.dominance_ratio_player2 != null
-                      ? `${markov.dominance_ratio_player1.toFixed(2)} vs ${markov.dominance_ratio_player2.toFixed(2)}`
-                      : '-- vs --'}
+                    {dominanceRatioText}
                   </div>
                 </div>
+                {expectedTotalGames != null && (
+                  <div>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>
+                      Exp. Total Games
+                    </div>
+                    <div style={{ fontSize: 14, fontWeight: 800, color: '#0f172a', marginTop: 2 }}>
+                      {expectedTotalGames} Games
+                    </div>
+                  </div>
+                )}
+                {expectedGameMargin != null && (
+                  <div>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>
+                      Exp. Spread Margin
+                    </div>
+                    <div style={{ fontSize: 14, fontWeight: 800, color: '#0f172a', marginTop: 2 }}>
+                      {expectedGameMargin > 0 ? `+${expectedGameMargin}` : expectedGameMargin} Games
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* AI Tactical Intelligence Narrative */}
-              {prediction.metadata?.ai_tactical_analysis && (
+              {tacticalAnalysis && (
                 <div
                   style={{
                     marginTop: 12,
@@ -731,7 +884,7 @@ export const TennisPredictionCard: React.FC<TennisPredictionCardProps> = ({
                     lineHeight: 1.55,
                   }}
                 >
-                  <strong>🧠 Tactical & Surface Edge:</strong> {prediction.metadata.ai_tactical_analysis}
+                  <strong>🧠 Tactical &amp; Surface Edge:</strong> {tacticalAnalysis}
                 </div>
               )}
             </div>

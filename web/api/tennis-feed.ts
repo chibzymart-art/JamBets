@@ -385,49 +385,21 @@ export default async function handler(req: Request): Promise<Response> {
           };
         }
 
-        const cat = (p.confidence_category || '').toUpperCase().replace(/[\s-]+/g, '_');
-        let prob = p.probability;
-        if (prob != null && typeof prob === 'number') {
-          if (prob > 1) prob = prob / 100;
-        }
-        const isVipTier =
-          cat === 'BANGER' ||
-          cat.includes('BANGER') ||
-          cat === 'TOP_PICK' ||
-          cat === 'TOPPICK' ||
-          cat.includes('TOP') ||
-          cat === 'HIGH_CONFIDENCE' ||
-          cat === 'HIGHCONFIDENCE' ||
-          cat.includes('HIGH') ||
-          (prob !== null && typeof prob === 'number' && prob >= 0.80);
-
-        if (isVipTier) {
-          return {
-            ...p,
-            prediction: '🔒 Premium VIP Pick',
-            probability: null,
-            confidence_category: p.confidence_category || 'TOP PICK',
-            secondary_predictions: [
-              { market: 'game_handicap', prediction: '🔒 VIP Spread Pick', probability: null, locked: true },
-              { market: 'first_set_winner', prediction: '🔒 VIP 1st Set Winner', probability: null, locked: true },
-              { market: 'set_handicap', prediction: '🔒 VIP Set Handicap', probability: null, locked: true },
-              { market: 'total_games_over_under', prediction: '🔒 VIP Over/Under Total', probability: null, locked: true },
-            ],
-            metadata: {
-              ...p.metadata,
-              ai_tactical_analysis: '🔒 Upgrade to Oddsbanta VIP to unlock comprehensive probability distributions and AI tactical breakdown.',
-              markov: undefined,
-            },
-            is_locked: true,
-          };
-        }
-
-        // Mid-Confidence (6.0–7.9) is visible to everyone across the board
+        // All live, scheduled & pending tennis predictions are locked for visitors as BigBang VIP conversion teasers
         return {
           ...p,
-          is_locked: false,
-          confidence_category: p.confidence_category || 'MID CONFIDENCE',
-          publication_status: p.publication_status || 'published',
+          prediction: '🔒 BigBang VIP Pick',
+          probability: null,
+          confidence_category: p.confidence_category || 'TOP PICK',
+          fair_odds: null,
+          market_odds: null,
+          secondary_predictions: [],
+          metadata: {
+            ...p.metadata,
+            ai_tactical_analysis: '🔒 ATP & WTA match predictions and Markov chain models are reserved for BigBang VIP members.',
+            markov: undefined,
+          },
+          is_locked: true,
         };
       });
 

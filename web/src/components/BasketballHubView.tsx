@@ -53,8 +53,6 @@ export const BasketballHubView: React.FC<BasketballHubViewProps> = ({
 
   const isSubscriber = isAdmin || canViewPredictions;
 
-
-
   const loadFeed = async (force = false) => {
     setLoading(true);
     setError(null);
@@ -130,27 +128,9 @@ export const BasketballHubView: React.FC<BasketballHubViewProps> = ({
     });
   }, [allPredictions, selectedDate, isSubscriber]);
 
-  // Helper to determine if a basketball prediction is free/unlocked for guests
+  // Helper to determine if a basketball prediction is free/unlocked for guests (strictly settled won games only)
   const isFreeAccessible = (p: BasketballPrediction): boolean => {
-    const isWon = (p.settlement_status || '').toLowerCase() === 'won';
-    if (isWon) return true;
-    const cat = (p.confidence_category || '').toUpperCase().replace(/[\s-]+/g, '_');
-    let prob = p.probability;
-    if (prob != null && typeof prob === 'number' && prob > 1) prob = prob / 100;
-    const isVipTier =
-      cat === 'BANGER' ||
-      cat.includes('BANGER') ||
-      cat === 'TOP_PICK' ||
-      cat === 'TOPPICK' ||
-      cat.includes('TOP') ||
-      cat === 'HIGH_CONFIDENCE' ||
-      cat === 'HIGHCONFIDENCE' ||
-      cat.includes('HIGH') ||
-      (prob !== null && typeof prob === 'number' && prob >= 0.80) ||
-      p.prediction === '🔒 VIP Locked Prediction' ||
-      p.prediction === 'LOCKED' ||
-      (p as any).is_locked === true;
-    return !isVipTier;
+    return (p.settlement_status || '').toLowerCase() === 'won';
   };
 
   // Filtered Predictions
@@ -230,14 +210,13 @@ export const BasketballHubView: React.FC<BasketballHubViewProps> = ({
         return -1;
       }
 
-      // For free visitors/non-subscribers: Prioritize unlocked Mid-Confidence & Low-Confidence so visitors experience working AI models upfront!
+      // For free visitors/non-subscribers: Keep high-conviction VIP conversion teasers at top
       if (!isSubscriber) {
-        if (cat.includes('MID_CONFIDENCE') || cat.includes('MIDCONFIDENCE') || cat === 'MID') return 10;
-        if (cat.includes('LOW_CONFIDENCE') || cat.includes('LOWCONFIDENCE') || cat === 'LOW') return 9;
-        // Locked VIP tiers follow directly beneath as conversion teasers
         if (cat.includes('BANGER')) return 6;
         if (cat.includes('TOP_PICK') || cat.includes('TOPPICK')) return 5;
         if (cat.includes('HIGH_CONFIDENCE') || cat.includes('HIGHCONFIDENCE')) return 4;
+        if (cat.includes('MID_CONFIDENCE') || cat.includes('MIDCONFIDENCE') || cat === 'MID') return 3;
+        if (cat.includes('LOW_CONFIDENCE') || cat.includes('LOWCONFIDENCE') || cat === 'LOW') return 2;
         return 1;
       }
 
@@ -601,12 +580,12 @@ export const BasketballHubView: React.FC<BasketballHubViewProps> = ({
                 <span style={{ fontSize: '24px' }}>🏀</span>
                 <div>
                   <div style={{ fontWeight: 800, fontSize: '13px', letterSpacing: '-0.01em', color: '#fbbf24' }}>
-                    {userRole === 'standard' ? 'Standard Plan Active — Upgrade to BigBang VIP' : 'Oddsbanta VIP Basketball Analytics'}
+                    {userRole === 'standard' ? 'Standard Plan Active — Upgrade to BigBang VIP' : 'Oddsbanta BigBang VIP Basketball Analytics'}
                   </div>
                   <div style={{ fontSize: '12px', color: '#c7d2fe', marginTop: '2px', lineHeight: 1.4 }}>
                     {userRole === 'standard'
-                      ? 'Your Standard Plan includes full Football coverage. Basketball predictions & Dean Oliver Four Factors models are unlocked with BigBang VIP.'
-                      : 'Free visitors get full access to Mid-Confidence basketball picks. High-accuracy models (85%+ hit rate) in High Confidence & Bangers require VIP.'}
+                      ? 'Your Standard Plan includes full Football coverage. Basketball predictions, Dean Oliver Four Factors, point spreads & game totals are unlocked with BigBang VIP (₦10,000/mo).'
+                      : 'Basketball match predictions, Dean Oliver Four Factors, point spreads, game totals, and 250,000 Monte Carlo simulations are reserved for BigBang VIP members.'}
                   </div>
                 </div>
               </div>
@@ -625,7 +604,7 @@ export const BasketballHubView: React.FC<BasketballHubViewProps> = ({
                   whiteSpace: 'nowrap',
                 }}
               >
-                {userRole === 'standard' ? 'Upgrade to BigBang VIP →' : 'Upgrade to VIP (₦5,000/mo) →'}
+                {userRole === 'standard' ? 'Upgrade to BigBang VIP (₦10,000/mo) →' : 'Unlock BigBang VIP (₦10,000/mo) →'}
               </button>
             </div>
           )}

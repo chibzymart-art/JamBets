@@ -151,6 +151,7 @@ export async function fetchTennisFeed(options: FetchTennisFeedOptions = {}): Pro
     forceRefresh = false,
   } = options;
 
+
   const cacheKey = `${surface}:${tour}:${tier}:${Boolean(canViewPredictions)}`;
 
   // 1. Instant Cache Hit
@@ -306,39 +307,30 @@ export async function fetchTennisFeed(options: FetchTennisFeedOptions = {}): Pro
         };
       }
 
-      const isRecordLocked = (p.is_locked !== false && p.prediction === 'LOCKED');
-
-      if (isRecordLocked) {
+      // Won matches are visible to all visitors as historical track record proof
+      const isWon = (p.settlement_status || '').toLowerCase() === 'won';
+      if (isWon) {
         return {
           ...p,
-          prediction: '🔒 Subscriber Only',
-          probability: null,
-          secondary_predictions: (p.secondary_predictions && p.secondary_predictions.length > 0)
-            ? p.secondary_predictions.map((s: any) => ({
-                market: s.market,
-                prediction: '🔒 VIP Banker',
-                probability: null,
-                locked: true,
-              }))
-            : [
-                { market: 'game_handicap', prediction: '🔒 VIP Banker', probability: null, locked: true },
-                { market: 'first_set_winner', prediction: '🔒 VIP Banker', probability: null, locked: true },
-                { market: 'set_handicap', prediction: '🔒 VIP Banker', probability: null, locked: true },
-                { market: 'total_games_over_under', prediction: '🔒 VIP Banker', probability: null, locked: true },
-              ],
-          metadata: {
-            ...p.metadata,
-            ai_tactical_analysis:
-              '🔒 Upgrade to Oddsbanta VIP to unlock full probability distributions and AI tactical breakdown.',
-            markov: undefined,
-          },
-          is_locked: true,
+          is_locked: false,
         };
       }
 
+      // All live, scheduled & pending tennis predictions are locked for visitors as VIP conversion teasers
       return {
         ...p,
-        is_locked: false,
+        prediction: '🔒 BigBang VIP Pick',
+        probability: null,
+        fair_odds: null,
+        market_odds: null,
+        secondary_predictions: [],
+        metadata: {
+          ...p.metadata,
+          ai_tactical_analysis:
+            '🔒 Tennis match predictions and Markov chain models are reserved for BigBang VIP members.',
+          markov: undefined,
+        },
+        is_locked: true,
       };
     });
 

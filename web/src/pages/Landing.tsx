@@ -6,6 +6,7 @@ interface LandingPageProps {
   onOpenAuth: (mode: 'signin' | 'register') => void;
   currentUser: any;
   userRole?: string;
+  canViewMultiSport?: boolean;
   onOpenFaq?: () => void;
   onOpenPricing?: () => void;
   onOpenBotHub?: () => void;
@@ -34,6 +35,8 @@ interface TrackRecordSummary {
 export const LandingPage: React.FC<LandingPageProps> = ({
   onOpenAuth,
   currentUser,
+  userRole: _userRole,
+  canViewMultiSport: _canViewMultiSport = false,
   onOpenFaq,
   onOpenPricing,
   onOpenBotHub

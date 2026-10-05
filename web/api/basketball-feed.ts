@@ -287,11 +287,10 @@ async function fetchBasketballFromUpstream(isPaidOrAdmin: boolean): Promise<Bask
   let settledLost = 0;
   let settledVoid = 0;
 
-// Universal Tier Paywall Redaction for Basketball:
-// 1. Mid-Confidence (6.0–7.9) is visible to everyone across the board
-// 2. High Confidence (8.0–8.9), Top Picks (9.0+), and Bangers (9.0+) are strictly hidden/locked from free users and visitors
-// 3. Won settled predictions are visible as historical proof
-// 4. Lost, void, or un-won finished predictions are hidden from free users
+// Multi-Sport VIP Shield for Basketball:
+// 1. Won settled predictions remain visible as historical track-record proof
+// 2. Lost, void, or un-won finished predictions are hidden from free users/visitors
+// 3. ALL upcoming & pending predictions are locked behind BigBang VIP teasers
 function applyBasketballPaywallRedaction(preds: any[]): any[] {
   return preds
     .filter((p: any) => {
@@ -311,40 +310,24 @@ function applyBasketballPaywallRedaction(preds: any[]): any[] {
         };
       }
 
-      const cat = (p.confidence_category || '').toUpperCase().replace(/[\s-]+/g, '_');
-      let prob = p.probability;
-      if (prob != null && typeof prob === 'number') {
-        if (prob > 1) prob = prob / 100;
-      }
-      const isVipTier =
-        cat === 'BANGER' ||
-        cat.includes('BANGER') ||
-        cat === 'TOP_PICK' ||
-        cat === 'TOPPICK' ||
-        cat.includes('TOP') ||
-        cat === 'HIGH_CONFIDENCE' ||
-        cat === 'HIGHCONFIDENCE' ||
-        cat.includes('HIGH') ||
-        (prob !== null && typeof prob === 'number' && prob >= 0.80);
-
-      if (isVipTier) {
-        return {
-          ...p,
-          is_locked: true,
-          probability: null,
-          confidence_category: p.confidence_category || 'TOP PICK',
-          prediction: '🔒 Premium VIP Pick',
-          secondary_predictions: [],
-          metadata: {},
-        };
-      }
-
-      // Mid-Confidence (6.0–7.9) is visible to everyone across the board
+      // All active/scheduled basketball predictions are locked as BigBang VIP teasers
       return {
         ...p,
-        is_locked: false,
-        confidence_category: p.confidence_category || 'MID CONFIDENCE',
-        publication_status: p.publication_status || 'published',
+        is_locked: true,
+        probability: null,
+        confidence_category: (p.confidence_category === 'BANGER' ? 'BANGER' : 'TOP PICK'),
+        prediction: '🔒 BigBang VIP Pick',
+        simulated_home_score: null,
+        simulated_away_score: null,
+        edge_percentage: null,
+        fair_odds: null,
+        market_odds: null,
+        secondary_predictions: [],
+        metadata: {
+          ai_tactical_analysis: '🔒 Basketball predictions and 250,000 Monte Carlo simulations are reserved for BigBang VIP members.',
+          simulation: null,
+          secondary_locked: true,
+        },
       };
     });
 }
@@ -422,6 +405,7 @@ export default async function handler(req: Request): Promise<Response> {
   const authHeader = req.headers.get('Authorization');
   const rawToken = authHeader?.startsWith('Bearer ') ? authHeader.slice(7).trim() : authHeader?.trim() || null;
   const isPaidOrAdmin = await checkIsPaidOrAdmin(rawToken);
+
 
   const responseHeaders: Record<string, string> = {
     ...corsHeaders,

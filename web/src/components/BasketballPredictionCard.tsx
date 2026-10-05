@@ -57,21 +57,9 @@ export const BasketballPredictionCard: React.FC<BasketballPredictionCardProps> =
   let prob = prediction.probability;
   if (prob != null && typeof prob === 'number' && prob > 1) prob = prob / 100;
 
-  const isVipTier =
-    cat === 'BANGER' ||
-    cat.includes('BANGER') ||
-    cat === 'TOP_PICK' ||
-    cat === 'TOPPICK' ||
-    cat.includes('TOP') ||
-    cat === 'HIGH_CONFIDENCE' ||
-    cat === 'HIGHCONFIDENCE' ||
-    cat.includes('HIGH') ||
-    (prob !== null && typeof prob === 'number' && prob >= 0.80) ||
-    prediction.is_locked === true;
-
-  // Universal Tier Paywall: Mid-Confidence (6.0–7.9) is visible to everyone across the board
-  // Only VIP tiers (High Confidence, Top Picks, Bangers) are locked for non-paid visitors
-  const isLocked = !isUserEntitled && !isWon && isVipTier;
+  // Multi-Sport VIP Shield: All live & upcoming basketball predictions are locked for visitors as marketing teasers.
+  // Won settled matches remain visible as historical track-record win proof.
+  const isLocked = !isUserEntitled && !isWon;
 
   // Kickoff formatting in Lagos WAT (UTC+1)
   const kickoffDate = new Date(prediction.target_kickoff_at || fixture?.target_kickoff_at || Date.now());
@@ -107,8 +95,21 @@ export const BasketballPredictionCard: React.FC<BasketballPredictionCardProps> =
   const leagueCode = league?.code || 'NBA';
   const leagueName = league?.name || 'Basketball';
 
+  const isNoBanker =
+    cat === 'NO_SAFE_BANKER' ||
+    cat === 'NOSAFEBANKER' ||
+    cat.includes('NO_SAFE') ||
+    cat.includes('NOSAFE') ||
+    (prediction.market || '').toUpperCase() === 'NO_SAFE_BANKER' ||
+    (prediction.prediction || '').toUpperCase() === 'SKIP';
+
+  const isSettledOrFinished = isFinished || Boolean(prediction.settled_at) || (Boolean(prediction.settlement_status) && prediction.settlement_status !== 'pending');
+
+  const isSecondaryRedacted = !isUserEntitled && !isWon && isNoBanker && !isSettledOrFinished;
+
   // Strictly filter out primary market to guarantee non-duplication
   const displayedSecondaryPreds = useMemo(() => {
+    if (isSecondaryRedacted || isLocked) return [];
     const list = prediction.secondary_predictions || [];
     let arr: any[] = [];
     if (Array.isArray(list)) {
@@ -125,7 +126,7 @@ export const BasketballPredictionCard: React.FC<BasketballPredictionCardProps> =
       const secMarket = (sec.market || '').toLowerCase();
       return secMarket !== primaryMarket;
     });
-  }, [prediction.secondary_predictions, prediction.market]);
+  }, [prediction.secondary_predictions, prediction.market, isSecondaryRedacted, isLocked]);
 
   // Four Factors Data
   const homeFF = homeTeam?.four_factors || { efg_pct: 0.535, tov_pct: 0.125, orb_pct: 0.250, ftr: 0.220 };
@@ -282,7 +283,7 @@ export const BasketballPredictionCard: React.FC<BasketballPredictionCardProps> =
       </div>
 
       {/* 2.5 250k MONTE CARLO SIMULATED SCORELINE RIBBON */}
-      {prediction.simulated_home_score != null && prediction.simulated_away_score != null && (
+      {!isLocked && prediction.simulated_home_score != null && prediction.simulated_away_score != null && (
         <div
           style={{
             background: 'linear-gradient(90deg, #fff7ed 0%, #ffedd5 50%, #fff7ed 100%)',
@@ -360,9 +361,9 @@ export const BasketballPredictionCard: React.FC<BasketballPredictionCardProps> =
           <div className="bball-prediction-text" style={{ marginTop: 4 }}>
             {isLocked ? (
               <div>
-                <span style={{ color: '#ea580c', fontWeight: 700 }}>🔒 Premium VIP Pick (Restricted)</span>
+                <span style={{ color: '#ea580c', fontWeight: 700 }}>🔒 BigBang VIP Pick</span>
                 <div style={{ fontSize: 11, color: '#b45309', marginTop: 2, fontWeight: 500 }}>
-                  High-accuracy models (85%+ hit rate) are reserved for VIP.
+                  250,000 Monte Carlo simulations &amp; Four Factors reserved for BigBang VIP.
                 </div>
               </div>
             ) : (
@@ -381,7 +382,7 @@ export const BasketballPredictionCard: React.FC<BasketballPredictionCardProps> =
                 onOpenUpgrade ? onOpenUpgrade() : onOpenAuth ? onOpenAuth('signin') : null;
               }}
             >
-              👑 Unlock VIP (₦5,000/mo) →
+              👑 Unlock BigBang VIP (₦10,000/mo) →
             </button>
           ) : (
             <>
@@ -411,8 +412,87 @@ export const BasketballPredictionCard: React.FC<BasketballPredictionCardProps> =
         </div>
       </div>
 
-      {/* 3.5 DYNAMIC SECONDARY PREDICTIONS GRID (STRICTLY DEDUPLICATED FROM PRIMARY) */}
-      {displayedSecondaryPreds.length > 0 && (
+      {/* 3.5 DYNAMIC SECONDARY PREDICTIONS OR ANTI-LOSS VIP TEASER */}
+      {isSecondaryRedacted ? (
+        <div
+          className="bball-anti-loss-teaser-box"
+          style={{
+            marginTop: 10,
+            marginBottom: 12,
+            padding: '14px 16px',
+            background: 'linear-gradient(135deg, rgba(248, 250, 252, 0.98), rgba(241, 245, 249, 0.95))',
+            border: '1.5px dashed #fed7aa',
+            borderRadius: 12,
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, flexWrap: 'wrap', gap: 6 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ fontSize: 14 }}>🔒</span>
+              <span style={{ fontSize: 11.5, fontWeight: 900, color: '#9a3412', textTransform: 'uppercase', letterSpacing: '0.02em' }}>
+                VIP Secondary Markets Detected
+              </span>
+            </div>
+            <span style={{
+              fontSize: 10,
+              fontWeight: 800,
+              color: '#c2410c',
+              background: '#fff7ed',
+              border: '1px solid #fed7aa',
+              padding: '2px 8px',
+              borderRadius: 9999,
+              textTransform: 'uppercase',
+            }}>
+              Anti-Loss Toss-Up
+            </span>
+          </div>
+
+          <p style={{ fontSize: 12, color: '#475569', lineHeight: 1.5, margin: '0 0 10px 0' }}>
+            Moneyline is too volatile for a safe banker pick. Our engine identified <strong>qualifying derivative edges</strong> (Point Spread &amp; Game Totals). Upgrade to VIP to reveal all secondary basketball models.
+          </p>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 8, filter: 'blur(3.5px)', opacity: 0.65, userSelect: 'none', pointerEvents: 'none', marginBottom: 10 }}>
+            <div style={{ padding: '8px 10px', background: '#fff', borderRadius: 6, border: '1px solid #fed7aa' }}>
+              <div style={{ fontSize: 9.5, fontWeight: 800, color: '#9a3412' }}>⚡ POINT SPREAD</div>
+              <div style={{ fontSize: 12, fontWeight: 900, color: '#0f172a' }}>+X.5 • 7X.X%</div>
+            </div>
+            <div style={{ padding: '8px 10px', background: '#fff', borderRadius: 6, border: '1px solid #fed7aa' }}>
+              <div style={{ fontSize: 9.5, fontWeight: 800, color: '#9a3412' }}>📊 GAME TOTALS</div>
+              <div style={{ fontSize: 12, fontWeight: 900, color: '#0f172a' }}>Over 2XX.5 • 7X.X%</div>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+            <span style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>
+              ⚡ Instant access to basketball spreads &amp; totals
+            </span>
+            <button
+              type="button"
+              className="btn-paywall-unlock-prominent"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                background: 'linear-gradient(135deg, #f97316, #ea580c)',
+                color: '#ffffff',
+                fontWeight: 800,
+                fontSize: 11.5,
+                padding: '6px 14px',
+                borderRadius: 6,
+                border: 'none',
+                cursor: 'pointer',
+                boxShadow: '0 2px 6px rgba(234, 88, 12, 0.25)',
+              }}
+              onClick={() => {
+                if (onOpenUpgrade) onOpenUpgrade();
+                else if (onOpenAuth) onOpenAuth('register');
+              }}
+            >
+              ⚡ Unlock BigBang VIP (₦10,000/mo) →
+            </button>
+          </div>
+        </div>
+      ) : !isLocked && displayedSecondaryPreds.length > 0 ? (
         <div
           className="bball-secondary-section"
           style={{ marginTop: 10, marginBottom: 12 }}
@@ -455,13 +535,18 @@ export const BasketballPredictionCard: React.FC<BasketballPredictionCardProps> =
                 isFavoriteItem ? isFavoriteItem(prediction.fixture_id, marketName, pickVal) : false
               );
 
+              const secSettlement = (sec as any).settlement_status as string | undefined;
+              const isSecWon = secSettlement === 'won' || secSettlement === 'half_won';
+              const isSecLost = secSettlement === 'lost' || secSettlement === 'half_lost';
+              const isSecVoid = secSettlement === 'void' || secSettlement === 'voided';
+
               return (
                 <div
                   key={idx}
                   className="bball-secondary-tile"
                   style={{
                     background: '#ffffff',
-                    border: isSecFav ? '1.5px solid #10b981' : '1.5px solid #fed7aa',
+                    border: isSecFav ? '1.5px solid #10b981' : isSecWon ? '1.5px solid #86efac' : isSecLost ? '1.5px solid #fca5a5' : '1.5px solid #fed7aa',
                     borderRadius: 10,
                     padding: '10px 12px',
                     display: 'flex',
@@ -475,20 +560,37 @@ export const BasketballPredictionCard: React.FC<BasketballPredictionCardProps> =
                     <span style={{ fontSize: 10.5, fontWeight: 800, color: '#9a3412', textTransform: 'uppercase', letterSpacing: '0.02em' }}>
                       {displayMarketTitle}
                     </span>
-                    {probNum != null ? (
-                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 3, background: probNum >= 65 ? '#ecfdf5' : '#eff6ff', border: `1px solid ${probNum >= 65 ? '#a7f3d0' : '#bfdbfe'}`, padding: '1px 6px', borderRadius: 5 }}>
-                        <span style={{ fontSize: 11.5, fontWeight: 900, color: probNum >= 65 ? '#15803d' : '#1d4ed8' }}>
-                          {probNum}%
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                      {isSecWon && (
+                        <span style={{ fontSize: 9.5, fontWeight: 900, color: '#ffffff', background: '#16a34a', padding: '1px 6px', borderRadius: 4 }}>
+                          ✓ WON
                         </span>
-                        <span style={{ fontSize: 9, fontWeight: 700, color: probNum >= 65 ? '#166534' : '#1e40af' }}>
-                          Prob
+                      )}
+                      {isSecLost && (
+                        <span style={{ fontSize: 9.5, fontWeight: 900, color: '#ffffff', background: '#dc2626', padding: '1px 6px', borderRadius: 4 }}>
+                          ✗ LOST
                         </span>
-                      </div>
-                    ) : isSecLocked ? (
-                      <span style={{ fontSize: 10, fontWeight: 800, color: '#d97706', background: '#fef3c7', padding: '1px 6px', borderRadius: 4 }}>
-                        🔒 Locked
-                      </span>
-                    ) : null}
+                      )}
+                      {isSecVoid && (
+                        <span style={{ fontSize: 9.5, fontWeight: 900, color: '#475569', background: '#e2e8f0', padding: '1px 6px', borderRadius: 4 }}>
+                          ⊘ VOID
+                        </span>
+                      )}
+                      {probNum != null ? (
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 3, background: probNum >= 65 ? '#ecfdf5' : '#eff6ff', border: `1px solid ${probNum >= 65 ? '#a7f3d0' : '#bfdbfe'}`, padding: '1px 6px', borderRadius: 5 }}>
+                          <span style={{ fontSize: 11.5, fontWeight: 900, color: probNum >= 65 ? '#15803d' : '#1d4ed8' }}>
+                            {probNum}%
+                          </span>
+                          <span style={{ fontSize: 9, fontWeight: 700, color: probNum >= 65 ? '#166534' : '#1e40af' }}>
+                            Prob
+                          </span>
+                        </div>
+                      ) : isSecLocked ? (
+                        <span style={{ fontSize: 10, fontWeight: 800, color: '#d97706', background: '#fef3c7', padding: '1px 6px', borderRadius: 4 }}>
+                          🔒 Locked
+                        </span>
+                      ) : null}
+                    </div>
                   </div>
 
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 2 }}>
@@ -524,7 +626,7 @@ export const BasketballPredictionCard: React.FC<BasketballPredictionCardProps> =
             })}
           </div>
         </div>
-      )}
+      ) : null}
 
       {/* 4. SETTLEMENT RESULT (IF SETTLED) */}
       {(isWon || isLost || isVoid) && (
@@ -549,8 +651,53 @@ export const BasketballPredictionCard: React.FC<BasketballPredictionCardProps> =
         </div>
       )}
 
-      {/* 6. EXPANDABLE 250,000 SIMULATION & FOUR FACTORS DRAWER */}
-      {isExpanded && !isLocked && (
+      {/* 6. EXPANDABLE PAYWALL LOCK DRAWER FOR VISITORS */}
+      {isExpanded && isLocked && (
+        <div
+          className="paywall-lock-container"
+          style={{
+            margin: '14px 0',
+            padding: '24px 20px',
+            borderRadius: 12,
+            background: 'linear-gradient(135deg, rgba(254, 243, 199, 0.5), rgba(255, 237, 213, 0.4))',
+            border: '1.5px solid #fed7aa',
+            textAlign: 'center',
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="paywall-lock-icon" style={{ fontSize: 28, marginBottom: 8 }}>🔒</div>
+          <h4 style={{ margin: '0 0 6px 0', fontSize: 15, fontWeight: 800, color: '#0f172a' }}>
+            Oddsbanta BigBang VIP Basketball Analytics
+          </h4>
+          <p style={{ margin: '0 0 16px 0', fontSize: 12.5, color: '#475569', lineHeight: 1.5, maxWidth: 440, marginLeft: 'auto', marginRight: 'auto' }}>
+            Autonomous Monte Carlo simulations, Dean Oliver Four Factors, point spreads, game totals, and possession pace models are reserved for BigBang VIP members.
+          </p>
+          <button
+            type="button"
+            className="btn-paywall-unlock-prominent"
+            style={{
+              background: 'linear-gradient(135deg, #f97316, #ea580c)',
+              color: '#ffffff',
+              fontWeight: 800,
+              fontSize: 13,
+              padding: '10px 22px',
+              borderRadius: 8,
+              border: 'none',
+              cursor: 'pointer',
+              boxShadow: '0 4px 12px rgba(234, 88, 12, 0.25)',
+            }}
+            onClick={() => {
+              if (onOpenUpgrade) onOpenUpgrade();
+              else if (onOpenAuth) onOpenAuth('register');
+            }}
+          >
+            👑 Unlock BigBang VIP (₦10,000/mo) →
+          </button>
+        </div>
+      )}
+
+      {/* 6.5 EXPANDABLE 250,000 SIMULATION & FOUR FACTORS DRAWER FOR SUBSCRIBERS */}
+      {isExpanded && !isLocked && !isSecondaryRedacted && (
         <div className="bball-four-factors-wrap" onClick={(e) => e.stopPropagation()}>
           <div className="bball-ff-header">
             <span>Dean Oliver Four Factors Breakdown</span>
@@ -602,7 +749,7 @@ export const BasketballPredictionCard: React.FC<BasketballPredictionCardProps> =
           </div>
 
           {/* Projected Score & Percentiles */}
-          {prediction.simulated_home_score != null && prediction.simulated_away_score != null && (
+          {!isLocked && prediction.simulated_home_score != null && prediction.simulated_away_score != null && (
             <div style={{ display: 'flex', justifyContent: 'space-around', background: '#ffffff', border: '1px solid #e2e8f0', padding: '10px', borderRadius: '8px', marginTop: '12px', boxShadow: '0 2px 6px rgba(0,0,0,0.03)' }}>
               <div style={{ textAlign: 'center' }}>
                 <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>Expected Home Score</div>

@@ -369,13 +369,13 @@ export const TennisHubView: React.FC<TennisHubViewProps> = ({
         return -1;
       }
 
-      // For non-subscribers: Prioritize unlocked Mid-Confidence & Low-Confidence picks upfront
+      // For non-subscribers: Showcase highest conviction VIP conversion teasers at top
       if (!isSubscriber) {
-        if (cat.includes('MID_CONFIDENCE') || cat.includes('MIDCONFIDENCE') || cat === 'MID') return 10;
-        if (cat.includes('LOW_CONFIDENCE') || cat.includes('LOWCONFIDENCE') || cat === 'LOW') return 9;
         if (cat.includes('BANGER')) return 6;
         if (cat.includes('TOP_PICK') || cat.includes('TOPPICK')) return 5;
         if (cat.includes('HIGH_CONFIDENCE') || cat.includes('HIGHCONFIDENCE')) return 4;
+        if (cat.includes('MID_CONFIDENCE') || cat.includes('MIDCONFIDENCE') || cat === 'MID') return 3;
+        if (cat.includes('LOW_CONFIDENCE') || cat.includes('LOWCONFIDENCE') || cat === 'LOW') return 2;
         if (cat.includes('RISKY')) return 1;
         if (market === 'SET_HANDICAP') return 6;
         if (market === 'MATCH_WINNER') return 5;
@@ -913,12 +913,12 @@ export const TennisHubView: React.FC<TennisHubViewProps> = ({
                 <span style={{ fontSize: '24px' }}>🎾</span>
                 <div>
                   <div style={{ fontWeight: 800, fontSize: '13px', letterSpacing: '-0.01em', color: '#fbbf24' }}>
-                    {userRole === 'standard' ? 'Standard Plan Active — Upgrade to BigBang VIP' : 'Oddsbanta VIP Tennis Match Radar'}
+                    {userRole === 'standard' ? 'Standard Plan Active — Upgrade to BigBang VIP' : '👑 Oddsbanta BigBang VIP Tennis Match Radar'}
                   </div>
                   <div style={{ fontSize: '12px', color: '#c7d2fe', marginTop: '2px', lineHeight: 1.4 }}>
                     {userRole === 'standard'
-                      ? 'Your Standard Plan includes full Football coverage. Tennis predictions and Markov chain models are unlocked with BigBang VIP.'
-                      : 'Free visitors get full access to Mid-Confidence tennis picks. High-accuracy models (85%+ hit rate) in High Confidence & Bangers require VIP.'}
+                      ? 'Your Standard Plan includes full Football coverage. Tennis predictions and Markov chain models are unlocked with BigBang VIP (₦10,000/mo).'
+                      : 'Live tennis match predictions, Markov probability models, game spreads, and set totals are reserved exclusively for BigBang VIP members.'}
                   </div>
                 </div>
               </div>
@@ -937,7 +937,7 @@ export const TennisHubView: React.FC<TennisHubViewProps> = ({
                   whiteSpace: 'nowrap',
                 }}
               >
-                {userRole === 'standard' ? 'Upgrade to BigBang VIP →' : 'Upgrade to VIP (₦5,000/mo) →'}
+                Upgrade to BigBang VIP (₦10,000/mo) →
               </button>
             </div>
           )}

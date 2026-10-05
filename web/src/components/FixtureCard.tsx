@@ -611,8 +611,15 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
   const previousPrediction = meta.previous_prediction;
   const changeReason = meta.change_reason;
 
-  // Parse Secondary Predictions
+  const isNoBanker = prediction?.market === 'NO_SAFE_BANKER' ||
+    prediction?.confidence_category === 'NO_SAFE_BANKER' ||
+    prediction?.prediction === 'SKIP';
+  const isPaid = Boolean(isAdmin || canViewPredictions);
+  const isSecondaryRedacted = !isPaid && !isWon && isNoBanker;
+
+  // Parse Secondary Predictions (redacted on No Safe Banker for non-subscribers)
   const secondaryList: SecondaryPrediction[] = React.useMemo(() => {
+    if (isSecondaryRedacted) return [];
     if (!prediction?.secondary_predictions) return [];
     if (Array.isArray(prediction.secondary_predictions)) return prediction.secondary_predictions;
     try {
@@ -621,15 +628,17 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
       }
     } catch {}
     return [];
-  }, [prediction?.secondary_predictions]);
+  }, [prediction?.secondary_predictions, isSecondaryRedacted]);
 
-  // Extract Poisson Parameters and 5-Dimension Outlines
+  // Extract Poisson Parameters and 5-Dimension Outlines (redacted on No Safe Banker for non-subscribers)
   const poissonData = React.useMemo(() => {
+    if (isSecondaryRedacted) return null;
     return resolvePoissonData(prediction, fixture);
-  }, [prediction, fixture]);
+  }, [prediction, fixture, isSecondaryRedacted]);
 
-  // Extract or synthesize AI Simulation Intelligence Narrative
+  // Extract or synthesize AI Simulation Intelligence Narrative (redacted on No Safe Banker for non-subscribers)
   const aiNarrative = React.useMemo(() => {
+    if (isSecondaryRedacted) return null;
     if (prediction?.metadata) {
       if (typeof prediction.metadata === 'object' && prediction.metadata.ai_summary) {
         return prediction.metadata.ai_summary;
@@ -649,16 +658,12 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
     const homeName = fixture.home_team_name?.replace(/-/g, ' ') || 'Home';
     const awayName = fixture.away_team_name?.replace(/-/g, ' ') || 'Away';
     return `Poisson-Monte Carlo Analysis: ${homeName} Attack Strength (${p.home_attack_str.toFixed(2)}) vs ${awayName} Defense (${p.away_defense_str.toFixed(2)}) with +${p.home_boost_pct}% Home Advantage & Form Weighting models expected goals at ${p.xg_home.toFixed(2)} vs ${p.xg_away.toFixed(2)}. Calibrated probability distributions confirm '${topPick}' (${topProb.toFixed(1)}%) as the highest-probable occurrence. Secondary edges: Over 1.5 Goals at ${o.goals.over_1_5_prob.toFixed(1)}%, Corners Over 8.5 at ${o.corners.over_8_5_prob.toFixed(1)}%, and ${o.anytime_scorer.home_scorer} anytime goal probability at ${o.anytime_scorer.home_scorer_prob.toFixed(1)}%. Recommended strategy: Core banker on ${topPick} with Over 1.5 Goals accumulator booster.`;
-  }, [prediction?.metadata, poissonData, fixture]);
+  }, [prediction?.metadata, poissonData, fixture, isSecondaryRedacted]);
 
   // If the match is live and the prediction has been met or settled while live, it settles the match by showing WON.
   const isLost = prediction?.settlement_status === 'lost';
   const isVoid = prediction?.settlement_status === 'void' || prediction?.settlement_status === 'voided';
   const isPending = !isWon && !isLost && !isVoid;
-
-  const isNoBanker = prediction?.market === 'NO_SAFE_BANKER' ||
-    prediction?.confidence_category === 'NO_SAFE_BANKER' ||
-    prediction?.prediction === 'SKIP';
 
   const probPct = prediction?.probability != null
     ? ((prediction.probability <= 1 ? prediction.probability * 100 : prediction.probability)).toFixed(1)
@@ -1304,6 +1309,88 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
                       <strong>Settlement:</strong> {prediction.settlement_notes}
                     </div>
                   )}
+                </div>
+              )}
+
+              {/* For NO_SAFE_BANKER when visitor is not paid: show Anti-Loss VIP Derivative Markets Teaser */}
+              {isSecondaryRedacted && (
+                <div
+                  className="anti-loss-vip-teaser-card"
+                  style={{
+                    marginTop: 14,
+                    padding: '18px 20px',
+                    background: 'linear-gradient(135deg, rgba(248, 250, 252, 0.98), rgba(241, 245, 249, 0.95))',
+                    border: '1.5px dashed #cbd5e1',
+                    borderRadius: 12,
+                    position: 'relative',
+                    overflow: 'hidden',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontSize: 16 }}>🔒</span>
+                      <span style={{ fontSize: 13, fontWeight: 900, color: '#0f172a', letterSpacing: '0.02em', textTransform: 'uppercase' }}>
+                        VIP Secondary Markets Detected
+                      </span>
+                    </div>
+                    <span style={{
+                      fontSize: 10.5,
+                      fontWeight: 800,
+                      color: '#b45309',
+                      background: '#fef3c7',
+                      border: '1px solid #fde68a',
+                      padding: '2px 8px',
+                      borderRadius: 9999,
+                      textTransform: 'uppercase',
+                    }}>
+                      Volatile Toss-Up Protection
+                    </span>
+                  </div>
+
+                  <p style={{ fontSize: 12.5, color: '#475569', lineHeight: 1.55, margin: '0 0 14px 0' }}>
+                    While the primary match winner (1X2) failed our strict 80% banker confidence floor, our Monte-Carlo simulation engine identified <strong>qualifying secondary value edges</strong> (e.g. Over/Under Goals, BTTS, and Corner Frequency). Upgrade to VIP to reveal all secondary market probabilities and models.
+                  </p>
+
+                  {/* Blurred teaser cards showing dummy secondary derivatives */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10, filter: 'blur(3.5px)', opacity: 0.65, userSelect: 'none', pointerEvents: 'none', marginBottom: 14 }}>
+                    <div style={{ padding: '10px 12px', background: '#fff', borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                      <div style={{ fontSize: 10, fontWeight: 800, color: '#64748b' }}>⚽ GOALS OUTCOME</div>
+                      <div style={{ fontSize: 13, fontWeight: 900, color: '#1e293b' }}>Over 1.5 Goals • 8X.X%</div>
+                    </div>
+                    <div style={{ padding: '10px 12px', background: '#fff', borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                      <div style={{ fontSize: 10, fontWeight: 800, color: '#64748b' }}>🔄 BOTH TEAMS TO SCORE</div>
+                      <div style={{ fontSize: 13, fontWeight: 900, color: '#1e293b' }}>GG (Yes) • 7X.X%</div>
+                    </div>
+                    <div style={{ padding: '10px 12px', background: '#fff', borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                      <div style={{ fontSize: 10, fontWeight: 800, color: '#64748b' }}>🚩 CORNERS FREQUENCY</div>
+                      <div style={{ fontSize: 13, fontWeight: 900, color: '#1e293b' }}>Over 8.5 Corners • 7X.X%</div>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+                    <span style={{ fontSize: 11.5, color: '#64748b', fontWeight: 600 }}>
+                      ⚡ Instant access to all derivative markets across all matches
+                    </span>
+                    <Link
+                      to="/subscription"
+                      className="btn-paywall-unlock-prominent"
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+                        color: '#ffffff',
+                        fontWeight: 800,
+                        fontSize: 12.5,
+                        padding: '8px 16px',
+                        borderRadius: 8,
+                        textDecoration: 'none',
+                        boxShadow: '0 2px 6px rgba(217, 119, 6, 0.25)',
+                      }}
+                    >
+                      ⚡ Unlock VIP Secondary Markets (₦5,000/mo) →
+                    </Link>
+                  </div>
                 </div>
               )}
 
