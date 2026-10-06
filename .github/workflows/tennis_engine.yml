@@ -110,3 +110,11 @@ jobs:
           except Exception as e:
               print(f'Failed to dispatch email alert: {e}')
           "
+
+      - name: Notify IndexNow (Bing, Yandex) of changed pages
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: python -m python.src.seo.indexnow --sports tennis --since-minutes 60

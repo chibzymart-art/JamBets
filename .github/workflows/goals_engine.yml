@@ -66,3 +66,11 @@ jobs:
           ALERT_EMAIL_RECIPIENTS: ${{ secrets.ALERT_EMAIL_RECIPIENTS }}
         run: |
           python -c "from python.src.alerts.email_notifier import send_pipeline_failure_alert; send_pipeline_failure_alert('Goals & Decoupled Specialists Engine (GitHub Actions)', Exception('Workflow job failed'), {'run_id': '${{ github.run_id }}', 'run_url': 'https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}'})"
+
+      - name: Notify IndexNow (Bing, Yandex) of changed pages
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: python -m python.src.seo.indexnow --sports goals --since-minutes 60
