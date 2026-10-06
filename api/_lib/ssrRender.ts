@@ -135,6 +135,43 @@ export function routeNeedsUpcoming(route: SsrRoute): boolean {
   return !!META[route].needsUpcoming;
 }
 
+// ── Sitemap ─────────────────────────────────────────────────────────────────────
+/**
+ * Public routes deliberately left out of sitemap.xml. They stay crawlable (robots.txt allows
+ * them and they are linked internally); they are just not advertised in the sitemap.
+ */
+export const SITEMAP_EXCLUDE: SsrRoute[] = ['/track-record'];
+
+/** Routes listed in sitemap.xml: every SSR route except exclusions and coming-soon pages. */
+export function sitemapRoutes(): SsrRoute[] {
+  return SSR_ROUTES.filter((r) => !META[r].comingSoon && !SITEMAP_EXCLUDE.includes(r));
+}
+
+/**
+ * lastmod reflects real content changes: a sport hub's latest settled result, and the most
+ * recent of those for the home page. Routes without a data-backed date omit lastmod.
+ */
+export function renderSitemap(tr: TrackRecord | null): string {
+  const latest = (dates: (string | null | undefined)[]): string | null => {
+    const valid = dates.filter((d): d is string => !!d && !Number.isNaN(Date.parse(d)));
+    if (!valid.length) return null;
+    return new Date(Math.max(...valid.map((d) => Date.parse(d)))).toISOString();
+  };
+
+  const urls = sitemapRoutes().map((route) => {
+    const m = META[route];
+    let lastmod: string | null = null;
+    if (tr) {
+      if (route === '/') lastmod = latest(tr.products.map((p) => p.until));
+      else if (m.product) lastmod = latest([tr.products.find((p) => p.product === m.product)?.until]);
+    }
+    const loc = `${SITE_ORIGIN}${route === '/' ? '/' : route}`;
+    return `  <url>\n    <loc>${esc(loc)}</loc>${lastmod ? `\n    <lastmod>${lastmod}</lastmod>` : ''}\n  </url>`;
+  });
+
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.join('\n')}\n</urlset>\n`;
+}
+
 // ── HTML helpers ────────────────────────────────────────────────────────────────
 export function esc(value: unknown): string {
   return String(value ?? '')
