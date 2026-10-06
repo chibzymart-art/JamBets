@@ -2,6 +2,7 @@ import React from 'react';
 import { UnifiedMarketPrediction } from '../lib/marketFeedService';
 import { FavoritePredictionItem } from './FavoritesDrawer';
 import { formatClubName } from './GoalCard';
+import { useGeoCurrency } from '../lib/geoCurrency';
 
 export interface SpecialistMarketCardProps {
   prediction: UnifiedMarketPrediction;
@@ -18,6 +19,7 @@ export const SpecialistMarketCard: React.FC<SpecialistMarketCardProps> = ({
   onOpenUpgrade,
   isAdmin = false,
 }) => {
+  const { pricing, formatPrice } = useGeoCurrency();
   const { fixture, metrics, is_locked: rawIsLocked } = prediction;
   const isLocked = isAdmin ? false : Boolean(rawIsLocked);
   const homeName = formatClubName(fixture?.home_team?.short_name || fixture?.home_team?.name || 'Home Club');
@@ -323,7 +325,7 @@ export const SpecialistMarketCard: React.FC<SpecialistMarketCardProps> = ({
                 className="locked-unlock-cta-btn"
                 onClick={onOpenUpgrade}
               >
-                <span>⚡ Unlock for ₦5,000</span>
+                <span>⚡ Unlock for {formatPrice(pricing.standard.monthly)}</span>
                 <span className="arrow-chip">→</span>
               </button>
             </div>

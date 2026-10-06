@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { supabase } from '../lib/supabase';
+import { useGeoCurrency } from '../lib/geoCurrency';
 
 interface BotHubModalProps {
   isOpen: boolean;
@@ -19,6 +20,7 @@ export const BotHubModal: React.FC<BotHubModalProps> = ({
   onOpenAuth,
   onOpenPricing,
 }) => {
+  const { currency, symbol, pricing, formatPrice } = useGeoCurrency();
   const [telegramToken, setTelegramToken] = useState<string | null>(null);
   const [telegramDeepLink, setTelegramDeepLink] = useState<string | null>(null);
   const [telegramLoading, setTelegramLoading] = useState<boolean>(false);
@@ -267,7 +269,7 @@ export const BotHubModal: React.FC<BotHubModalProps> = ({
               </span>
             </div>
             <p style={{ margin: 0, fontSize: '12px', color: '#cbd5e1', lineHeight: 1.4 }}>
-              Web users check periodically and miss early pricing. Bot subscribers receive instant lock-screen notifications the second simulations finish. Included with all Paid Plans (Standard ₦5,000/mo & BigBang VIP).
+              Web users check periodically and miss early pricing. Bot subscribers receive instant lock-screen notifications the second simulations finish. Included with all Paid Plans (Standard {formatPrice(pricing.standard.monthly)}/mo & BigBang VIP).
             </p>
           </div>
 
@@ -288,7 +290,7 @@ export const BotHubModal: React.FC<BotHubModalProps> = ({
                 whiteSpace: 'nowrap',
               }}
             >
-              ⚡ View Plans & Upgrade (₦5k) →
+              ⚡ View Plans & Upgrade ({currency === 'NGN' ? '₦5k' : `${symbol}${pricing.standard.monthly}`}) →
             </button>
           )}
         </div>
@@ -536,7 +538,7 @@ export const BotHubModal: React.FC<BotHubModalProps> = ({
                   color: '#86efac',
                 }}
               >
-                ✓ Available for Standard (₦5k) & VIP BigBang plan holders.
+                ✓ Available for Standard ({currency === 'NGN' ? '₦5k' : `${symbol}${pricing.standard.monthly}`}) & VIP BigBang plan holders.
               </div>
             </div>
 

@@ -204,7 +204,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
               <div className="hero-light-metric-card" onClick={onOpenPricing} style={{ cursor: 'pointer' }}>
                 <span className="metric-light-label">VIP plans from</span>
-                <span className="metric-light-val dark">₦5,000 / mo</span>
+                <span className="metric-light-val dark">{formatPrice(pricing.standard.monthly)} / mo</span>
               </div>
             </div>
 

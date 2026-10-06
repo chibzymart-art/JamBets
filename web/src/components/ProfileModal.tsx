@@ -480,7 +480,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
                   {entitlement?.can_view_predictions ? (
                     <span style={{ color: '#86efac' }}>✓ Your active subscription grants access to the official Oddsbanta VIP channel.</span>
                   ) : (
-                    <span style={{ color: '#f87171' }}>Requires Standard (₦5k) or BigBang VIP plan to join the private group.</span>
+                    <span style={{ color: '#f87171' }}>Requires Standard ({currency === 'NGN' ? '₦5k' : `${symbol}${pricing.standard.monthly}`}) or BigBang VIP plan to join the private group.</span>
                   )}
                 </div>
               </div>
@@ -503,7 +503,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
                     className="btn-update-password"
                     style={{ background: '#d97706', padding: '10px', width: '100%' }}
                   >
-                    Upgrade to Unlock WhatsApp VIP (₦5k)
+                    Upgrade to Unlock WhatsApp VIP ({currency === 'NGN' ? '₦5k' : `${symbol}${pricing.standard.monthly}`})
                   </button>
                 )}
               </div>

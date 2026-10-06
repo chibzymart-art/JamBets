@@ -24,6 +24,7 @@ import { CookieConsentBanner } from './components/CookieConsentBanner';
 import { AdBannerSlot } from './components/AdBannerSlot';
 import { initAttributionTracker } from './lib/attribution';
 import { updatePageSeo } from './lib/seo';
+import { useGeoCurrency } from './lib/geoCurrency';
 import { LandingPage } from './pages/Landing';
 import { SubscriptionPage } from './pages/Subscription';
 import { PasswordRecoveryPage } from './pages/PasswordRecovery';
@@ -40,6 +41,7 @@ import { seoForPath, DASHBOARD_PATHS } from './lib/routeMeta';
 
 
 export default function App() {
+  const { currency, symbol, pricing } = useGeoCurrency();
   const navigate = useNavigate();
   const location = useLocation();
   // Authentication & Entitlement State
@@ -1874,7 +1876,9 @@ export default function App() {
             >
               <span className="nav-header-btn-icon">⚡</span>
               <span className="nav-header-btn-label">Plans</span>
-              <span className="pricing-flat-badge desktop-only">from ₦5k</span>
+              <span className="pricing-flat-badge desktop-only">
+                {currency === 'NGN' ? 'from ₦5k' : `from ${symbol}${pricing.standard.monthly}`}
+              </span>
             </button>
 
             {/* FAQs Button (Top Menu on Mobile & Desktop) */}

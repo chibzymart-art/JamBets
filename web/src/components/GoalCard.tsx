@@ -1,5 +1,6 @@
 import React from 'react';
 import { FavoritePredictionItem } from './FavoritesDrawer';
+import { useGeoCurrency } from '../lib/geoCurrency';
 
 export interface GoalPredictionItem {
   id: string;
@@ -645,6 +646,7 @@ export const StandaloneGoalCard: React.FC<StandaloneGoalCardProps> = ({
   onToggleFavoriteItem,
   isFavoriteItem,
 }) => {
+  const { pricing, formatPrice } = useGeoCurrency();
   const p = prediction;
   const f = p.fixture;
   const isOver25 = p.market === 'over_2.5_goals';
@@ -877,7 +879,7 @@ export const StandaloneGoalCard: React.FC<StandaloneGoalCardProps> = ({
                 <span className="lock-heading">{isOver25 ? 'Over 2.5 VIP Edge' : '1H Blitz VIP Edge'}</span>
                 <span className="lock-subtext">More accurate predictions (85%+ hit rate) are in High Confidence &amp; Bangers</span>
                 <button className="subcard-lock-btn" type="button">
-                  Unlock VIP (₦5,000/mo) →
+                  Unlock VIP ({formatPrice(pricing.standard.monthly)}/mo) →
                 </button>
               </div>
             </div>

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { QueueFixture, FootballPrediction, SecondaryPrediction, PoissonParameters, SimulationOutlines } from '../types';
 import { FavoritePredictionItem } from './FavoritesDrawer';
 import { PICK_DISCLAIMER } from '../lib/confidenceScore';
+import { useGeoCurrency } from '../lib/geoCurrency';
 
 export interface TierDisplayConfig {
   label: string;
@@ -531,6 +532,7 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
   isExpanded,
   onToggleExpand
 }) => {
+  const { pricing, formatPrice } = useGeoCurrency();
   // STRICT ARCHITECTURAL INVARIANT: UI MUST ONLY SHOW PREDICTED FIXTURES
   // Fixture may appear only with an authoritative, published prediction record
   if (!prediction || (prediction.publication_status && prediction.publication_status !== 'published')) {
@@ -962,7 +964,7 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
                 className="key-pick-unlock-link"
                 onClick={(e) => e.stopPropagation()}
               >
-                Unlock (₦5,000/mo) →
+                Unlock ({formatPrice(pricing.standard.monthly)}/mo) →
               </Link>
             </div>
           ) : (
@@ -1084,7 +1086,7 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
                   Free visitors get full access to live Mid-Confidence models across all sports. Upgrade to VIP to unlock our highest conviction signals.
                 </p>
                 <Link to="/subscription" className="btn-paywall-unlock-prominent">
-                  ⚡ Unlock VIP Picks (₦5,000/mo) →
+                  ⚡ Unlock VIP Picks ({formatPrice(pricing.standard.monthly)}/mo) →
                 </Link>
               </div>
             </div>
@@ -1388,7 +1390,7 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
                         boxShadow: '0 2px 6px rgba(217, 119, 6, 0.25)',
                       }}
                     >
-                      ⚡ Unlock VIP Secondary Markets (₦5,000/mo) →
+                      ⚡ Unlock VIP Secondary Markets ({formatPrice(pricing.standard.monthly)}/mo) →
                     </Link>
                   </div>
                 </div>

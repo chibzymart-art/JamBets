@@ -1,5 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import { useGeoCurrency } from '../lib/geoCurrency';
 
 interface NavigationFooterProps {
   onOpenAuthModal?: (mode: 'signin' | 'register') => void;
@@ -17,6 +18,7 @@ export const NavigationFooter: React.FC<NavigationFooterProps> = ({
   userRole,
   currentUser
 }) => {
+  const { currency, symbol, pricing, formatPrice } = useGeoCurrency();
   const currentYear = new Date().getFullYear();
   const targetPath = currentUser ? '/dashboard' : '/predictions';
 
@@ -138,12 +140,12 @@ export const NavigationFooter: React.FC<NavigationFooterProps> = ({
             <ul className="footer-nav-list">
               <li>
                 <Link to="/subscription" className="footer-nav-link font-bold text-emerald">
-                  ⚡ Standard Plan — ₦5,000 / mo
+                  ⚡ Standard Plan — {formatPrice(pricing.standard.monthly)} / mo
                 </Link>
               </li>
               <li>
                 <Link to="/subscription" className="footer-nav-link font-bold text-amber">
-                  👑 BigBang VIP — ₦10,000 / mo
+                  👑 BigBang VIP — {formatPrice(pricing.bigbang.monthly)} / mo
                 </Link>
               </li>
               <li>
@@ -241,7 +243,7 @@ export const NavigationFooter: React.FC<NavigationFooterProps> = ({
             📊 Predictions
           </Link>
           <Link to="/subscription" className="footer-mobile-btn">
-            ⚡ Plans (₦5k)
+            ⚡ Plans ({currency === 'NGN' ? '₦5k' : `${symbol}${pricing.standard.monthly}`})
           </Link>
           <button type="button" className="footer-mobile-btn" onClick={onOpenFaqModal}>
             ❓ FAQ

@@ -1,4 +1,5 @@
 import React from 'react';
+import { useGeoCurrency } from '../lib/geoCurrency';
 
 interface HeroSectionProps {
   onStartFree: () => void;
@@ -19,6 +20,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
   settledCount,
   onScrollToFixtures
 }) => {
+  const { pricing, formatPrice } = useGeoCurrency();
   return (
     <section className="hero-section" aria-label="Oddsbanta Predictive Analytics Platform">
       {/* Dynamic Background with Floodlit Soccer Stadium & Action Photo (Picture 3) */}
@@ -95,7 +97,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
 
             <div className="hero-metric-card" onClick={onSeePlans} style={{ cursor: 'pointer' }}>
               <span className="metric-label">Paid plans from</span>
-              <span className="metric-value plan-price">₦5,000 <small>/ mo</small></span>
+              <span className="metric-value plan-price">{formatPrice(pricing.standard.monthly)} <small>/ mo</small></span>
               <span className="metric-sub">Flat Rate • All Leagues</span>
             </div>
           </div>
