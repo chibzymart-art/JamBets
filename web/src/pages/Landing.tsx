@@ -454,7 +454,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           )}
 
           <div className="ledger-light-footer" style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
-            <Link to="/dashboard/track-record" className="btn-light-view-all">
+            <Link to="/track-record" className="btn-light-view-all">
               Inspect Full Public Track Record & Hit Rates →
             </Link>
             <Link to="/dashboard" className="btn-light-view-all" style={{ background: '#0284c7' }}>

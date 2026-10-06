@@ -440,7 +440,7 @@ export default async function handler(req: Request) {
         const pick = escapeHtml(p.prediction || '');
         reply += `• <b>${home} vs ${away}</b> (${score})\n  Pick: ${pick} → <b>${icon}</b>\n`;
       });
-      reply += `\nTrack record is 100% auditable at <a href="https://www.oddsbanta.com/dashboard/track-record">oddsbanta.com/settlement</a>`;
+      reply += `\nTrack record is 100% auditable at <a href="https://www.oddsbanta.com/track-record">oddsbanta.com/track-record</a>`;
 
       await sendTelegramMessage(chatId, reply);
       return new Response(JSON.stringify({ ok: true }), { status: 200 });

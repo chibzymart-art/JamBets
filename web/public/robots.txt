@@ -1,15 +1,17 @@
 # ==============================================================================
 # Oddsbanta Robots Configuration (SEO & Web Crawlers)
-# Allows Googlebot, Bingbot, and Social Preview Scrapers (WhatsApp, Twitter, Telegram)
+# Canonical host: https://www.oddsbanta.com
+#
+# Public & indexable: home, /track-record, /subscription, and the sport hubs
+# under /dashboard (guests see free picks; paid content stays locked in-card).
+# Blocked: the private admin deck and internal API endpoints only.
 # ==============================================================================
 
 User-agent: *
 Allow: /
-
-# Login-only area: nothing indexable for anonymous crawlers
-Disallow: /dashboard
-
-# Protect private admin deck and internal edge endpoints
+Allow: /track-record
+Allow: /subscription
+Allow: /dashboard
 Disallow: /admin
 Disallow: /api/
 

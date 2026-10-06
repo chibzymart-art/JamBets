@@ -33,7 +33,7 @@ export const ROUTE_SEO: Record<string, RouteSeo> = {
     description:
       'Basketball predictions rated on a 0–10 confidence score, published before tip-off and settled on a public track record.',
   },
-  '/dashboard/track-record': {
+  '/track-record': {
     title: 'Track Record: Settled Results by Confidence Score | Oddsbanta',
     description:
       'Every settled Oddsbanta pick, wins and losses, grouped by 0–10 confidence score tier with sample sizes. Live results only, not a backtest.',
@@ -70,5 +70,6 @@ export const DASHBOARD_PATHS = {
   basketball: '/dashboard/basketball',
   american_football: '/dashboard/american-football',
   cricket: '/dashboard/cricket',
-  trackRecord: '/dashboard/track-record',
+  /** Public, indexable page: deliberately outside /dashboard. */
+  trackRecord: '/track-record',
 } as const;

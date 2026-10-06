@@ -56,7 +56,7 @@ export function TrackRecordPage() {
       title: 'Track Record: Settled Results by Confidence Score | Oddsbanta',
       description:
         'Every settled Oddsbanta pick, wins and losses, grouped by 0–10 confidence score tier with sample sizes. Live forward results only, not a backtest.',
-      canonicalPath: '/dashboard/track-record',
+      canonicalPath: '/track-record',
     });
 
     let isMounted = true;

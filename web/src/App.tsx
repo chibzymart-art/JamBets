@@ -1018,7 +1018,10 @@ export default function App() {
   };
 
   /** All sport pages live inside the dashboard; the home page is the landing page only. */
-  const isDashboard = location.pathname === '/dashboard' || location.pathname.startsWith('/dashboard/');
+  const isDashboard =
+    location.pathname === '/dashboard' ||
+    location.pathname.startsWith('/dashboard/') ||
+    location.pathname === DASHBOARD_PATHS.trackRecord;
 
   const isSportActive = (sportId: string) => {
     const p = location.pathname.replace(/\/+$/, '');
@@ -2010,7 +2013,7 @@ export default function App() {
           <Route path="/basketball" element={<Navigate to={DASHBOARD_PATHS.basketball} replace />} />
           <Route path="/american-football" element={<Navigate to={DASHBOARD_PATHS.american_football} replace />} />
           <Route path="/cricket" element={<Navigate to={DASHBOARD_PATHS.cricket} replace />} />
-          <Route path="/track-record" element={<Navigate to={DASHBOARD_PATHS.trackRecord} replace />} />
+          <Route path="/dashboard/track-record" element={<Navigate to={DASHBOARD_PATHS.trackRecord} replace />} />
           <Route path="/settlement" element={<Navigate to={DASHBOARD_PATHS.trackRecord} replace />} />
           <Route path="/pricing" element={<Navigate to="/subscription" replace />} />
 

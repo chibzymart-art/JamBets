@@ -21,7 +21,7 @@ export type SsrRoute =
   | '/dashboard/goals'
   | '/dashboard/tennis'
   | '/dashboard/basketball'
-  | '/dashboard/track-record'
+  | '/track-record'
   | '/dashboard/american-football'
   | '/dashboard/cricket'
   | '/subscription';
@@ -32,7 +32,7 @@ export const SSR_ROUTES: SsrRoute[] = [
   '/dashboard/goals',
   '/dashboard/tennis',
   '/dashboard/basketball',
-  '/dashboard/track-record',
+  '/track-record',
   '/dashboard/american-football',
   '/dashboard/cricket',
   '/subscription',
@@ -99,7 +99,7 @@ const META: Record<SsrRoute, RouteMeta> = {
     intro: 'Basketball picks across the leagues we cover, each rated on the 0–10 confidence score.',
     product: 'basketball',
   },
-  '/dashboard/track-record': {
+  '/track-record': {
     title: 'Track Record: Settled Results by Confidence Score | Oddsbanta',
     description:
       'Every settled Oddsbanta pick, wins and losses, grouped by 0–10 confidence score tier with sample sizes. Live results only, not a backtest.',
@@ -195,7 +195,7 @@ function summaryList(tr: TrackRecord): string {
 function scoreExplainer(): string {
   return `<section aria-labelledby="score-h">
 <h2 id="score-h">How the 0–10 confidence score works</h2>
-<p>Each pick gets a score from 0 to 10 based on the model’s estimated probability. The score is the model’s own estimate, not a promise; the real settled hit rate for each tier is published on the <a href="/dashboard/track-record">track record</a>.</p>
+<p>Each pick gets a score from 0 to 10 based on the model’s estimated probability. The score is the model’s own estimate, not a promise; the real settled hit rate for each tier is published on the <a href="/track-record">track record</a>.</p>
 <ul><li><strong>9 and above</strong>: Very High</li><li><strong>8 to 8.9</strong>: High</li><li><strong>6 to 7.9</strong>: Moderate</li><li><strong>Below 6</strong>: Low</li></ul>
 </section>`;
 }
@@ -240,7 +240,7 @@ function recentList(tr: TrackRecord): string {
 }
 
 function nav(): string {
-  return `<nav aria-label="Main"><a href="/">Oddsbanta</a> · <a href="/dashboard">Dashboard</a> · <a href="/dashboard/track-record">Track record</a> · <a href="/subscription">Pricing</a></nav>`;
+  return `<nav aria-label="Main"><a href="/">Oddsbanta</a> · <a href="/dashboard">Dashboard</a> · <a href="/track-record">Track record</a> · <a href="/subscription">Pricing</a></nav>`;
 }
 
 function footer(): string {
@@ -258,9 +258,9 @@ export function renderBody(route: SsrRoute, tr: TrackRecord | null, upcoming: Up
     parts.push(
       `<section aria-labelledby="tr-h"><h2 id="tr-h">Track record so far</h2>${
         tr ? summaryList(tr) : '<p>Track record is loading.</p>'
-      }<p><a href="/dashboard/track-record">See every score tier, wins and losses</a> · <a href="/dashboard">Open the dashboard</a></p></section>`
+      }<p><a href="/track-record">See every score tier, wins and losses</a> · <a href="/dashboard">Open the dashboard</a></p></section>`
     );
-  } else if (route === '/dashboard/track-record') {
+  } else if (route === '/track-record') {
     if (tr) {
       parts.push(`<p>${esc(tr.note)}</p>`);
       parts.push(`<section aria-labelledby="tiers-h"><h2 id="tiers-h">Results by confidence score tier</h2>${tr.products.map(productTable).join('')}</section>`);
@@ -271,11 +271,11 @@ export function renderBody(route: SsrRoute, tr: TrackRecord | null, upcoming: Up
     parts.push(scoreExplainer());
   } else if (route === '/subscription') {
     parts.push(scoreExplainer());
-    if (tr) parts.push(`<section aria-labelledby="tr-h"><h2 id="tr-h">Track record before you buy</h2>${summaryList(tr)}<p><a href="/dashboard/track-record">Full track record</a></p></section>`);
+    if (tr) parts.push(`<section aria-labelledby="tr-h"><h2 id="tr-h">Track record before you buy</h2>${summaryList(tr)}<p><a href="/track-record">Full track record</a></p></section>`);
   } else {
     if (m.product && tr) {
       const p = tr.products.find((x) => x.product === m.product);
-      if (p) parts.push(`<section aria-labelledby="tiers-h"><h2 id="tiers-h">Settled results by score tier</h2>${productTable(p)}<p><a href="/dashboard/track-record">Full track record</a></p></section>`);
+      if (p) parts.push(`<section aria-labelledby="tiers-h"><h2 id="tiers-h">Settled results by score tier</h2>${productTable(p)}<p><a href="/track-record">Full track record</a></p></section>`);
     }
     if (m.needsUpcoming) parts.push(upcomingList(upcoming));
     parts.push(sportsList());
