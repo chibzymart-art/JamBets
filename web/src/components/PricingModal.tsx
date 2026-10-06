@@ -1,4 +1,5 @@
 import React from 'react';
+import { useGeoCurrency } from '../lib/geoCurrency';
 
 interface PricingModalProps {
   isOpen: boolean;
@@ -7,6 +8,8 @@ interface PricingModalProps {
 }
 
 export const PricingModal: React.FC<PricingModalProps> = ({ isOpen, onClose, onUpgrade }) => {
+  const { currency, symbol, pricing, formatPrice } = useGeoCurrency();
+
   if (!isOpen) return null;
 
   return (
@@ -14,7 +17,7 @@ export const PricingModal: React.FC<PricingModalProps> = ({ isOpen, onClose, onU
       <div className="modal-card pricing-modal-card" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <div className="modal-brand">
-            <img src="/oddsbanta-logo.svg" alt="Oddsbanta" className="modal-brand-logo-img" />
+            <img src="/logo.svg" alt="Oddsbanta" className="modal-brand-logo-img" style={{ width: 44, height: 44, borderRadius: 10 }} />
             <div>
               <h2 className="modal-title">Oddsbanta Subscriptions</h2>
               <p className="modal-subtitle">Instant mathematical edge — transparent 0–10 confidence scores and audited track record</p>
@@ -27,7 +30,7 @@ export const PricingModal: React.FC<PricingModalProps> = ({ isOpen, onClose, onU
 
         <div className="pricing-banner-pill">
           <span className="pricing-flash-tag">⚡ SPECIAL FLAT RATE</span>
-          <span>Access all European & World League predictions for <strong>₦5,000 / month</strong></span>
+          <span>Access all European & World League predictions for <strong>{formatPrice(pricing.standard.monthly)} / month</strong></span>
         </div>
 
         <div className="pricing-tiers-grid">
@@ -36,17 +39,17 @@ export const PricingModal: React.FC<PricingModalProps> = ({ isOpen, onClose, onU
             <div className="plan-header">
               <span className="plan-badge standard">STANDARD</span>
               <div className="plan-price">
-                <span className="currency">₦</span>
-                <span className="amount">5,000</span>
+                <span className="currency">{symbol}</span>
+                <span className="amount">{currency === 'NGN' ? '5,000' : '5'}</span>
                 <span className="period">/ month</span>
               </div>
-              <p className="plan-desc">Complete access to daily football predictions and simulation models.</p>
+              <p className="plan-desc">Complete access to daily football predictions, goal specialists and simulation models.</p>
             </div>
 
             <ul className="plan-features">
-              <li>✓ Full Football access (General & Specialist markets)</li>
+              <li>✓ Full Football access (Over 2.5 & First Half Goals)</li>
               <li>✓ Unlocks all 4-Day Horizon predictions</li>
-              <li>✓ Top Picks & High Confidence edges (≥83%)</li>
+              <li>✓ Top Picks & High Confidence edges (Score ≥ 8.0)</li>
               <li>✓ Mid & Low confidence value markets</li>
               <li>✓ Live match scoring & settlement alerts</li>
               <li>✓ 15-Minute automated live settlement sync</li>
@@ -60,7 +63,7 @@ export const PricingModal: React.FC<PricingModalProps> = ({ isOpen, onClose, onU
                 onClose();
               }}
             >
-              Select Standard (₦5,000 / month)
+              Select Standard ({formatPrice(pricing.standard.monthly)} / month)
             </button>
           </div>
 
@@ -70,19 +73,19 @@ export const PricingModal: React.FC<PricingModalProps> = ({ isOpen, onClose, onU
             <div className="plan-header">
               <span className="plan-badge bigbang">BIGBANG VIP</span>
               <div className="plan-price">
-                <span className="currency">₦</span>
-                <span className="amount">10,000</span>
+                <span className="currency">{symbol}</span>
+                <span className="amount">{currency === 'NGN' ? '10,000' : '10'}</span>
                 <span className="period">/ month</span>
               </div>
-              <p className="plan-desc">VIP algorithmic suite with exclusive 96%+ Bangers & instant access.</p>
+              <p className="plan-desc">VIP algorithmic suite with multi-sport coverage and priority alerts.</p>
             </div>
 
             <ul className="plan-features">
-              <li>✓ <strong>Everything in Standard (All Football)</strong></li>
-              <li>✓ <strong>Multi-Sport VIP: Basketball, Tennis & Cricket models</strong></li>
-              <li>✓ <strong>Exclusive 🔥 BANGER signals (96%–100%)</strong></li>
-              <li>✓ Full Poisson & Dixon-Coles parameter export</li>
-              <li>✓ Priority settlement & zero-quarantine access</li>
+              <li>✓ <strong>Everything in Standard (All Football & Goals)</strong></li>
+              <li>✓ <strong>Multi-Sport VIP: Tennis (ATP/WTA) & Basketball (NBA)</strong></li>
+              <li>✓ <strong>Exclusive Top Mathematical Signals (Score 9.0–10.0)</strong></li>
+              <li>✓ Full Poisson & Model parameter breakdowns</li>
+              <li>✓ Priority settlement & instant match access</li>
               <li>✓ VIP Telegram & WhatsApp instant match signals</li>
             </ul>
 
@@ -94,13 +97,16 @@ export const PricingModal: React.FC<PricingModalProps> = ({ isOpen, onClose, onU
                 onClose();
               }}
             >
-              Unlock BigBang VIP (₦10,000 / month)
+              Unlock BigBang VIP ({formatPrice(pricing.bigbang.monthly)} / month)
             </button>
           </div>
         </div>
 
-        <div className="pricing-guarantee-note">
-          <span>🛡 <strong>Mathematical Transparency:</strong> Every prediction is derived from calibrated probabilistic models recorded before kickoff. Settled hit rates and outcomes are published on our public track record.</span>
+        <div className="modal-footer-note">
+          <p>
+            🔒 All payments securely processed with instant database activation.
+            Cancel anytime with zero long-term commitments.
+          </p>
         </div>
       </div>
     </div>

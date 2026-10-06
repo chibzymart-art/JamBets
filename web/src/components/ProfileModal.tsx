@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { UserProfile, UserSubscription, UserEntitlement } from '../types';
+import { useGeoCurrency } from '../lib/geoCurrency';
 
 interface ProfileModalProps {
   isOpen: boolean;
@@ -149,12 +150,13 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
 
   if (!isOpen || !effectiveProfile) return null;
 
+  const { currency, symbol, pricing, formatPrice } = useGeoCurrency();
   const currentTier = (effectiveProfile.role || subscription?.tier || 'free').toLowerCase();
 
   const handleTierChange = (targetTier: 'free' | 'standard' | 'bigbang') => {
     if (targetTier === currentTier) return;
     onClose();
-    navigate('/subscribe');
+    navigate('/subscription');
   };
 
   const handleUpdatePassword = async (e: React.FormEvent) => {
@@ -630,7 +632,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
             <div className={`tier-card ${currentTier === 'free' ? 'active-tier' : ''}`}>
               <div className="tier-badge-top">BASIC</div>
               <h4 className="tier-name">Free Tier</h4>
-              <div className="tier-price">₦0 <span>/ month</span></div>
+              <div className="tier-price">{symbol}0 <span>/ month</span></div>
               <ul className="tier-perks">
                 <li>✓ Browse all football fixtures</li>
                 <li>✓ Live scores & match states</li>
@@ -651,9 +653,9 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
             <div className={`tier-card highlighted-tier ${currentTier === 'standard' ? 'active-tier' : ''}`}>
               <div className="tier-badge-top" style={{ background: '#3b82f6', color: '#fff' }}>POPULAR</div>
               <h4 className="tier-name">Standard Plan</h4>
-              <div className="tier-price">₦5,000 <span>/ month</span></div>
+              <div className="tier-price">{symbol}{currency === 'NGN' ? '5,000' : '5'} <span>/ month</span></div>
               <ul className="tier-perks">
-                <li>✓ Full Football coverage (General & Specialist markets)</li>
+                <li>✓ Full Football coverage (Over 2.5 & First Half Goals)</li>
                 <li>✓ Unlocked probabilities & confidence tiers</li>
                 <li>✓ 4-day horizon predictions</li>
                 <li>✓ Automatic 15-minute settlement sync</li>
@@ -664,7 +666,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
                 onClick={() => handleTierChange('standard')}
                 className={`tier-action-btn ${currentTier === 'standard' ? 'btn-current' : 'btn-primary'}`}
               >
-                {currentTier === 'standard' ? 'Active Plan' : 'Upgrade to Standard (₦5,000/mo)'}
+                {currentTier === 'standard' ? 'Active Plan' : `Upgrade to Standard (${formatPrice(pricing.standard.monthly)}/mo)`}
               </button>
             </div>
 
@@ -672,11 +674,11 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
             <div className={`tier-card vip-tier ${currentTier === 'bigbang' ? 'active-tier' : ''}`}>
               <div className="tier-badge-top" style={{ background: '#ec4899', color: '#fff' }}>VIP PRO</div>
               <h4 className="tier-name">BigBang VIP</h4>
-              <div className="tier-price">₦10,000 <span>/ month</span></div>
+              <div className="tier-price">{symbol}{currency === 'NGN' ? '10,000' : '10'} <span>/ month</span></div>
               <ul className="tier-perks">
-                <li>✓ Everything in Standard (All Football)</li>
-                <li>✓ Multi-Sport VIP: Tennis, Basketball & Cricket models</li>
-                <li>✓ BANGER & TOP PICK priority signals</li>
+                <li>✓ Everything in Standard (All Football & Goals)</li>
+                <li>✓ Multi-Sport VIP: Tennis & Basketball models</li>
+                <li>✓ Top Priority Signals (Score 9.0–10.0)</li>
                 <li>✓ Detailed Poisson parameter breakdowns</li>
               </ul>
               <button
@@ -685,7 +687,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
                 onClick={() => handleTierChange('bigbang')}
                 className={`tier-action-btn ${currentTier === 'bigbang' ? 'btn-current' : 'btn-vip'}`}
               >
-                {currentTier === 'bigbang' ? 'Active Plan' : 'Upgrade to BigBang VIP (₦10,000/mo)'}
+                {currentTier === 'bigbang' ? 'Active Plan' : `Upgrade to BigBang VIP (${formatPrice(pricing.bigbang.monthly)}/mo)`}
               </button>
             </div>
           </div>

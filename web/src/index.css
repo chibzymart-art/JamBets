@@ -9656,6 +9656,9 @@ body {
 .sub-billing-toggle-wrap {
   display: flex;
   justify-content: center;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
   margin-bottom: 40px;
 }
 
@@ -9666,6 +9669,42 @@ body {
   border-radius: 9999px;
   padding: 4px;
   gap: 4px;
+}
+
+.sub-currency-switcher {
+  display: inline-flex;
+  align-items: center;
+  background: rgba(15, 23, 42, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 9999px;
+  padding: 4px;
+  gap: 4px;
+}
+
+.sub-currency-label {
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #64748b;
+  padding: 0 8px 0 12px;
+}
+
+.currency-toggle-btn {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 6px 14px;
+  border-radius: 9999px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.currency-toggle-btn.active {
+  background: #3b82f6;
+  color: #ffffff;
 }
 
 .billing-toggle-btn {
@@ -9695,6 +9734,13 @@ body {
   color: #ffffff;
   padding: 2px 6px;
   border-radius: 9999px;
+}
+
+.plan-sub-billed {
+  font-size: 13px;
+  color: #34d399;
+  font-weight: 700;
+  margin-top: 4px;
 }
 
 .sub-alert-success {

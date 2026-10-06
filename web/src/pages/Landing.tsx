@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { PICK_DISCLAIMER } from '../lib/confidenceScore';
+import { useGeoCurrency } from '../lib/geoCurrency';
 
 interface LandingPageProps {
   onOpenAuth: (mode: 'signin' | 'register') => void;
@@ -42,6 +43,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   onOpenBotHub
 }) => {
   const navigate = useNavigate();
+  const { currency, symbol, pricing, formatPrice } = useGeoCurrency();
   const [trackRecord, setTrackRecord] = useState<TrackRecordSummary | null>(null);
   const [loadingSettled, setLoadingSettled] = useState(true);
   const [selectedSport, setSelectedSport] = useState<string>('football');
@@ -471,15 +473,14 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             <span className="pricing-light-pill">ACCESSIBLE VALUE</span>
             <h2 className="pricing-light-title">Start Trading with Mathematical Clarity</h2>
             <p className="pricing-light-desc">
-              Instant activation for only ₦5,000 flat per month. Zero hidden tiers, zero long-term commitments.
-              Cancel anytime.
+              Instant activation starting from only {formatPrice(pricing.standard.monthly)} per month. Transparent mathematical models, cancel anytime.
             </p>
           </div>
 
           <div className="pricing-light-right">
             <div className="pricing-light-price-box">
-              <span className="pricing-curr">₦</span>
-              <span className="pricing-amt">5,000</span>
+              <span className="pricing-curr">{symbol}</span>
+              <span className="pricing-amt">{currency === 'NGN' ? '5,000' : '5'}</span>
               <span className="pricing-mo">/ month</span>
             </div>
             <Link to="/subscription" className="btn-pricing-action">
