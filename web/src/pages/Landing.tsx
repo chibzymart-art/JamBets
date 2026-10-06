@@ -39,7 +39,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   userRole: _userRole,
   canViewMultiSport: _canViewMultiSport = false,
   onOpenFaq,
-  onOpenPricing,
+  onOpenPricing: _onOpenPricing,
   onOpenBotHub
 }) => {
   const navigate = useNavigate();
@@ -170,14 +170,15 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                   🤖 Bots
                 </button>
               )}
-              <button
-                type="button"
+              <Link
+                to="/subscription"
                 id="btn-hero-see-plans"
                 className="btn-hero-outline"
-                onClick={onOpenPricing || (() => {})}
+                style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                title="View VIP Subscription Plans"
               >
                 Plans
-              </button>
+              </Link>
               {onOpenFaq && (
                 <button
                   type="button"
@@ -202,10 +203,15 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 <span className="metric-light-val dark">{totalSettledCount}+ picks</span>
               </div>
 
-              <div className="hero-light-metric-card" onClick={onOpenPricing} style={{ cursor: 'pointer' }}>
+              <Link
+                to="/subscription"
+                className="hero-light-metric-card"
+                style={{ cursor: 'pointer', textDecoration: 'none' }}
+                title="View VIP Subscription Plans"
+              >
                 <span className="metric-light-label">VIP plans from</span>
                 <span className="metric-light-val dark">{formatPrice(pricing.standard.monthly)} / mo</span>
-              </div>
+              </Link>
             </div>
 
             {/* 5 Sport Status Pills (All live sports inside /dashboard) */}

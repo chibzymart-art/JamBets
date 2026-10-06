@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { DesktopSidebarLayout } from '../components/DesktopSidebarLayout';
 import { FavoritePredictionItem } from '../components/FavoritesDrawer';
 import { useGeoCurrency, BillingCycle } from '../lib/geoCurrency';
@@ -21,12 +21,27 @@ export const SubscriptionPage: React.FC<SubscriptionPageProps> = ({
   onToggleFavoriteItem,
   onOpenFavoritesDrawer,
 }) => {
+  const [searchParams] = useSearchParams();
+  const highlightedTier = searchParams.get('tier')?.toLowerCase();
+
   const [selectedBilling, setSelectedBilling] = useState<BillingCycle>('monthly');
   const [processingPlan, setProcessingPlan] = useState<string | null>(null);
   const [subscribeSuccess, setSubscribeSuccess] = useState<string | null>(null);
   const [subscribeError, setSubscribeError] = useState<string | null>(null);
 
   const { currency, symbol, pricing, setCurrency, formatPrice } = useGeoCurrency();
+
+  useEffect(() => {
+    if (highlightedTier === 'standard' || highlightedTier === 'bigbang' || highlightedTier === 'free') {
+      const timer = setTimeout(() => {
+        const el = document.getElementById(`plan-${highlightedTier}`);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }, 150);
+      return () => clearTimeout(timer);
+    }
+  }, [highlightedTier]);
 
   const handleSubscribe = async (tier: 'standard' | 'bigbang') => {
     if (!currentUser) {
@@ -133,7 +148,7 @@ export const SubscriptionPage: React.FC<SubscriptionPageProps> = ({
         {/* Pricing Cards Grid */}
         <div className="pricing-cards-grid">
           {/* Free Plan Card */}
-          <div className="pricing-card free-card">
+          <div id="plan-free" className={`pricing-card free-card ${highlightedTier === 'free' ? 'highlighted-focus' : ''}`}>
             <div className="pricing-card-header">
               <span className="plan-badge">{userRole === 'free' ? 'CURRENT PLAN' : 'STARTER AUDIT'}</span>
               <h3 className="plan-name">Free Tier</h3>
@@ -194,7 +209,7 @@ export const SubscriptionPage: React.FC<SubscriptionPageProps> = ({
           </div>
 
           {/* Standard Plan Card */}
-          <div className="pricing-card standard-card featured">
+          <div id="plan-standard" className={`pricing-card standard-card featured ${highlightedTier === 'standard' ? 'highlighted-focus' : ''}`}>
             <div className="featured-ribbon">MOST POPULAR</div>
             <div className="pricing-card-header">
               <span className="plan-badge featured-badge">{userRole === 'standard' ? 'CURRENT PLAN' : 'ESSENTIAL ACCESS'}</span>
@@ -265,7 +280,7 @@ export const SubscriptionPage: React.FC<SubscriptionPageProps> = ({
           </div>
 
           {/* BigBang VIP Plan Card */}
-          <div className="pricing-card vip-card">
+          <div id="plan-bigbang" className={`pricing-card vip-card ${highlightedTier === 'bigbang' ? 'highlighted-focus' : ''}`}>
             <div className="pricing-card-header">
               <span className="plan-badge vip-badge">{userRole === 'bigbang' ? 'CURRENT PLAN' : 'ELITE TRADER'}</span>
               <h3 className="plan-name">BigBang VIP</h3>

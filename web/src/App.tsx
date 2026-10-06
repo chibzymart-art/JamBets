@@ -1735,7 +1735,7 @@ export default function App() {
                       className="hamburger-menu-item"
                       onClick={() => {
                         setIsHamburgerOpen(false);
-                        setIsPricingModalOpen(true);
+                        navigate('/subscription');
                       }}
                     >
                       <span className="hamburger-item-icon">⚡</span>
@@ -1847,10 +1847,15 @@ export default function App() {
             )}
 
             {/* Plans Button (Top Menu on Mobile & Desktop) */}
-            <button
-              type="button"
+            <Link
+              to="/subscription"
               className="nav-header-plans-btn"
-              onClick={() => setIsPricingModalOpen(true)}
+              onClick={(e) => {
+                if (location.pathname === '/subscription') {
+                  e.preventDefault();
+                  document.querySelector('.pricing-cards-grid')?.scrollIntoView({ behavior: 'smooth' });
+                }
+              }}
               title="View VIP Subscription Plans"
               aria-label="Plans & Pricing"
             >
@@ -1859,7 +1864,7 @@ export default function App() {
               <span className="pricing-flat-badge desktop-only">
                 {currency === 'NGN' ? 'from ₦5k' : `from ${symbol}${pricing.standard.monthly}`}
               </span>
-            </button>
+            </Link>
 
             {/* FAQs Button (Top Menu on Mobile & Desktop) */}
             <button
@@ -1956,7 +1961,7 @@ export default function App() {
                 userRole={profile?.role}
                 canViewMultiSport={canViewMultiSport}
                 onOpenFaq={() => setIsFaqModalOpen(true)}
-                onOpenPricing={() => setIsPricingModalOpen(true)}
+                onOpenPricing={() => navigate('/subscription')}
                 onOpenBotHub={() => setIsBotHubModalOpen(true)}
               />
             }
@@ -2014,7 +2019,7 @@ export default function App() {
                   setAuthModalMode(mode);
                   setIsAuthModalOpen(true);
                 }}
-                onOpenSubscription={() => setIsPricingModalOpen(true)}
+                onOpenSubscription={() => navigate('/subscription')}
                 favoriteItems={favoriteItems}
                 onToggleFavoriteItem={toggleFavoriteItem}
                 isFavoriteItem={isFavoriteItem}
@@ -2041,7 +2046,7 @@ export default function App() {
                     setAuthModalMode(mode);
                     setIsAuthModalOpen(true);
                   }}
-                  onOpenSubscription={() => setIsPricingModalOpen(true)}
+                  onOpenSubscription={() => navigate('/subscription')}
                   onBackToFootball={() => {
                     setSelectedSport('football');
                     navigate(DASHBOARD_PATHS.football);
@@ -2069,7 +2074,7 @@ export default function App() {
                     setAuthModalMode(mode);
                     setIsAuthModalOpen(true);
                   }}
-                  onOpenSubscription={() => setIsPricingModalOpen(true)}
+                  onOpenSubscription={() => navigate('/subscription')}
                   onBackToFootball={() => {
                     setSelectedSport('football');
                     navigate(DASHBOARD_PATHS.football);
@@ -2778,7 +2783,7 @@ export default function App() {
                               </div>
                               <button
                                 type="button"
-                                onClick={() => setIsPricingModalOpen(true)}
+                                onClick={() => navigate('/subscription')}
                                 style={{
                                   background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
                                   color: '#0f172a',
@@ -2913,13 +2918,9 @@ export default function App() {
       <PricingModal
         isOpen={isPricingModalOpen}
         onClose={() => setIsPricingModalOpen(false)}
-        onUpgrade={() => {
-          if (!currentUser) {
-            setAuthModalMode('register');
-            setIsAuthModalOpen(true);
-          } else {
-            setIsProfileModalOpen(true);
-          }
+        onUpgrade={(tier) => {
+          setIsPricingModalOpen(false);
+          navigate(`/subscription?tier=${tier || 'standard'}`);
         }}
       />
 
@@ -2958,7 +2959,7 @@ export default function App() {
         onProfileUpdated={fetchCloudData}
         onOpenPricing={() => {
           setIsBotHubModalOpen(false);
-          setIsPricingModalOpen(true);
+          navigate('/subscription');
         }}
       />
 

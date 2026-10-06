@@ -1,4 +1,5 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useGeoCurrency } from '../lib/geoCurrency';
 
 interface PricingModalProps {
@@ -8,6 +9,7 @@ interface PricingModalProps {
 }
 
 export const PricingModal: React.FC<PricingModalProps> = ({ isOpen, onClose, onUpgrade }) => {
+  const navigate = useNavigate();
   const { currency, symbol, pricing, formatPrice } = useGeoCurrency();
 
   if (!isOpen) return null;
@@ -59,8 +61,12 @@ export const PricingModal: React.FC<PricingModalProps> = ({ isOpen, onClose, onU
               type="button"
               className="btn-select-plan standard"
               onClick={() => {
-                if (onUpgrade) onUpgrade('standard');
                 onClose();
+                if (onUpgrade) {
+                  onUpgrade('standard');
+                } else {
+                  navigate('/subscription?tier=standard');
+                }
               }}
             >
               Select Standard ({formatPrice(pricing.standard.monthly)} / month)
@@ -93,8 +99,12 @@ export const PricingModal: React.FC<PricingModalProps> = ({ isOpen, onClose, onU
               type="button"
               className="btn-select-plan bigbang"
               onClick={() => {
-                if (onUpgrade) onUpgrade('bigbang');
                 onClose();
+                if (onUpgrade) {
+                  onUpgrade('bigbang');
+                } else {
+                  navigate('/subscription?tier=bigbang');
+                }
               }}
             >
               Unlock BigBang VIP ({formatPrice(pricing.bigbang.monthly)} / month)
