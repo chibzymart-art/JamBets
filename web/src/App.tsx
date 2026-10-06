@@ -37,7 +37,8 @@ import {
   useUserTimeZone,
   getUserTimeZone,
   getTodayIsoDate,
-  getFixtureLocalDate
+  getFixtureLocalDate,
+  formatKickoff
 } from './lib/dateUtils';
 import './tennis.css';
 import { TennisHubView } from './components/TennisHubView';
@@ -1357,9 +1358,9 @@ export default function App() {
         if (!codeMatch && !idMatch) return false;
       }
 
-      // Date Navigation Filter (Ground truth: Africa/Lagos kickoff date)
+      // Date Navigation Filter (Ground truth: visitor's local kickoff date)
       // "All Dates (this will be all predictions of current date and future dates, no past dates)"
-      const fDate = getFixtureWatDate(f.target_kickoff_at);
+      const fDate = getFixtureLocalDate(f.target_kickoff_at, timeZone);
       if (selectedDate !== 'all') {
         if (fDate !== selectedDate) return false;
       } else {
@@ -1481,16 +1482,8 @@ export default function App() {
     isAdmin,
     searchQuery,
     isFixtureUnlocked,
+    timeZone,
   ]);
-
-  // Helpers
-  const formatKickoff = (isoString: string) => {
-    const d = new Date(isoString);
-    return {
-      timeStr: d.toLocaleTimeString('en-GB', { timeZone: 'Africa/Lagos', hour: '2-digit', minute: '2-digit', hour12: false }),
-      dateStr: d.toLocaleDateString('en-GB', { timeZone: 'Africa/Lagos', month: 'short', day: 'numeric' })
-    };
-  };
 
   const resetAllFilters = () => {
     setSelectedLeague('all');
@@ -2728,9 +2721,9 @@ export default function App() {
                 ) : (
                   <div className="chronological-fixtures-stream">
                     {filteredFixtures.map((fixture, idx) => {
-                      const kickoff = formatKickoff(fixture.target_kickoff_at);
+                      const kickoff = formatKickoff(fixture.target_kickoff_at, timeZone);
                       const prevFixture = idx > 0 ? filteredFixtures[idx - 1] : null;
-                      const prevKickoff = prevFixture ? formatKickoff(prevFixture.target_kickoff_at) : null;
+                      const prevKickoff = prevFixture ? formatKickoff(prevFixture.target_kickoff_at, timeZone) : null;
                       const isTimeSlotStart =
                         !prevKickoff ||
                         prevKickoff.timeStr !== kickoff.timeStr ||
@@ -2807,7 +2800,7 @@ export default function App() {
                             <div className="kickoff-slot-divider">
                               <div className="kickoff-slot-badge">
                                 <span className="kickoff-slot-clock">⏰</span>
-                                <span className="kickoff-slot-time">{kickoff.timeStr} WAT</span>
+                                <span className="kickoff-slot-time">{kickoff.fullFormatted}</span>
                                 <span className="kickoff-slot-dot">•</span>
                                 <span className="kickoff-slot-date">{kickoff.dateStr}</span>
                               </div>
