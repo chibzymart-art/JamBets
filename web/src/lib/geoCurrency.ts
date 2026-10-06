@@ -123,8 +123,17 @@ export function useGeoCurrency() {
         setHasResolved(true);
       });
 
+    const handleSync = (e: Event) => {
+      const customEvent = e as CustomEvent<CurrencyCode>;
+      if (customEvent.detail === 'NGN' || customEvent.detail === 'USD') {
+        setCurrencyState(customEvent.detail);
+      }
+    };
+    window.addEventListener('oddsbanta_currency_change', handleSync);
+
     return () => {
       isMounted = false;
+      window.removeEventListener('oddsbanta_currency_change', handleSync);
     };
   }, []);
 
@@ -132,6 +141,7 @@ export function useGeoCurrency() {
     setCurrencyState(newCurrency);
     try {
       localStorage.setItem(STORAGE_KEY, newCurrency);
+      window.dispatchEvent(new CustomEvent('oddsbanta_currency_change', { detail: newCurrency }));
     } catch {}
   };
 
