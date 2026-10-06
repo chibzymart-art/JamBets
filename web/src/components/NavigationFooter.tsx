@@ -104,6 +104,11 @@ export const NavigationFooter: React.FC<NavigationFooterProps> = ({
             <h4 className="footer-col-heading">ANALYTICS & MODELING</h4>
             <ul className="footer-nav-list">
               <li>
+                <Link to="/about" className="footer-nav-link font-bold text-emerald">
+                  ℹ️ About Oddsbanta (AI Analytics)
+                </Link>
+              </li>
+              <li>
                 <Link to="/#accuracy" className="footer-nav-link">
                   📈 Historical Win Rate Ledger
                 </Link>

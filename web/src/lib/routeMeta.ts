@@ -9,9 +9,14 @@ export interface RouteSeo {
 
 export const ROUTE_SEO: Record<string, RouteSeo> = {
   '/': {
-    title: 'Oddsbanta: Football, Tennis & Basketball Predictions with a 0–10 Confidence Score',
+    title: 'Oddsbanta: AI Sports Analytics & Predictions with a 0–10 Confidence Score',
     description:
-      'Sports predictions rated on a 0–10 confidence score. Every pick is published before kickoff and settled on a public track record that shows wins and losses.',
+      'AI sports predictions and mathematical models rated on a 0–10 confidence score. Settled on a transparent public track record. Oddsbanta is an analytics tool, not a bookmaker.',
+  },
+  '/about': {
+    title: 'About Oddsbanta | AI Sports Predictive Analytics & Quantitative Modeling',
+    description:
+      'About Oddsbanta, our AI sports analytics engine, Poisson probability models, and public settlement track record. Oddsbanta is an analytics tool, not a bookmaker.',
   },
   '/dashboard': {
     title: 'Football Predictions Today | Oddsbanta Dashboard',

@@ -17,6 +17,7 @@ export const PICK_DISCLAIMER =
 
 export type SsrRoute =
   | '/'
+  | '/about'
   | '/dashboard'
   | '/dashboard/goals'
   | '/dashboard/tennis'
@@ -28,6 +29,7 @@ export type SsrRoute =
 
 export const SSR_ROUTES: SsrRoute[] = [
   '/',
+  '/about',
   '/dashboard',
   '/dashboard/goals',
   '/dashboard/tennis',
@@ -55,12 +57,20 @@ interface RouteMeta {
 
 const META: Record<SsrRoute, RouteMeta> = {
   '/': {
-    title: 'Oddsbanta: Football, Tennis & Basketball Predictions with a 0–10 Confidence Score',
+    title: 'Oddsbanta: AI Sports Analytics & Predictions with a 0–10 Confidence Score',
     description:
-      'Sports predictions rated on a 0–10 confidence score. Every pick is published before kickoff and settled on a public track record that shows wins and losses.',
-    h1: 'Sports predictions rated on a 0–10 confidence score',
+      'AI sports predictions and mathematical models rated on a 0–10 confidence score. Settled on a transparent public track record. Oddsbanta is an analytics tool, not a bookmaker.',
+    h1: 'AI sports analytics and mathematical predictions with a 0–10 confidence score',
     intro:
-      'Oddsbanta publishes football, tennis and basketball picks before kickoff, scores each one from 0 to 10, and settles every result on a public track record, wins and losses alike.',
+      'Oddsbanta is an AI-powered sports analytics and predictive intelligence platform publishing football, tennis and basketball models before kickoff. Oddsbanta is an analytics tool, not a bookmaker.',
+  },
+  '/about': {
+    title: 'About Oddsbanta | AI Sports Predictive Analytics & Quantitative Modeling',
+    description:
+      'About Oddsbanta, our AI sports analytics engine, Poisson probability models, and public settlement track record. Oddsbanta is an analytics platform, not a bookmaker.',
+    h1: 'About Oddsbanta: AI Sports Analytics & Quantitative Modeling',
+    intro:
+      'Oddsbanta is an independent sports analytics and quantitative research platform. We build statistical models, expected goals algorithms, and calibrated 0–10 confidence scores.',
   },
   '/dashboard': {
     title: 'Football Predictions Today | Oddsbanta Dashboard',

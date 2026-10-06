@@ -28,6 +28,7 @@ import { useGeoCurrency } from './lib/geoCurrency';
 import { LandingPage } from './pages/Landing';
 import { SubscriptionPage } from './pages/Subscription';
 import { PasswordRecoveryPage } from './pages/PasswordRecovery';
+import { AboutPage } from './pages/AboutPage';
 import { OtherMarketsPage } from './pages/OtherMarketsPage';
 import { WatchlistSidebar } from './components/WatchlistSidebar';
 import { LeftSidebarAd } from './components/LeftSidebarAd';
@@ -1970,6 +1971,18 @@ export default function App() {
           {/* ROUTE 2: PASSWORD RECOVERY PAGE */}
           <Route path="/reset-password" element={<PasswordRecoveryPage />} />
           <Route path="/forgot-password" element={<PasswordRecoveryPage />} />
+
+          {/* ROUTE: ABOUT ODDSBANTA (AI SPORTS ANALYTICS) */}
+          <Route
+            path="/about"
+            element={
+              <AboutPage
+                favoriteItems={favoriteItems}
+                onToggleFavoriteItem={toggleFavoriteItem}
+                onOpenFavoritesDrawer={() => setIsFavoritesDrawerOpen(true)}
+              />
+            }
+          />
 
           {/* ROUTE 3: NGN SUBSCRIPTION PAGE */}
           <Route
