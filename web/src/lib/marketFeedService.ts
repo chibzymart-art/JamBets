@@ -1,6 +1,6 @@
 import { supabase } from './supabase';
 import { formatClubName } from '../components/GoalCard';
-import { getTodayIsoDate } from './dateUtils';
+import { getTodayIsoDate, getFixtureLocalDate } from './dateUtils';
 
 export type MarketType =
   | 'general'
@@ -94,19 +94,9 @@ export interface FetchMarketFeedOptions {
   canViewPredictions?: boolean;
 }
 
-// Format Lagos WAT date
+// Format date in visitor's local timezone
 function getLagosDateFromIso(isoStr?: string | null): string {
-  if (!isoStr) return '';
-  try {
-    return new Intl.DateTimeFormat('en-CA', {
-      timeZone: 'Africa/Lagos',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    }).format(new Date(isoStr));
-  } catch {
-    return '';
-  }
+  return getFixtureLocalDate(isoStr);
 }
 
 const FIXTURE_JOIN =

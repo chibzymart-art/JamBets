@@ -3,6 +3,7 @@ import { UnifiedMarketPrediction } from '../lib/marketFeedService';
 import { FavoritePredictionItem } from './FavoritesDrawer';
 import { formatClubName } from './GoalCard';
 import { useGeoCurrency } from '../lib/geoCurrency';
+import { formatKickoff } from '../lib/dateUtils';
 
 export interface SpecialistMarketCardProps {
   prediction: UnifiedMarketPrediction;
@@ -27,23 +28,12 @@ export const SpecialistMarketCard: React.FC<SpecialistMarketCardProps> = ({
   const leagueName = fixture?.league?.name || fixture?.league?.code || 'Football';
   const kickoffStr = prediction.target_kickoff_at || fixture?.target_kickoff_at;
 
-  // Format Kickoff in Lagos WAT (UTC+1)
+  // Format Kickoff dynamically in visitor's local timezone
   const timeFormatted = (() => {
     if (!kickoffStr) return { time: 'Upcoming', date: '' };
     try {
-      const d = new Date(kickoffStr);
-      const time = new Intl.DateTimeFormat('en-GB', {
-        timeZone: 'Africa/Lagos',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false,
-      }).format(d);
-      const date = new Intl.DateTimeFormat('en-GB', {
-        timeZone: 'Africa/Lagos',
-        month: 'short',
-        day: 'numeric',
-      }).format(d);
-      return { time: `${time} WAT`, date };
+      const res = formatKickoff(kickoffStr);
+      return { time: res.fullFormatted, date: res.dateStr };
     } catch {
       return { time: 'Upcoming', date: '' };
     }

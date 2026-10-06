@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { UserProfile, UserSubscription, UserEntitlement } from '../types';
 import { useGeoCurrency } from '../lib/geoCurrency';
+import { getUserTimeZone, getTimeZoneAbbreviation } from '../lib/dateUtils';
 
 interface ProfileModalProps {
   isOpen: boolean;
@@ -238,12 +239,14 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
   const formatLagosDate = (isoStr?: string) => {
     if (!isoStr) return 'Not recorded';
     try {
+      const tz = getUserTimeZone();
+      const abbr = getTimeZoneAbbreviation(tz);
       const d = new Date(isoStr);
       return d.toLocaleString('en-GB', {
-        timeZone: 'Africa/Lagos',
+        timeZone: tz,
         dateStyle: 'medium',
         timeStyle: 'short'
-      }) + ' (WAT)';
+      }) + ` (${abbr})`;
     } catch {
       return isoStr;
     }

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { AdBannerSlot } from './AdBannerSlot';
+import { formatKickoff } from '../lib/dateUtils';
 
 export interface FavoritePredictionItem {
   id: string; // unique `${fixtureId}::${market}::${prediction}`
@@ -61,9 +62,8 @@ export const FavoritesDrawer: React.FC<FavoritesDrawerProps> = ({
     text += `📅 ${new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })} • ${favorites.length} Selection${favorites.length > 1 ? 's' : ''}\n\n`;
 
     favorites.forEach((fav, idx) => {
-      const timeStr = fav.targetKickoffAt
-        ? new Date(fav.targetKickoffAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Africa/Lagos' }) + ' WAT'
-        : 'Scheduled';
+      const time = fav.targetKickoffAt ? formatKickoff(fav.targetKickoffAt) : null;
+      const timeStr = time ? time.fullFormatted : 'Scheduled';
       const probStr = fav.probability ? `${Math.round(fav.probability)}%` : '';
 
       text += `*${idx + 1}. ${fav.homeTeam || 'Home'} vs ${fav.awayTeam || 'Away'}*\n`;
@@ -191,11 +191,7 @@ export const FavoritesDrawer: React.FC<FavoritesDrawerProps> = ({
             <div className="favorites-items-list">
               {favorites.map((fav, index) => {
                 const kickoffFormatted = fav.targetKickoffAt
-                  ? new Date(fav.targetKickoffAt).toLocaleTimeString('en-GB', {
-                      hour: '2-digit',
-                      minute: '2-digit',
-                      timeZone: 'Africa/Lagos'
-                    }) + ' WAT'
+                  ? formatKickoff(fav.targetKickoffAt).fullFormatted
                   : 'Kickoff Scheduled';
 
                 const probRound = Math.round(fav.probability || 0);

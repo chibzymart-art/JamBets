@@ -1,6 +1,7 @@
 import React from 'react';
 import { FavoritePredictionItem } from './FavoritesDrawer';
 import { useGeoCurrency } from '../lib/geoCurrency';
+import { formatFullKickoff } from '../lib/dateUtils';
 
 export interface GoalPredictionItem {
   id: string;
@@ -176,58 +177,8 @@ export function formatClubName(name?: string | null): string {
     .join(' ');
 }
 
-export function formatFullKickoff(isoDate: string): string {
-  try {
-    const d = new Date(isoDate);
-    const now = new Date();
-
-    const dLagosDate = new Intl.DateTimeFormat('en-CA', {
-      timeZone: 'Africa/Lagos',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit'
-    }).format(d);
-
-    const todayLagosDate = new Intl.DateTimeFormat('en-CA', {
-      timeZone: 'Africa/Lagos',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit'
-    }).format(now);
-
-    const tomorrowLagosDate = new Intl.DateTimeFormat('en-CA', {
-      timeZone: 'Africa/Lagos',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit'
-    }).format(new Date(now.getTime() + 86400000));
-
-    const timeStr = d.toLocaleTimeString('en-GB', {
-      timeZone: 'Africa/Lagos',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false
-    });
-
-    if (dLagosDate === todayLagosDate) {
-      return `Today • ${timeStr} WAT`;
-    }
-    if (dLagosDate === tomorrowLagosDate) {
-      return `Tomorrow • ${timeStr} WAT`;
-    }
-
-    const dayName = new Intl.DateTimeFormat('en-US', {
-      timeZone: 'Africa/Lagos',
-      weekday: 'short',
-      day: 'numeric',
-      month: 'short'
-    }).format(d);
-
-    return `${dayName} • ${timeStr} WAT`;
-  } catch {
-    return 'Kickoff TBA';
-  }
-}
+// Re-export centralized dynamic formatFullKickoff for backwards compatibility
+export { formatFullKickoff };
 
 export const GoalCard: React.FC<GoalMatchRowProps> = ({
   match,

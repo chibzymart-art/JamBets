@@ -5,6 +5,7 @@ import {
   getDateDetailsByOffset,
   getPastDatesList,
   getFixtureWatDate,
+  useUserTimeZone,
 } from '../lib/dateUtils';
 import { TennisPredictionCard } from './TennisPredictionCard';
 import { LeftSidebarAd } from './LeftSidebarAd';
@@ -38,6 +39,7 @@ export const TennisHubView: React.FC<TennisHubViewProps> = ({
   onOpenSubscription,
   onBackToFootball,
 }) => {
+  const { timeZone, timeZoneAbbr } = useUserTimeZone();
   const [selectedTournament, setSelectedTournament] = useState<string>('all');
   const [selectedTour, setSelectedTour] = useState<'all' | 'ATP' | 'WTA' | 'CH' | 'CUP'>('all');
   const [selectedDate, setSelectedDate] = useState<string>(() => getDateDetailsByOffset(0).iso);
@@ -50,11 +52,11 @@ export const TennisHubView: React.FC<TennisHubViewProps> = ({
 
   const isSubscriber = isAdmin || canViewPredictions;
 
-  // Format today's date in Lagos WAT (UTC+1) matching football scorecard
+  // Format today's date dynamically in visitor's local timezone matching football scorecard
   const watDateStr = useMemo(() => {
     try {
       return new Intl.DateTimeFormat('en-US', {
-        timeZone: 'Africa/Lagos',
+        timeZone,
         weekday: 'long',
         month: 'short',
         day: 'numeric',
@@ -63,7 +65,7 @@ export const TennisHubView: React.FC<TennisHubViewProps> = ({
     } catch {
       return 'Today';
     }
-  }, []);
+  }, [timeZone]);
 
   const loadFeed = async (force = false) => {
     setLoading(true);
@@ -91,23 +93,23 @@ export const TennisHubView: React.FC<TennisHubViewProps> = ({
   // Dynamic filter options & predictions list
   const allPredictions = feedData?.predictions || [];
 
-  // Dynamic Lagos (WAT / UTC+1) relative calendar dates
+  // Dynamic relative calendar dates in visitor's local timezone
   const dynamicDateTabs = useMemo(() => {
-    // Map prediction counts by WAT kickoff date
+    // Map prediction counts by local kickoff date
     const fixtureCountByDate = new Map<string, number>();
     allPredictions.forEach((p) => {
       const kickoff = p.target_kickoff_at || p.fixture?.target_kickoff_at;
-      const d = getFixtureWatDate(kickoff);
+      const d = getFixtureWatDate(kickoff, timeZone);
       if (d) {
         fixtureCountByDate.set(d, (fixtureCountByDate.get(d) || 0) + 1);
       }
     });
 
-    const yesterday = getDateDetailsByOffset(-1);
-    const today = getDateDetailsByOffset(0);
-    const day1 = getDateDetailsByOffset(1);
-    const day2 = getDateDetailsByOffset(2);
-    const day3 = getDateDetailsByOffset(3);
+    const yesterday = getDateDetailsByOffset(-1, timeZone);
+    const today = getDateDetailsByOffset(0, timeZone);
+    const day1 = getDateDetailsByOffset(1, timeZone);
+    const day2 = getDateDetailsByOffset(2, timeZone);
+    const day3 = getDateDetailsByOffset(3, timeZone);
 
     // Past dates list (last 30 days plus any fixture dates before today)
     const rawPastDates = getPastDatesList(30, Array.from(fixtureCountByDate.keys()));
@@ -120,7 +122,7 @@ export const TennisHubView: React.FC<TennisHubViewProps> = ({
     let currentAndFutureCount = 0;
     allPredictions.forEach((p) => {
       const kickoff = p.target_kickoff_at || p.fixture?.target_kickoff_at;
-      const d = getFixtureWatDate(kickoff);
+      const d = getFixtureWatDate(kickoff, timeZone);
       if (!d || d >= today.iso) currentAndFutureCount++;
     });
 
@@ -160,7 +162,7 @@ export const TennisHubView: React.FC<TennisHubViewProps> = ({
       todayIso: today.iso,
       yesterdayIso: yesterday.iso,
     };
-  }, [allPredictions, isSubscriber]);
+  }, [allPredictions, isSubscriber, timeZone]);
 
   const isPastDateSelected =
     selectedDate !== 'all' &&
@@ -172,23 +174,23 @@ export const TennisHubView: React.FC<TennisHubViewProps> = ({
     : null;
   const selectedPastFormatted = selectedPastOption?.shortFormatted || selectedDate;
 
-  // Active predictions matching the selected date
+  // Active predictions matching the selected date in visitor's local timezone
   const dateScopedPredictions = useMemo(() => {
     const baseList = allPredictions;
 
     if (selectedDate === 'all') {
       return baseList.filter((p) => {
         const kickoff = p.target_kickoff_at || p.fixture?.target_kickoff_at;
-        const d = getFixtureWatDate(kickoff);
+        const d = getFixtureWatDate(kickoff, timeZone);
         return !d || d >= dynamicDateTabs.todayIso;
       });
     }
     return baseList.filter((p) => {
       const kickoff = p.target_kickoff_at || p.fixture?.target_kickoff_at;
-      const d = getFixtureWatDate(kickoff);
+      const d = getFixtureWatDate(kickoff, timeZone);
       return d === selectedDate;
     });
-  }, [allPredictions, selectedDate, dynamicDateTabs.todayIso]);
+  }, [allPredictions, selectedDate, dynamicDateTabs.todayIso, timeZone]);
 
   // Dynamic competition category match counts for selected date horizon
   const competitionCounts = useMemo(() => {
@@ -503,7 +505,10 @@ export const TennisHubView: React.FC<TennisHubViewProps> = ({
         <div className="scorecard-date-header">
           <div className="current-date-badge">
             <span className="current-date-live-dot" />
-            <span className="current-date-val">{watDateStr} • WAT (UTC+1)</span>
+            <span className="current-date-val">{watDateStr}</span>
+            <span className="current-date-tz-pill" title={`All match kickoff times are automatically displayed in your local timezone (${timeZone})`}>
+              🕒 {timeZoneAbbr}
+            </span>
           </div>
 
           <div className="scorecard-league-filter-inline">

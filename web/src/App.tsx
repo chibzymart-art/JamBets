@@ -31,7 +31,14 @@ import { PasswordRecoveryPage } from './pages/PasswordRecovery';
 import { OtherMarketsPage } from './pages/OtherMarketsPage';
 import { WatchlistSidebar } from './components/WatchlistSidebar';
 import { LeftSidebarAd } from './components/LeftSidebarAd';
-import { getDateDetailsByOffset, getPastDatesList } from './lib/dateUtils';
+import {
+  getDateDetailsByOffset,
+  getPastDatesList,
+  useUserTimeZone,
+  getUserTimeZone,
+  getTodayIsoDate,
+  getFixtureLocalDate
+} from './lib/dateUtils';
 import './tennis.css';
 import { TennisHubView } from './components/TennisHubView';
 import './basketball.css';
@@ -42,6 +49,7 @@ import { seoForPath, DASHBOARD_PATHS } from './lib/routeMeta';
 
 export default function App() {
   const { currency, symbol, pricing } = useGeoCurrency();
+  const { timeZone, timeZoneAbbr } = useUserTimeZone();
   const navigate = useNavigate();
   const location = useLocation();
   // Authentication & Entitlement State
@@ -108,16 +116,10 @@ export default function App() {
     cricket: { isAvailable: false, fixtureCount: 0, leagueCount: 0 }
   });
 
-  // Calendar-Grounded Date Navigation State (Strictly Africa/Lagos Kickoff Dates - Default to Today)
+  // Calendar-Grounded Date Navigation State (Default to Visitor's Local Today)
   const [selectedDate, setSelectedDate] = useState<string>(() => {
     try {
-      const now = new Date();
-      return new Intl.DateTimeFormat('en-CA', {
-        timeZone: 'Africa/Lagos',
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit'
-      }).format(now);
+      return getTodayIsoDate(getUserTimeZone());
     } catch {
       return new Date().toISOString().split('T')[0];
     }
@@ -223,14 +225,14 @@ export default function App() {
     return () => window.removeEventListener('hashchange', handleHash);
   }, [navigate]);
 
-  // Live Lagos Time (WAT / UTC+1)
+  // Live Visitor Local Date Display
   const [watDateStr, setWatDateStr] = useState<string>('');
 
   useEffect(() => {
     const updateTime = () => {
       const now = new Date();
       const dateStr = now.toLocaleDateString('en-GB', {
-        timeZone: 'Africa/Lagos',
+        timeZone,
         weekday: 'short',
         day: 'numeric',
         month: 'short'
@@ -240,7 +242,7 @@ export default function App() {
     updateTime();
     const timer = setInterval(updateTime, 10000);
     return () => clearInterval(timer);
-  }, []);
+  }, [timeZone]);
 
   // User & Auth Session Management (Phase 3 High-Concurrency Bootstrap)
   const fetchUserData = async (userId: string) => {
@@ -745,17 +747,12 @@ export default function App() {
         // Safe baseline fallback without making 6 parallel queries to Supabase
       }
 
-      // Calculate active current & upcoming fixtures in Africa/Lagos WAT
+      // Calculate active current & upcoming fixtures in visitor's local timezone
       let activeCurrentAndFutureCount = 0;
-      const todayIsoStr = new Intl.DateTimeFormat('en-CA', {
-        timeZone: 'Africa/Lagos',
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit'
-      }).format(new Date());
+      const todayIsoStr = getTodayIsoDate(timeZone);
 
       returnedFixtures.forEach((f) => {
-        const d = getFixtureWatDate(f.target_kickoff_at);
+        const d = getFixtureLocalDate(f.target_kickoff_at, timeZone);
         if (!d || d >= todayIsoStr) {
           activeCurrentAndFutureCount++;
         }
@@ -803,41 +800,31 @@ export default function App() {
   }, [predictions]);
 
 
-  // Date extraction strictly in Africa/Lagos (WAT / UTC+1)
-  const getFixtureWatDate = (targetKickoffIso: string) => {
-    try {
-      const d = new Date(targetKickoffIso);
-      return new Intl.DateTimeFormat('en-CA', {
-        timeZone: 'Africa/Lagos',
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit'
-      }).format(d);
-    } catch {
-      return '';
-    }
-  };
+  // Date extraction in visitor's local timezone
+  const getFixtureWatDate = useCallback((targetKickoffIso: string) => {
+    return getFixtureLocalDate(targetKickoffIso, timeZone);
+  }, [timeZone]);
 
-  // Dynamic Lagos (WAT / UTC+1) relative calendar dates
+  // Dynamic visitor relative calendar dates
   const dynamicDateTabs = useMemo(() => {
-    // Map fixture counts by WAT kickoff date
+    // Map fixture counts by local kickoff date
     const fixtureCountByDate = new Map<string, number>();
     fixtures.forEach((f) => {
-      const d = getFixtureWatDate(f.target_kickoff_at);
+      const d = getFixtureLocalDate(f.target_kickoff_at, timeZone);
       if (d) {
         fixtureCountByDate.set(d, (fixtureCountByDate.get(d) || 0) + 1);
       }
     });
 
-    const yesterday = getDateDetailsByOffset(-1);
-    const today = getDateDetailsByOffset(0);
-    const day1 = getDateDetailsByOffset(1);
-    const day2 = getDateDetailsByOffset(2);
-    const day3 = getDateDetailsByOffset(3);
-    const day4 = getDateDetailsByOffset(4);
+    const yesterday = getDateDetailsByOffset(-1, timeZone);
+    const today = getDateDetailsByOffset(0, timeZone);
+    const day1 = getDateDetailsByOffset(1, timeZone);
+    const day2 = getDateDetailsByOffset(2, timeZone);
+    const day3 = getDateDetailsByOffset(3, timeZone);
+    const day4 = getDateDetailsByOffset(4, timeZone);
 
     // Past dates list (last 30 days plus any fixture dates before today)
-    const rawPastDates = getPastDatesList(30, Array.from(fixtureCountByDate.keys()));
+    const rawPastDates = getPastDatesList(30, Array.from(fixtureCountByDate.keys()), timeZone);
     const pastDates = rawPastDates.map((pd) => ({
       ...pd,
       count: fixtureCountByDate.get(pd.iso) || 0
@@ -846,7 +833,7 @@ export default function App() {
     // Count fixtures for current date and future dates (strictly no past dates)
     let currentAndFutureCount = 0;
     fixtures.forEach((f) => {
-      const d = getFixtureWatDate(f.target_kickoff_at);
+      const d = getFixtureLocalDate(f.target_kickoff_at, timeZone);
       if (!d || d >= today.iso) currentAndFutureCount++;
     });
 
@@ -891,7 +878,7 @@ export default function App() {
       todayIso: today.iso,
       yesterdayIso: yesterday.iso
     };
-  }, [fixtures]);
+  }, [fixtures, timeZone]);
 
   const isPastDateSelected =
     selectedDate !== 'all' &&
@@ -2302,11 +2289,14 @@ export default function App() {
                   <>
             {/* 3. DAILY VERIFIED SCORECARD SECTION */}
         <section className="daily-scorecard-section">
-          {/* Top Date Header: Current Date Display on left, League Selector Dropdown on far right */}
+          {/* Top Date Header: Current Date Display on left with Timezone indicator, League Selector Dropdown on far right */}
           <div className="scorecard-date-header">
             <div className="current-date-badge">
               <span className="current-date-live-dot" />
               <span className="current-date-val">{watDateStr || 'Today'}</span>
+              <span className="current-date-tz-pill" title={`All match kickoff times are automatically displayed in your local timezone (${timeZone})`}>
+                🕒 {timeZoneAbbr}
+              </span>
             </div>
 
             <div className="scorecard-league-filter-inline">

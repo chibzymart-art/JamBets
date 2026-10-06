@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { TennisPrediction, TennisSurface } from '../types/tennis';
 import { getTierConfig } from './FixtureCard';
 import { FavoritePredictionItem } from './FavoritesDrawer';
+import { formatCardKickoff } from '../lib/dateUtils';
 
 export interface TennisPredictionCardProps {
   prediction: TennisPrediction;
@@ -66,19 +67,9 @@ export const TennisPredictionCard: React.FC<TennisPredictionCardProps> = ({
   const absDiff = Math.abs(eloDiff);
   const leaderName = eloDiff >= 0 ? (player1?.display_name || 'Player 1') : (player2?.display_name || 'Player 2');
 
-  // Kickoff formatting in Lagos WAT (UTC+1)
+  // Kickoff formatting dynamically in visitor's local timezone
   const kickoffDate = new Date(prediction.target_kickoff_at || fixture?.target_kickoff_at || Date.now());
-  const formattedDateTime = kickoffDate.toLocaleDateString('en-US', {
-    timeZone: 'Africa/Lagos',
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-  }) + ', ' + kickoffDate.toLocaleTimeString('en-US', {
-    timeZone: 'Africa/Lagos',
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true,
-  });
+  const formattedDateTime = formatCardKickoff(kickoffDate);
 
   const isFinished = fixture?.status === 'finished' || fixture?.status === 'retired' || Boolean(prediction.settled_at);
   const isLive = fixture?.status === 'live';

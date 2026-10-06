@@ -8,6 +8,7 @@ import React, { useState, useMemo } from 'react';
 import { BasketballPrediction } from '../types/basketball';
 import { getTierConfig } from './FixtureCard';
 import { FavoritePredictionItem } from './FavoritesDrawer';
+import { formatCardKickoff } from '../lib/dateUtils';
 
 export interface BasketballPredictionCardProps {
   prediction: BasketballPrediction;
@@ -57,19 +58,9 @@ export const BasketballPredictionCard: React.FC<BasketballPredictionCardProps> =
   // Multi-Sport VIP Shield: All basketball predictions are locked teasers for visitors
   const isLocked = !isUserEntitled;
 
-  // Kickoff formatting in Lagos WAT (UTC+1)
+  // Kickoff formatting dynamically in visitor's local timezone
   const kickoffDate = new Date(prediction.target_kickoff_at || fixture?.target_kickoff_at || Date.now());
-  const formattedDateTime = kickoffDate.toLocaleDateString('en-US', {
-    timeZone: 'Africa/Lagos',
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-  }) + ', ' + kickoffDate.toLocaleTimeString('en-US', {
-    timeZone: 'Africa/Lagos',
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true,
-  });
+  const formattedDateTime = formatCardKickoff(kickoffDate);
 
   // Confidence Tier Configuration
   const effectiveCategory = isLocked

@@ -4,6 +4,7 @@ import { QueueFixture, FootballPrediction, SecondaryPrediction, PoissonParameter
 import { FavoritePredictionItem } from './FavoritesDrawer';
 import { PICK_DISCLAIMER } from '../lib/confidenceScore';
 import { useGeoCurrency } from '../lib/geoCurrency';
+import { formatCardKickoff } from '../lib/dateUtils';
 
 export interface TierDisplayConfig {
   label: string;
@@ -678,18 +679,8 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
   const scoreRating = probNum != null ? (probNum / 10).toFixed(1) : null;
   const cleanTierLabel = (tierConfig.label || '').replace(/\s*\([^)]*\)/g, '').trim();
 
-  // Format date & time like "Thu, Sep 10, 12:30 AM"
-  const formattedDateTime = kickoffDate.toLocaleDateString('en-US', {
-    timeZone: 'Africa/Lagos',
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric'
-  }) + ', ' + kickoffDate.toLocaleTimeString('en-US', {
-    timeZone: 'Africa/Lagos',
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true
-  });
+  // Format date & time dynamically in visitor's local timezone (e.g. "Thu, Sep 10, 12:30 AM (EDT)")
+  const formattedDateTime = formatCardKickoff(kickoffDate);
 
   const country = fixture.league_country || (fixture.league_code ? LEAGUE_COUNTRY_MAP[fixture.league_code] : '') || '';
   const leagueDisplay = country ? `${country} • ${fixture.league_name || fixture.league_code}` : (fixture.league_name || fixture.league_code);

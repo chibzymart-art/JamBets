@@ -72,7 +72,7 @@ export const WatchlistSidebar: React.FC<WatchlistSidebarProps> = ({
                   >
                     <div className="banger-item-meta">
                       <span>{fav.league}</span>
-                      <span>{time ? `${time.timeStr} WAT` : 'Scheduled'}</span>
+                      <span>{time ? time.fullFormatted : 'Scheduled'}</span>
                     </div>
                     <div className="banger-item-teams">
                       {fav.homeTeam} vs {fav.awayTeam}
