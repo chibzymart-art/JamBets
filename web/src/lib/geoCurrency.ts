@@ -72,14 +72,16 @@ export function formatAmount(amount: number, currency: CurrencyCode): string {
 export function detectLocalDefaultCurrency(): CurrencyCode {
   if (typeof window === 'undefined') return 'NGN';
   
-  // 1. Check user manual override preference
-  const saved = localStorage.getItem(STORAGE_KEY);
-  if (saved === 'NGN' || saved === 'USD') return saved;
+  // 1. Check active session manual selection if explicitly chosen
+  try {
+    const sessionSaved = sessionStorage.getItem(STORAGE_KEY);
+    if (sessionSaved === 'NGN' || sessionSaved === 'USD') return sessionSaved;
+  } catch {}
 
   // 2. Check timezone heuristic: Africa/Lagos -> NGN; all others -> USD
   try {
     const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    if (tz === 'Africa/Lagos') return 'NGN';
+    if (tz === 'Africa/Lagos' || tz.includes('Lagos')) return 'NGN';
   } catch {}
 
   // Default to USD for all non-Nigeria zones
@@ -94,15 +96,22 @@ export function useGeoCurrency() {
   useEffect(() => {
     let isMounted = true;
 
-    // Check if user has explicitly pinned their preferred currency
-    const userOverride = localStorage.getItem(STORAGE_KEY);
-    if (userOverride === 'NGN' || userOverride === 'USD') {
-      setCurrencyState(userOverride);
-      setHasResolved(true);
-      return;
-    }
+    // Purge legacy localStorage override from past test suites so real IP geolocation is never hijacked
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch {}
 
-    // Call edge geolocation endpoint
+    // Check if user has explicitly chosen a currency in this active browser session
+    try {
+      const sessionOverride = sessionStorage.getItem(STORAGE_KEY);
+      if (sessionOverride === 'NGN' || sessionOverride === 'USD') {
+        setCurrencyState(sessionOverride);
+        setHasResolved(true);
+        return;
+      }
+    } catch {}
+
+    // Authoritative edge geolocation endpoint
     fetch('/api/geo')
       .then((res) => {
         if (!res.ok) throw new Error('Geo lookup failed');
@@ -140,7 +149,7 @@ export function useGeoCurrency() {
   const setCurrency = (newCurrency: CurrencyCode) => {
     setCurrencyState(newCurrency);
     try {
-      localStorage.setItem(STORAGE_KEY, newCurrency);
+      sessionStorage.setItem(STORAGE_KEY, newCurrency);
       window.dispatchEvent(new CustomEvent('oddsbanta_currency_change', { detail: newCurrency }));
     } catch {}
   };
