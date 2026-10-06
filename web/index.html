@@ -23,30 +23,100 @@
     <meta property="og:site_name" content="Oddsbanta" />
     <meta property="og:title" content="🔥 Oddsbanta — Smart Sport Analysis & AI Predictions" id="og-title-tag" />
     <meta property="og:description" content="Over 2.5 Goals & First Half goal predictions from statistical models and AI tactical analysis, with a public settled track record." id="og-desc-tag" />
-    <meta property="og:image" content="https://www.oddsbanta.com/oddsbanta-logo.svg" id="og-image-tag" />
+    <meta property="og:image" content="https://www.oddsbanta.com/icon-512.png" id="og-image-tag" />
+    <meta property="og:image:width" content="512" />
+    <meta property="og:image:height" content="512" />
+    <meta property="og:image:type" content="image/png" />
     <meta property="og:url" content="https://www.oddsbanta.com/" id="og-url-tag" />
 
     <!-- Twitter / X Cards -->
-    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:card" content="summary" />
     <meta name="twitter:site" content="@oddsbanta" />
     <meta name="twitter:title" content="Oddsbanta — Smart Sport Analysis & AI Predictions" id="tw-title-tag" />
     <meta name="twitter:description" content="Over 2.5 Goals & First Half goal predictions, published before kickoff and settled on a public track record." id="tw-desc-tag" />
-    <meta name="twitter:image" content="https://www.oddsbanta.com/oddsbanta-logo.svg" id="tw-image-tag" />
+    <meta name="twitter:image" content="https://www.oddsbanta.com/icon-512.png" id="tw-image-tag" />
 
-    <!-- Schema.org JSON-LD Structured Data for Google Rich Snippets -->
+    <!-- Schema.org JSON-LD Structured Data for Google Site Names & Knowledge Graph -->
     <script type="application/ld+json" id="schema-org-data">
     {
       "@context": "https://schema.org",
-      "@type": "SportsOrganization",
-      "name": "Oddsbanta",
-      "url": "https://www.oddsbanta.com/",
-      "logo": "https://www.oddsbanta.com/oddsbanta-logo.svg",
-      "description": "AI-powered sports analytics and probabilistic football predictions.",
-      "potentialAction": {
-        "@type": "SearchAction",
-        "target": "https://www.oddsbanta.com/goals?q={search_term_string}",
-        "query-input": "required name=search_term_string"
-      }
+      "@graph": [
+        {
+          "@type": "WebSite",
+          "@id": "https://www.oddsbanta.com/#website",
+          "url": "https://www.oddsbanta.com/",
+          "name": "Oddsbanta",
+          "alternateName": [
+            "OddsBanta",
+            "Oddsbanta.com",
+            "Odds Banta"
+          ],
+          "description": "AI-powered sports analytics and probabilistic predictions for football, tennis, and basketball.",
+          "publisher": {
+            "@id": "https://www.oddsbanta.com/#organization"
+          },
+          "inLanguage": "en-US",
+          "potentialAction": {
+            "@type": "SearchAction",
+            "target": {
+              "@type": "EntryPoint",
+              "urlTemplate": "https://www.oddsbanta.com/dashboard/goals?q={search_term_string}"
+            },
+            "query-input": "required name=search_term_string"
+          }
+        },
+        {
+          "@type": "Organization",
+          "@id": "https://www.oddsbanta.com/#organization",
+          "name": "Oddsbanta",
+          "alternateName": [
+            "OddsBanta",
+            "Oddsbanta.com"
+          ],
+          "url": "https://www.oddsbanta.com/",
+          "logo": {
+            "@type": "ImageObject",
+            "@id": "https://www.oddsbanta.com/#logo",
+            "url": "https://www.oddsbanta.com/icon-512.png",
+            "contentUrl": "https://www.oddsbanta.com/icon-512.png",
+            "caption": "Oddsbanta",
+            "width": 512,
+            "height": 512
+          },
+          "image": "https://www.oddsbanta.com/icon-512.png",
+          "description": "Oddsbanta is an AI-driven sports analytics platform providing mathematical model forecasts, tactical insights, and transparent public settlement tracking for major sports leagues.",
+          "sameAs": [
+            "https://x.com/oddsbanta",
+            "https://twitter.com/oddsbanta"
+          ],
+          "knowsAbout": [
+            "Sports Analytics",
+            "Football Predictions",
+            "Over 2.5 Goals",
+            "First Half Goals",
+            "Tennis Predictions",
+            "Basketball Analytics",
+            "Predictive Modeling"
+          ]
+        },
+        {
+          "@type": "SoftwareApplication",
+          "@id": "https://www.oddsbanta.com/#software",
+          "name": "Oddsbanta Sports Analytics",
+          "applicationCategory": "SportsApplication",
+          "operatingSystem": "All",
+          "url": "https://www.oddsbanta.com/",
+          "description": "Algorithmic sport predictions, confidence ratings, and settlement tracking for football, basketball, and tennis.",
+          "author": {
+            "@id": "https://www.oddsbanta.com/#organization"
+          },
+          "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "USD"
+          }
+        }
+      ]
     }
     </script>
 
