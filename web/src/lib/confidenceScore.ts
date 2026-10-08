@@ -116,3 +116,86 @@ export function matchesTierFilter(filter: ScoreTierFilter, probability: number |
 /** Standard per-pick disclaimer shown on every prediction surface. */
 export const PICK_DISCLAIMER =
   'Model estimate, not a guarantee. Oddsbanta does not place bets on anyone’s behalf. 18+.';
+
+/**
+ * Resolves the relative ranking priority for football predictions/fixtures.
+ * 1 = Bangers (96%+)
+ * 2 = Top Pick (90%-95%)
+ * 3 = High Confidence (83%-89%)
+ * 4 = Mid Confidence (75%-82%)
+ * 5 = Low Confidence (65%-74%)
+ * 6 = Anti-Loss / No Safe Banker / Risky
+ * 7 = Others / Unclassified
+ */
+export function getFootballTierPriority(
+  category?: string | null,
+  tier?: string | null,
+  probability?: number | null
+): number {
+  const norm = `${category || ''} ${tier || ''}`.toUpperCase().replace(/[\s-]+/g, '_');
+
+  if (norm.includes('BANGER')) return 1;
+  if (norm.includes('TOP_PICK') || norm.includes('TOPPICK') || norm.includes('TOP')) return 2;
+  if (
+    norm.includes('HIGH_CONFIDENCE') ||
+    norm.includes('HIGHCONFIDENCE') ||
+    norm.includes('HIGH') ||
+    norm.includes('GOAL_MACHINE') ||
+    norm.includes('OVER_25_LOCK') ||
+    norm.includes('EARLY_STRIKE')
+  ) {
+    return 3;
+  }
+  if (norm.includes('MID_CONFIDENCE') || norm.includes('MIDCONFIDENCE') || norm.includes('MID')) return 4;
+  if (norm.includes('LOW_CONFIDENCE') || norm.includes('LOWCONFIDENCE') || norm.includes('LOW')) return 5;
+  if (
+    norm.includes('NO_SAFE_BANKER') ||
+    norm.includes('NOSAFEBANKER') ||
+    norm.includes('SKIP') ||
+    norm.includes('RISKY')
+  ) {
+    return 6;
+  }
+
+  // Fallback to probability if category is unassigned or generic
+  let p = probability;
+  if (p != null && typeof p === 'number' && p > 1) p = p / 100;
+  if (p != null && typeof p === 'number' && p > 0) {
+    if (p >= 0.96) return 1;
+    if (p >= 0.90) return 2;
+    if (p >= 0.83) return 3;
+    if (p >= 0.75) return 4;
+    if (p >= 0.65) return 5;
+    return 6;
+  }
+
+  return 7;
+}
+
+export interface TierHeaderConfig {
+  icon: string;
+  label: string;
+  badgeClass: string;
+  textColor: string;
+  borderColor: string;
+}
+
+export function getTierHeaderByRank(rank: number): TierHeaderConfig {
+  switch (rank) {
+    case 1:
+      return { icon: '🔥', label: 'BANGERS (96%+)', badgeClass: 'tier-banger', textColor: '#ea580c', borderColor: '#f97316' };
+    case 2:
+      return { icon: '👑', label: 'TOP PICKS (90%–95%)', badgeClass: 'tier-top-pick', textColor: '#d97706', borderColor: '#f59e0b' };
+    case 3:
+      return { icon: '🟢', label: 'HIGH CONFIDENCE (83%–89%)', badgeClass: 'tier-high-conf', textColor: '#16a34a', borderColor: '#22c55e' };
+    case 4:
+      return { icon: '🔵', label: 'MID CONFIDENCE (75%–82%)', badgeClass: 'tier-mid-conf', textColor: '#2563eb', borderColor: '#3b82f6' };
+    case 5:
+      return { icon: '🟡', label: 'LOW CONFIDENCE (65%–74%)', badgeClass: 'tier-low-conf', textColor: '#ca8a04', borderColor: '#eab308' };
+    case 6:
+      return { icon: '🛡️', label: 'ANTI-LOSS (NO SAFE BANKER)', badgeClass: 'tier-no-banker', textColor: '#64748b', borderColor: '#cbd5e1' };
+    default:
+      return { icon: '⚽', label: 'OTHER PREDICTIONS', badgeClass: 'tier-mid-conf', textColor: '#64748b', borderColor: '#cbd5e1' };
+  }
+}
+

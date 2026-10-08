@@ -38,8 +38,7 @@ import {
   useUserTimeZone,
   getUserTimeZone,
   getTodayIsoDate,
-  getFixtureLocalDate,
-  formatKickoff
+  getFixtureLocalDate
 } from './lib/dateUtils';
 import './tennis.css';
 import { TennisHubView } from './components/TennisHubView';
@@ -47,9 +46,27 @@ import './basketball.css';
 import { BasketballHubView } from './components/BasketballHubView';
 import { TrackRecordPage } from './pages/TrackRecord';
 import { seoForPath, DASHBOARD_PATHS } from './lib/routeMeta';
+import { getFootballTierPriority, getTierHeaderByRank } from './lib/confidenceScore';
 
+function getFixtureRankAndProb(fId: string, map: Map<string, FootballPrediction[]>): { rank: number; prob: number } {
+  const preds = map.get(fId) || [];
+  let bestRank = 7;
+  let bestProb = 0;
+  for (const p of preds) {
+    const rank = getFootballTierPriority(p.confidence_category, undefined, p.probability);
+    let pProb = typeof p.probability === 'number' ? (p.probability > 1 ? p.probability / 100 : p.probability) : 0;
+    if (rank < bestRank) {
+      bestRank = rank;
+      bestProb = pProb;
+    } else if (rank === bestRank && pProb > bestProb) {
+      bestProb = pProb;
+    }
+  }
+  return { rank: bestRank, prob: bestProb };
+}
 
 export default function App() {
+
   const { currency, symbol, pricing } = useGeoCurrency();
   const { timeZone, timeZoneAbbr } = useUserTimeZone();
   const navigate = useNavigate();
@@ -699,11 +716,22 @@ export default function App() {
         }
       });
 
+      const predMapForSort = new Map<string, FootballPrediction[]>();
+      embeddedPreds.forEach((p) => {
+        const list = predMapForSort.get(p.fixture_id) || [];
+        list.push(p);
+        predMapForSort.set(p.fixture_id, list);
+      });
+
       const returnedFixtures: QueueFixture[] = Array.from(fixtureMap.values());
-      // Strictly earliest kickoff time first with deterministic ID tie-breaker
+      // Arranged strictly by Tier Priority (Bangers first, Top Pick, High, Mid, Low, Anti-Loss)
       returnedFixtures.sort((a, b) => {
+        const metaA = getFixtureRankAndProb(a.id, predMapForSort);
+        const metaB = getFixtureRankAndProb(b.id, predMapForSort);
+        if (metaA.rank !== metaB.rank) return metaA.rank - metaB.rank;
+        if (Math.abs(metaB.prob - metaA.prob) > 0.0001) return metaB.prob - metaA.prob;
         const timeDiff = new Date(a.target_kickoff_at).getTime() - new Date(b.target_kickoff_at).getTime();
-        if (timeDiff !== 0) return timeDiff;
+        if (!isNaN(timeDiff) && timeDiff !== 0) return timeDiff;
         return a.id.localeCompare(b.id);
       });
 
@@ -1417,60 +1445,24 @@ export default function App() {
       return true;
     });
 
-    // Marketing Prioritization Rule:
-    // When the user is NOT a paid subscriber (!canViewPredictions && !isAdmin):
-    // Prioritize fixtures that have UNLOCKED actionable predictions (Mid Confidence & Low Confidence) first!
-    // Followed by locked VIP fixtures (Bangers, Top Picks, High Confidence).
-    // Within each group, preserve earliest kickoff time.
-    // When the user IS a paid subscriber (canViewPredictions):
-    // Maintain natural earliest kickoff order.
-    if (!canViewPredictions && !isAdmin) {
-      return [...list].sort((a, b) => {
-        const getFixtureWeight = (f: QueueFixture): number => {
-          const p = predsByFixture.get(f.id)?.[0];
-          if (!p) return 0;
-          if (p.settlement_status === 'won') return 10;
-          const pCat = (p.confidence_category || '').toUpperCase().replace(/[\s-]+/g, '_');
-          const isNoBanker =
-            pCat === 'NO_SAFE_BANKER' ||
-            pCat === 'NOSAFEBANKER' ||
-            pCat.includes('NO_SAFE') ||
-            pCat.includes('NOSAFE') ||
-            p.market === 'NO_SAFE_BANKER' ||
-            p.prediction === 'SKIP';
-          if (isNoBanker) return -1;
+    // Display Rule: Arranged strictly by Tier Priority:
+    // 1. Bangers first
+    // 2. Top Pick
+    // 3. High Confidence
+    // 4. Mid Confidence
+    // 5. Low Confidence
+    // 6. Anti-Loss / No Safe Banker
+    // No longer arranged by kickoff time.
+    return [...list].sort((a, b) => {
+      const metaA = getFixtureRankAndProb(a.id, predsByFixture);
+      const metaB = getFixtureRankAndProb(b.id, predsByFixture);
+      if (metaA.rank !== metaB.rank) return metaA.rank - metaB.rank;
+      if (Math.abs(metaB.prob - metaA.prob) > 0.0001) return metaB.prob - metaA.prob;
+      const timeDiff = new Date(a.target_kickoff_at).getTime() - new Date(b.target_kickoff_at).getTime();
+      if (!isNaN(timeDiff) && timeDiff !== 0) return timeDiff;
+      return a.id.localeCompare(b.id);
+    });
 
-          let pProb = p.probability;
-          if (pProb != null && typeof pProb === 'number' && pProb > 1) pProb = pProb / 100;
-          const isVip =
-            pCat === 'BANGER' ||
-            pCat.includes('BANGER') ||
-            pCat === 'TOP_PICK' ||
-            pCat === 'TOPPICK' ||
-            pCat.includes('TOP') ||
-            pCat === 'HIGH_CONFIDENCE' ||
-            pCat === 'HIGHCONFIDENCE' ||
-            pCat.includes('HIGH') ||
-            (pProb !== null && typeof pProb === 'number' && pProb >= 0.80) ||
-            p.is_locked === true ||
-            p.prediction === 'LOCKED' ||
-            p.prediction === '🔒 Premium VIP Pick';
-
-          if (!isVip) return 5;
-          return 1;
-        };
-
-        const wA = getFixtureWeight(a);
-        const wB = getFixtureWeight(b);
-        if (wB !== wA) return wB - wA;
-
-        const timeDiff = new Date(a.target_kickoff_at).getTime() - new Date(b.target_kickoff_at).getTime();
-        if (timeDiff !== 0) return timeDiff;
-        return a.id.localeCompare(b.id);
-      });
-    }
-
-    return list;
   }, [
     fixtures,
     predsByFixture,
@@ -2739,92 +2731,34 @@ export default function App() {
                 ) : (
                   <div className="chronological-fixtures-stream">
                     {filteredFixtures.map((fixture, idx) => {
-                      const kickoff = formatKickoff(fixture.target_kickoff_at, timeZone);
                       const prevFixture = idx > 0 ? filteredFixtures[idx - 1] : null;
-                      const prevKickoff = prevFixture ? formatKickoff(prevFixture.target_kickoff_at, timeZone) : null;
-                      const isTimeSlotStart =
-                        !prevKickoff ||
-                        prevKickoff.timeStr !== kickoff.timeStr ||
-                        prevKickoff.dateStr !== kickoff.dateStr;
-
-                      const isTransitionToLocked = !canViewPredictions && !isAdmin && idx > 0 && prevFixture &&
-                        isFixtureUnlocked(prevFixture) && !isFixtureUnlocked(fixture);
+                      const currentRank = getFixtureRankAndProb(fixture.id, predsByFixture).rank;
+                      const prevRank = prevFixture ? getFixtureRankAndProb(prevFixture.id, predsByFixture).rank : null;
+                      const isTierSlotStart = idx === 0 || currentRank !== prevRank;
+                      const tierHeader = getTierHeaderByRank(currentRank);
 
                       return (
                         <Fragment key={fixture.id}>
-                          {isTransitionToLocked && (
-                            <div
-                              className="football-vip-banner-card"
-                              style={{
-                                background: 'linear-gradient(135deg, #1e1b4b 0%, #312e81 100%)',
-                                border: '1px solid rgba(245, 158, 11, 0.4)',
-                                borderRadius: '14px',
-                                padding: '20px 24px',
-                                margin: '20px 0',
-                                color: '#ffffff',
-                                boxShadow: '0 8px 24px rgba(30, 27, 75, 0.25)',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'space-between',
-                                gap: '16px',
-                                flexWrap: 'wrap'
-                              }}
-                            >
-                              <div style={{ flex: '1 1 300px' }}>
-                                <div style={{
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: '6px',
-                                  background: 'rgba(245, 158, 11, 0.2)',
-                                  color: '#fbbf24',
-                                  fontSize: '11px',
-                                  fontWeight: 800,
-                                  padding: '4px 10px',
-                                  borderRadius: '6px',
-                                  textTransform: 'uppercase',
-                                  letterSpacing: '0.05em',
-                                  marginBottom: '8px'
-                                }}>
-                                  👑 VIP Football Bankers Vault
-                                </div>
-                                <h4 style={{ margin: '0 0 6px 0', fontSize: '17px', fontWeight: 800, color: '#ffffff' }}>
-                                  Want 85%+ High-Confidence Football Picks?
-                                </h4>
-                                <p style={{ margin: 0, fontSize: '13px', color: '#c7d2fe', lineHeight: 1.5 }}>
-                                  You've explored our free Mid-Confidence simulations above. Unlock today's highest-conviction <strong>Bangers</strong>, <strong>Top Picks</strong>, and Poisson Goal cards with VIP access.
-                                </p>
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() => navigate('/subscription')}
+                          {isTierSlotStart && (
+                            <div className="kickoff-slot-divider tier-slot-divider">
+                              <div
+                                className={`kickoff-slot-badge tier-slot-badge ${tierHeader.badgeClass}`}
                                 style={{
-                                  background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
-                                  color: '#0f172a',
-                                  border: 'none',
-                                  borderRadius: '10px',
-                                  padding: '12px 22px',
-                                  fontWeight: 800,
-                                  fontSize: '13px',
-                                  cursor: 'pointer',
-                                  boxShadow: '0 4px 14px rgba(245, 158, 11, 0.4)',
-                                  whiteSpace: 'nowrap'
+                                  background: '#ffffff',
+                                  border: `1.5px solid ${tierHeader.borderColor}`,
+                                  color: tierHeader.textColor,
+                                  boxShadow: '0 2px 8px rgba(0, 0, 0, 0.04)',
                                 }}
                               >
-                                ⚡ Unlock All VIP Picks Now →
-                              </button>
-                            </div>
-                          )}
-                          {isTimeSlotStart && (
-                            <div className="kickoff-slot-divider">
-                              <div className="kickoff-slot-badge">
-                                <span className="kickoff-slot-clock">⏰</span>
-                                <span className="kickoff-slot-time">{kickoff.fullFormatted}</span>
-                                <span className="kickoff-slot-dot">•</span>
-                                <span className="kickoff-slot-date">{kickoff.dateStr}</span>
+                                <span className="kickoff-slot-clock">{tierHeader.icon}</span>
+                                <span className="kickoff-slot-time" style={{ color: tierHeader.textColor }}>
+                                  {tierHeader.label}
+                                </span>
                               </div>
                               <div className="kickoff-slot-line" />
                             </div>
                           )}
+
                           <FixtureCard
                             fixture={fixture}
                             prediction={predsByFixture.get(fixture.id)?.[0] || null}

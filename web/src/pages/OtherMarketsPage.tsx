@@ -14,6 +14,7 @@ import {
   getDateDetailsByOffset,
   getPastDatesList
 } from '../lib/dateUtils';
+import { getFootballTierPriority, getTierHeaderByRank } from '../lib/confidenceScore';
 import '../goals.css';
 
 export interface OtherMarketsPageProps {
@@ -229,7 +230,7 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
 
   // Client-side search & status filtering on the loaded batch
   const filteredPredictions = useMemo(() => {
-    return predictions.filter((p) => {
+    const list = predictions.filter((p) => {
       // Exclude void or archived legacy records completely from user display
       if (p.settlement_status === 'void' || (p as any).publication_status === 'archived') return false;
 
@@ -257,7 +258,26 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
 
       return true;
     });
+
+    // Arranged strictly by Tier Priority: Bangers first, Top pick, High, Mid, Low, Anti-loss
+    // No longer arranged by kickoff time.
+    return list.sort((a, b) => {
+      const rankA = getFootballTierPriority(a.confidence_category, a.confidence_tier, a.probability);
+      const rankB = getFootballTierPriority(b.confidence_category, b.confidence_tier, b.probability);
+      if (rankA !== rankB) return rankA - rankB;
+
+      const probA = typeof a.probability === 'number' ? (a.probability > 1 ? a.probability / 100 : a.probability) : 0;
+      const probB = typeof b.probability === 'number' ? (b.probability > 1 ? b.probability / 100 : b.probability) : 0;
+      if (Math.abs(probB - probA) > 0.0001) return probB - probA;
+
+      const timeA = new Date(a.target_kickoff_at || a.fixture?.target_kickoff_at || 0).getTime();
+      const timeB = new Date(b.target_kickoff_at || b.fixture?.target_kickoff_at || 0).getTime();
+      if (!isNaN(timeA) && !isNaN(timeB) && timeA !== timeB) return timeA - timeB;
+
+      return (a.id || '').localeCompare(b.id || '');
+    });
   }, [predictions, statusFilter, searchQuery, isPaidUser]);
+
 
   // Summary counts for current batch
   const statusStats = useMemo(() => {
@@ -549,26 +569,53 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
           </div>
         ) : (
           <div className="specialist-cards-grid" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {filteredPredictions.map((prediction, idx) => (
-              <React.Fragment key={prediction.id || `${prediction.fixture_id}_${prediction.market}`}>
-                <SpecialistMarketCard
-                  prediction={prediction}
-                  isFavorite={
-                    isFavoriteItem
-                      ? isFavoriteItem(prediction.fixture_id, prediction.market_label, prediction.prediction)
-                      : false
-                  }
-                  onToggleFavorite={onToggleFavoriteItem}
-                  onOpenUpgrade={onOpenSubscription}
-                  isAdmin={isAdmin}
-                />
-                {(idx === 2 || idx === 6) && (
-                  <div style={{ margin: '8px 0' }}>
-                    <AdBannerSlot slotType="native-card" />
-                  </div>
-                )}
-              </React.Fragment>
-            ))}
+            {filteredPredictions.map((prediction, idx) => {
+              const currentRank = getFootballTierPriority(prediction.confidence_category, prediction.confidence_tier, prediction.probability);
+              const prevPred = idx > 0 ? filteredPredictions[idx - 1] : null;
+              const prevRank = prevPred ? getFootballTierPriority(prevPred.confidence_category, prevPred.confidence_tier, prevPred.probability) : null;
+              const isTierSlotStart = idx === 0 || currentRank !== prevRank;
+              const tierHeader = getTierHeaderByRank(currentRank);
+
+              return (
+                <React.Fragment key={prediction.id || `${prediction.fixture_id}_${prediction.market}`}>
+                  {isTierSlotStart && (
+                    <div className="kickoff-slot-divider tier-slot-divider" style={{ margin: idx === 0 ? '4px 0 8px 0' : '20px 0 8px 0' }}>
+                      <div
+                        className={`kickoff-slot-badge tier-slot-badge ${tierHeader.badgeClass}`}
+                        style={{
+                          background: '#ffffff',
+                          border: `1.5px solid ${tierHeader.borderColor}`,
+                          color: tierHeader.textColor,
+                          boxShadow: '0 2px 8px rgba(0, 0, 0, 0.04)',
+                        }}
+                      >
+                        <span className="kickoff-slot-clock">{tierHeader.icon}</span>
+                        <span className="kickoff-slot-time" style={{ color: tierHeader.textColor }}>
+                          {tierHeader.label}
+                        </span>
+                      </div>
+                      <div className="kickoff-slot-line" />
+                    </div>
+                  )}
+                  <SpecialistMarketCard
+                    prediction={prediction}
+                    isFavorite={
+                      isFavoriteItem
+                        ? isFavoriteItem(prediction.fixture_id, prediction.market_label, prediction.prediction)
+                        : false
+                    }
+                    onToggleFavorite={onToggleFavoriteItem}
+                    onOpenUpgrade={onOpenSubscription}
+                    isAdmin={isAdmin}
+                  />
+                  {(idx === 2 || idx === 6) && (
+                    <div style={{ margin: '8px 0' }}>
+                      <AdBannerSlot slotType="native-card" />
+                    </div>
+                  )}
+                </React.Fragment>
+              );
+            })}
           </div>
         )}
       </section>
