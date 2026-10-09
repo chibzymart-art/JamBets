@@ -286,8 +286,270 @@ function recentList(tr: TrackRecord): string {
   return `<section aria-labelledby="recent-h"><h2 id="recent-h">Latest settled football picks</h2><ul>${items}</ul></section>`;
 }
 
+export const SSR_CRITICAL_CSS = `
+#ssr-content.ssr-content {
+  min-height: 100vh;
+  background-color: #080c15;
+  color: #f1f5f9;
+  font-family: 'Outfit', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+.ssr-header {
+  background: rgba(11, 15, 25, 0.95);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+.ssr-nav-inner {
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 12px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.ssr-brand-logo {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  text-decoration: none;
+  font-weight: 800;
+  font-size: 1.25rem;
+  color: #ffffff;
+  letter-spacing: -0.02em;
+}
+.ssr-logo-badge {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: #ffffff;
+  padding: 2px 7px;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 900;
+}
+.ssr-nav-links {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.ssr-nav-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 14px;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.05);
+  color: #cbd5e1;
+  text-decoration: none;
+  font-size: 0.85rem;
+  font-weight: 500;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition: all 0.2s ease;
+}
+.ssr-nav-pill:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.18);
+}
+.ssr-engine-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: #10b981;
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  padding: 4px 12px;
+  border-radius: 9999px;
+}
+.ssr-live-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #10b981;
+  box-shadow: 0 0 8px #10b981;
+  display: inline-block;
+  animation: ssrPulse 1.8s infinite;
+}
+@keyframes ssrPulse {
+  0% { transform: scale(0.95); opacity: 0.7; }
+  50% { transform: scale(1.15); opacity: 1; }
+  100% { transform: scale(0.95); opacity: 0.7; }
+}
+.ssr-content main {
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 32px 20px 60px;
+}
+.ssr-content h1 {
+  font-size: 2rem;
+  font-weight: 800;
+  color: #ffffff;
+  letter-spacing: -0.03em;
+  margin: 0 0 10px;
+  line-height: 1.25;
+}
+.ssr-content p {
+  color: #94a3b8;
+  font-size: 0.95rem;
+  line-height: 1.6;
+  margin: 0 0 24px;
+}
+.ssr-content a {
+  color: #38bdf8;
+  text-decoration: none;
+}
+.ssr-content a:hover {
+  text-decoration: underline;
+}
+.ssr-skeleton-section {
+  margin: 24px 0 32px;
+}
+.ssr-skeleton-banner {
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 14px 20px;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.ssr-pulse-bar {
+  height: 12px;
+  width: 100%;
+  max-width: 320px;
+  border-radius: 6px;
+  background: linear-gradient(90deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.16) 50%, rgba(255,255,255,0.06) 100%);
+  background-size: 200% 100%;
+  animation: ssrShimmer 1.8s infinite;
+}
+.ssr-skeleton-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 16px;
+}
+.ssr-skeleton-card {
+  background: #0f172a;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.25);
+}
+.ssr-skel-line {
+  height: 14px;
+  border-radius: 6px;
+  background: linear-gradient(90deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.12) 50%, rgba(255,255,255,0.04) 100%);
+  background-size: 200% 100%;
+  animation: ssrShimmer 1.8s infinite;
+}
+.ssr-skel-line.w-40 { width: 40%; }
+.ssr-skel-line.w-60 { width: 60%; }
+.ssr-skel-line.w-80 { width: 80%; }
+@keyframes ssrShimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+.ssr-content section {
+  background: #0f172a;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  padding: 24px;
+  margin-bottom: 24px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.25);
+}
+.ssr-content h2, .ssr-content h3 {
+  color: #f8fafc;
+  font-weight: 700;
+  margin: 0 0 16px;
+  letter-spacing: -0.01em;
+}
+.ssr-content h2 { font-size: 1.35rem; }
+.ssr-content h3 { font-size: 1.1rem; color: #38bdf8; }
+.ssr-content table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  margin: 16px 0;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.ssr-content th {
+  background: rgba(255, 255, 255, 0.04);
+  color: #94a3b8;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  text-align: left;
+}
+.ssr-content td {
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  color: #e2e8f0;
+  font-size: 0.88rem;
+}
+.ssr-content tr:last-child td {
+  border-bottom: none;
+}
+.ssr-content td small {
+  color: #94a3b8;
+  margin-left: 6px;
+}
+.ssr-content ul {
+  list-style: none;
+  padding: 0;
+  margin: 16px 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+}
+.ssr-content ul li {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 12px 16px;
+  border-radius: 10px;
+  color: #cbd5e1;
+  font-size: 0.88rem;
+  line-height: 1.4;
+}
+.ssr-content footer {
+  margin-top: 48px;
+  padding-top: 24px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  text-align: center;
+  color: #64748b;
+  font-size: 0.82rem;
+}
+.ssr-content footer p {
+  color: #64748b;
+  margin-bottom: 8px;
+}
+@media (max-width: 640px) {
+  .ssr-content main { padding: 20px 14px 40px; }
+  .ssr-content h1 { font-size: 1.5rem; }
+  .ssr-skeleton-grid { grid-template-columns: 1fr; }
+  .ssr-content ul { grid-template-columns: 1fr; }
+}
+`;
+
 function nav(): string {
-  return `<nav aria-label="Main"><a href="/">Oddsbanta</a> · <a href="/dashboard">Dashboard</a> · <a href="/track-record">Track record</a> · <a href="/subscription">Pricing</a></nav>`;
+  return `<header class="ssr-header"><div class="ssr-nav-inner"><a href="/" class="ssr-brand-logo"><span class="ssr-logo-badge">ODDS</span>BANTA</a><nav aria-label="Main" class="ssr-nav-links"><a href="/" class="ssr-nav-pill">Home</a><a href="/dashboard" class="ssr-nav-pill">Dashboard</a><a href="/track-record" class="ssr-nav-pill">Track record</a><a href="/subscription" class="ssr-nav-pill">Pricing</a></nav><div class="ssr-engine-status"><span class="ssr-live-dot"></span><span>AI Predictive Engine</span></div></div></header>`;
+}
+
+function skeletonPreview(): string {
+  return `<div class="ssr-skeleton-section" aria-hidden="true"><div class="ssr-skeleton-banner"><div class="ssr-pulse-bar"></div></div><div class="ssr-skeleton-grid"><div class="ssr-skeleton-card"><div class="ssr-skel-line w-40"></div><div class="ssr-skel-line w-80"></div><div class="ssr-skel-line w-60"></div></div><div class="ssr-skeleton-card"><div class="ssr-skel-line w-40"></div><div class="ssr-skel-line w-80"></div><div class="ssr-skel-line w-60"></div></div></div></div>`;
 }
 
 function footer(): string {
@@ -296,7 +558,7 @@ function footer(): string {
 
 export function renderBody(route: SsrRoute, tr: TrackRecord | null, upcoming: UpcomingFixture[]): string {
   const m = META[route];
-  const parts: string[] = [nav(), `<main><h1>${esc(m.h1)}</h1><p>${esc(m.intro)}</p>`];
+  const parts: string[] = [nav(), `<main><h1>${esc(m.h1)}</h1><p>${esc(m.intro)}</p>`, skeletonPreview()];
 
   if (m.comingSoon) {
     parts.push(sportsList());
@@ -355,6 +617,9 @@ export function renderPage(shell: string, route: SsrRoute, tr: TrackRecord | nul
 
   const body = renderBody(route, tr, upcoming);
   html = setTag(html, /<div id="root">\s*<\/div>/i, `<div id="root">${body}</div>`);
+  if (!html.includes('id="ssr-critical-css"')) {
+    html = setTag(html, /<\/head>/i, `<style id="ssr-critical-css">${SSR_CRITICAL_CSS}</style></head>`);
+  }
   return html;
 }
 
@@ -362,5 +627,7 @@ export function renderPage(shell: string, route: SsrRoute, tr: TrackRecord | nul
 export function fallbackShell(): string {
   return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Oddsbanta</title><meta name="description" content="" /><link rel="canonical" href="${SITE_ORIGIN}/" />
-<link rel="icon" type="image/svg+xml" href="/oddsbanta-logo.svg" /></head><body><div id="root"></div></body></html>`;
+<link rel="icon" type="image/svg+xml" href="/oddsbanta-logo.svg" />
+<style id="ssr-critical-css">${SSR_CRITICAL_CSS}</style>
+</head><body><div id="root"></div></body></html>`;
 }
