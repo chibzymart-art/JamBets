@@ -7,7 +7,9 @@ import { fetchBasketballFeed, BasketballFeedResponse } from '../lib/basketballFe
 import { BasketballMarket } from '../types/basketball';
 import {
   getDateDetailsByOffset,
+  getPastDatesList,
   getFixtureWatDate,
+  useUserTimeZone,
 } from '../lib/dateUtils';
 import { BasketballPredictionCard } from './BasketballPredictionCard';
 import { LeftSidebarAd } from './LeftSidebarAd';
@@ -43,13 +45,14 @@ export const BasketballHubView: React.FC<BasketballHubViewProps> = ({
   onOpenSubscription,
   onBackToFootball: _onBackToFootball,
 }) => {
+  const { timeZone, timeZoneAbbr } = useUserTimeZone();
+  const [selectedLeague, setSelectedLeague] = useState<string>('all');
   const [selectedDate, setSelectedDate] = useState<string>(() => getDateDetailsByOffset(0).iso);
   const [selectedTier, setSelectedTier] = useState<string>('all');
   const [settlementFilter, setSettlementFilter] = useState<'all' | 'pending' | 'won' | 'lost' | 'void'>('all');
   const [loading, setLoading] = useState<boolean>(true);
   const [feedData, setFeedData] = useState<BasketballFeedResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const selectedLeague: string = 'all';
   const selectedMarket: BasketballMarket | 'all' = 'all';
 
   const isSubscriber = isAdmin || canViewPredictions;
@@ -79,41 +82,138 @@ export const BasketballHubView: React.FC<BasketballHubViewProps> = ({
 
   const allPredictions = feedData?.predictions || [];
 
-  // Dynamic Lagos (WAT / UTC+1) relative calendar dates
+  // Format today's date dynamically in visitor's local timezone matching football & tennis scorecard
+  const watDateStr = useMemo(() => {
+    try {
+      return new Intl.DateTimeFormat('en-US', {
+        timeZone,
+        weekday: 'long',
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+      }).format(new Date());
+    } catch {
+      return 'Today';
+    }
+  }, [timeZone]);
+
+  // Dynamic relative calendar dates in visitor's local timezone
   const dynamicDateTabs = useMemo(() => {
     const fixtureCountByDate = new Map<string, number>();
     allPredictions.forEach((p) => {
       const kickoff = p.target_kickoff_at || p.fixture?.target_kickoff_at;
-      const d = getFixtureWatDate(kickoff);
+      const d = getFixtureWatDate(kickoff, timeZone);
       if (d) {
         fixtureCountByDate.set(d, (fixtureCountByDate.get(d) || 0) + 1);
       }
     });
 
-    const futureDates = [0, 1, 2, 3].map((offset) => {
-      const item = getDateDetailsByOffset(offset);
-      return {
-        iso: item.iso,
-        dayLabel: offset === 0 ? 'Today' : offset === 1 ? 'Tomorrow' : item.shortDay,
-        dateSub: item.dateFormatted,
-        count: fixtureCountByDate.get(item.iso) || 0,
-        isPast: false,
-      };
+    const yesterday = getDateDetailsByOffset(-1, timeZone);
+    const today = getDateDetailsByOffset(0, timeZone);
+    const day1 = getDateDetailsByOffset(1, timeZone);
+    const day2 = getDateDetailsByOffset(2, timeZone);
+    const day3 = getDateDetailsByOffset(3, timeZone);
+
+    // Past dates list (last 30 days plus any fixture dates before today)
+    const rawPastDates = getPastDatesList(30, Array.from(fixtureCountByDate.keys()));
+    const pastDates = rawPastDates.map((pd) => ({
+      ...pd,
+      count: fixtureCountByDate.get(pd.iso) || 0,
+    }));
+
+    // Count fixtures for current date and future dates (strictly no past dates)
+    let currentAndFutureCount = 0;
+    allPredictions.forEach((p) => {
+      const kickoff = p.target_kickoff_at || p.fixture?.target_kickoff_at;
+      const d = getFixtureWatDate(kickoff, timeZone);
+      if (!d || d >= today.iso) currentAndFutureCount++;
     });
 
-    return futureDates;
-  }, [allPredictions]);
+    return {
+      all: {
+        id: 'all',
+        label: 'All Dates',
+        subLabel: 'Current & Future',
+        count: currentAndFutureCount,
+      },
+      yesterday: {
+        ...yesterday,
+        id: yesterday.iso,
+        count: fixtureCountByDate.get(yesterday.iso) || 0,
+      },
+      today: {
+        ...today,
+        id: today.iso,
+        count: fixtureCountByDate.get(today.iso) || 0,
+      },
+      day1: {
+        ...day1,
+        id: day1.iso,
+        count: fixtureCountByDate.get(day1.iso) || 0,
+      },
+      day2: {
+        ...day2,
+        id: day2.iso,
+        count: fixtureCountByDate.get(day2.iso) || 0,
+      },
+      day3: {
+        ...day3,
+        id: day3.iso,
+        count: fixtureCountByDate.get(day3.iso) || 0,
+      },
+      pastDates,
+      todayIso: today.iso,
+      yesterdayIso: yesterday.iso,
+    };
+  }, [allPredictions, isSubscriber, timeZone]);
+
+  const isPastDateSelected =
+    selectedDate !== 'all' &&
+    selectedDate < dynamicDateTabs.todayIso &&
+    selectedDate !== dynamicDateTabs.yesterdayIso;
+
+  const selectedPastOption = isPastDateSelected
+    ? dynamicDateTabs.pastDates.find((p) => p.iso === selectedDate)
+    : null;
+  const selectedPastFormatted = selectedPastOption?.shortFormatted || selectedDate;
 
   // Date-scoped predictions for calculating daily scorecard metrics
   const dateScopedPredictions = useMemo(() => {
-    return allPredictions.filter((p) => {
-      if (selectedDate === 'all') return true;
+    const baseList = allPredictions;
+
+    if (selectedDate === 'all') {
+      return baseList.filter((p) => {
+        const kickoff = p.target_kickoff_at || p.fixture?.target_kickoff_at;
+        const d = getFixtureWatDate(kickoff, timeZone);
+        return !d || d >= dynamicDateTabs.todayIso;
+      });
+    }
+    return baseList.filter((p) => {
       const kickoff = p.target_kickoff_at || p.fixture?.target_kickoff_at;
-      const d = getFixtureWatDate(kickoff);
+      const d = getFixtureWatDate(kickoff, timeZone);
       return d === selectedDate;
     });
-  }, [allPredictions, selectedDate]);
+  }, [allPredictions, selectedDate, dynamicDateTabs.todayIso, timeZone]);
 
+  // Available basketball leagues with match counts on the currently scoped date
+  const availableLeagues = useMemo(() => {
+    const leagueMap = new Map<string, { code: string; name: string; count: number }>();
+    dateScopedPredictions.forEach((p) => {
+      const code = (p.fixture?.league?.code || (p as any).league_code || 'OTHER').toUpperCase();
+      const name = p.fixture?.league?.name || (p as any).league_name || code;
+      if (!leagueMap.has(code)) {
+        leagueMap.set(code, { code, name, count: 0 });
+      }
+      leagueMap.get(code)!.count++;
+    });
+    return Array.from(leagueMap.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [dateScopedPredictions]);
+
+  useEffect(() => {
+    if (selectedLeague !== 'all' && !availableLeagues.some((l) => l.code === selectedLeague)) {
+      setSelectedLeague('all');
+    }
+  }, [availableLeagues, selectedLeague]);
 
   // Filtered Predictions
   const filteredPredictions = useMemo(() => {
@@ -122,7 +222,7 @@ export const BasketballHubView: React.FC<BasketballHubViewProps> = ({
       // 1. Date Filter (ignore if viewing past results or all dates)
       if (selectedDate !== 'all' && settlementFilter === 'all') {
         const kickoff = p.target_kickoff_at || p.fixture?.target_kickoff_at;
-        const d = getFixtureWatDate(kickoff);
+        const d = getFixtureWatDate(kickoff, timeZone);
         if (selectedDate && d !== selectedDate) {
           return false;
         }
@@ -130,7 +230,7 @@ export const BasketballHubView: React.FC<BasketballHubViewProps> = ({
 
       // 2. League Filter
       if (selectedLeague !== 'all') {
-        const lCode = p.fixture?.league?.code?.toUpperCase();
+        const lCode = (p.fixture?.league?.code || (p as any).league_code || '').toUpperCase();
         if (lCode !== selectedLeague.toUpperCase()) return false;
       }
 
@@ -310,51 +410,173 @@ export const BasketballHubView: React.FC<BasketballHubViewProps> = ({
 
   return (
     <div className="bball-page-root">
-      {/* 1. REDUCED HERO BANNER WITH INTEGRATED LAGOS WAT DATE SELECTOR */}
-      <section className="bball-hero-banner">
-        <div className="bball-hero-header">
-          <div className="bball-hero-title-group">
-            <div className="bball-hero-icon-ring">🏀</div>
-            <h1 className="bball-hero-title">
-              Basketball Predictions
-            </h1>
-          </div>
+      {error && (
+        <div style={{ background: '#fef2f2', border: '1px solid #fecaca', color: '#dc2626', padding: '12px 16px', borderRadius: '12px', marginBottom: '16px', fontSize: '0.86rem' }}>
+          <strong>Notice:</strong> {error}
+        </div>
+      )}
 
-          {/* LAGOS WAT CALENDAR DATE DROPDOWN ON THE SAME LINE */}
-          <div className="bball-date-dropdown-wrap">
-            <span className="bball-date-dropdown-icon" aria-hidden="true">📅</span>
-            <select
-              id="bball-date-select"
-              aria-label="Filter Basketball Matches by Date"
-              className="bball-date-select"
-              value={selectedDate}
-              onChange={(e) => {
-                setSelectedDate(e.target.value);
-                setSettlementFilter('all');
-              }}
-            >
-              <option value="all">
-                All Dates ({allPredictions.length} {allPredictions.length === 1 ? 'game' : 'games'})
-              </option>
-              {dynamicDateTabs.map((tab) => {
-                const label = tab.dayLabel === 'Past'
-                  ? `Past (${tab.dateSub})`
-                  : tab.dayLabel === 'Today' || tab.dayLabel === 'Tomorrow'
-                    ? `${tab.dayLabel}, ${tab.dateSub}`
-                    : `${tab.dayLabel}, ${tab.dateSub}`;
-                return (
-                  <option key={tab.iso} value={tab.iso}>
-                    {label} ({tab.count} {tab.count === 1 ? 'game' : 'games'})
-                  </option>
-                );
-              })}
-            </select>
-            <span className="bball-date-dropdown-arrow" aria-hidden="true">
-              <svg width="10" height="6" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M1 1L5 5L9 1" stroke="#ea580c" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
+      {/* 1. DAILY VERIFIED SCORECARD SECTION (REPLICATING TENNIS & FOOTBALL DASHBOARD HEADING & DATE SELECTOR) */}
+      <section className="daily-scorecard-section" style={{ marginTop: 0 }}>
+        {/* Top Date Header: Current Date Display on left, League Selector Dropdown on far right */}
+        <div className="scorecard-date-header">
+          <div className="current-date-badge">
+            <span className="current-date-live-dot" />
+            <span className="current-date-val">{watDateStr}</span>
+            <span className="current-date-tz-pill" title={`All match kickoff times are automatically displayed in your local timezone (${timeZone})`}>
+              🕒 {timeZoneAbbr}
             </span>
           </div>
+
+          <div className="scorecard-league-filter-inline">
+            <div className="scorecard-league-select-wrapper">
+              <span className="scorecard-league-icon">🏀</span>
+              <select
+                id="scorecard-league-select"
+                className="scorecard-league-select"
+                value={selectedLeague}
+                onChange={(e) => setSelectedLeague(e.target.value)}
+                aria-label="Filter by Basketball League"
+              >
+                <option value="all">All Leagues ({availableLeagues.reduce((sum, l) => sum + l.count, 0)})</option>
+                {availableLeagues.map((l) => (
+                  <option key={l.code} value={l.code}>
+                    {l.name} ({l.count})
+                  </option>
+                ))}
+              </select>
+              <span className="scorecard-league-arrow">▾</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Date Navigation Pills Bar: Strictly Ordered: Select Date (Drop down) | Yesterday | Today | Day+1 | Day+2 | Day+3 | All Dates */}
+        <div className="date-nav-pills-bar">
+          {/* Pill 1: Select Date (Drop down of all past dates) */}
+          <div
+            className={`date-pill-btn date-pill-dropdown-wrap ${isPastDateSelected ? 'active' : ''}`}
+          >
+            <span className="date-pill-main-row">
+              📅 {isPastDateSelected ? selectedPastFormatted : 'Select Date'} ▾
+            </span>
+            <span className="date-pill-sub-label">
+              {isPastDateSelected ? 'Past Archive' : 'All Past Dates'}
+            </span>
+            <select
+              className="date-pill-native-select"
+              value={isPastDateSelected ? selectedDate : ''}
+              onChange={(e) => {
+                if (e.target.value) {
+                  setSelectedDate(e.target.value);
+                  setSettlementFilter('all');
+                }
+              }}
+              aria-label="Select Past Date"
+            >
+              <option value="" disabled>Select Past Date...</option>
+              {dynamicDateTabs.pastDates.map((pd) => (
+                <option key={pd.iso} value={pd.iso}>
+                  {pd.formatted}{pd.count ? ` (${pd.count} M)` : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Pill 2: Yesterday */}
+          <button
+            type="button"
+            className={`date-pill-btn yesterday-pill ${selectedDate === dynamicDateTabs.yesterday.iso ? 'active' : ''}`}
+            onClick={() => {
+              setSelectedDate(dynamicDateTabs.yesterday.iso);
+              setSettlementFilter('all');
+            }}
+          >
+            <span className="date-pill-main-row">
+              Yesterday
+              <span className="date-pill-winloss">{dynamicDateTabs.yesterday.count} M</span>
+            </span>
+            <span className="date-pill-sub-label">{dynamicDateTabs.yesterday.dateFormatted}</span>
+          </button>
+
+          {/* Pill 3: Today */}
+          <button
+            type="button"
+            className={`date-pill-btn ${selectedDate === dynamicDateTabs.today.iso ? 'active' : ''}`}
+            onClick={() => {
+              setSelectedDate(dynamicDateTabs.today.iso);
+              setSettlementFilter('all');
+            }}
+          >
+            <span className="date-pill-main-row">
+              Today
+              <span className="date-pill-winloss">{dynamicDateTabs.today.count} M</span>
+            </span>
+            <span className="date-pill-sub-label">{dynamicDateTabs.today.dateFormatted}</span>
+          </button>
+
+          {/* Pill 4: Day (with date) - Day + 1 */}
+          <button
+            type="button"
+            className={`date-pill-btn ${selectedDate === dynamicDateTabs.day1.iso ? 'active' : ''}`}
+            onClick={() => {
+              setSelectedDate(dynamicDateTabs.day1.iso);
+              setSettlementFilter('all');
+            }}
+          >
+            <span className="date-pill-main-row">
+              {dynamicDateTabs.day1.shortDay}
+              <span className="date-pill-winloss">{dynamicDateTabs.day1.count} M</span>
+            </span>
+            <span className="date-pill-sub-label">{dynamicDateTabs.day1.dateFormatted}</span>
+          </button>
+
+          {/* Pill 5: Day (with date) - Day + 2 */}
+          <button
+            type="button"
+            className={`date-pill-btn ${selectedDate === dynamicDateTabs.day2.iso ? 'active' : ''}`}
+            onClick={() => {
+              setSelectedDate(dynamicDateTabs.day2.iso);
+              setSettlementFilter('all');
+            }}
+          >
+            <span className="date-pill-main-row">
+              {dynamicDateTabs.day2.shortDay}
+              <span className="date-pill-winloss">{dynamicDateTabs.day2.count} M</span>
+            </span>
+            <span className="date-pill-sub-label">{dynamicDateTabs.day2.dateFormatted}</span>
+          </button>
+
+          {/* Pill 6: Day (with date) - Day + 3 */}
+          <button
+            type="button"
+            className={`date-pill-btn ${selectedDate === dynamicDateTabs.day3.iso ? 'active' : ''}`}
+            onClick={() => {
+              setSelectedDate(dynamicDateTabs.day3.iso);
+              setSettlementFilter('all');
+            }}
+          >
+            <span className="date-pill-main-row">
+              {dynamicDateTabs.day3.shortDay}
+              <span className="date-pill-winloss">{dynamicDateTabs.day3.count} M</span>
+            </span>
+            <span className="date-pill-sub-label">{dynamicDateTabs.day3.dateFormatted}</span>
+          </button>
+
+          {/* Pill 7: All Dates */}
+          <button
+            type="button"
+            className={`date-pill-btn ${selectedDate === 'all' ? 'active' : ''}`}
+            onClick={() => {
+              setSelectedDate('all');
+              setSettlementFilter('all');
+            }}
+          >
+            <span className="date-pill-main-row">
+              All Dates
+              <span className="date-pill-winloss">{dynamicDateTabs.all.count} M</span>
+            </span>
+            <span className="date-pill-sub-label">{dynamicDateTabs.all.subLabel}</span>
+          </button>
         </div>
 
         {/* 2. DECONGESTED SCORECARD KPI SECTION (REFLECTING ALL PREDICTION TYPES AND WINS/LOSSES JUST LIKE TENNIS) */}
