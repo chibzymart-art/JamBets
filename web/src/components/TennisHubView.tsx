@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { fetchTennisFeed, TennisFeedResponse } from '../lib/tennisFeedService';
-import { TennisPrediction } from '../types/tennis';
 import {
   getDateDetailsByOffset,
   getPastDatesList,
@@ -11,6 +10,7 @@ import { TennisPredictionCard } from './TennisPredictionCard';
 import { LeftSidebarAd } from './LeftSidebarAd';
 import { WatchlistSidebar } from './WatchlistSidebar';
 import { FavoritePredictionItem } from './FavoritesDrawer';
+import { getSportTierPriority, getTierHeaderByRank } from '../lib/confidenceScore';
 
 export interface TennisHubViewProps {
   currentUser?: any;
@@ -246,10 +246,6 @@ export const TennisHubView: React.FC<TennisHubViewProps> = ({
     }
   }, [availableTournaments, selectedTournament]);
 
-  // Helper to determine if a tennis prediction is free/unlocked for guests (all tennis predictions are locked VIP teasers)
-  const isFreeAccessible = (_p: TennisPrediction): boolean => {
-    return false;
-  };
 
   const filteredPredictions = useMemo(() => {
     let list = dateScopedPredictions;
@@ -314,54 +310,12 @@ export const TennisHubView: React.FC<TennisHubViewProps> = ({
       });
     }
 
-    // UI ORDERING RULE:
-    // For free visitors/non-subscribers: Prioritize unlocked Mid-Confidence & Low-Confidence so visitors see live, playable models first!
-    // For subscribers: Make Banger predictions top of the list, then Top Pick, then High Confidence, etc. (highest rating first)
-    // Predictions with NO SAFE BANKER (High Volatility) strictly come below them.
-    const getConfidenceWeight = (p: TennisPrediction): number => {
-      const market = (p.market || '').toUpperCase().replace(/ /g, '_');
-      const pred = (p.prediction || '').toUpperCase().replace(/ /g, '_');
-      const cat = (p.confidence_category || '').toUpperCase().replace(/ /g, '_');
-
-      // NO SAFE BANKER (High Volatility) strictly sinks to the bottom
-      if (cat.includes('NO_SAFE_BANKER') || market.includes('NO_SAFE_BANKER') || pred.includes('NO_SAFE_BANKER')) {
-        return -1;
-      }
-
-      // For non-subscribers: Showcase highest conviction VIP conversion teasers at top
-      if (!isSubscriber) {
-        if (cat.includes('BANGER')) return 6;
-        if (cat.includes('TOP_PICK') || cat.includes('TOPPICK')) return 5;
-        if (cat.includes('HIGH_CONFIDENCE') || cat.includes('HIGHCONFIDENCE')) return 4;
-        if (cat.includes('MID_CONFIDENCE') || cat.includes('MIDCONFIDENCE') || cat === 'MID') return 3;
-        if (cat.includes('LOW_CONFIDENCE') || cat.includes('LOWCONFIDENCE') || cat === 'LOW') return 2;
-        if (cat.includes('RISKY')) return 1;
-        if (market === 'SET_HANDICAP') return 6;
-        if (market === 'MATCH_WINNER') return 5;
-        return 1;
-      }
-
-      // For paying subscribers: Standard VIP priority
-      if (cat.includes('BANGER')) return 6;
-      if (cat.includes('TOP_PICK') || cat.includes('TOPPICK')) return 5;
-      if (cat.includes('HIGH_CONFIDENCE') || cat.includes('HIGHCONFIDENCE')) return 4;
-      if (cat.includes('MID_CONFIDENCE') || cat.includes('MIDCONFIDENCE')) return 3;
-      if (cat.includes('LOW_CONFIDENCE') || cat.includes('LOWCONFIDENCE')) return 2;
-      if (cat.includes('RISKY')) return 1;
-
-      // Fallbacks for paywall-locked records where category may be masked
-      if (market === 'SET_HANDICAP') return 6;
-      if (market === 'MATCH_WINNER') return 5;
-
-      return 1;
-    };
-
+    // Arranged strictly by Tier Priority: Bangers first, Top pick, High, Mid, Low, Anti-loss
+    // No longer arranged by kickoff time.
     return [...list].sort((a, b) => {
-      const weightA = getConfidenceWeight(a);
-      const weightB = getConfidenceWeight(b);
-      if (weightB !== weightA) {
-        return weightB - weightA; // higher confidence tier first
-      }
+      const rankA = getSportTierPriority(a.confidence_category, undefined, a.probability);
+      const rankB = getSportTierPriority(b.confidence_category, undefined, b.probability);
+      if (rankA !== rankB) return rankA - rankB;
 
       // Secondary: highest rating / probability first
       const probA = a.probability != null ? (a.probability <= 1 ? a.probability * 100 : a.probability) : 0;
@@ -370,10 +324,11 @@ export const TennisHubView: React.FC<TennisHubViewProps> = ({
         return probB - probA;
       }
 
-      // Tertiary: earliest kickoff time first
       const timeA = new Date(a.target_kickoff_at || a.fixture?.target_kickoff_at || 0).getTime();
       const timeB = new Date(b.target_kickoff_at || b.fixture?.target_kickoff_at || 0).getTime();
-      return timeA - timeB;
+      if (!isNaN(timeA) && !isNaN(timeB) && timeA !== timeB) return timeA - timeB;
+
+      return (a.id || '').localeCompare(b.id || '');
     });
   }, [dateScopedPredictions, selectedTour, selectedTournament, selectedTier, settlementFilter, searchQuery, isSubscriber]);
 
@@ -959,74 +914,31 @@ export const TennisHubView: React.FC<TennisHubViewProps> = ({
               </div>
             ) : (
               filteredPredictions.map((prediction, idx) => {
+                const currentRank = getSportTierPriority(prediction.confidence_category, undefined, prediction.probability);
                 const prevPred = idx > 0 ? filteredPredictions[idx - 1] : null;
-                const isTransitionToLocked = !isSubscriber && prevPred &&
-                  isFreeAccessible(prevPred) && !isFreeAccessible(prediction);
+                const prevRank = prevPred ? getSportTierPriority(prevPred.confidence_category, undefined, prevPred.probability) : null;
+                const isTierSlotStart = idx === 0 || currentRank !== prevRank;
+                const tierHeader = getTierHeaderByRank(currentRank, 'tennis');
 
                 return (
                   <React.Fragment key={prediction.id}>
-                    {isTransitionToLocked && (
-                      <div
-                        className="tennis-vip-banner-card"
-                        style={{
-                          background: 'linear-gradient(135deg, #1e1b4b 0%, #312e81 100%)',
-                          border: '1px solid rgba(245, 158, 11, 0.4)',
-                          borderRadius: '14px',
-                          padding: '20px 24px',
-                          margin: '14px 0 18px 0',
-                          color: '#ffffff',
-                          boxShadow: '0 8px 24px rgba(30, 27, 75, 0.25)',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          gap: '16px',
-                          flexWrap: 'wrap'
-                        }}
-                      >
-                        <div style={{ flex: '1 1 300px' }}>
-                          <div style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '6px',
-                            background: 'rgba(245, 158, 11, 0.2)',
-                            color: '#fbbf24',
-                            fontSize: '11px',
-                            fontWeight: 800,
-                            padding: '4px 10px',
-                            borderRadius: '6px',
-                            textTransform: 'uppercase',
-                            letterSpacing: '0.05em',
-                            marginBottom: '8px'
-                          }}>
-                            👑 VIP Tennis Vault
-                          </div>
-                          <h4 style={{ margin: '0 0 6px 0', fontSize: '17px', fontWeight: 800, color: '#ffffff' }}>
-                            Want 85%+ High-Confidence Tennis Picks?
-                          </h4>
-                          <p style={{ margin: 0, fontSize: '13px', color: '#c7d2fe', lineHeight: 1.5 }}>
-                            You've tested our free Mid-Confidence simulations above. Unlock today's highest-conviction <strong>Bangers</strong>, <strong>Top Picks</strong>, and Markov chain set handicap models with VIP access.
-                          </p>
+                    {isTierSlotStart && (
+                      <div className="kickoff-slot-divider tier-slot-divider" style={{ margin: idx === 0 ? '4px 0 10px 0' : '22px 0 10px 0' }}>
+                        <div
+                          className={`kickoff-slot-badge tier-slot-badge ${tierHeader.badgeClass}`}
+                          style={{
+                            background: '#ffffff',
+                            border: `1.5px solid ${tierHeader.borderColor}`,
+                            color: tierHeader.textColor,
+                            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.04)',
+                          }}
+                        >
+                          <span className="kickoff-slot-clock">{tierHeader.icon}</span>
+                          <span className="kickoff-slot-time" style={{ color: tierHeader.textColor }}>
+                            {tierHeader.label}
+                          </span>
                         </div>
-                        {onOpenSubscription && (
-                          <button
-                            type="button"
-                            onClick={onOpenSubscription}
-                            style={{
-                              background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
-                              color: '#0f172a',
-                              border: 'none',
-                              borderRadius: '10px',
-                              padding: '12px 22px',
-                              fontWeight: 800,
-                              fontSize: '13px',
-                              cursor: 'pointer',
-                              boxShadow: '0 4px 14px rgba(245, 158, 11, 0.4)',
-                              whiteSpace: 'nowrap'
-                            }}
-                          >
-                            ⚡ Unlock All VIP Picks Now →
-                          </button>
-                        )}
+                        <div className="kickoff-slot-line" />
                       </div>
                     )}
                     <TennisPredictionCard

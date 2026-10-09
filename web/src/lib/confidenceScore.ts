@@ -172,6 +172,8 @@ export function getFootballTierPriority(
   return 7;
 }
 
+export const getSportTierPriority = getFootballTierPriority;
+
 export interface TierHeaderConfig {
   icon: string;
   label: string;
@@ -180,7 +182,7 @@ export interface TierHeaderConfig {
   borderColor: string;
 }
 
-export function getTierHeaderByRank(rank: number): TierHeaderConfig {
+export function getTierHeaderByRank(rank: number, sport: 'football' | 'tennis' | 'basketball' = 'football'): TierHeaderConfig {
   switch (rank) {
     case 1:
       return { icon: '🔥', label: 'BANGERS (96%+)', badgeClass: 'tier-banger', textColor: '#ea580c', borderColor: '#f97316' };
@@ -194,8 +196,10 @@ export function getTierHeaderByRank(rank: number): TierHeaderConfig {
       return { icon: '🟡', label: 'LOW CONFIDENCE (65%–74%)', badgeClass: 'tier-low-conf', textColor: '#ca8a04', borderColor: '#eab308' };
     case 6:
       return { icon: '🛡️', label: 'ANTI-LOSS (NO SAFE BANKER)', badgeClass: 'tier-no-banker', textColor: '#64748b', borderColor: '#cbd5e1' };
-    default:
-      return { icon: '⚽', label: 'OTHER PREDICTIONS', badgeClass: 'tier-mid-conf', textColor: '#64748b', borderColor: '#cbd5e1' };
+    default: {
+      const icon = sport === 'tennis' ? '🎾' : sport === 'basketball' ? '🏀' : '⚽';
+      return { icon, label: 'OTHER PREDICTIONS', badgeClass: 'tier-mid-conf', textColor: '#64748b', borderColor: '#cbd5e1' };
+    }
   }
 }
 
