@@ -344,6 +344,7 @@ class UniversalDataStore:
         if tid in self.profiles:
             return self.profiles[tid]
         if slug in self.profiles:
+            self.profiles[tid] = self.profiles[slug]
             return self.profiles[slug]
 
         profile = UnifiedTeamProfile(
@@ -362,10 +363,18 @@ class UniversalDataStore:
         if identifier in self.profiles:
             return self.profiles[identifier]
 
+        # 1. Direct UUID bridge via id_to_slug
+        if identifier in self.id_to_slug:
+            slug = self.id_to_slug[identifier]
+            if slug in self.profiles:
+                return self.profiles[slug]
+
+        # 2. Canonical normalized slug match
         norm = normalize_team_name(identifier)
         if norm in self.profiles:
             return self.profiles[norm]
 
+        # 3. Slug-to-ID fallback
         tid = self.slug_to_id.get(norm) or self.slug_to_id.get(identifier.lower().strip().replace(" ", "-"))
         if tid and tid in self.profiles:
             return self.profiles[tid]

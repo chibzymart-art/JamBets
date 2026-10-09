@@ -186,10 +186,22 @@ def run():
     lock_window_iso = (now_utc + timedelta(hours=48)).isoformat()
     locked_fixture_ids = set()
     try:
-        existing_preds_raw = supabase.get("football_predictions", {
-            "select": "fixture_id,market,prediction,probability,confidence_category,created_at,updated_at,metadata,settlement_status,target_kickoff_at",
-            "limit": "2000"
-        })
+        existing_preds_raw = []
+        page_size = 1000
+        offset = 0
+        while True:
+            batch = supabase.get("football_predictions", {
+                "select": "fixture_id,market,prediction,probability,confidence_category,created_at,updated_at,metadata,settlement_status,target_kickoff_at",
+                "offset": str(offset),
+                "limit": str(page_size)
+            })
+            if not batch:
+                break
+            existing_preds_raw.extend(batch)
+            if len(batch) < page_size:
+                break
+            offset += page_size
+
         existing_preds_map = {p["fixture_id"]: p for p in existing_preds_raw if "fixture_id" in p}
         for p in existing_preds_raw:
             if p.get("settlement_status") in ("won", "lost", "void"):
@@ -318,21 +330,24 @@ def run():
         if res.status == "PUBLISHED":
             published_count += 1
             primary = res.primary_prediction
-            print(f"    Status: PUBLISHED [SNIPER MODE: 1 Fixture = 1 Database Row]", flush=True)
-            if res.simulation_result:
-                print(f"    Simulations: {res.simulation_result.completed_simulations:,} draws in {res.simulation_result.duration_ms:.1f}ms", flush=True)
-            if res.is_consensus_banker:
-                consensus_banker_count += 1
-                print(f"    🎯 CONSENSUS BANKER VERIFIED: Both P_sim={res.p_sim_primary*100:.1f}% >= 82% AND P_market={res.p_market_primary*100:.1f}% >= 80%", flush=True)
-                print(f"       Market: [{primary.confidence_tier}] {primary.market_name} -> {primary.outcome}", flush=True)
-            else:
-                print(f"    🛡 TOSS-UP / DIVERGENCE: [{primary.confidence_tier}] {primary.market_name} -> {primary.outcome} (P_sim={res.p_sim_primary*100 if res.p_sim_primary else 0:.1f}%)", flush=True)
+            if primary is not None:
+                print(f"    Status: PUBLISHED [SNIPER MODE: 1 Fixture = 1 Database Row]", flush=True)
+                if res.simulation_result:
+                    print(f"    Simulations: {res.simulation_result.completed_simulations:,} draws in {res.simulation_result.duration_ms:.1f}ms", flush=True)
+                if res.is_consensus_banker:
+                    consensus_banker_count += 1
+                    print(f"    🎯 CONSENSUS BANKER VERIFIED: Both P_sim={res.p_sim_primary*100:.1f}% >= 82% AND P_market={res.p_market_primary*100:.1f}% >= 80%", flush=True)
+                    print(f"       Market: [{primary.confidence_tier}] {primary.market_name} -> {primary.outcome}", flush=True)
+                else:
+                    print(f"    🛡 TOSS-UP / DIVERGENCE: [{primary.confidence_tier}] {primary.market_name} -> {primary.outcome} (P_sim={res.p_sim_primary*100 if res.p_sim_primary else 0:.1f}%)", flush=True)
 
-            if res.secondary_predictions:
-                print(f"    📦 SECONDARY CONSENSUS ({len(res.secondary_predictions)} markets >= 60%):", flush=True)
-                for s in res.secondary_predictions:
-                    prob_pct = s.get('probability', 0) * 100
-                    print(f"       • [{s.get('confidence_tier')}] {s.get('market')} -> {s.get('prediction')} : {prob_pct:.1f}%", flush=True)
+                if res.secondary_predictions:
+                    print(f"    📦 SECONDARY CONSENSUS ({len(res.secondary_predictions)} markets >= 60%):", flush=True)
+                    for s in res.secondary_predictions:
+                        prob_pct = s.get('probability', 0) * 100
+                        print(f"       • [{s.get('confidence_tier')}] {s.get('market')} -> {s.get('prediction')} : {prob_pct:.1f}%", flush=True)
+            else:
+                print(f"    Status: PUBLISHED [PRESERVED: 48h immutable lock active]", flush=True)
 
         elif res.status == "DATA_UNAVAILABLE":
             data_unavailable_count += 1

@@ -2,8 +2,8 @@ name: JamBets Automated Football Goals & Specialists Engine (Daily Cadence)
 
 on:
   schedule:
-    # Run daily at 12:30 AM WAT (23:30 UTC) - 30 minutes after Core Football Ingestion completes
-    - cron: '30 23 * * *'
+    # Run daily at 1:00 AM WAT (00:00 UTC) - 60 minutes after Core Football Ingestion completes
+    - cron: '0 0 * * *'
   workflow_dispatch:
 
 concurrency:
@@ -14,7 +14,7 @@ jobs:
   predict-goals-and-specialists:
     name: Goals & Decoupled Specialists Prediction Engines
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
 
     steps:
       - name: Checkout Repository

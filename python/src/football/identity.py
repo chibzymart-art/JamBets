@@ -172,6 +172,102 @@ TEAM_ALIASES: Dict[str, str] = {
     "luton town": "luton-town",
     "stevenage": "stevenage",
     "stevenage fc": "stevenage",
+
+    # French Ligue 2 & National
+    "laval": "stade-laval",
+    "stade laval": "stade-laval",
+    "stade lavallois": "stade-laval",
+    "stade-laval": "stade-laval",
+    "pau": "pau-fc",
+    "pau fc": "pau-fc",
+    "pau-fc": "pau-fc",
+    "sochaux": "sochaux",
+    "fc sochaux": "sochaux",
+    "sochaux-montbeliard": "sochaux",
+    "boulogne": "boulogne",
+    "usbco": "boulogne",
+    "us boulogne": "boulogne",
+
+    # German 2. Bundesliga & 3. Liga
+    "eintracht braunschweig": "eintracht-braunschweig",
+    "tsv eintracht braunschweig": "eintracht-braunschweig",
+    "tsv-eintracht-braunschweig": "eintracht-braunschweig",
+    "braunschweig": "eintracht-braunschweig",
+    "holstein kiel": "holstein-kiel",
+    "holstein-kiel": "holstein-kiel",
+    "ksv holstein": "holstein-kiel",
+
+    # Argentina Primera Division
+    "sarmiento": "sarmiento-junin",
+    "sarmiento de junin": "sarmiento-junin",
+    "sarmiento-junin": "sarmiento-junin",
+    "ca sarmiento": "sarmiento-junin",
+    "aldosivi": "aldosivi",
+    "ca aldosivi": "aldosivi",
+    "belgrano": "belgrano",
+    "belgrano de cordoba": "belgrano",
+    "belgrano-cordoba": "belgrano",
+
+    # Turkish Super Lig
+    "kasimpasa": "kasimpasa",
+    "kasimpasa sk": "kasimpasa",
+    "kasimpasa-sk": "kasimpasa",
+    "konyaspor": "konyaspor",
+    "genclerbirligi": "genclerbirligi",
+
+    # Swedish Allsvenskan / Superettan
+    "ifk goteborg": "ifk-goteborg",
+    "ifk gothenburg": "ifk-goteborg",
+    "ifk-goteborg": "ifk-goteborg",
+    "goteborg": "ifk-goteborg",
+    "vasteras": "vasteras",
+    "vasteras sk": "vasteras",
+    "vasteras-sk": "vasteras",
+    "halmstad": "halmstads-bk",
+    "halmstads bk": "halmstads-bk",
+    "mjaellby": "mjallby",
+    "mjallby aif": "mjallby",
+
+    # Danish Superliga
+    "nordsjaelland": "nordsjaelland",
+    "nordsjælland": "nordsjaelland",
+    "fc nordsjaelland": "nordsjaelland",
+    "fc nordsjælland": "nordsjaelland",
+    "odense": "odense-boldklub",
+    "odense bk": "odense-boldklub",
+    "odense boldklub": "odense-boldklub",
+    "odense-boldklub": "odense-boldklub",
+    "ob": "odense-boldklub",
+
+    # Saudi Pro League
+    "al nassr": "al-nassr",
+    "al-nassr": "al-nassr",
+    "al nassr fc": "al-nassr",
+    "al fateh": "al-fateh",
+    "al-fateh": "al-fateh",
+    "al fateh sc": "al-fateh",
+    "al ahli": "al-ahli",
+    "al-ahli": "al-ahli",
+    "al ahli saudi": "al-ahli",
+    "al kholood": "al-kholood",
+    "al-kholood": "al-kholood",
+    "al qadsiah": "al-qadsiah",
+    "al-qadsiah": "al-qadsiah",
+    "al qadisiya": "al-qadsiah",
+    "al diriyah": "al-diriyah",
+    "al-diriyah": "al-diriyah",
+    "al khaleej": "al-khaleej",
+    "al-khaleej": "al-khaleej",
+
+    # Dutch Eerste Divisie
+    "jong ajax": "jong-ajax",
+    "jong-ajax": "jong-ajax",
+    "vvv venlo": "vvv-venlo",
+    "vvv-venlo": "vvv-venlo",
+    "de graafschap": "de-graafschap",
+    "de-graafschap": "de-graafschap",
+    "jong utrecht": "jong-utrecht",
+    "jong-utrecht": "jong-utrecht",
 }
 
 
@@ -191,7 +287,15 @@ def resolve_fuzzy_team_name(raw_name: str, min_confidence: float = 85.0) -> Tupl
     if not raw_name:
         return "unknown", 0.0
 
-    normalized = unicodedata.normalize("NFKD", raw_name)
+    raw_mapped = (
+        raw_name.replace("æ", "ae")
+        .replace("Æ", "ae")
+        .replace("ø", "oe")
+        .replace("Ø", "oe")
+        .replace("å", "aa")
+        .replace("Å", "aa")
+    )
+    normalized = unicodedata.normalize("NFKD", raw_mapped)
     cleaned = "".join(c for c in normalized if not unicodedata.combining(c))
     cleaned = cleaned.lower().strip()
     cleaned = re.sub(r"[^\w\s-]", "", cleaned)

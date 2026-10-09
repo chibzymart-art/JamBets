@@ -4,9 +4,14 @@ Invariant: Pure isolated mathematical testing. Zero dependencies on football cod
 """
 
 import unittest
-from src.tennis.markov import TennisMarkovModel
-from src.tennis.simulation import TennisMonteCarloSimulator
-from src.tennis.prediction_engine import TennisPredictionEngine
+try:
+    from python.src.tennis.markov import TennisMarkovModel
+    from python.src.tennis.simulation import TennisMonteCarloSimulator
+    from python.src.tennis.prediction_engine import TennisPredictionEngine
+except ImportError:
+    from src.tennis.markov import TennisMarkovModel
+    from src.tennis.simulation import TennisMonteCarloSimulator
+    from src.tennis.prediction_engine import TennisPredictionEngine
 
 
 class TestTennisPredictionEngine(unittest.TestCase):

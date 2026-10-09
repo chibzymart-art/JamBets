@@ -341,9 +341,9 @@ class Over25GoalsEngine:
             }
 
             # =================================================================
-            # QUALITY GATE 5: Over 2.5 Value Threshold (Requires >= 68%)
+            # QUALITY GATE 5: Over 2.5 Value Threshold (Requires >= 66%)
             # =================================================================
-            qualifies_over25 = final_p_over25 >= 0.68 and intent.is_favorable_for_over
+            qualifies_over25 = final_p_over25 >= 0.66 and intent.is_favorable_for_over
 
             if qualifies_over25:
                 if (fid, "over_2.5_goals") not in locked_keys:

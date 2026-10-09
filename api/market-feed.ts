@@ -266,11 +266,11 @@ const FIXTURE_JOIN =
 
 const SELECTS: Record<string, { table: string; select: string }> = {
   corners: {
-    table: 'corner_predictions',
+    table: 'corner_predictions_paywall',
     select: `id,fixture_id,prediction,market,probability,confidence_category,corner_tier,predicted_total_corners,home_corners_avg,away_corners_avg,over_8_5_prob,over_9_5_prob,over_10_5_prob,target_kickoff_at,settlement_status,settled_at,actual_corners,settlement_notes,publication_status,is_locked,${FIXTURE_JOIN}`,
   },
   goals: {
-    table: 'goals_predictions',
+    table: 'goals_predictions_paywall',
     select: `id,fixture_id,market,predicted_outcome,probability,confidence_tier,xg_combined,home_over25_rate,away_over25_rate,h2h_over25_rate,ht_goal_frequency,avg_first_goal_minute,target_kickoff_at,settlement_status,settled_at,actual_score,ht_score,settlement_notes,metadata,is_locked,${FIXTURE_JOIN}`,
   },
 };

@@ -2,8 +2,8 @@ name: JamBets Autonomous Tennis Prediction Engine (Daily Cadence)
 
 on:
   schedule:
-    # Run daily at 2:00 AM WAT (01:00 UTC) - 60 minutes after Basketball Prediction completes
-    - cron: '0 1 * * *'
+    # Run daily at 3:00 AM WAT (02:00 UTC) - 60 minutes after Basketball Prediction completes
+    - cron: '0 2 * * *'
   push:
     branches:
       - main
@@ -39,7 +39,7 @@ jobs:
   tennis-prediction-cycle:
     name: Autonomous Tennis Scraping, 250k Monte Carlo & Prediction Cycle
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 35
 
     steps:
       - name: Checkout Repository

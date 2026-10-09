@@ -2,9 +2,9 @@ name: JamBets Automated Football Settlement Engine (Hourly Daytime)
 
 on:
   schedule:
-    # Run hourly at minute :10 between 3:10 AM and 11:10 PM WAT (02:10 - 22:10 UTC)
-    # Automatically paused between 11:30 PM and 3:00 AM WAT for the nightly prediction window
-    - cron: '10 2-22 * * *'
+    # Run hourly at minute :10 between 4:10 AM and 11:10 PM WAT (03:10 - 22:10 UTC)
+    # Automatically paused between 11:00 PM and 4:00 AM WAT (22:00 - 03:00 UTC) for the nightly prediction window
+    - cron: '10 3-22 * * *'
   workflow_dispatch:
 
 concurrency:

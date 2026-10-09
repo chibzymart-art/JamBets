@@ -123,14 +123,33 @@ class PredictionPipeline:
             except Exception:
                 existing_p = None
 
-        if not force_repredict and is_within_48h_lock and existing_p:
+        if not force_repredict and is_within_48h_lock and isinstance(existing_p, list) and len(existing_p) > 0 and isinstance(existing_p[0], dict):
             print(f"    [48H IMMUTABLE LOCK] Fixture {canonical_key} ({fixture_id}) within 48h ({kickoff_utc.isoformat()}). Preserving locked prediction.")
             p = existing_p[0]
+            market_val = str(p.get("market") or "NO_SAFE_BANKER")
+            outcome_val = str(p.get("prediction") or "SKIP")
+            conf_tier = str(p.get("confidence_category") or "LOCKED")
+            pub_status = str(p.get("publication_status") or "published")
+            prob_raw = p.get("probability")
+            try:
+                prob_float = float(prob_raw) if prob_raw is not None else 0.5
+            except Exception:
+                prob_float = 0.5
+            primary_locked = QualifyingPrediction(
+                market_name=market_val,
+                outcome=outcome_val,
+                probability_pct=round(prob_float * 100 if prob_float <= 1.0 else prob_float, 2),
+                raw_probability=prob_float if prob_float <= 1.0 else prob_float / 100.0,
+                confidence_tier=conf_tier,
+                publication_status=pub_status,
+                tier_required="free",
+                is_qualifying=True
+            )
             return FixturePredictionResult(
                 fixture_id=fixture_id,
                 canonical_key=canonical_key,
                 status="PUBLISHED",
-                primary_prediction=None,
+                primary_prediction=primary_locked,
                 secondary_predictions=p.get("secondary_predictions") or [],
                 persisted_predictions_count=0
             )

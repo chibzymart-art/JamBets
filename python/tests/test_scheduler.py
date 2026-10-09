@@ -16,6 +16,7 @@ try:
 except Exception:
     LAGOS_TZ = timezone(timedelta(hours=1), name="WAT")
 
+from python.src.config import MAX_PREDICTION_WINDOW_DAYS
 from python.src.football.scheduler import PredictionCycleScheduler, PredictionCycleTelemetry
 from python.src.football.scheduler_lock import DistributedSchedulerLock
 from python.src.football.publication_filter import PublicationFilter, QualifyingPrediction
@@ -224,17 +225,17 @@ class TestPredictionCycleScheduler(unittest.TestCase):
 
         # Day 0 (today) -> Eligible
         t0 = (now_wat + timedelta(hours=3)).astimezone(timezone.utc).isoformat()
-        # Day +4 -> Eligible
+        # Day within window (Day +4) -> Eligible
         t4 = (now_wat + timedelta(days=4)).astimezone(timezone.utc).isoformat()
-        # Day +5 -> Disqualified (beyond 4 days)
-        t5 = (now_wat + timedelta(days=5, hours=2)).astimezone(timezone.utc).isoformat()
+        # Day beyond window -> Disqualified (beyond MAX_PREDICTION_WINDOW_DAYS)
+        tb = (now_wat + timedelta(days=MAX_PREDICTION_WINDOW_DAYS + 1, hours=2)).astimezone(timezone.utc).isoformat()
         # Past -> Disqualified
         tp = (now_wat - timedelta(days=1)).astimezone(timezone.utc).isoformat()
 
         self.supabase.prediction_queue = [
             {"id": "f0", "canonical_key": "k0", "target_kickoff_at": t0, "status": "scheduled", "home_team_name": "Team A", "away_team_name": "Team B", "league_code": "ENG_PL"},
             {"id": "f4", "canonical_key": "k4", "target_kickoff_at": t4, "status": "scheduled", "home_team_name": "Team C", "away_team_name": "Team D", "league_code": "ENG_PL"},
-            {"id": "f5", "canonical_key": "k5", "target_kickoff_at": t5, "status": "scheduled", "home_team_name": "Team E", "away_team_name": "Team F", "league_code": "ENG_PL"},
+            {"id": "fb", "canonical_key": "kb", "target_kickoff_at": tb, "status": "scheduled", "home_team_name": "Team E", "away_team_name": "Team F", "league_code": "ENG_PL"},
             {"id": "fp", "canonical_key": "kp", "target_kickoff_at": tp, "status": "scheduled", "home_team_name": "Team G", "away_team_name": "Team H", "league_code": "ENG_PL"}
         ]
 

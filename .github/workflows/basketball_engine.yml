@@ -2,8 +2,8 @@ name: JamBets Autonomous Basketball Prediction Engine (Daily Cadence)
 
 on:
   schedule:
-    # Run daily at 1:00 AM WAT (00:00 UTC) - 30 minutes after Football Goals completes
-    - cron: '0 0 * * *'
+    # Run daily at 2:00 AM WAT (01:00 UTC) - 60 minutes after Football Goals completes
+    - cron: '0 1 * * *'
   push:
     branches:
       - main
@@ -34,7 +34,7 @@ jobs:
   basketball-prediction-cycle:
     name: Autonomous Basketball Ingestion & 250k Monte Carlo Simulation Cycle
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
 
     steps:
       - name: Checkout Repository

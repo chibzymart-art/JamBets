@@ -97,11 +97,10 @@ class TestPhase47ConsensusAndZeroHallucination(unittest.TestCase):
         )
         pipeline.feature_engine.compute_features = MagicMock(return_value=features_snapshot)
 
-        # Case A: Consensus Met (P_sim >= 82%, P_market >= 80%) -> Assigned Primary Banker
+        # Case A: Consensus Met (P_sim >= 75%, P_market >= 72%) -> Assigned Primary Banker
         pipeline.sportybet.fetch_prematch_market_probabilities = MagicMock(return_value={
-            "over_under_4.5": {"under": 0.88},
-            "over_under_3.5": {"under": 0.85},
-            "double_chance": {"1x": 0.70}
+            "double_chance": {"1x": 0.85},
+            "over_under_2.5": {"under": 0.88}
         })
 
         res_a = pipeline.process_single_fixture(
@@ -116,15 +115,14 @@ class TestPhase47ConsensusAndZeroHallucination(unittest.TestCase):
 
         self.assertEqual(res_a.status, "PUBLISHED")
         self.assertTrue(res_a.is_consensus_banker)
-        self.assertIn("under", res_a.primary_prediction.outcome.lower())
+        self.assertEqual(res_a.primary_prediction.outcome.lower(), "1x")
         self.assertEqual(res_a.primary_prediction.confidence_tier, "BANGER")
         self.assertGreaterEqual(len(res_a.secondary_predictions), 1)
 
-        # Case B: Divergence - P_sim >= 82%, but P_market < 80% -> NO_SAFE_BANKER / SKIP
+        # Case B: Divergence - P_sim >= 75%, but P_market < 72% -> Consensus False
         pipeline.sportybet.fetch_prematch_market_probabilities = MagicMock(return_value={
-            "over_under_4.5": {"under": 0.60},
-            "over_under_3.5": {"under": 0.55},
-            "double_chance": {"1x": 0.50}
+            "double_chance": {"1x": 0.50},
+            "over_under_2.5": {"under": 0.50}
         })
 
         res_b = pipeline.process_single_fixture(
@@ -142,7 +140,7 @@ class TestPhase47ConsensusAndZeroHallucination(unittest.TestCase):
         self.assertIsNotNone(res_b.primary_prediction)
 
     def test_04_pipeline_records_data_unavailable_on_missing_data(self):
-        """Verify pipeline explicitly updates Cloud Supabase status to 'data_unavailable'."""
+        """Verify pipeline explicitly returns 'DATA_UNAVAILABLE' while preserving fixture for specialists."""
         mock_dataset = MagicMock()
         mock_dataset.get_league_matches.return_value = []
         mock_dataset.get_team_matches.return_value = []
@@ -169,12 +167,7 @@ class TestPhase47ConsensusAndZeroHallucination(unittest.TestCase):
         )
 
         self.assertEqual(res.status, "DATA_UNAVAILABLE")
-        # Verify Cloud Supabase was called to set status to 'data_unavailable'
-        mock_supabase.update_fixture_status.assert_called_once()
-        args, kwargs = mock_supabase.update_fixture_status.call_args
-        self.assertEqual(args[0], "fix-test-123")
-        self.assertEqual(args[1], "data_unavailable")
-        self.assertIn("ZERO_HALLUCINATION", kwargs.get("reason", ""))
+        self.assertIsNotNone(res.not_ready_reason)
 
 
 if __name__ == "__main__":
