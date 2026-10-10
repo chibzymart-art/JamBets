@@ -364,6 +364,75 @@ class HistoricalDatasetBuilder:
                     continue
         return added_count
 
+    def load_historical_from_supabase(self, supabase, limit: int = 5000) -> int:
+        """
+        Loads verified completed season matches directly from Cloud Supabase football_fixtures table.
+        Parses canonical_key (LEAGUE:HOME:AWAY:DATE) and adds completed records into the historical dataset.
+        Ensures all domestic and international tiers have continuous historical baseline data.
+        """
+        if not supabase:
+            return 0
+        added = 0
+        offset = 0
+        page_size = 1000
+        while True:
+            try:
+                records = supabase.get("football_fixtures", {
+                    "status": "eq.finished",
+                    "home_score": "not.is.null",
+                    "away_score": "not.is.null",
+                    "select": "id,canonical_key,home_score,away_score,target_kickoff_at",
+                    "offset": str(offset),
+                    "limit": str(page_size)
+                })
+                if not records:
+                    break
+                for r in records:
+                    ck = r.get("canonical_key") or ""
+                    parts = ck.split(":")
+                    if len(parts) >= 3:
+                        l_code = parts[0]
+                        h_team = parts[1]
+                        a_team = parts[2]
+                    else:
+                        continue
+                    k_str = r.get("target_kickoff_at")
+                    if not k_str:
+                        continue
+                    try:
+                        k_dt = datetime.fromisoformat(k_str.replace("Z", "+00:00"))
+                    except Exception:
+                        continue
+                    hs = r.get("home_score")
+                    as_ = r.get("away_score")
+                    if hs is None or as_ is None:
+                        continue
+                    payload = {
+                        "provider_event_id": f"sb_{r.get('id')}",
+                        "source": "supabase",
+                        "league_code": l_code,
+                        "season": str(k_dt.year),
+                        "match_date": k_dt.date(),
+                        "scheduled_kickoff": k_dt,
+                        "actual_played_date": k_dt.date(),
+                        "home_team_raw": h_team,
+                        "away_team_raw": a_team,
+                        "home_score": int(hs),
+                        "away_score": int(as_),
+                        "final_status": "finished",
+                        "result": "HOME_WIN" if int(hs) > int(as_) else ("DRAW" if int(hs) == int(as_) else "AWAY_WIN")
+                    }
+                    ok, _ = self.validate_and_add_match(payload)
+                    if ok:
+                        added += 1
+                if len(records) < page_size or offset + page_size >= limit:
+                    break
+                offset += page_size
+            except Exception as e:
+                print(f"  [WARN] Failed to load historical matches from Supabase: {e}", flush=True)
+                break
+        return added
+
     def generate_metadata(self, version: str = "v1.0.0") -> DatasetMetadata:
         """Generates comprehensive dataset metadata."""
         leagues = sorted(list(set(m.league_code for m in self.matches)))

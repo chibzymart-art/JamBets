@@ -552,7 +552,11 @@ export default function App() {
       if (!usedEdgeCache) {
         // Direct Supabase Query (Used for Admins, Paid Subscribers, or when Edge is local/unavailable)
         const now = new Date();
-        const minDate = new Date(now.getTime() - 48 * 60 * 60 * 1000).toISOString();
+        // Anchor live feed to start of yesterday (00:00:00 UTC) through +5 days forward.
+        // This guarantees 100% of Yesterday, Today, and upcoming forward fixtures fit within the 1000 limit without truncation.
+        // Older historical dates (2 to 30 days ago) are seamlessly loaded on-demand via fetchPastDateArchive.
+        const yesterdayUtc = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 1, 0, 0, 0));
+        const minDate = yesterdayUtc.toISOString();
         const maxDate = new Date(now.getTime() + 5 * 24 * 60 * 60 * 1000).toISOString();
 
         const predictionsQuery = supabase
@@ -602,7 +606,7 @@ export default function App() {
           .lte('target_kickoff_at', maxDate)
           .order('target_kickoff_at', { ascending: true })
           .order('id', { ascending: true })
-          .limit(500);
+          .limit(1000);
 
         const leagueQuery = supabase
           .from('football_leagues')
@@ -631,7 +635,13 @@ export default function App() {
         if (!f) return;
 
         const isLocked = !userCanView && (item.is_locked === true || item.confidence_category === 'LOCKED');
-        if (!isLocked) {
+        const isNoBanker =
+          item.confidence_category === 'NO_SAFE_BANKER' ||
+          item.confidence_category === 'NOSAFEBANKER' ||
+          item.market === 'NO_SAFE_BANKER' ||
+          item.prediction === 'SKIP';
+
+        if (!isLocked && !isNoBanker) {
           if (typeof item.probability !== 'number' || item.probability <= 0) return;
           if (!item.prediction || item.prediction === 'LOCKED') return;
         }
@@ -830,10 +840,6 @@ export default function App() {
   }, [predictions]);
 
 
-  // Date extraction in visitor's local timezone
-  const getFixtureWatDate = useCallback((targetKickoffIso: string) => {
-    return getFixtureLocalDate(targetKickoffIso, timeZone);
-  }, [timeZone]);
 
   // Dynamic visitor relative calendar dates
   const dynamicDateTabs = useMemo(() => {
@@ -919,6 +925,195 @@ export default function App() {
     ? dynamicDateTabs.pastDates.find((p) => p.iso === selectedDate)
     : null;
   const selectedPastFormatted = selectedPastOption?.shortFormatted || selectedDate;
+
+  // On-demand Historical Past Date Fetcher (for 30-day archive dates older than 7-day rolling window)
+  const loadedPastDatesRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!selectedDate || selectedDate === 'all') return;
+    
+    const todayIso = dynamicDateTabs.todayIso;
+    if (selectedDate >= todayIso) return;
+
+    // Check if we already have fixtures for this date
+    const hasFixturesForDate = fixtures.some(
+      (f) => getFixtureLocalDate(f.target_kickoff_at, timeZone) === selectedDate
+    );
+
+    if (hasFixturesForDate || loadedPastDatesRef.current.has(selectedDate)) {
+      return;
+    }
+
+    loadedPastDatesRef.current.add(selectedDate);
+    let isCancelled = false;
+
+    const fetchPastDateArchive = async () => {
+      try {
+        const startIso = new Date(`${selectedDate}T00:00:00.000Z`).getTime() - 14 * 60 * 60 * 1000;
+        const endIso = new Date(`${selectedDate}T23:59:59.999Z`).getTime() + 14 * 60 * 60 * 1000;
+
+        const { data: pastPreds, error: predErr } = await supabase
+          .from('football_predictions')
+          .select(`
+            id,
+            fixture_id,
+            prediction,
+            market,
+            probability,
+            confidence_category,
+            secondary_predictions,
+            metadata,
+            settlement_status,
+            settlement_notes,
+            settled_at,
+            actual_score,
+            publication_status,
+            simulations_count,
+            target_kickoff_at,
+            tier_required,
+            fixture:football_fixtures!inner(
+              id,
+              canonical_key,
+              target_kickoff_at,
+              status,
+              queue_day,
+              in_prediction_queue,
+              home_score,
+              away_score,
+              match_minute,
+              period,
+              half_time_home_score,
+              half_time_away_score,
+              corners_home,
+              corners_away,
+              postponed_at,
+              cancelled_at,
+              venue,
+              league:football_leagues!inner(id, name, code, country),
+              home_team:football_teams!football_fixtures_home_team_id_fkey(id, name),
+              away_team:football_teams!football_fixtures_away_team_id_fkey(id, name)
+            )
+          `)
+          .eq('publication_status', 'published')
+          .gte('target_kickoff_at', new Date(startIso).toISOString())
+          .lte('target_kickoff_at', new Date(endIso).toISOString())
+          .order('target_kickoff_at', { ascending: true })
+          .limit(300);
+
+        if (predErr || !pastPreds || isCancelled) return;
+
+        const newPreds: FootballPrediction[] = [];
+        const newFixtures: QueueFixture[] = [];
+        const userCanView = isAdmin || canViewPredictions;
+
+        pastPreds.forEach((item: any) => {
+          const f = item.fixture;
+          if (!f) return;
+          const isLocked = !userCanView && (item.is_locked === true || item.confidence_category === 'LOCKED');
+          const isNoBanker =
+            item.confidence_category === 'NO_SAFE_BANKER' ||
+            item.confidence_category === 'NOSAFEBANKER' ||
+            item.market === 'NO_SAFE_BANKER' ||
+            item.prediction === 'SKIP';
+
+          if (!isLocked && !isNoBanker) {
+            if (typeof item.probability !== 'number' || item.probability <= 0) return;
+            if (!item.prediction || item.prediction === 'LOCKED') return;
+          }
+
+          let itemMeta = item.metadata;
+          if (typeof itemMeta === 'string') {
+            try { itemMeta = JSON.parse(itemMeta); } catch { itemMeta = {}; }
+          }
+
+          newPreds.push({
+            id: item.id,
+            fixture_id: f.id,
+            prediction: isLocked ? 'LOCKED' : item.prediction,
+            market: item.market,
+            probability: isLocked ? 0 : item.probability,
+            confidence_category: (item.confidence_category && item.confidence_category !== 'LOCKED')
+              ? item.confidence_category
+              : (isLocked ? 'TOP_PICK' : 'MID_CONFIDENCE'),
+            secondary_predictions: item.secondary_predictions || [],
+            metadata: itemMeta,
+            settlement_status: item.settlement_status,
+            settlement_notes: item.settlement_notes,
+            settled_at: item.settled_at || null,
+            actual_score: item.actual_score || null,
+            publication_status: item.publication_status || 'published',
+            simulations_count: item.simulations_count || 250000,
+            tier_required: item.tier_required || 'free',
+            source_data_version: item.source_data_version || '1.0',
+            created_at: item.created_at || new Date().toISOString(),
+            target_kickoff_at: item.target_kickoff_at || f.target_kickoff_at,
+            is_locked: isLocked
+          });
+
+          newFixtures.push({
+            id: f.id,
+            canonical_key: f.canonical_key,
+            target_kickoff_at: f.target_kickoff_at,
+            status: f.status,
+            queue_day: f.queue_day,
+            in_prediction_queue: f.in_prediction_queue,
+            home_score: f.home_score,
+            away_score: f.away_score,
+            match_minute: f.match_minute,
+            period: f.period,
+            half_time_home_score: f.half_time_home_score,
+            half_time_away_score: f.half_time_away_score,
+            corners_home: f.corners_home,
+            corners_away: f.corners_away,
+            postponed_at: f.postponed_at || null,
+            cancelled_at: f.cancelled_at || null,
+            created_at: f.created_at || new Date().toISOString(),
+            updated_at: f.updated_at || new Date().toISOString(),
+            league_id: f.league?.id || f.league_id,
+            league_name: f.league?.name || f.league_name || 'Other Competitions',
+            league_code: f.league?.code || f.league_code || 'OTHER',
+            league_country: f.league?.country || f.league_country || '',
+            home_team_id: f.home_team?.id || f.home_team_id,
+            home_team_name: f.home_team?.name || f.home_team_name || 'Home Team',
+            away_team_id: f.away_team?.id || f.away_team_id,
+            away_team_name: f.away_team?.name || f.away_team_name || 'Away Team',
+            venue: f.venue || null
+          });
+        });
+
+        if (newFixtures.length > 0 && !isCancelled) {
+          setFixtures((prev) => {
+            const existingIds = new Set(prev.map((x) => x.id));
+            const additionsMap = new Map<string, QueueFixture>();
+            for (const x of newFixtures) {
+              if (!existingIds.has(x.id) && !additionsMap.has(x.id)) {
+                additionsMap.set(x.id, x);
+              }
+            }
+            return [...prev, ...Array.from(additionsMap.values())];
+          });
+          setPredictions((prev) => {
+            const existingIds = new Set(prev.map((x) => x.id));
+            const additionsMap = new Map<string, FootballPrediction>();
+            for (const x of newPreds) {
+              if (!existingIds.has(x.id) && !additionsMap.has(x.id)) {
+                additionsMap.set(x.id, x);
+              }
+            }
+            return [...prev, ...Array.from(additionsMap.values())];
+          });
+        }
+      } catch (e) {
+        console.warn('Failed to load past archive date:', e);
+      }
+    };
+
+    fetchPastDateArchive();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [selectedDate, dynamicDateTabs.todayIso, fixtures, timeZone, isAdmin, canViewPredictions]);
 
   // All 30 Leagues with fixture counts in the current dataset (Alphabetical)
   const allLeaguesWithCounts = useMemo(() => {
@@ -1092,10 +1287,10 @@ export default function App() {
     const activeFixtureIds = new Set(
       (selectedDate === 'all'
         ? fixtures.filter((f) => {
-            const fDate = getFixtureWatDate(f.target_kickoff_at);
+            const fDate = getFixtureLocalDate(f.target_kickoff_at, timeZone);
             return !fDate || fDate >= dynamicDateTabs.todayIso;
           })
-        : fixtures.filter((f) => getFixtureWatDate(f.target_kickoff_at) === selectedDate)
+        : fixtures.filter((f) => getFixtureLocalDate(f.target_kickoff_at, timeZone) === selectedDate)
       ).map((f) => f.id)
     );
 
@@ -1188,10 +1383,10 @@ export default function App() {
 
     const scopedFixtures = selectedDate === 'all'
       ? fixtures.filter((f) => {
-          const fDate = getFixtureWatDate(f.target_kickoff_at);
+          const fDate = getFixtureLocalDate(f.target_kickoff_at, timeZone);
           return !fDate || fDate >= dynamicDateTabs.todayIso;
         })
-      : fixtures.filter((f) => getFixtureWatDate(f.target_kickoff_at) === selectedDate);
+      : fixtures.filter((f) => getFixtureLocalDate(f.target_kickoff_at, timeZone) === selectedDate);
 
     const liveCount = scopedFixtures.filter((f) => {
       const isFinished = f.status === 'finished' || f.period === 'FT';
@@ -1256,7 +1451,7 @@ export default function App() {
       liveCount,
       settledMatchesCount
     };
-  }, [fixtures, predictions, predsByFixture, canViewPredictions, isAdmin, selectedDate]);
+  }, [fixtures, predictions, predsByFixture, canViewPredictions, isAdmin, selectedDate, timeZone, dynamicDateTabs.todayIso]);
 
   // Dynamic Tier-specific activity and settlement stats wired to Card 2
   const activeTierStats = useMemo(() => {

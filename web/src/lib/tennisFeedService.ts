@@ -212,9 +212,9 @@ export async function fetchTennisFeed(options: FetchTennisFeedOptions = {}): Pro
     }
 
     if (!usedEdge) {
-      // 2. Direct Cloud Supabase Fallback (strictly bounded by rolling date window & limit 50)
+      // 2. Direct Cloud Supabase Fallback (strictly bounded by rolling date window & limit 1000)
       const now = new Date();
-      const minDate = new Date(now.getTime() - 48 * 60 * 60 * 1000).toISOString();
+      const minDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
       const maxDate = new Date(now.getTime() + 5 * 24 * 60 * 60 * 1000).toISOString();
 
       const predTable = isUnlocked ? 'tennis_predictions' : 'tennis_predictions_paywall';

@@ -186,8 +186,8 @@ LEAGUE_REGISTRY: Dict[str, BasketballLeagueConfig] = {
         periods_count=4,
         default_pace=86.0,
         avg_offensive_rating=110.0,
-        livescore_keyword="nbl",
-        livescore_keywords=("nbl", "australia"),
+        livescore_keyword="australia",
+        livescore_keywords=("australia", "australian nbl"),
         hca_points=2.75,
     ),
     "NZL_NBL": BasketballLeagueConfig(

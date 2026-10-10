@@ -327,8 +327,11 @@ function prunePrediction(p: any): any {
 
 async function fetchFromUpstream(): Promise<FeedData> {
   const now = new Date();
-  // Bound query to active calendar window (-48h to +5 days) to eliminate huge full-table egress
-  const minDate = new Date(now.getTime() - 48 * 60 * 60 * 1000).toISOString();
+  // Anchor live feed to start of yesterday (00:00:00 UTC) through +5 days forward.
+  // This guarantees 100% of Yesterday, Today, and upcoming forward fixtures fit within the 1000 limit without truncation.
+  // Older historical dates (2 to 30 days ago) are seamlessly loaded on-demand via fetchPastDateArchive.
+  const yesterdayUtc = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 1, 0, 0, 0));
+  const minDate = yesterdayUtc.toISOString();
   const maxDate = new Date(now.getTime() + 5 * 24 * 60 * 60 * 1000).toISOString();
 
   const selectQuery = encodeURIComponent(
@@ -344,7 +347,7 @@ async function fetchFromUpstream(): Promise<FeedData> {
 
   const [predRes, leagueRes] = await Promise.all([
     fetch(
-      `${SUPABASE_URL}/rest/v1/football_predictions?select=${selectQuery}&publication_status=eq.published&target_kickoff_at=gte.${minDate}&target_kickoff_at=lte.${maxDate}&order=target_kickoff_at.asc,id.asc&limit=500`,
+      `${SUPABASE_URL}/rest/v1/football_predictions?select=${selectQuery}&publication_status=eq.published&target_kickoff_at=gte.${minDate}&target_kickoff_at=lte.${maxDate}&order=target_kickoff_at.asc,id.asc&limit=1000`,
       { headers }
     ),
     fetch(

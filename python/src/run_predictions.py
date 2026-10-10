@@ -70,6 +70,10 @@ def run():
     else:
         print("\n[STEP 1] Fast-mode active: using local cached historical dataset (--skip-hist active).", flush=True)
 
+    print("\n[STEP 1.2] Loading verified completed season matches from Cloud Supabase...", flush=True)
+    sb_hist_count = dataset.load_historical_from_supabase(supabase, limit=5000)
+    print(f"  [OK] Ingested {sb_hist_count} verified completed matches from Cloud Supabase", flush=True)
+
     print(f"[INFO] Total verified historical matches in dataset: {len(dataset.matches)}", flush=True)
 
     # 2. Record dataset metadata in Cloud Supabase
@@ -207,18 +211,25 @@ def run():
             if p.get("settlement_status") in ("won", "lost", "void"):
                 locked_fixture_ids.add(p["fixture_id"])
             elif p.get("target_kickoff_at") and p["target_kickoff_at"] <= lock_window_iso:
-                locked_fixture_ids.add(p["fixture_id"])
+                # Lock verified published bankers; NEVER lock abstained/unresolved predictions (NO_SAFE_BANKER / SKIP)
+                market = (p.get("market") or "").upper()
+                pred = (p.get("prediction") or "").upper()
+                if market not in ("NO_SAFE_BANKER", "OVER_UNDER_0.5", "OVER_UNDER_3.5") and pred != "SKIP":
+                    locked_fixture_ids.add(p["fixture_id"])
         print(f"  • Found {len(existing_preds_map)} existing predictions in Cloud Supabase ({len(locked_fixture_ids)} strictly locked under 48h/settlement rules).", flush=True)
     except Exception as e_err:
         existing_preds_map = {}
         print(f"  [WARN] Could not load existing predictions: {e_err}", flush=True)
 
-    # Sort fixtures to prioritize any legacy static over_under_0.5 or eliminated over_under_3.5 predictions for immediate upgrade
+    # Sort fixtures to prioritize unresolved abstentions (NO_SAFE_BANKER), legacy static over_under_0.5, or eliminated over_under_3.5 for immediate upgrade
     def fixture_priority(fix):
         fid = fix.get("id")
         ep = existing_preds_map.get(fid)
-        if ep and ep.get("market") in ("over_under_0.5", "over_under_3.5"):
-            return 0  # Highest priority: upgrade legacy static bankers and eliminated under 3.5
+        if ep:
+            m = (ep.get("market") or "").upper()
+            p = (ep.get("prediction") or "").upper()
+            if m in ("OVER_UNDER_0.5", "OVER_UNDER_3.5", "NO_SAFE_BANKER") or p == "SKIP":
+                return 0  # Highest priority: upgrade legacy static bankers and unresolved NO_SAFE_BANKER / SKIP
         return 1
 
     forward_fixtures = sorted(forward_fixtures, key=fixture_priority)
@@ -300,10 +311,12 @@ def run():
                     prev_meta = {}
             prev_sig = prev_meta.get("feature_signature")
             prev_market = existing_pred.get("market")
+            prev_pred_val = existing_pred.get("prediction")
 
-            force_repredict = force_repredict or not prev_meta.get("selection_stage")
-            # Condition to skip: Feature signature identical AND not an eliminated market (0.5/3.5) AND already evaluated under Option A+ hierarchy
-            if not force_repredict and prev_market not in ("over_under_0.5", "over_under_3.5") and prev_sig and prev_sig == features.feature_signature and prev_meta.get("selection_stage"):
+            is_unresolved = prev_market in ("over_under_0.5", "over_under_3.5", "NO_SAFE_BANKER") or prev_pred_val == "SKIP"
+            force_repredict = force_repredict or not prev_meta.get("selection_stage") or is_unresolved
+            # Condition to skip: Feature signature identical AND not an eliminated or unresolved market (0.5/3.5/NO_SAFE_BANKER) AND already evaluated under Option A+ hierarchy
+            if not force_repredict and not is_unresolved and prev_sig and prev_sig == features.feature_signature and prev_meta.get("selection_stage"):
                 skipped_unchanged_count += 1
                 print(f"    [SKIP REPREDICT] Game data stable with Option A+ calibration. Preserving existing prediction.", flush=True)
                 continue
@@ -312,6 +325,8 @@ def run():
                     print(f"    [OPTION A+ REPREDICT] Upgrading fixture prediction to Option A+ Calibrated Market Hierarchy.", flush=True)
                 elif prev_market in ("over_under_0.5", "over_under_3.5"):
                     print(f"    [UPGRADE REPREDICT] Upgrading legacy/eliminated {prev_market} prediction to dynamic banker model.", flush=True)
+                elif is_unresolved:
+                    print(f"    [UNRESOLVED REPREDICT] Re-evaluating previously abstained/unresolved fixture with latest form data.", flush=True)
                 else:
                     print(f"    [DATA CHANGED REPREDICT] Game data changed ({prev_sig} -> {features.feature_signature}). Re-simulating...", flush=True)
 

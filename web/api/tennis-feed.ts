@@ -194,7 +194,7 @@ async function fetchTennisDataFromUpstream(rawToken?: string | null): Promise<Te
   );
 
   const now = new Date();
-  const minDate = new Date(now.getTime() - 48 * 60 * 60 * 1000).toISOString();
+  const minDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
   const maxDate = new Date(now.getTime() + 5 * 24 * 60 * 60 * 1000).toISOString();
 
   const [predsRes, tourneysRes, settleRes] = await Promise.all([

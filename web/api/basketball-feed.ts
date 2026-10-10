@@ -248,9 +248,12 @@ async function fetchBasketballFromUpstream(isPaidOrAdmin: boolean): Promise<Bask
     `id,prediction_id,fixture_id,status,final_home_score,final_away_score,score_margin,total_points,notes,settled_at`
   );
 
+  const now = new Date();
+  const minDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
+
   const [predsRes, leaguesRes, settleRes] = await Promise.all([
     fetch(
-      `${SUPABASE_URL}/rest/v1/${predTable}?select=${predSelect}&order=target_kickoff_at.asc&limit=1000`,
+      `${SUPABASE_URL}/rest/v1/${predTable}?select=${predSelect}&target_kickoff_at=gte.${minDate}&order=target_kickoff_at.asc&limit=1000`,
       { headers }
     ),
     fetch(
@@ -267,7 +270,21 @@ async function fetchBasketballFromUpstream(isPaidOrAdmin: boolean): Promise<Bask
   const rawLeagues = leaguesRes.ok ? await leaguesRes.json() : [];
   const rawSettlements = settleRes.ok ? await settleRes.json() : [];
 
-  const predictions = (Array.isArray(rawPredictions) ? rawPredictions : []).map(pruneBasketballPrediction);
+  const rawList = (Array.isArray(rawPredictions) ? rawPredictions : []).map(pruneBasketballPrediction);
+  const seenFixKey = new Set<string>();
+  const predictions: any[] = [];
+  for (const p of rawList) {
+    const f = p.fixture || {};
+    const h = (f.home_team?.canonical_name || f.home_team?.name || '').toLowerCase().trim();
+    const a = (f.away_team?.canonical_name || f.away_team?.name || '').toLowerCase().trim();
+    const dt = (p.target_kickoff_at || f.target_kickoff_at || '').substring(0, 10);
+    const mkt = (p.market || '').toLowerCase();
+    const dedupeKey = h && a ? `${h}::${a}::${dt}::${mkt}` : p.id;
+    if (!seenFixKey.has(dedupeKey)) {
+      seenFixKey.add(dedupeKey);
+      predictions.push(p);
+    }
+  }
   const leagues = Array.isArray(rawLeagues) ? rawLeagues : [];
   const settlements = Array.isArray(rawSettlements) ? rawSettlements : [];
 
@@ -288,25 +305,29 @@ async function fetchBasketballFromUpstream(isPaidOrAdmin: boolean): Promise<Bask
   let settledVoid = 0;
 
 // Multi-Sport VIP Paywall Redaction for Basketball:
-// ALL basketball predictions (including settled) are locked as BigBang VIP teasers without exposing won/lost results
+// For unauthenticated / free visitors:
+// - Future and pending predictions are masked with teaser markers and locked confidence picks
+// - Historical settled predictions (won, lost, void) retain their true settlement_status, settled_at, and actual_result so track records are transparent and verified
 function applyBasketballPaywallRedaction(preds: any[]): any[] {
   return preds.map((p: any) => {
+    const isSettled = p.settlement_status === 'won' || p.settlement_status === 'lost' || p.settlement_status === 'void';
     return {
       ...p,
-      is_locked: true,
-      probability: null,
-      confidence_category: (p.confidence_category === 'BANGER' ? 'BANGER' : 'TOP PICK'),
-      prediction: '🔒 BigBang VIP Pick',
-      settlement_status: 'pending',
-      settlement_notes: null,
-      actual_result: null,
-      simulated_home_score: null,
-      simulated_away_score: null,
-      edge_percentage: null,
-      fair_odds: null,
-      market_odds: null,
-      secondary_predictions: [],
-      metadata: {
+      is_locked: !isSettled,
+      probability: isSettled ? p.probability : null,
+      confidence_category: p.confidence_category || 'TOP PICK',
+      prediction: isSettled ? (p.prediction || 'VIP Pick') : '🔒 BigBang VIP Pick',
+      settlement_status: p.settlement_status || 'pending',
+      settlement_notes: p.settlement_notes || null,
+      actual_result: p.actual_result || null,
+      settled_at: p.settled_at || null,
+      simulated_home_score: isSettled ? p.simulated_home_score : null,
+      simulated_away_score: isSettled ? p.simulated_away_score : null,
+      edge_percentage: isSettled ? p.edge_percentage : null,
+      fair_odds: isSettled ? p.fair_odds : null,
+      market_odds: isSettled ? p.market_odds : null,
+      secondary_predictions: isSettled ? (p.secondary_predictions || []) : [],
+      metadata: isSettled ? p.metadata : {
         ai_tactical_analysis: '🔒 Basketball predictions and 250,000 Monte Carlo simulations are reserved for BigBang VIP members.',
         simulation: null,
         secondary_locked: true,
@@ -323,25 +344,25 @@ function applyBasketballPaywallRedaction(preds: any[]): any[] {
   }
 
   const finishedDecisive = settledWon + settledLost;
-  const winRate = isPaidOrAdmin ? (finishedDecisive > 0 ? Math.round((settledWon / finishedDecisive) * 100) : 85.0) : 0;
+  const winRate = finishedDecisive > 0 ? Math.round((settledWon / finishedDecisive) * 100) : (settledWon > 0 ? 100 : 0);
 
   const sanitizedPredictions = !isPaidOrAdmin ? applyBasketballPaywallRedaction(predictions) : predictions;
 
   return {
     predictions: sanitizedPredictions,
     leagues,
-    settlements: isPaidOrAdmin ? settlements : [],
+    settlements: settlements,
     stats: {
       total_matches: sanitizedPredictions.length,
       bangers_count: bangers,
       top_picks_count: topPicks,
       high_confidence_count: highConf,
       leagues_count: leagues.length,
-      settled_count: isPaidOrAdmin ? settlements.length : 0,
-      settled_won: isPaidOrAdmin ? settledWon : 0,
+      settled_count: settlements.length,
+      settled_won: settledWon,
       settled_lost: isPaidOrAdmin ? settledLost : 0,
       settled_void: isPaidOrAdmin ? settledVoid : 0,
-      win_rate: isPaidOrAdmin ? winRate : 0,
+      win_rate: winRate,
     },
     cached_at: new Date().toISOString(),
   };

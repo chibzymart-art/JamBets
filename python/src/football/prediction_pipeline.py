@@ -262,7 +262,7 @@ class PredictionPipeline:
         }
         market_decision = MarketCalibrator.select_primary_banker(
             candidate_predictions=qualifying,
-            uncertainty=ensemble_out.combined_uncertainty,
+            uncertainty=getattr(features, "uncertainty", ensemble_out.combined_uncertainty),
             is_high_disagreement=ensemble_out.is_high_disagreement,
             dynamic_base_rates=dynamic_rates
         )

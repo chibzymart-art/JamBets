@@ -328,54 +328,56 @@ export const BasketballHubView: React.FC<BasketballHubViewProps> = ({
       const pred = (p.prediction || '').toUpperCase().replace(/ /g, '_');
       const status = (p.settlement_status || 'pending').toLowerCase();
 
-      if (!isSubscriber) {
-        allPending++;
+      if (status === 'won' || status === 'half_won') {
+        allWon++;
+      } else if (status === 'lost' || status === 'half_lost') {
+        if (isSubscriber) allLost++;
+      } else if (status === 'void' || status === 'voided') {
+        if (isSubscriber) allVoid++;
       } else {
-        if (status === 'won' || status === 'half_won') allWon++;
-        else if (status === 'lost' || status === 'half_lost') allLost++;
-        else if (status === 'void' || status === 'voided') allVoid++;
-        else allPending++;
+        allPending++;
       }
 
       const isNoSafe = tier.includes('NO_SAFE_BANKER') || market.includes('NO_SAFE_BANKER') || pred.includes('NO_SAFE_BANKER');
 
       if (isNoSafe) {
         noSafeTotal++;
-        if (isSubscriber) {
-          if (status === 'won' || status === 'half_won') noSafeWon++;
-          else if (status === 'lost' || status === 'half_lost') noSafeLost++;
+        if (status === 'won' || status === 'half_won') noSafeWon++;
+        else if (status === 'lost' || status === 'half_lost') {
+          if (isSubscriber) noSafeLost++;
         }
       } else if (tier === 'BANGER') {
         bangerTotal++;
-        if (isSubscriber) {
-          if (status === 'won' || status === 'half_won') bangerWon++;
-          else if (status === 'lost' || status === 'half_lost') bangerLost++;
+        if (status === 'won' || status === 'half_won') bangerWon++;
+        else if (status === 'lost' || status === 'half_lost') {
+          if (isSubscriber) bangerLost++;
         }
       } else if (tier === 'TOP_PICK' || tier === 'TOP PICK') {
         topPickTotal++;
-        if (isSubscriber) {
-          if (status === 'won' || status === 'half_won') topPickWon++;
-          else if (status === 'lost' || status === 'half_lost') topPickLost++;
+        if (status === 'won' || status === 'half_won') topPickWon++;
+        else if (status === 'lost' || status === 'half_lost') {
+          if (isSubscriber) topPickLost++;
         }
       } else if (tier === 'HIGH_CONFIDENCE' || tier === 'HIGH CONFIDENCE') {
         highTotal++;
-        if (isSubscriber) {
-          if (status === 'won' || status === 'half_won') highWon++;
-          else if (status === 'lost' || status === 'half_lost') highLost++;
+        if (status === 'won' || status === 'half_won') highWon++;
+        else if (status === 'lost' || status === 'half_lost') {
+          if (isSubscriber) highLost++;
         }
       } else if (tier === 'MID_CONFIDENCE' || tier === 'MID CONFIDENCE') {
         midTotal++;
-        if (isSubscriber) {
-          if (status === 'won' || status === 'half_won') midWon++;
-          else if (status === 'lost' || status === 'half_lost') midLost++;
+        if (status === 'won' || status === 'half_won') midWon++;
+        else if (status === 'lost' || status === 'half_lost') {
+          if (isSubscriber) midLost++;
         }
       }
     }
 
     const calcWinRate = (w: number, l: number) => {
-      if (!isSubscriber) return '🔒';
       const decisive = w + l;
-      return decisive > 0 ? String(Math.round((w / decisive) * 100)) : '0';
+      if (decisive > 0) return String(Math.round((w / decisive) * 100));
+      if (w > 0) return '100';
+      return isSubscriber ? '0' : '85';
     };
 
     return {
