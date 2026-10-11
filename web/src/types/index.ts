@@ -298,8 +298,8 @@ export interface UserProfile {
 export interface UserSubscription {
   id: string;
   user_id: string;
-  tier: 'free' | 'standard' | 'bigbang' | 'admin';
-  status: 'active' | 'cancelled' | 'expired' | 'disabled';
+  tier: 'free' | 'trial' | 'standard' | 'bigbang' | 'admin' | string;
+  status: 'active' | 'trialing' | 'cancelled' | 'expired' | 'disabled' | string;
   starts_at?: string;
   expires_at?: string;
   current_period_end?: string | null;
@@ -310,7 +310,7 @@ export interface UserSubscription {
 export interface UserEntitlement {
   id: string;
   user_id: string;
-  tier: 'free' | 'standard' | 'bigbang' | 'admin';
+  tier: 'free' | 'trial' | 'standard' | 'bigbang' | 'admin' | string;
   can_view_predictions?: boolean;
   can_view_detailed_stats?: boolean;
   can_view_simulation_breakdown?: boolean;

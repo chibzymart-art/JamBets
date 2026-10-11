@@ -25,6 +25,7 @@ import { AdBannerSlot } from './components/AdBannerSlot';
 import { initAttributionTracker } from './lib/attribution';
 import { updatePageSeo } from './lib/seo';
 import { useGeoCurrency } from './lib/geoCurrency';
+import { useTrialStatus } from './hooks/useTrialStatus';
 import { LandingPage } from './pages/Landing';
 import { SubscriptionPage } from './pages/Subscription';
 import { PasswordRecoveryPage } from './pages/PasswordRecovery';
@@ -93,6 +94,12 @@ export default function App() {
     // Trigger Google Identity Services One Tap prompt natively on Oddsbanta, and open modal with branded button
     promptGoogleOneTap();
     setAuthModalMode('signin');
+    setIsAuthModalOpen(true);
+  };
+
+  const handleRegisterClick = () => {
+    promptGoogleOneTap();
+    setAuthModalMode('register');
     setIsAuthModalOpen(true);
   };
 
@@ -420,39 +427,14 @@ export default function App() {
     );
   }, [currentUser, profile, subscription, entitlement]);
 
-  // Permissions: Football (Standard + BigBang VIP + Admin)
-  const canViewFootball = useMemo(() => {
-    if (!currentUser) return false;
-    if (isAdmin) return true;
-    if (profile?.role === 'admin') return true;
-    if (profile?.role === 'standard' || profile?.role === 'bigbang') return true;
-    const subTier = subscription?.tier?.toLowerCase();
-    if (subscription?.status === 'active' && subTier && ['standard', 'bigbang', 'admin', 'vip'].includes(subTier)) return true;
-    if (entitlement?.can_view_predictions === true) return true;
-    const entTier = entitlement?.tier?.toLowerCase();
-    if (entTier && ['standard', 'bigbang', 'admin', 'vip'].includes(entTier)) return true;
-    if ((entitlement?.features as any)?.vip === true || (entitlement?.features as any)?.football_predictions === true) return true;
-    return false;
-  }, [currentUser, isAdmin, profile, subscription, entitlement]);
+  // Oddsbanta 3-Day Free Trial & Paywall State Hook
+  const trialState = useTrialStatus(currentUser, profile, subscription, entitlement);
 
-  // Permissions: Multi-Sport (Tennis, Basketball, Cricket - BigBang VIP + Admin only)
-  const canViewMultiSport = useMemo(() => {
-    if (!currentUser) return false;
-    if (isAdmin) return true;
-    if (profile?.role === 'admin' || profile?.role === 'bigbang') return true;
-    const subTier = subscription?.tier?.toLowerCase();
-    if (subscription?.status === 'active' && subTier && ['bigbang', 'admin', 'vip'].includes(subTier)) return true;
-    const entTier = entitlement?.tier?.toLowerCase();
-    if (entTier && ['bigbang', 'admin', 'vip'].includes(entTier)) return true;
-    if (
-      (entitlement?.features as any)?.bigbang === true ||
-      (entitlement?.features as any)?.all_sports === true ||
-      (entitlement?.features as any)?.multi_sport === true ||
-      (entitlement?.features as any)?.tennis === true ||
-      (entitlement?.features as any)?.basketball === true
-    ) return true;
-    return false;
-  }, [currentUser, isAdmin, profile, subscription, entitlement]);
+  // Permissions: Football (3-Day Free Trial + Standard + BigBang VIP + Admin)
+  const canViewFootball = trialState.canViewFootballPredictions;
+
+  // Permissions: Multi-Sport (Tennis, Basketball, Cricket - Strictly BigBang VIP + Admin only, excluded from Trial)
+  const canViewMultiSport = trialState.canViewTennis;
 
   // Backward compatibility alias for football predictions
   const canViewPredictions = canViewFootball;
@@ -1294,8 +1276,6 @@ export default function App() {
       ).map((f) => f.id)
     );
 
-    const isPaid = isAdmin || canViewPredictions;
-
     sourceList.forEach((item: any) => {
       if (!activeFixtureIds.has(item.fixture_id)) return;
       let st = item.settlement_status || 'pending';
@@ -1307,79 +1287,63 @@ export default function App() {
         item.prediction === 'SKIP';
 
       if (st === 'won') allWon++;
-      else if (st === 'lost') {
-        if (isPaid) allLost++;
-      }
-      else if (st === 'void' || st === 'voided') {
-        if (isPaid) allVoid++;
-      }
+      else if (st === 'lost') allLost++;
+      else if (st === 'void' || st === 'voided') allVoid++;
       else allPending++;
 
       if (rawCat === 'BANGER') {
         bangerTotal++;
         if (st === 'won') bangerWon++;
-        else if (st === 'lost') {
-          if (isPaid) bangerLost++;
-        }
+        else if (st === 'lost') bangerLost++;
         else bangerPending++;
       } else if (rawCat === 'TOP_PICK' || rawCat === 'TOPPICK') {
         topPickTotal++;
         if (st === 'won') topPickWon++;
-        else if (st === 'lost') {
-          if (isPaid) topPickLost++;
-        }
+        else if (st === 'lost') topPickLost++;
         else topPickPending++;
       } else if (rawCat === 'HIGH_CONFIDENCE' || rawCat === 'HIGHCONFIDENCE' || rawCat === 'HIGH') {
         highTotal++;
         if (st === 'won') highWon++;
-        else if (st === 'lost') {
-          if (isPaid) highLost++;
-        }
+        else if (st === 'lost') highLost++;
         else highPending++;
       } else if (rawCat === 'MID_CONFIDENCE' || rawCat === 'MIDCONFIDENCE' || rawCat === 'MID') {
         midTotal++;
         if (st === 'won') midWon++;
-        else if (st === 'lost') {
-          if (isPaid) midLost++;
-        }
+        else if (st === 'lost') midLost++;
         else midPending++;
       } else if (rawCat === 'LOW_CONFIDENCE' || rawCat === 'LOWCONFIDENCE' || rawCat === 'LOW' || rawCat === 'RISKY') {
         lowTotal++;
         if (st === 'won') lowWon++;
-        else if (st === 'lost') {
-          if (isPaid) lowLost++;
-        }
+        else if (st === 'lost') lowLost++;
         else lowPending++;
       } else if (isAntiLoss) {
         antiLossTotal++;
         if (st === 'won') antiLossWon++;
-        else if (st === 'lost') {
-          if (isPaid) antiLossLost++;
-        }
+        else if (st === 'lost') antiLossLost++;
         else antiLossPending++;
       }
     });
 
     const allDecided = allWon + allLost;
-    const allWinRate = allDecided > 0 ? Math.round((allWon / allDecided) * 100) : (allWon > 0 && !isPaid ? 100 : 0);
+    const allWinRate = allDecided > 0 ? Math.round((allWon / allDecided) * 100) : 0;
 
     const bangerDecided = bangerWon + bangerLost;
-    const bangerWinRate = bangerDecided > 0 ? Math.round((bangerWon / bangerDecided) * 100) : (bangerWon > 0 && !isPaid ? 100 : 0);
+    const bangerWinRate = bangerDecided > 0 ? Math.round((bangerWon / bangerDecided) * 100) : 0;
 
     const topPickDecided = topPickWon + topPickLost;
-    const topPickWinRate = topPickDecided > 0 ? Math.round((topPickWon / topPickDecided) * 100) : (topPickWon > 0 && !isPaid ? 100 : 0);
+    const topPickWinRate = topPickDecided > 0 ? Math.round((topPickWon / topPickDecided) * 100) : 0;
 
     const highDecided = highWon + highLost;
-    const highWinRate = highDecided > 0 ? Math.round((highWon / highDecided) * 100) : (highWon > 0 && !isPaid ? 100 : 0);
+    const highWinRate = highDecided > 0 ? Math.round((highWon / highDecided) * 100) : 0;
 
     const midDecided = midWon + midLost;
-    const midWinRate = midDecided > 0 ? Math.round((midWon / midDecided) * 100) : (midWon > 0 && !isPaid ? 100 : 0);
+    const midWinRate = midDecided > 0 ? Math.round((midWon / midDecided) * 100) : 0;
 
     const lowDecided = lowWon + lowLost;
-    const lowWinRate = lowDecided > 0 ? Math.round((lowWon / lowDecided) * 100) : (lowWon > 0 && !isPaid ? 100 : 0);
+    const lowWinRate = lowDecided > 0 ? Math.round((lowWon / lowDecided) * 100) : 0;
 
     const antiLossDecided = antiLossWon + antiLossLost;
-    const antiLossWinRate = antiLossDecided > 0 ? Math.round((antiLossWon / antiLossDecided) * 100) : (antiLossWon > 0 && !isPaid ? 100 : 0);
+    const antiLossWinRate = antiLossDecided > 0 ? Math.round((antiLossWon / antiLossDecided) * 100) : 0;
 
     const scopedFixtures = selectedDate === 'all'
       ? fixtures.filter((f) => {
@@ -1765,12 +1729,16 @@ export default function App() {
                           {currentUser.email}
                         </div>
                         <span className={`hamburger-role-badge role-${profile?.role || 'free'}`}>
-                          {profile?.role === 'admin'
+                          {trialState.isAdmin
                             ? '🛡 Sigma Admin'
-                            : profile?.role === 'bigbang'
-                            ? '💥 BigBang VIP'
-                            : profile?.role === 'standard'
-                            ? '⭐ Standard VIP'
+                            : trialState.isPaidVip
+                            ? profile?.role === 'bigbang'
+                              ? '💥 BigBang VIP'
+                              : '⭐ Oddsbanta VIP'
+                            : trialState.isTrialActive
+                            ? `🎁 3-Day Trial (${trialState.remainingTimeDisplay})`
+                            : trialState.isTrialExpired
+                            ? '⌛ Trial Expired (Upgrade VIP)'
                             : 'Free Access'}
                         </span>
                       </div>
@@ -2066,7 +2034,7 @@ export default function App() {
               <span className="nav-header-btn-label">FAQs</span>
             </button>
 
-            {!currentUser && (
+            {!currentUser ? (
               <>
                 <button
                   type="button"
@@ -2090,6 +2058,82 @@ export default function App() {
                 >
                   Sign In
                 </button>
+              </>
+            ) : (
+              <>
+                {/* Active Trial Pill */}
+                {trialState.isTrialActive && !trialState.isPaidVip && !trialState.isAdmin && (
+                  <button
+                    type="button"
+                    className="trial-header-status-pill desktop-only"
+                    onClick={() => setIsPricingModalOpen(true)}
+                    title={`Oddsbanta 3-Day Free Trial Active: ${trialState.remainingTimeDisplay}. Click to upgrade to VIP.`}
+                    style={{
+                      background: 'linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%)',
+                      border: '1px solid #6ee7b7',
+                      borderRadius: 20,
+                      padding: '5px 12px',
+                      fontSize: 12,
+                      fontWeight: 800,
+                      color: '#065f46',
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 5,
+                    }}
+                  >
+                    <span>🎁</span>
+                    <span>{trialState.remainingTimeDisplay}</span>
+                  </button>
+                )}
+
+                {/* Expired Trial Pill */}
+                {trialState.isTrialExpired && !trialState.isPaidVip && !trialState.isAdmin && (
+                  <button
+                    type="button"
+                    className="trial-header-status-pill expired desktop-only"
+                    onClick={() => setIsPricingModalOpen(true)}
+                    title="Your 3-Day Free Trial has ended. Click to unlock Oddsbanta VIP."
+                    style={{
+                      background: 'linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%)',
+                      border: '1px solid #fca5a5',
+                      borderRadius: 20,
+                      padding: '5px 12px',
+                      fontSize: 12,
+                      fontWeight: 800,
+                      color: '#991b1b',
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 5,
+                    }}
+                  >
+                    <span>⏰</span>
+                    <span>Trial Expired • Upgrade VIP</span>
+                  </button>
+                )}
+
+                {/* VIP / Admin Badge */}
+                {(trialState.isPaidVip || trialState.isAdmin) && (
+                  <div
+                    className="vip-header-badge desktop-only"
+                    style={{
+                      background: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)',
+                      border: '1px solid #f59e0b',
+                      borderRadius: 20,
+                      padding: '5px 12px',
+                      fontSize: 12,
+                      fontWeight: 900,
+                      color: '#92400e',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 5,
+                    }}
+                  >
+                    <span>👑</span>
+                    <span>{trialState.isAdmin ? 'Admin' : 'VIP Active'}</span>
+                  </div>
+                )}
               </>
             )}
 
@@ -2661,8 +2705,8 @@ export default function App() {
                   <span className="compact-kpi-pill">{scorecardStats.allTotal}M</span>
                 </div>
                 <div className="compact-kpi-val-row">
-                  <span className="compact-kpi-pct">{scorecardStats.allWinRate}%</span>
-                  <span className="compact-kpi-ratio">{scorecardStats.allWon}W • {scorecardStats.allLost}L</span>
+                  <span className="compact-kpi-pct">{trialState.canViewFootballSettlements ? `${scorecardStats.allWinRate}%` : '🔒'}</span>
+                  <span className="compact-kpi-ratio">{trialState.canViewFootballSettlements ? `${scorecardStats.allWon}W • ${scorecardStats.allLost}L` : 'Register'}</span>
                 </div>
               </div>
 
@@ -2678,8 +2722,8 @@ export default function App() {
                     <span className="compact-kpi-pill banger-pill">{scorecardStats.bangerTotal}M</span>
                   </div>
                   <div className="compact-kpi-val-row">
-                    <span className="compact-kpi-pct banger-text">{scorecardStats.bangerWinRate}%</span>
-                    <span className="compact-kpi-ratio">{scorecardStats.bangerWon}W • {scorecardStats.bangerLost}L</span>
+                    <span className="compact-kpi-pct banger-text">{trialState.canViewFootballSettlements ? `${scorecardStats.bangerWinRate}%` : '🔒'}</span>
+                    <span className="compact-kpi-ratio">{trialState.canViewFootballSettlements ? `${scorecardStats.bangerWon}W • ${scorecardStats.bangerLost}L` : 'Register'}</span>
                   </div>
                 </div>
 
@@ -2695,8 +2739,8 @@ export default function App() {
                     <span className="compact-kpi-pill toppick-pill">{scorecardStats.topPickTotal}M</span>
                   </div>
                   <div className="compact-kpi-val-row">
-                    <span className="compact-kpi-pct toppick-text">{scorecardStats.topPickWinRate}%</span>
-                    <span className="compact-kpi-ratio">{scorecardStats.topPickWon}W • {scorecardStats.topPickLost}L</span>
+                    <span className="compact-kpi-pct toppick-text">{trialState.canViewFootballSettlements ? `${scorecardStats.topPickWinRate}%` : '🔒'}</span>
+                    <span className="compact-kpi-ratio">{trialState.canViewFootballSettlements ? `${scorecardStats.topPickWon}W • ${scorecardStats.topPickLost}L` : 'Register'}</span>
                   </div>
                 </div>
               </div>
@@ -2713,8 +2757,8 @@ export default function App() {
                     <span className="compact-kpi-pill high-pill">{scorecardStats.highTotal}M</span>
                   </div>
                   <div className="compact-kpi-val-row">
-                    <span className="compact-kpi-pct high-text">{scorecardStats.highWinRate}%</span>
-                    <span className="compact-kpi-ratio">{scorecardStats.highWon}W • {scorecardStats.highLost}L</span>
+                    <span className="compact-kpi-pct high-text">{trialState.canViewFootballSettlements ? `${scorecardStats.highWinRate}%` : '🔒'}</span>
+                    <span className="compact-kpi-ratio">{trialState.canViewFootballSettlements ? `${scorecardStats.highWon}W • ${scorecardStats.highLost}L` : 'Register'}</span>
                   </div>
                 </div>
 
@@ -2730,8 +2774,8 @@ export default function App() {
                     <span className="compact-kpi-pill mid-pill">{scorecardStats.midTotal}M</span>
                   </div>
                   <div className="compact-kpi-val-row">
-                    <span className="compact-kpi-pct mid-text">{scorecardStats.midWinRate}%</span>
-                    <span className="compact-kpi-ratio">{scorecardStats.midWon}W • {scorecardStats.midLost}L</span>
+                    <span className="compact-kpi-pct mid-text">{trialState.canViewFootballSettlements ? `${scorecardStats.midWinRate}%` : '🔒'}</span>
+                    <span className="compact-kpi-ratio">{trialState.canViewFootballSettlements ? `${scorecardStats.midWon}W • ${scorecardStats.midLost}L` : 'Register'}</span>
                   </div>
                 </div>
               </div>
@@ -2748,8 +2792,8 @@ export default function App() {
                     <span className="compact-kpi-pill low-pill">{scorecardStats.lowTotal}M</span>
                   </div>
                   <div className="compact-kpi-val-row">
-                    <span className="compact-kpi-pct low-text">{scorecardStats.lowWinRate}%</span>
-                    <span className="compact-kpi-ratio">{scorecardStats.lowWon}W • {scorecardStats.lowLost}L</span>
+                    <span className="compact-kpi-pct low-text">{trialState.canViewFootballSettlements ? `${scorecardStats.lowWinRate}%` : '🔒'}</span>
+                    <span className="compact-kpi-ratio">{trialState.canViewFootballSettlements ? `${scorecardStats.lowWon}W • ${scorecardStats.lowLost}L` : 'Register'}</span>
                   </div>
                 </div>
 
@@ -2765,8 +2809,8 @@ export default function App() {
                     <span className="compact-kpi-pill antiloss-pill">{scorecardStats.antiLossTotal}M</span>
                   </div>
                   <div className="compact-kpi-val-row">
-                    <span className="compact-kpi-pct antiloss-text">{scorecardStats.antiLossWinRate}%</span>
-                    <span className="compact-kpi-ratio">{scorecardStats.antiLossWon}W • {scorecardStats.antiLossLost}L</span>
+                    <span className="compact-kpi-pct antiloss-text">{trialState.canViewFootballSettlements ? `${scorecardStats.antiLossWinRate}%` : '🔒'}</span>
+                    <span className="compact-kpi-ratio">{trialState.canViewFootballSettlements ? `${scorecardStats.antiLossWon}W • ${scorecardStats.antiLossLost}L` : 'Register'}</span>
                   </div>
                 </div>
               </div>
@@ -2777,48 +2821,78 @@ export default function App() {
               {/* Option 1: Settled */}
               <div
                 className={`compact-act-segment ${scoreStatusFilter === 'finished' ? 'active-seg' : ''}`}
-                onClick={() => setScoreStatusFilter(scoreStatusFilter === 'finished' ? 'all' : 'finished')}
-                title="Click to filter by settled finished matches"
+                onClick={() => {
+                  if (trialState.isVisitor) {
+                    handleRegisterClick();
+                  } else if (!trialState.canViewFootballSettlements) {
+                    setIsPricingModalOpen(true);
+                  } else {
+                    setScoreStatusFilter(scoreStatusFilter === 'finished' ? 'all' : 'finished');
+                  }
+                }}
+                title={trialState.isVisitor ? 'Register to view settled matches' : 'Click to filter by settled finished matches'}
               >
                 <span className="act-seg-label">Settled</span>
-                <span className="act-seg-val">{activeTierStats.settled}</span>
-                <span className="act-seg-sub">FT</span>
+                <span className="act-seg-val">{trialState.canViewFootballSettlements ? activeTierStats.settled : '🔒'}</span>
+                <span className="act-seg-sub">{trialState.canViewFootballSettlements ? 'FT' : 'Unlock'}</span>
               </div>
 
               {/* Option 2: Won */}
               <div
                 className={`compact-act-segment won-seg ${settlementFilter === 'won' ? 'active-seg' : ''}`}
-                onClick={() => setSettlementFilter(settlementFilter === 'won' ? 'all' : 'won')}
-                title="Click to filter by won predictions"
+                onClick={() => {
+                  if (trialState.isVisitor) {
+                    handleRegisterClick();
+                  } else if (!trialState.canViewFootballSettlements) {
+                    setIsPricingModalOpen(true);
+                  } else {
+                    setSettlementFilter(settlementFilter === 'won' ? 'all' : 'won');
+                  }
+                }}
+                title={trialState.isVisitor ? 'Register to view won predictions' : 'Click to filter by won predictions'}
               >
                 <span className="act-seg-label">Won</span>
-                <span className="act-seg-val won-text">{activeTierStats.won}</span>
-                <span className="act-seg-sub">Wins</span>
+                <span className="act-seg-val won-text">{trialState.canViewFootballSettlements ? activeTierStats.won : '🔒'}</span>
+                <span className="act-seg-sub">{trialState.canViewFootballSettlements ? 'Wins' : 'Unlock'}</span>
               </div>
 
               {/* Option 3: Lost */}
               <div
                 className={`compact-act-segment lost-seg ${settlementFilter === 'lost' ? 'active-seg' : ''}`}
-                onClick={() => setSettlementFilter(settlementFilter === 'lost' ? 'all' : 'lost')}
-                title="Click to filter by lost predictions"
+                onClick={() => {
+                  if (trialState.isVisitor) {
+                    handleRegisterClick();
+                  } else if (!trialState.canViewFootballSettlements) {
+                    setIsPricingModalOpen(true);
+                  } else {
+                    setSettlementFilter(settlementFilter === 'lost' ? 'all' : 'lost');
+                  }
+                }}
+                title={trialState.isVisitor ? 'Register to view lost predictions' : 'Click to filter by lost predictions'}
               >
                 <span className="act-seg-label">Lost</span>
-                <span className="act-seg-val lost-text">{activeTierStats.lost}</span>
-                <span className="act-seg-sub">Audit</span>
+                <span className="act-seg-val lost-text">{trialState.canViewFootballSettlements ? activeTierStats.lost : '🔒'}</span>
+                <span className="act-seg-sub">{trialState.canViewFootballSettlements ? 'Audit' : 'Unlock'}</span>
               </div>
 
               {/* Option 4: Win Rate */}
               <div
                 className="compact-act-segment rate-seg"
                 onClick={() => {
-                  setSettlementFilter('all');
-                  setScoreStatusFilter('all');
+                  if (trialState.isVisitor) {
+                    handleRegisterClick();
+                  } else if (!trialState.canViewFootballSettlements) {
+                    setIsPricingModalOpen(true);
+                  } else {
+                    setSettlementFilter('all');
+                    setScoreStatusFilter('all');
+                  }
                 }}
-                title="Click to reset win/loss filters"
+                title={trialState.isVisitor ? 'Register to view verified win rates' : 'Click to reset win/loss filters'}
               >
                 <span className="act-seg-label">Win Rate</span>
-                <span className="act-seg-val won-text">{activeTierStats.winRate}%</span>
-                <span className="act-seg-sub">{activeTierStats.won}/{activeTierStats.decided}</span>
+                <span className="act-seg-val won-text">{trialState.canViewFootballSettlements ? `${activeTierStats.winRate}%` : '🔒'}</span>
+                <span className="act-seg-sub">{trialState.canViewFootballSettlements ? `${activeTierStats.won}/${activeTierStats.decided}` : 'Verified'}</span>
               </div>
 
               {/* Option 5: In-Play */}
@@ -2886,45 +2960,279 @@ export default function App() {
                       Fetching verified mathematical simulations and authoritative match results.
                     </div>
                   </div>
-                ) : filteredFixtures.length === 0 ? (
-                  <div
-                    style={{
-                      padding: 48,
-                      background: '#ffffff',
-                      borderRadius: 16,
-                      border: '1px solid var(--border-subtle)',
-                      textAlign: 'center',
-                    }}
-                  >
-                    <div style={{ fontSize: 32, marginBottom: 8 }}>⚽</div>
-                    <div style={{ fontWeight: 800, fontSize: 16, color: 'var(--text-primary)' }}>
-                      {selectedDate !== 'all'
-                        ? 'No predictions available for this date.'
-                        : 'No predictions available for this selection.'}
-                    </div>
+                ) : selectedDate !== 'all' && selectedDate < dynamicDateTabs.todayIso && !trialState.canViewFootballSettlements ? (
+                  trialState.isTrialExpired ? (
                     <div
+                      className="trial-expired-settlement-gate-card"
                       style={{
-                        fontSize: 13,
-                        color: 'var(--text-muted)',
-                        marginTop: 4,
-                        maxWidth: 460,
-                        margin: '6px auto 16px',
+                        padding: '52px 24px',
+                        background: '#ffffff',
+                        borderRadius: 16,
+                        border: '1.5px solid var(--border-subtle)',
+                        textAlign: 'center',
+                        boxShadow: '0 4px 20px rgba(0, 0, 0, 0.04)',
+                        margin: '12px 0 24px 0',
                       }}
                     >
-                      No published predictions are available for your current selection. Oddsbanta only displays
-                      matches that have completed full mathematical simulations and met our publication confidence
-                      thresholds.
+                      <div style={{ fontSize: 44, marginBottom: 12 }}>⌛</div>
+                      <h2 style={{ fontSize: 22, fontWeight: 900, color: 'var(--text-primary)', marginBottom: 8 }}>
+                        Your Oddsbanta 3-Day Free Trial Has Ended
+                      </h2>
+                      <p style={{ color: 'var(--text-muted)', fontSize: 14, maxWidth: 520, margin: '0 auto 24px', lineHeight: 1.6 }}>
+                        Historical settlements, verified outcomes, and live AI prediction models are reserved for active VIP members. Upgrade to Oddsbanta VIP to restore full access.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setIsPricingModalOpen(true)}
+                        style={{
+                          background: 'linear-gradient(135deg, #059669 0%, #047857 100%)',
+                          color: '#ffffff',
+                          border: 'none',
+                          borderRadius: 10,
+                          padding: '14px 28px',
+                          fontSize: 15,
+                          fontWeight: 800,
+                          cursor: 'pointer',
+                          boxShadow: '0 4px 14px rgba(5, 150, 105, 0.35)',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 8,
+                        }}
+                      >
+                        👑 Upgrade to Oddsbanta VIP →
+                      </button>
                     </div>
-                    <button
-                      type="button"
-                      className="btn-toggle-expand"
-                      onClick={resetAllFilters}
+                  ) : (
+                    <div
+                      className="visitor-settlement-gate-card"
+                      style={{
+                        padding: '52px 24px',
+                        background: '#ffffff',
+                        borderRadius: 16,
+                        border: '1.5px solid var(--border-subtle)',
+                        textAlign: 'center',
+                        boxShadow: '0 4px 20px rgba(0, 0, 0, 0.04)',
+                        margin: '12px 0 24px 0',
+                      }}
                     >
-                      Reset All Filters
-                    </button>
-                  </div>
-                ) : (
-                  <div className="chronological-fixtures-stream">
+                      <div style={{ fontSize: 44, marginBottom: 12 }}>🔒</div>
+                      <h2 style={{ fontSize: 22, fontWeight: 900, color: 'var(--text-primary)', marginBottom: 8 }}>
+                        Register to View Verified Settlements &amp; Past Track Record
+                      </h2>
+                      <p style={{ color: 'var(--text-muted)', fontSize: 14, maxWidth: 520, margin: '0 auto 24px', lineHeight: 1.6 }}>
+                        Oddsbanta transparently audits 100% of finished matches, verified wins, and mathematical simulations. Create your free account to unlock historical settlements and start your <strong>3-day free trial</strong> of live football predictions.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={handleRegisterClick}
+                        style={{
+                          background: 'linear-gradient(135deg, #059669 0%, #047857 100%)',
+                          color: '#ffffff',
+                          border: 'none',
+                          borderRadius: 10,
+                          padding: '14px 28px',
+                          fontSize: 15,
+                          fontWeight: 800,
+                          cursor: 'pointer',
+                          boxShadow: '0 4px 14px rgba(5, 150, 105, 0.35)',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 8,
+                        }}
+                      >
+                        ⚡ Start 3-Day Free Trial (1-Click Google Sign In) →
+                      </button>
+                    </div>
+                  )
+                ) : filteredFixtures.length === 0 ? (
+                    <div
+                      style={{
+                        padding: 48,
+                        background: '#ffffff',
+                        borderRadius: 16,
+                        border: '1px solid var(--border-subtle)',
+                        textAlign: 'center',
+                      }}
+                    >
+                      <div style={{ fontSize: 32, marginBottom: 8 }}>⚽</div>
+                      <div style={{ fontWeight: 800, fontSize: 16, color: 'var(--text-primary)' }}>
+                        {selectedDate !== 'all'
+                          ? 'No predictions available for this date.'
+                          : 'No predictions available for this selection.'}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: 13,
+                          color: 'var(--text-muted)',
+                          marginTop: 4,
+                          maxWidth: 460,
+                          margin: '6px auto 16px',
+                        }}
+                      >
+                        No published predictions are available for your current selection. Oddsbanta only displays
+                        matches that have completed full mathematical simulations and met our publication confidence
+                        thresholds.
+                      </div>
+                      <button
+                        type="button"
+                        className="btn-toggle-expand"
+                        onClick={resetAllFilters}
+                      >
+                        Reset All Filters
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="chronological-fixtures-stream">
+                    {/* Visitor Trial Callout Banner */}
+                    {trialState.isVisitor && (
+                      <div
+                        className="visitor-trial-banner"
+                        style={{
+                          background: 'linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)',
+                          border: '1.5px solid #86efac',
+                          borderRadius: 14,
+                          padding: '14px 20px',
+                          marginBottom: 18,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          flexWrap: 'wrap',
+                          gap: 12,
+                          boxShadow: '0 2px 10px rgba(22, 163, 74, 0.08)',
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                          <span style={{ fontSize: 24 }}>🎁</span>
+                          <div>
+                            <div style={{ fontSize: 14, fontWeight: 900, color: '#14532d' }}>
+                              Oddsbanta 3-Day Free Trial Available
+                            </div>
+                            <div style={{ fontSize: 12, color: '#166534', marginTop: 2 }}>
+                              Register in 5 seconds to unlock 100% of live AI football predictions &amp; verified settlements free.
+                            </div>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleRegisterClick}
+                          style={{
+                            background: '#16a34a',
+                            color: '#ffffff',
+                            border: 'none',
+                            borderRadius: 8,
+                            padding: '8px 18px',
+                            fontSize: 13,
+                            fontWeight: 800,
+                            cursor: 'pointer',
+                            boxShadow: '0 2px 8px rgba(22, 163, 74, 0.35)',
+                          }}
+                        >
+                          Start 3-Day Free Trial →
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Active Trial User Status Banner */}
+                    {trialState.isTrialActive && !trialState.isPaidVip && !trialState.isAdmin && (
+                      <div
+                        className="trial-active-banner"
+                        style={{
+                          background: 'linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%)',
+                          border: '1.5px solid #6ee7b7',
+                          borderRadius: 14,
+                          padding: '14px 20px',
+                          marginBottom: 18,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          flexWrap: 'wrap',
+                          gap: 12,
+                          boxShadow: '0 2px 10px rgba(5, 150, 105, 0.08)',
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                          <span style={{ fontSize: 24 }}>⭐</span>
+                          <div>
+                            <div style={{ fontSize: 14, fontWeight: 900, color: '#065f46' }}>
+                              Oddsbanta 3-Day Free Trial Active
+                            </div>
+                            <div style={{ fontSize: 12, color: '#047857', marginTop: 2 }}>
+                              Full access to live AI predictions &amp; verified settlements • {trialState.remainingTimeDisplay}
+                            </div>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setIsPricingModalOpen(true)}
+                          style={{
+                            background: '#059669',
+                            color: '#ffffff',
+                            border: 'none',
+                            borderRadius: 8,
+                            padding: '8px 16px',
+                            fontSize: 12,
+                            fontWeight: 800,
+                            cursor: 'pointer',
+                            boxShadow: '0 2px 8px rgba(5, 150, 105, 0.3)',
+                          }}
+                        >
+                          Lock in VIP Access →
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Expired Trial User Urgency Banner */}
+                    {trialState.isTrialExpired && !trialState.isPaidVip && !trialState.isAdmin && (
+                      <div
+                        className="trial-expired-urgency-banner"
+                        style={{
+                          background: 'linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%)',
+                          border: '1.5px solid #fca5a5',
+                          borderRadius: 14,
+                          padding: '14px 20px',
+                          marginBottom: 18,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          flexWrap: 'wrap',
+                          gap: 12,
+                          boxShadow: '0 2px 10px rgba(220, 38, 38, 0.08)',
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                          <span style={{ fontSize: 24 }}>⏰</span>
+                          <div>
+                            <div style={{ fontSize: 14, fontWeight: 900, color: '#991b1b' }}>
+                              Your Oddsbanta 3-Day Free Trial Has Ended
+                            </div>
+                            <div style={{ fontSize: 12, color: '#b91c1c', marginTop: 2 }}>
+                              Unlock unlimited 250,000 Monte Carlo predictions, verified settlements, and Multi-Sport access today.
+                            </div>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setIsPricingModalOpen(true)}
+                          style={{
+                            background: 'linear-gradient(135deg, #dc2626 0%, #b91c1c 100%)',
+                            color: '#ffffff',
+                            border: 'none',
+                            borderRadius: 8,
+                            padding: '9px 18px',
+                            fontSize: 13,
+                            fontWeight: 800,
+                            cursor: 'pointer',
+                            boxShadow: '0 2px 8px rgba(220, 38, 38, 0.35)',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 6,
+                          }}
+                        >
+                          👑 Unlock VIP Now (₦3,500/mo) →
+                        </button>
+                      </div>
+                    )}
+
                     {filteredFixtures.map((fixture, idx) => {
                       const prevFixture = idx > 0 ? filteredFixtures[idx - 1] : null;
                       const currentRank = getFixtureRankAndProb(fixture.id, predsByFixture).rank;
@@ -2959,6 +3267,8 @@ export default function App() {
                             prediction={predsByFixture.get(fixture.id)?.[0] || null}
                             isAdmin={isAdmin}
                             canViewPredictions={canViewPredictions}
+                            isVisitor={trialState.isVisitor}
+                            onRegisterClick={handleRegisterClick}
                             isStarred={favorites.includes(fixture.id)}
                             onToggleFavorite={toggleFavorite}
                             isFavoriteItem={isFavoriteItem}

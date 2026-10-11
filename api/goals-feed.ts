@@ -195,6 +195,59 @@ async function fetchGoalsFromUpstream(headers: Record<string, string>): Promise<
   };
 }
 
+// Scraper Bot Detector: Checks User-Agent for curl, python-requests, scrapers, and headless crawlers
+export function isScraperBot(req: Request): boolean {
+  const ua = (req.headers.get('user-agent') || '').toLowerCase().trim();
+  if (!ua || ua.length < 5) return true;
+
+  const botPatterns = [
+    'python-requests',
+    'python-urllib',
+    'requests',
+    'aiohttp',
+    'httpx',
+    'curl',
+    'wget',
+    'scrapy',
+    'go-http-client',
+    'node-fetch',
+    'axios',
+    'postmanruntime',
+    'postman',
+    'headless',
+    'puppeteer',
+    'playwright',
+    'selenium',
+    'phantomjs',
+    'bot',
+    'crawler',
+    'spider',
+    'slurp',
+    'baiduspider',
+    'yandex',
+    'duckduckbot',
+    'facebookexternalhit',
+    'bytespider',
+    'semrushbot',
+    'ahrefsbot',
+    'mj12bot',
+    'dotbot',
+    'petalbot',
+  ];
+
+  return botPatterns.some((pattern) => ua.includes(pattern));
+}
+
+export function applyGoalsScraperBlinding(preds: any[]): any[] {
+  return preds
+    .filter((p: any) => p.settlement_status === 'won')
+    .map((p: any) => ({
+      ...p,
+      is_locked: false,
+      metadata: { proof_of_work: 'verified_won_settlement' },
+    }));
+}
+
 function applyGoalsPaywallRedaction(preds: any[]): any[] {
   return preds
     .filter((p: any) => {
@@ -277,7 +330,11 @@ export default async function handler(req: Request) {
   }
 
   const userAuthToken = req.headers.get('Authorization');
-  const isVipOrAdmin = await checkIsPaidOrAdmin(userAuthToken);
+  const rawToken = userAuthToken?.startsWith('Bearer ') ? userAuthToken.slice(7).trim() : userAuthToken?.trim() || null;
+  const isInternalService = Boolean(SUPABASE_SERVICE_ROLE_KEY && rawToken === SUPABASE_SERVICE_ROLE_KEY);
+  const isBot = !isInternalService && isScraperBot(req);
+
+  const isVipOrAdmin = isBot ? false : await checkIsPaidOrAdmin(userAuthToken);
 
   const corsOrigin = getCorsOrigin(req);
   const responseHeaders: Record<string, string> = {
@@ -287,7 +344,7 @@ export default async function handler(req: Request) {
       : 'public, s-maxage=30, stale-while-revalidate=60',
     'CDN-Cache-Control': isVipOrAdmin ? 'no-store' : 'public, s-maxage=30',
     'Vercel-CDN-Cache-Control': isVipOrAdmin ? 'no-store' : 'public, s-maxage=30',
-    'Vary': 'Authorization, Origin',
+    'Vary': 'Authorization, Origin, User-Agent',
     'Access-Control-Allow-Origin': corsOrigin,
     'Access-Control-Allow-Credentials': 'true',
     'X-RateLimit-Limit': '60',
@@ -299,9 +356,17 @@ export default async function handler(req: Request) {
 
     // 1. Return fresh in-memory cache if available
     if (memoryCache && now < memoryCache.expiresAt) {
-      const payload = !isVipOrAdmin
-        ? { ...memoryCache.data, predictions: applyGoalsPaywallRedaction(memoryCache.data.predictions) }
-        : memoryCache.data;
+      const preds = isBot
+        ? applyGoalsScraperBlinding(memoryCache.data.predictions)
+        : !isVipOrAdmin
+        ? applyGoalsPaywallRedaction(memoryCache.data.predictions)
+        : memoryCache.data.predictions;
+
+      const payload = {
+        ...memoryCache.data,
+        predictions: preds,
+        is_scraper_blinded: isBot,
+      };
       return new Response(
         JSON.stringify({ success: true, ...payload }),
         { status: 200, headers: responseHeaders }
@@ -324,9 +389,17 @@ export default async function handler(req: Request) {
     }
     feedData = await inflightPromise;
 
-    const payload = !isVipOrAdmin
-      ? { ...feedData, predictions: applyGoalsPaywallRedaction(feedData.predictions) }
-      : feedData;
+    const preds = isBot
+      ? applyGoalsScraperBlinding(feedData.predictions)
+      : !isVipOrAdmin
+      ? applyGoalsPaywallRedaction(feedData.predictions)
+      : feedData.predictions;
+
+    const payload = {
+      ...feedData,
+      predictions: preds,
+      is_scraper_blinded: isBot,
+    };
 
     return new Response(
       JSON.stringify({ success: true, ...payload }),
@@ -334,11 +407,16 @@ export default async function handler(req: Request) {
     );
   } catch (err: any) {
     if (!isVipOrAdmin && memoryCache) {
+      const preds = isBot
+        ? applyGoalsScraperBlinding(memoryCache.data.predictions)
+        : applyGoalsPaywallRedaction(memoryCache.data.predictions);
+
       return new Response(
         JSON.stringify({
           success: true,
           ...memoryCache.data,
-          predictions: applyGoalsPaywallRedaction(memoryCache.data.predictions),
+          predictions: preds,
+          is_scraper_blinded: isBot,
           stale: true,
         }),
         { status: 200, headers: responseHeaders }

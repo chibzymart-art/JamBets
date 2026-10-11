@@ -35,23 +35,25 @@ const memoryCache = new Map<string, MemoryCacheEntry>();
 const inflightPromises = new Map<string, Promise<FeedData>>();
 const CACHE_TTL_MS = 120 * 1000; // 120 seconds edge memory cache (reduces Supabase upstream load)
 
-// In-memory cache for user auth verification (120s for valid users, 30s for invalid)
-const userAuthCache = new Map<string, { isPaid: boolean; expiresAt: number }>();
+export type AuthStatus = 'paid_or_trial' | 'expired' | 'visitor';
 
-async function checkIsPaidOrAdmin(authToken: string | null): Promise<boolean> {
-  if (!authToken) return false;
+// In-memory cache for user auth verification (120s for valid users, 30s for invalid)
+const userAuthCache = new Map<string, { status: AuthStatus; expiresAt: number }>();
+
+async function checkAuthStatus(authToken: string | null): Promise<AuthStatus> {
+  if (!authToken) return 'visitor';
   const rawToken = authToken.startsWith('Bearer ') ? authToken.slice(7).trim() : authToken.trim();
-  if (!rawToken) return false;
+  if (!rawToken) return 'visitor';
 
   // 1. Direct Service Role Key Match (internal/admin scripts)
   if (SUPABASE_SERVICE_ROLE_KEY && rawToken === SUPABASE_SERVICE_ROLE_KEY) {
-    return true;
+    return 'paid_or_trial';
   }
 
   // 2. Check in-memory cache to eliminate duplicate Supabase Auth roundtrips
   const cached = userAuthCache.get(rawToken);
   if (cached && Date.now() < cached.expiresAt) {
-    return cached.isPaid;
+    return cached.status;
   }
 
   try {
@@ -65,14 +67,14 @@ async function checkIsPaidOrAdmin(authToken: string | null): Promise<boolean> {
 
     if (!authRes.ok) {
       // Signature is invalid, token is forged or expired -> fail closed
-      userAuthCache.set(rawToken, { isPaid: false, expiresAt: Date.now() + 30 * 1000 });
-      return false;
+      userAuthCache.set(rawToken, { status: 'visitor', expiresAt: Date.now() + 30 * 1000 });
+      return 'visitor';
     }
 
     const authUser = await authRes.json();
     if (!authUser || !authUser.id) {
-      userAuthCache.set(rawToken, { isPaid: false, expiresAt: Date.now() + 30 * 1000 });
-      return false;
+      userAuthCache.set(rawToken, { status: 'visitor', expiresAt: Date.now() + 30 * 1000 });
+      return 'visitor';
     }
 
     // 4. Server-verified role or admin email whitelist
@@ -82,8 +84,8 @@ async function checkIsPaidOrAdmin(authToken: string | null): Promise<boolean> {
       authUser.user_metadata?.role === 'admin' ||
       (email && ADMIN_EMAILS.has(email))
     ) {
-      userAuthCache.set(rawToken, { isPaid: true, expiresAt: Date.now() + 120 * 1000 });
-      return true;
+      userAuthCache.set(rawToken, { status: 'paid_or_trial', expiresAt: Date.now() + 120 * 1000 });
+      return 'paid_or_trial';
     }
 
     const userId = authUser.id;
@@ -104,115 +106,164 @@ async function checkIsPaidOrAdmin(authToken: string | null): Promise<boolean> {
     if (userRes.ok) {
       const userData = await userRes.json();
       if (Array.isArray(userData) && userData.length > 0 && userData[0].role === 'admin') {
-        userAuthCache.set(rawToken, { isPaid: true, expiresAt: Date.now() + 120 * 1000 });
-        return true;
+        userAuthCache.set(rawToken, { status: 'paid_or_trial', expiresAt: Date.now() + 120 * 1000 });
+        return 'paid_or_trial';
       }
     }
 
-    let isPaid = false;
-
+    // Check active paid subscriptions
     if (subRes.ok) {
       const subData = await subRes.json();
       if (Array.isArray(subData) && subData.length > 0) {
         const tier = (subData[0].tier || '').toLowerCase();
         if (['standard', 'bigbang', 'vip', 'pro', 'admin'].includes(tier)) {
-          isPaid = true;
+          userAuthCache.set(rawToken, { status: 'paid_or_trial', expiresAt: Date.now() + 120 * 1000 });
+          return 'paid_or_trial';
         }
       }
     }
 
-    if (!isPaid && entRes.ok) {
+    // Check entitlements (active 3-day trial or active entitlement)
+    if (entRes.ok) {
       const entData = await entRes.json();
       if (Array.isArray(entData) && entData.length > 0) {
         const ent = entData[0];
-        const validUntil = ent.valid_until ? new Date(ent.valid_until).getTime() : Infinity;
-        if (validUntil > Date.now()) {
-          const tier = (ent.tier || '').toLowerCase();
-          const feats = ent.features || {};
-          const isEntAdmin = tier === 'admin' || feats.admin === true;
-          const hasVipFeatures = Boolean(
-            feats.vip === true ||
-            feats.football_predictions === true ||
-            feats.simulations === true ||
-            feats.all_sports === true ||
-            feats.bigbang === true
-          );
-          if (['standard', 'bigbang', 'vip', 'pro', 'admin'].includes(tier) || isEntAdmin || hasVipFeatures) {
-            isPaid = true;
-          }
+        const validUntil = ent.valid_until ? new Date(ent.valid_until).getTime() : 0;
+        const tier = (ent.tier || '').toLowerCase();
+        const feats = ent.features || {};
+        const isEntAdmin = tier === 'admin' || feats.admin === true;
+        const hasVipOrTrial = Boolean(
+          tier === 'trial' ||
+          ['standard', 'bigbang', 'vip', 'pro', 'admin'].includes(tier) ||
+          feats.trial === true ||
+          feats.vip === true ||
+          feats.football_predictions === true ||
+          feats.simulations === true ||
+          feats.all_sports === true ||
+          feats.bigbang === true
+        );
+
+        if ((isEntAdmin || hasVipOrTrial) && validUntil > Date.now()) {
+          userAuthCache.set(rawToken, { status: 'paid_or_trial', expiresAt: Date.now() + 120 * 1000 });
+          return 'paid_or_trial';
         }
       }
     }
 
-    userAuthCache.set(rawToken, { isPaid, expiresAt: Date.now() + 120 * 1000 });
-    return isPaid;
+    // Authenticated user whose 3-day trial or subscription has expired
+    userAuthCache.set(rawToken, { status: 'expired', expiresAt: Date.now() + 120 * 1000 });
+    return 'expired';
   } catch (err) {
     console.error('Cryptographic auth verification error:', err);
-    return false;
+    return 'visitor';
   }
 }
 
-// Universal Tier Paywall Redaction:
-// 1. Mid-Confidence (6.0–7.9) is visible to everyone across the board as live proof of work
-// 2. High Confidence (8.0–8.9), Top Picks (9.0+), and Bangers (9.0+) are strictly hidden/locked from free users and visitors
-// 3. Won settled predictions are visible as historical proof
-// 4. Lost, void, or un-won finished predictions are hidden from free users
-function applyPaywallRedaction(predictions: any[]): any[] {
+// Scraper Bot Detector: Checks User-Agent for curl, python-requests, scrapers, and headless crawlers
+export function isScraperBot(req: Request): boolean {
+  const ua = (req.headers.get('user-agent') || '').toLowerCase().trim();
+  if (!ua || ua.length < 5) return true;
+
+  const botPatterns = [
+    'python-requests',
+    'python-urllib',
+    'requests',
+    'aiohttp',
+    'httpx',
+    'curl',
+    'wget',
+    'scrapy',
+    'go-http-client',
+    'node-fetch',
+    'axios',
+    'postmanruntime',
+    'postman',
+    'headless',
+    'puppeteer',
+    'playwright',
+    'selenium',
+    'phantomjs',
+    'bot',
+    'crawler',
+    'spider',
+    'slurp',
+    'baiduspider',
+    'yandex',
+    'duckduckbot',
+    'facebookexternalhit',
+    'bytespider',
+    'semrushbot',
+    'ahrefsbot',
+    'mj12bot',
+    'dotbot',
+    'petalbot',
+  ];
+
+  return botPatterns.some((pattern) => ua.includes(pattern));
+}
+
+// Scraper Blinding Redaction:
+// Scrapers and automated crawlers are blinded from all active, pending, in-play, and unverified predictions.
+// Scrapers can ONLY see verified 'won' historical predictions as public proof of work for SEO.
+export function applyScraperBlinding(predictions: any[]): any[] {
   return predictions
-    .filter((p: any) => {
-      const status = p.settlement_status;
-      // Rule: Hide all lost and void predictions completely from non-paid visitors
-      if (status === 'lost' || status === 'void' || status === 'voided') {
-        return false;
-      }
-      return true;
-    })
-    .map((p: any) => {
-      // Rule: Won predictions are visible as proof
-      if (p.settlement_status === 'won') {
-        return {
-          ...p,
-          is_locked: false,
-          publication_status: p.publication_status || 'published',
-        };
-      }
+    .filter((p: any) => p.settlement_status === 'won')
+    .map((p: any) => ({
+      ...p,
+      is_locked: false,
+      probability: p.probability,
+      market: p.market,
+      confidence_category: p.confidence_category || 'TOP_PICK',
+      prediction: p.prediction,
+      settlement_status: 'won',
+      actual_score: p.actual_score,
+      settled_at: p.settled_at,
+      metadata: { proof_of_work: 'verified_won_settlement' },
+    }));
+}
 
-      // Check if prediction is High Confidence, Top Pick, or Banger
-      const cat = (p.confidence_category || '').toUpperCase().replace(/[\s-]+/g, '_');
-      let prob = p.probability;
-      if (prob != null && typeof prob === 'number') {
-        if (prob > 1) prob = prob / 100;
-      }
-      const isVipTier =
-        cat === 'BANGER' ||
-        cat === 'TOP_PICK' ||
-        cat === 'TOPPICK' ||
-        cat === 'HIGH_CONFIDENCE' ||
-        cat === 'HIGHCONFIDENCE' ||
-        (prob !== null && typeof prob === 'number' && prob >= 0.80);
+// Strict Edge Paywall & Visitor Redaction:
+// 1. Paid & Active 3-Day Trial: Full access to all predictions, probabilities, and won/lost settlements
+// 2. Unauthenticated Human Visitors (Real Browser):
+//    - Retains all fixtures (full count over 100) while strictly redacting prediction details
+//    - Blinded from active pre-match predictions (stripped probabilities, markets, and metadata)
+//    - Prompted: '🔒 Register to view Oddsbanta AI predictions'
+// 3. Expired Trial / Non-Paying Users:
+//    - Blinded from active predictions ('🔒 Subscribe to Oddsbanta VIP')
+//    - Blinded from settlements (cannot view won or lost games for free)
+export function applyPaywallRedaction(predictions: any[], authStatus: AuthStatus): any[] {
+  if (authStatus === 'paid_or_trial') {
+    return predictions;
+  }
 
-      // VIP Tiers (High Confidence, Top Pick, Banger) are strictly hidden/locked
-      if (isVipTier) {
-        return {
-          ...p,
-          is_locked: true,
-          probability: null,
-          confidence_category: cat || 'TOP_PICK',
-          prediction: '🔒 Premium VIP Pick',
-          publication_status: p.publication_status || 'published',
-          secondary_predictions: [], // Strip data to prevent leakage
-          metadata: {},              // Strip simulation details to prevent leakage
-        };
-      }
+  if (authStatus === 'expired') {
+    // Expired trial users: retain all fixtures for full count, blinded from predictions & settlements
+    return predictions.map((p: any) => ({
+      ...p,
+      is_locked: true,
+      probability: null,
+      market: null,
+      confidence_category: p.confidence_category || 'TOP_PICK',
+      prediction: '🔒 Subscribe to Oddsbanta VIP',
+      publication_status: p.publication_status || 'published',
+      secondary_predictions: [],
+      metadata: { locked: true, subscription_required: true, trial_expired: true },
+    }));
+  }
 
-      // Mid-Confidence (6.0–7.9) is free and visible to all users
-      return {
-        ...p,
-        is_locked: false,
-        confidence_category: p.confidence_category || 'MID_CONFIDENCE',
-        publication_status: p.publication_status || 'published',
-      };
-    });
+  // authStatus === 'visitor': Unauthenticated human visitors in browsers
+  // Retains all fixtures (full count over 100) while strictly redacting prediction details
+  return predictions.map((p: any) => ({
+    ...p,
+    is_locked: true,
+    probability: null,
+    market: null,
+    confidence_category: p.confidence_category || 'TOP_PICK',
+    prediction: '🔒 Register to view Oddsbanta AI predictions',
+    publication_status: p.publication_status || 'published',
+    secondary_predictions: [],
+    metadata: { locked: true, registration_required: true },
+  }));
 }
 
 function getCorsOrigin(req: Request): string {
@@ -372,23 +423,24 @@ export default async function handler(req: Request) {
   }
 
   const userAuthToken = req.headers.get('Authorization');
-  const isVipOrAdmin = await checkIsPaidOrAdmin(userAuthToken);
+  const rawToken = userAuthToken?.startsWith('Bearer ') ? userAuthToken.slice(7).trim() : userAuthToken?.trim() || null;
+  const isInternalService = Boolean(SUPABASE_SERVICE_ROLE_KEY && rawToken === SUPABASE_SERVICE_ROLE_KEY);
 
-  const upstreamHeaders = {
-    apikey: SUPABASE_ANON_KEY,
-    Authorization: userAuthToken || `Bearer ${SUPABASE_ANON_KEY}`,
-    Accept: 'application/json',
-  };
+  // Scraper Bot Detection (curl, python-requests, scrapers, headless spiders)
+  const isBot = !isInternalService && isScraperBot(req);
+
+  const authStatus = isBot ? 'visitor' : await checkAuthStatus(userAuthToken);
+  const isPaidOrTrial = authStatus === 'paid_or_trial';
 
   const corsOrigin = getCorsOrigin(req);
   const responseHeaders: Record<string, string> = {
     'Content-Type': 'application/json',
-    'Cache-Control': isVipOrAdmin
+    'Cache-Control': isPaidOrTrial
       ? 'private, no-cache, no-store, must-revalidate'
       : 'public, s-maxage=60, stale-while-revalidate=300',
-    'CDN-Cache-Control': isVipOrAdmin ? 'no-store' : 'public, s-maxage=60',
-    'Vercel-CDN-Cache-Control': isVipOrAdmin ? 'no-store' : 'public, s-maxage=60',
-    'Vary': 'Authorization, Origin',
+    'CDN-Cache-Control': isPaidOrTrial ? 'no-store' : 'public, s-maxage=60',
+    'Vercel-CDN-Cache-Control': isPaidOrTrial ? 'no-store' : 'public, s-maxage=60',
+    'Vary': 'Authorization, Origin, User-Agent',
     'Access-Control-Allow-Origin': corsOrigin,
     'Access-Control-Allow-Credentials': 'true',
     'X-RateLimit-Limit': '120',
@@ -403,9 +455,24 @@ export default async function handler(req: Request) {
     // 1. Return cached Edge data if fresh (shields Supabase from both guest & VIP queries!)
     const cached = memoryCache.get(cacheKey);
     if (cached && now < cached.expiresAt) {
-      const payload = !isVipOrAdmin
-        ? { ...cached.data, predictions: applyPaywallRedaction(cached.data.predictions) }
-        : cached.data;
+      if (isBot) {
+        return new Response(
+          JSON.stringify({
+            success: true,
+            predictions: applyScraperBlinding(cached.data.predictions),
+            leagues: cached.data.leagues,
+            cached_at: cached.data.cached_at,
+            auth_status: 'scraper_blinded',
+          }),
+          { status: 200, headers: responseHeaders }
+        );
+      }
+
+      const payload = {
+        ...cached.data,
+        predictions: applyPaywallRedaction(cached.data.predictions, authStatus),
+        auth_status: authStatus,
+      };
       return new Response(
         JSON.stringify({ success: true, ...payload }),
         { status: 200, headers: responseHeaders }
@@ -430,9 +497,24 @@ export default async function handler(req: Request) {
 
     const rawFeed = await fetchPromise;
 
-    const payload = !isVipOrAdmin
-      ? { ...rawFeed, predictions: applyPaywallRedaction(rawFeed.predictions) }
-      : rawFeed;
+    if (isBot) {
+      return new Response(
+        JSON.stringify({
+          success: true,
+          predictions: applyScraperBlinding(rawFeed.predictions),
+          leagues: rawFeed.leagues,
+          cached_at: rawFeed.cached_at,
+          auth_status: 'scraper_blinded',
+        }),
+        { status: 200, headers: responseHeaders }
+      );
+    }
+
+    const payload = {
+      ...rawFeed,
+      predictions: applyPaywallRedaction(rawFeed.predictions, authStatus),
+      auth_status: authStatus,
+    };
 
     return new Response(
       JSON.stringify({ success: true, ...payload }),
@@ -442,9 +524,25 @@ export default async function handler(req: Request) {
     // Fallback: If upstream errors but we have stale cache, serve stale cache
     const cached = memoryCache.get(cacheKey);
     if (cached) {
-      const paywalledData = !isVipOrAdmin
-        ? { ...cached.data, predictions: applyPaywallRedaction(cached.data.predictions) }
-        : cached.data;
+      if (isBot) {
+        return new Response(
+          JSON.stringify({
+            success: true,
+            predictions: applyScraperBlinding(cached.data.predictions),
+            leagues: cached.data.leagues,
+            cached_at: cached.data.cached_at,
+            auth_status: 'scraper_blinded',
+            stale: true,
+          }),
+          { status: 200, headers: responseHeaders }
+        );
+      }
+
+      const paywalledData = {
+        ...cached.data,
+        predictions: applyPaywallRedaction(cached.data.predictions, authStatus),
+        auth_status: authStatus,
+      };
       return new Response(
         JSON.stringify({ success: true, ...paywalledData, stale: true }),
         { status: 200, headers: responseHeaders }

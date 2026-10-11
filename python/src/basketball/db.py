@@ -8,7 +8,7 @@ Invariant: Strictly manages basketball_* tables. Zero interactions with football
 import os
 import httpx
 from typing import Dict, Any, List, Optional
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -105,13 +105,14 @@ class BasketballDbClient:
     # ------------------------------------------------------------------
     # Fixtures
     # ------------------------------------------------------------------
-    def get_upcoming_fixtures(self, start_iso: str, end_iso: str) -> List[Dict[str, Any]]:
+    def get_upcoming_fixtures(self, start_iso: str, end_iso: str, include_finished: bool = False) -> List[Dict[str, Any]]:
         params = {
             "and": f"(target_kickoff_at.gte.{start_iso},target_kickoff_at.lte.{end_iso})",
-            "status": "eq.scheduled",
             "select": "*,league:basketball_leagues(*),home_team:basketball_teams!basketball_fixtures_home_team_id_fkey(*),away_team:basketball_teams!basketball_fixtures_away_team_id_fkey(*)",
             "order": "target_kickoff_at.asc"
         }
+        if not include_finished:
+            params["status"] = "eq.scheduled"
         resp = self.client.get("/basketball_fixtures", params=params)
         resp.raise_for_status()
         return resp.json()
@@ -162,14 +163,19 @@ class BasketballDbClient:
         res = resp.json()
         return res[0] if res else {}
 
-    def purge_stale_predictions(self, before_iso: str) -> int:
+    def purge_stale_predictions(self, retention_days: int = 30) -> int:
         """
-        Deletes predictions whose kickoff is strictly before before_iso.
-        Cascades to basketball_settlements automatically.
+        Purges historical predictions older than retention_days (default 30 days) to prevent database bloat.
+        SAFETY GUARD: Enforces a strict minimum retention of 30 days. Never deletes current, recent,
+        or settled track-record predictions from the active historical archive window.
         """
+        safe_retention_days = max(30, retention_days)
+        cutoff = datetime.now(timezone.utc) - timedelta(days=safe_retention_days)
+        cutoff_iso = cutoff.isoformat()
+
         headers = dict(self.headers)
         headers["Prefer"] = "return=representation"
-        resp = self.client.delete("/basketball_predictions", params={"target_kickoff_at": f"lt.{before_iso}"}, headers=headers)
+        resp = self.client.delete("/basketball_predictions", params={"target_kickoff_at": f"lt.{cutoff_iso}"}, headers=headers)
         if resp.status_code in (200, 204):
             res = resp.json() if resp.status_code == 200 else []
             return len(res)

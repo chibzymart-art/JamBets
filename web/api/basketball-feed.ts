@@ -230,6 +230,102 @@ function pruneBasketballPrediction(p: any): any {
   };
 }
 
+// Scraper Bot Detector: Checks User-Agent for curl, python-requests, scrapers, and headless crawlers
+export function isScraperBot(req: Request): boolean {
+  const ua = (req.headers.get('user-agent') || '').toLowerCase().trim();
+  if (!ua || ua.length < 5) return true;
+
+  const botPatterns = [
+    'python-requests',
+    'python-urllib',
+    'requests',
+    'aiohttp',
+    'httpx',
+    'curl',
+    'wget',
+    'scrapy',
+    'go-http-client',
+    'node-fetch',
+    'axios',
+    'postmanruntime',
+    'postman',
+    'headless',
+    'puppeteer',
+    'playwright',
+    'selenium',
+    'phantomjs',
+    'bot',
+    'crawler',
+    'spider',
+    'slurp',
+    'baiduspider',
+    'yandex',
+    'duckduckbot',
+    'facebookexternalhit',
+    'bytespider',
+    'semrushbot',
+    'ahrefsbot',
+    'mj12bot',
+    'dotbot',
+    'petalbot',
+  ];
+
+  return botPatterns.some((pattern) => ua.includes(pattern));
+}
+
+export function applyBasketballScraperBlinding(data: BasketballFeedData): BasketballFeedData {
+  const wonPreds = data.predictions
+    .filter((p: any) => p.settlement_status === 'won')
+    .map((p: any) => ({
+      ...p,
+      is_locked: false,
+      metadata: { proof_of_work: 'verified_won_settlement' },
+    }));
+  const wonSettles = (data.settlements || []).filter((s: any) => (s.status || '').toLowerCase() === 'won');
+  return {
+    ...data,
+    predictions: wonPreds,
+    settlements: wonSettles,
+    stats: {
+      ...data.stats,
+      total_matches: wonPreds.length,
+      settled_count: wonSettles.length,
+    },
+  };
+}
+
+// Multi-Sport VIP Paywall Redaction for Basketball:
+// For unauthenticated / free visitors:
+// - Future and pending predictions are masked with teaser markers and locked confidence picks
+// - Historical settled predictions (won, lost, void) retain their true settlement_status, settled_at, and actual_result so track records are transparent and verified
+function applyBasketballPaywallRedaction(preds: any[]): any[] {
+  return preds.map((p: any) => {
+    const isSettled = p.settlement_status === 'won' || p.settlement_status === 'lost' || p.settlement_status === 'void';
+    return {
+      ...p,
+      is_locked: !isSettled,
+      probability: isSettled ? p.probability : null,
+      confidence_category: p.confidence_category || 'TOP PICK',
+      prediction: isSettled ? (p.prediction || 'VIP Pick') : '🔒 BigBang VIP Pick',
+      settlement_status: p.settlement_status || 'pending',
+      settlement_notes: p.settlement_notes || null,
+      actual_result: p.actual_result || null,
+      settled_at: p.settled_at || null,
+      simulated_home_score: isSettled ? p.simulated_home_score : null,
+      simulated_away_score: isSettled ? p.simulated_away_score : null,
+      edge_percentage: isSettled ? p.edge_percentage : null,
+      fair_odds: isSettled ? p.fair_odds : null,
+      market_odds: isSettled ? p.market_odds : null,
+      secondary_predictions: isSettled ? (p.secondary_predictions || []) : [],
+      metadata: isSettled ? p.metadata : {
+        ai_tactical_analysis: '🔒 Basketball predictions and 250,000 Monte Carlo simulations are reserved for BigBang VIP members.',
+        simulation: null,
+        secondary_locked: true,
+      },
+    };
+  });
+}
+
 async function fetchBasketballFromUpstream(isPaidOrAdmin: boolean): Promise<BasketballFeedData> {
   const authKey = SUPABASE_SERVICE_ROLE_KEY || SUPABASE_ANON_KEY;
   const headers = {
@@ -304,37 +400,7 @@ async function fetchBasketballFromUpstream(isPaidOrAdmin: boolean): Promise<Bask
   let settledLost = 0;
   let settledVoid = 0;
 
-// Multi-Sport VIP Paywall Redaction for Basketball:
-// For unauthenticated / free visitors:
-// - Future and pending predictions are masked with teaser markers and locked confidence picks
-// - Historical settled predictions (won, lost, void) retain their true settlement_status, settled_at, and actual_result so track records are transparent and verified
-function applyBasketballPaywallRedaction(preds: any[]): any[] {
-  return preds.map((p: any) => {
-    const isSettled = p.settlement_status === 'won' || p.settlement_status === 'lost' || p.settlement_status === 'void';
-    return {
-      ...p,
-      is_locked: !isSettled,
-      probability: isSettled ? p.probability : null,
-      confidence_category: p.confidence_category || 'TOP PICK',
-      prediction: isSettled ? (p.prediction || 'VIP Pick') : '🔒 BigBang VIP Pick',
-      settlement_status: p.settlement_status || 'pending',
-      settlement_notes: p.settlement_notes || null,
-      actual_result: p.actual_result || null,
-      settled_at: p.settled_at || null,
-      simulated_home_score: isSettled ? p.simulated_home_score : null,
-      simulated_away_score: isSettled ? p.simulated_away_score : null,
-      edge_percentage: isSettled ? p.edge_percentage : null,
-      fair_odds: isSettled ? p.fair_odds : null,
-      market_odds: isSettled ? p.market_odds : null,
-      secondary_predictions: isSettled ? (p.secondary_predictions || []) : [],
-      metadata: isSettled ? p.metadata : {
-        ai_tactical_analysis: '🔒 Basketball predictions and 250,000 Monte Carlo simulations are reserved for BigBang VIP members.',
-        simulation: null,
-        secondary_locked: true,
-      },
-    };
-  });
-}
+
 
   for (const s of settlements) {
     const st = (s.status || '').toLowerCase();
@@ -408,8 +474,10 @@ export default async function handler(req: Request): Promise<Response> {
 
   const authHeader = req.headers.get('Authorization');
   const rawToken = authHeader?.startsWith('Bearer ') ? authHeader.slice(7).trim() : authHeader?.trim() || null;
-  const isPaidOrAdmin = await checkIsPaidOrAdmin(rawToken);
+  const isInternalService = Boolean(SUPABASE_SERVICE_ROLE_KEY && rawToken === SUPABASE_SERVICE_ROLE_KEY);
+  const isBot = !isInternalService && isScraperBot(req);
 
+  const isPaidOrAdmin = isBot ? false : await checkIsPaidOrAdmin(rawToken);
 
   const responseHeaders: Record<string, string> = {
     ...corsHeaders,
@@ -418,7 +486,7 @@ export default async function handler(req: Request): Promise<Response> {
       : 'public, s-maxage=60, stale-while-revalidate=300',
     'CDN-Cache-Control': isPaidOrAdmin ? 'no-store' : 'public, s-maxage=60',
     'Vercel-CDN-Cache-Control': isPaidOrAdmin ? 'no-store' : 'public, s-maxage=60',
-    'Vary': 'Authorization, Origin',
+    'Vary': 'Authorization, Origin, User-Agent',
     'Access-Control-Allow-Credentials': 'true',
     'X-RateLimit-Limit': '120',
     'X-RateLimit-Remaining': String(rateLimit.remaining),
@@ -430,8 +498,14 @@ export default async function handler(req: Request): Promise<Response> {
     const now = Date.now();
     const cached = memoryCache.get(cacheKey);
     if (cached && now < cached.expiresAt) {
+      const dataToServe = isBot ? applyBasketballScraperBlinding(cached.data) : cached.data;
       return new Response(
-        JSON.stringify({ success: true, is_subscriber: isPaidOrAdmin, ...cached.data }),
+        JSON.stringify({
+          success: true,
+          is_subscriber: isPaidOrAdmin,
+          is_scraper_blinded: isBot,
+          ...dataToServe,
+        }),
         { status: 200, headers: responseHeaders }
       );
     }
@@ -452,15 +526,28 @@ export default async function handler(req: Request): Promise<Response> {
     }
 
     const feedData = await fetchPromise;
+    const dataToServe = isBot ? applyBasketballScraperBlinding(feedData) : feedData;
     return new Response(
-      JSON.stringify({ success: true, is_subscriber: isPaidOrAdmin, ...feedData }),
+      JSON.stringify({
+        success: true,
+        is_subscriber: isPaidOrAdmin,
+        is_scraper_blinded: isBot,
+        ...dataToServe,
+      }),
       { status: 200, headers: responseHeaders }
     );
   } catch (err: any) {
     const cached = memoryCache.get(cacheKey);
     if (cached) {
+      const dataToServe = isBot ? applyBasketballScraperBlinding(cached.data) : cached.data;
       return new Response(
-        JSON.stringify({ success: true, is_subscriber: isPaidOrAdmin, ...cached.data, stale: true }),
+        JSON.stringify({
+          success: true,
+          is_subscriber: isPaidOrAdmin,
+          is_scraper_blinded: isBot,
+          ...dataToServe,
+          stale: true,
+        }),
         { status: 200, headers: responseHeaders }
       );
     }

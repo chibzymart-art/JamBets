@@ -274,6 +274,49 @@ async function fetchTennisDataFromUpstream(rawToken?: string | null): Promise<Te
   };
 }
 
+// Scraper Bot Detector: Checks User-Agent for curl, python-requests, scrapers, and headless crawlers
+export function isScraperBot(req: Request): boolean {
+  const ua = (req.headers.get('user-agent') || '').toLowerCase().trim();
+  if (!ua || ua.length < 5) return true;
+
+  const botPatterns = [
+    'python-requests',
+    'python-urllib',
+    'requests',
+    'aiohttp',
+    'httpx',
+    'curl',
+    'wget',
+    'scrapy',
+    'go-http-client',
+    'node-fetch',
+    'axios',
+    'postmanruntime',
+    'postman',
+    'headless',
+    'puppeteer',
+    'playwright',
+    'selenium',
+    'phantomjs',
+    'bot',
+    'crawler',
+    'spider',
+    'slurp',
+    'baiduspider',
+    'yandex',
+    'duckduckbot',
+    'facebookexternalhit',
+    'bytespider',
+    'semrushbot',
+    'ahrefsbot',
+    'mj12bot',
+    'dotbot',
+    'petalbot',
+  ];
+
+  return botPatterns.some((pattern) => ua.includes(pattern));
+}
+
 export default async function handler(req: Request): Promise<Response> {
   const origin = getCorsOrigin(req);
   const corsHeaders = {
@@ -305,7 +348,9 @@ export default async function handler(req: Request): Promise<Response> {
 
   const authHeader = req.headers.get('Authorization');
   const rawToken = authHeader?.startsWith('Bearer ') ? authHeader.slice(7).trim() : authHeader?.trim() || null;
-  const isPaidOrAdmin = await checkIsPaidOrAdmin(rawToken);
+  const isInternalService = Boolean(SUPABASE_SERVICE_ROLE_KEY && rawToken === SUPABASE_SERVICE_ROLE_KEY);
+  const isBot = !isInternalService && isScraperBot(req);
+  const isPaidOrAdmin = isBot ? false : await checkIsPaidOrAdmin(rawToken);
 
   try {
     let feedData: TennisFeedData;
@@ -328,6 +373,41 @@ export default async function handler(req: Request): Promise<Response> {
           });
       }
       feedData = await inflightPromise;
+    }
+
+    if (isBot) {
+      const wonOnly = feedData.predictions
+        .filter((p) => p.settlement_status === 'won')
+        .map((p) => ({
+          ...p,
+          is_locked: false,
+          metadata: { proof_of_work: 'verified_won_settlement' },
+        }));
+      const wonSettlements = (feedData.settlements || []).filter((s: any) => (s.status || '').toLowerCase() === 'won');
+      return new Response(
+        JSON.stringify({
+          success: true,
+          is_subscriber: false,
+          is_scraper_blinded: true,
+          stats: {
+            ...feedData.stats,
+            total_matches: wonOnly.length,
+            settled_count: wonSettlements.length,
+          },
+          tournaments: feedData.tournaments,
+          settlements: wonSettlements,
+          predictions: wonOnly,
+          cached_at: feedData.cached_at,
+        }),
+        {
+          status: 200,
+          headers: {
+            ...corsHeaders,
+            'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300',
+            'Vary': 'Authorization, Origin, User-Agent',
+          },
+        }
+      );
     }
 
     const url = new URL(req.url);

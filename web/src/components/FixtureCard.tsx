@@ -413,6 +413,8 @@ export interface FixtureCardProps {
   onToggleFavoriteItem?: (item: FavoritePredictionItem) => void;
   isExpanded: boolean;
   onToggleExpand: () => void;
+  isVisitor?: boolean;
+  onRegisterClick?: () => void;
 }
  
 export function resolvePoissonData(prediction?: FootballPrediction | null, fixture?: QueueFixture): {
@@ -531,7 +533,9 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
   isFavoriteItem,
   onToggleFavoriteItem,
   isExpanded,
-  onToggleExpand
+  onToggleExpand,
+  isVisitor = false,
+  onRegisterClick
 }) => {
   const { pricing, formatPrice } = useGeoCurrency();
   // STRICT ARCHITECTURAL INVARIANT: UI MUST ONLY SHOW PREDICTED FIXTURES
@@ -551,42 +555,29 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
   // Format Kickoff in Lagos WAT (UTC+1)
   const kickoffDate = new Date(fixture.target_kickoff_at);
 
+  const isSettled = isFinished ||
+    prediction.settlement_status === 'won' ||
+    prediction.settlement_status === 'lost' ||
+    prediction.settlement_status === 'void' ||
+    prediction.settlement_status === 'voided';
+
   // Strict Paywall Evaluation:
-  // Paid / Admin: 100% full visibility of all predictions (pending, won, lost, void).
-  // Non-paid users:
-  // 1. Completely hide lost and void predictions (only won predictions are visible).
+  // Paid / Admin / Active 3-Day Trial: 100% full visibility of predictions and settlements.
+  // Non-paid users (visitors & expired trial users):
+  // 1. Blinded from all settlements (won, lost, void) and finished matches.
   // 2. All pending/upcoming predictions are strictly locked.
   if (!isAdmin && !canViewPredictions) {
-    if (prediction.settlement_status === 'lost' ||
-        prediction.settlement_status === 'void' ||
-        prediction.settlement_status === 'voided' ||
-        (isFinished && prediction.settlement_status !== 'won')) {
+    if (isSettled) {
       return null;
     }
   }
 
   const isWon = prediction.settlement_status === 'won';
 
-  // Categorize tier: High Confidence, Top Picks, Bangers are strictly VIP tiers
-  const cat = (prediction.confidence_category || '').toUpperCase().replace(/[\s-]+/g, '_');
-  let prob = prediction.probability;
-  if (prob != null && typeof prob === 'number' && prob > 1) prob = prob / 100;
-
-  const isVipTier =
-    cat === 'BANGER' ||
-    cat.includes('BANGER') ||
-    cat === 'TOP_PICK' ||
-    cat === 'TOPPICK' ||
-    cat.includes('TOP') ||
-    cat === 'HIGH_CONFIDENCE' ||
-    cat === 'HIGHCONFIDENCE' ||
-    cat.includes('HIGH') ||
-    (prob !== null && typeof prob === 'number' && prob >= 0.80) ||
-    prediction.is_locked === true;
-
-  // Universal Tier Paywall: Mid-Confidence (6.0–7.9) is visible to everyone across the board
-  // Only VIP tiers (High Confidence, Top Picks, Bangers) are locked for non-paid visitors
-  const isLocked = !isAdmin && !canViewPredictions && !isWon && isVipTier;
+  // Universal Paywall:
+  // Visitors and expired trial users have ALL upcoming predictions locked.
+  // Active 3-Day Free Trial, Paid VIP, and Admin users have predictions unlocked.
+  const isLocked = !isAdmin && !canViewPredictions;
 
   const effectiveCategory = isLocked
     ? (prediction.confidence_category && prediction.confidence_category !== 'LOCKED' ? prediction.confidence_category : 'TOP_PICK')
@@ -942,21 +933,45 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
         {/* Right Side: Key 250,000 Sim Pick Box + Expand Chevron */}
         <div className="glance-right-col">
           {isLocked ? (
-            <div className="glance-key-pick-card locked" onClick={onToggleExpand}>
+            <div
+              className="glance-key-pick-card locked"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (isVisitor && onRegisterClick) {
+                  onRegisterClick();
+                } else {
+                  onToggleExpand();
+                }
+              }}
+            >
               <div className="key-pick-badge">
-                <span className="key-pick-spark">✨</span>
-                <span>KEY MODEL PICK</span>
+                <span className="key-pick-spark">🔒</span>
+                <span>{isVisitor ? 'ODDSBANTA AI PREDICTION' : 'KEY MODEL PICK'}</span>
               </div>
               <div className="key-pick-outcome locked-blur">
                 ••••••••••••••••
               </div>
-              <Link
-                to="/subscription"
-                className="key-pick-unlock-link"
-                onClick={(e) => e.stopPropagation()}
-              >
-                Unlock ({formatPrice(pricing.standard.monthly)}/mo) →
-              </Link>
+              {isVisitor ? (
+                <button
+                  type="button"
+                  className="key-pick-unlock-link"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (onRegisterClick) onRegisterClick();
+                  }}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                >
+                  Register for 3 Days Free →
+                </button>
+              ) : (
+                <Link
+                  to="/subscription"
+                  className="key-pick-unlock-link"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  Trial Expired • Upgrade to VIP ({formatPrice(pricing.standard.monthly)}/mo) →
+                </Link>
+              )}
             </div>
           ) : (
             <div
@@ -1072,13 +1087,32 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
 
               <div className="paywall-overlay-prompt">
                 <div className="paywall-lock-icon">🔒</div>
-                <h4>More accurate predictions (85%+ hit rate) are in High Confidence, Top Picks, and Bangers.</h4>
-                <p>
-                  Free visitors get full access to live Mid-Confidence models across all sports. Upgrade to VIP to unlock our highest conviction signals.
-                </p>
-                <Link to="/subscription" className="btn-paywall-unlock-prominent">
-                  ⚡ Unlock VIP Picks ({formatPrice(pricing.standard.monthly)}/mo) →
-                </Link>
+                {isVisitor ? (
+                  <>
+                    <h4>Register to View Oddsbanta AI Predictions &amp; Verified Settlements</h4>
+                    <p>
+                      Get 3 days of unrestricted access to all calibrated football models, Bangers (96%+), Top Picks, Poisson distributions, and verified settlements.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={onRegisterClick}
+                      className="btn-paywall-unlock-prominent"
+                      style={{ cursor: 'pointer', border: 'none', display: 'inline-flex', alignItems: 'center', gap: 6, margin: '0 auto' }}
+                    >
+                      ⚡ Start 3-Day Free Trial (1-Click Google Sign In) →
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <h4>Your 3-Day Oddsbanta Free Trial Has Expired</h4>
+                    <p>
+                      Subscribe to Oddsbanta VIP to continue accessing live high-conviction predictions, Poisson distributions, and verified settlements.
+                    </p>
+                    <Link to="/subscription" className="btn-paywall-unlock-prominent">
+                      ⚡ Upgrade to VIP ({formatPrice(pricing.standard.monthly)}/mo) →
+                    </Link>
+                  </>
+                )}
               </div>
             </div>
           ) : (

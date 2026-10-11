@@ -28,12 +28,13 @@ logger = logging.getLogger("basketball.run_predictions")
 
 def run_basketball_predictions(
     days_forward: int = 4,
+    days_back: int = 0,
     num_sims: int = 250000,
     purge_stale: bool = True,
     wipe_all: bool = False,
 ) -> Dict[str, Any]:
     """
-    Simulates and persists predictions for all upcoming fixtures (strictly current time forward).
+    Simulates and persists predictions for basketball fixtures (upcoming and optionally recent past horizon).
     """
     db = BasketballDbClient()
     engine = BasketballPredictionEngine()
@@ -47,20 +48,22 @@ def run_basketball_predictions(
         logger.warning("Rating calibration warning: %s", e)
 
     now = datetime.now(timezone.utc)
-    start_iso = now.isoformat()
+    start_dt = now - timedelta(days=days_back) if days_back > 0 else now
+    start_iso = start_dt.isoformat()
     end_iso = (now + timedelta(days=days_forward)).isoformat()
 
     if wipe_all:
         wiped = db.wipe_all_predictions()
         logger.info("Wiped %d existing basketball predictions from database", wiped)
     elif purge_stale:
-        stale_wiped = db.purge_stale_predictions(start_iso)
+        # Retention Policy: Only purge predictions older than 30 days (preserves full historical track record)
+        stale_wiped = db.purge_stale_predictions(retention_days=30)
         if stale_wiped:
-            logger.info("Purged %d stale/past predictions prior to simulation pass", stale_wiped)
+            logger.info("Purged %d archived basketball predictions (>30 days old)", stale_wiped)
 
-    logger.info("Fetching upcoming basketball fixtures from %s to %s...", start_iso, end_iso)
-    fixtures = db.get_upcoming_fixtures(start_iso, end_iso)
-    logger.info("Found %d scheduled fixtures to evaluate", len(fixtures))
+    logger.info("Fetching basketball fixtures from %s to %s...", start_iso, end_iso)
+    fixtures = db.get_upcoming_fixtures(start_iso, end_iso, include_finished=(days_back > 0))
+    logger.info("Found %d fixtures to evaluate", len(fixtures))
 
     total_evaluated = 0
     total_saved = 0
@@ -200,6 +203,7 @@ def run_basketball_predictions(
 def main():
     parser = argparse.ArgumentParser(description="Oddsbanta Autonomous Basketball Prediction Runner")
     parser.add_argument("--days", "--days-forward", dest="days", type=int, default=4, help="Days forward to simulate")
+    parser.add_argument("--days-back", dest="days_back", type=int, default=0, help="Days back to simulate for past horizon")
     parser.add_argument("--sims", "--num-sims", dest="sims", type=int, default=250000, help="Number of Monte Carlo iterations per fixture")
     parser.add_argument("--wipe-all", dest="wipe_all", action="store_true", help="Wipe all existing basketball predictions before running fresh pass")
     parser.add_argument("--no-purge-stale", dest="purge_stale", action="store_false", default=True, help="Disable purging of past/stale predictions")
@@ -207,6 +211,7 @@ def main():
 
     run_basketball_predictions(
         days_forward=args.days,
+        days_back=args.days_back,
         num_sims=args.sims,
         purge_stale=args.purge_stale,
         wipe_all=args.wipe_all,
