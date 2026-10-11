@@ -613,11 +613,6 @@ export const StandaloneGoalCard: React.FC<StandaloneGoalCardProps> = ({
   const isLost = p.settlement_status === 'lost';
   const isVoid = (p.settlement_status as string) === 'void' || (p.settlement_status as string) === 'voided';
 
-  // Strict Paywall: Non-paid users strictly see only won fixtures (never lost, void, or un-won finished)
-  if (!isPaidUser && (isLost || isVoid || (isFinished && !isWon))) {
-    return null;
-  }
-
   // Helper to format scores with spaces around hyphens
   const formatScore = (raw?: string | null): string | null => {
     if (!raw) return null;
@@ -713,6 +708,12 @@ export const StandaloneGoalCard: React.FC<StandaloneGoalCardProps> = ({
   };
 
   const [isAiExpanded, setIsAiExpanded] = React.useState(false);
+
+  // Strict Paywall: Non-paid users strictly see only won fixtures (never lost, void, or un-won finished)
+  // Evaluated after all hooks have executed unconditionally
+  if (!isPaidUser && (isLost || isVoid || (isFinished && !isWon))) {
+    return null;
+  }
 
   return (
     <div className={`standalone-goal-card ${isOver25 ? 'over25-theme' : 'ht05-theme'} ${isWon ? 'card-won' : isLost ? 'card-lost' : ''}`}>

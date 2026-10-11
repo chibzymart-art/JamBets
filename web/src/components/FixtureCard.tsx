@@ -538,8 +538,75 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
   onRegisterClick
 }) => {
   const { pricing, formatPrice } = useGeoCurrency();
+
+  // Variables required for unconditional hook lifecycles
+  const isWon = prediction?.settlement_status === 'won';
+  const isNoBanker = prediction?.market === 'NO_SAFE_BANKER' ||
+    prediction?.confidence_category === 'NO_SAFE_BANKER' ||
+    prediction?.prediction === 'SKIP';
+  const isPaid = Boolean(isAdmin || canViewPredictions);
+  const isSecondaryRedacted = !isPaid && !isWon && isNoBanker;
+
+  // 1. Hook: Parse Prediction Metadata for Change Tracking & Simulation Outlines
+  const meta: Record<string, any> = React.useMemo(() => {
+    if (!prediction?.metadata) return {};
+    if (typeof prediction.metadata === 'object' && prediction.metadata !== null) return prediction.metadata;
+    if (typeof prediction.metadata === 'string') {
+      try {
+        return JSON.parse(prediction.metadata);
+      } catch {
+        return {};
+      }
+    }
+    return {};
+  }, [prediction?.metadata]);
+
+  // 2. Hook: Parse Secondary Predictions (redacted on No Safe Banker for non-subscribers)
+  const secondaryList: SecondaryPrediction[] = React.useMemo(() => {
+    if (!prediction || isSecondaryRedacted) return [];
+    if (!prediction.secondary_predictions) return [];
+    if (Array.isArray(prediction.secondary_predictions)) return prediction.secondary_predictions;
+    try {
+      if (typeof prediction.secondary_predictions === 'string') {
+        return JSON.parse(prediction.secondary_predictions);
+      }
+    } catch {}
+    return [];
+  }, [prediction?.secondary_predictions, isSecondaryRedacted]);
+
+  // 3. Hook: Extract Poisson Parameters and 5-Dimension Outlines (redacted on No Safe Banker for non-subscribers)
+  const poissonData = React.useMemo(() => {
+    if (!prediction || isSecondaryRedacted) return null;
+    return resolvePoissonData(prediction, fixture);
+  }, [prediction, fixture, isSecondaryRedacted]);
+
+  // 4. Hook: Extract or synthesize AI Simulation Intelligence Narrative (redacted on No Safe Banker for non-subscribers)
+  const aiNarrative = React.useMemo(() => {
+    if (!prediction || isSecondaryRedacted) return null;
+    if (prediction.metadata) {
+      if (typeof prediction.metadata === 'object' && prediction.metadata.ai_summary) {
+        return prediction.metadata.ai_summary;
+      }
+      if (typeof prediction.metadata === 'string') {
+        try {
+          const parsed = JSON.parse(prediction.metadata);
+          if (parsed.ai_summary) return parsed.ai_summary;
+        } catch {}
+      }
+    }
+    if (!poissonData) return null;
+    const p = poissonData.pParams;
+    const o = poissonData.outlines;
+    const topPick = o.goals.top_prob >= 85 ? o.goals.top_market : o.moneyline.top_pick;
+    const topProb = o.goals.top_prob >= 85 ? o.goals.top_prob : o.moneyline.top_prob;
+    const homeName = fixture.home_team_name?.replace(/-/g, ' ') || 'Home';
+    const awayName = fixture.away_team_name?.replace(/-/g, ' ') || 'Away';
+    return `Poisson-Monte Carlo Analysis: ${homeName} Attack Strength (${p.home_attack_str.toFixed(2)}) vs ${awayName} Defense (${p.away_defense_str.toFixed(2)}) with +${p.home_boost_pct}% Home Advantage & Form Weighting models expected goals at ${p.xg_home.toFixed(2)} vs ${p.xg_away.toFixed(2)}. Calibrated probability distributions confirm '${topPick}' (${topProb.toFixed(1)}%) as the highest-probable occurrence. Secondary edges: Over 1.5 Goals at ${o.goals.over_1_5_prob.toFixed(1)}%, Corners Over 8.5 at ${o.corners.over_8_5_prob.toFixed(1)}%, and ${o.anytime_scorer.home_scorer} anytime goal probability at ${o.anytime_scorer.home_scorer_prob.toFixed(1)}%. Recommended strategy: Core banker on ${topPick} with Over 1.5 Goals accumulator booster.`;
+  }, [prediction?.metadata, poissonData, fixture, isSecondaryRedacted]);
+
   // STRICT ARCHITECTURAL INVARIANT: UI MUST ONLY SHOW PREDICTED FIXTURES
   // Fixture may appear only with an authoritative, published prediction record
+  // Evaluated strictly after all hooks have executed
   if (!prediction || (prediction.publication_status && prediction.publication_status !== 'published')) {
     return null;
   }
@@ -572,8 +639,6 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
     }
   }
 
-  const isWon = prediction.settlement_status === 'won';
-
   // Universal Paywall:
   // Visitors and expired trial users have ALL upcoming predictions locked.
   // Active 3-Day Free Trial, Paid VIP, and Admin users have predictions unlocked.
@@ -587,72 +652,9 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
 
   const tierConfig = getTierConfig(effectiveCategory, prediction?.probability);
 
-  // Parse Prediction Metadata for Change Tracking & Simulation Outlines
-  const meta: Record<string, any> = React.useMemo(() => {
-    if (!prediction?.metadata) return {};
-    if (typeof prediction.metadata === 'object' && prediction.metadata !== null) return prediction.metadata;
-    if (typeof prediction.metadata === 'string') {
-      try {
-        return JSON.parse(prediction.metadata);
-      } catch {
-        return {};
-      }
-    }
-    return {};
-  }, [prediction?.metadata]);
-
   const hasNewChange = Boolean(meta.has_change);
   const previousPrediction = meta.previous_prediction;
   const changeReason = meta.change_reason;
-
-  const isNoBanker = prediction?.market === 'NO_SAFE_BANKER' ||
-    prediction?.confidence_category === 'NO_SAFE_BANKER' ||
-    prediction?.prediction === 'SKIP';
-  const isPaid = Boolean(isAdmin || canViewPredictions);
-  const isSecondaryRedacted = !isPaid && !isWon && isNoBanker;
-
-  // Parse Secondary Predictions (redacted on No Safe Banker for non-subscribers)
-  const secondaryList: SecondaryPrediction[] = React.useMemo(() => {
-    if (isSecondaryRedacted) return [];
-    if (!prediction?.secondary_predictions) return [];
-    if (Array.isArray(prediction.secondary_predictions)) return prediction.secondary_predictions;
-    try {
-      if (typeof prediction.secondary_predictions === 'string') {
-        return JSON.parse(prediction.secondary_predictions);
-      }
-    } catch {}
-    return [];
-  }, [prediction?.secondary_predictions, isSecondaryRedacted]);
-
-  // Extract Poisson Parameters and 5-Dimension Outlines (redacted on No Safe Banker for non-subscribers)
-  const poissonData = React.useMemo(() => {
-    if (isSecondaryRedacted) return null;
-    return resolvePoissonData(prediction, fixture);
-  }, [prediction, fixture, isSecondaryRedacted]);
-
-  // Extract or synthesize AI Simulation Intelligence Narrative (redacted on No Safe Banker for non-subscribers)
-  const aiNarrative = React.useMemo(() => {
-    if (isSecondaryRedacted) return null;
-    if (prediction?.metadata) {
-      if (typeof prediction.metadata === 'object' && prediction.metadata.ai_summary) {
-        return prediction.metadata.ai_summary;
-      }
-      if (typeof prediction.metadata === 'string') {
-        try {
-          const parsed = JSON.parse(prediction.metadata);
-          if (parsed.ai_summary) return parsed.ai_summary;
-        } catch {}
-      }
-    }
-    if (!poissonData) return null;
-    const p = poissonData.pParams;
-    const o = poissonData.outlines;
-    const topPick = o.goals.top_prob >= 85 ? o.goals.top_market : o.moneyline.top_pick;
-    const topProb = o.goals.top_prob >= 85 ? o.goals.top_prob : o.moneyline.top_prob;
-    const homeName = fixture.home_team_name?.replace(/-/g, ' ') || 'Home';
-    const awayName = fixture.away_team_name?.replace(/-/g, ' ') || 'Away';
-    return `Poisson-Monte Carlo Analysis: ${homeName} Attack Strength (${p.home_attack_str.toFixed(2)}) vs ${awayName} Defense (${p.away_defense_str.toFixed(2)}) with +${p.home_boost_pct}% Home Advantage & Form Weighting models expected goals at ${p.xg_home.toFixed(2)} vs ${p.xg_away.toFixed(2)}. Calibrated probability distributions confirm '${topPick}' (${topProb.toFixed(1)}%) as the highest-probable occurrence. Secondary edges: Over 1.5 Goals at ${o.goals.over_1_5_prob.toFixed(1)}%, Corners Over 8.5 at ${o.corners.over_8_5_prob.toFixed(1)}%, and ${o.anytime_scorer.home_scorer} anytime goal probability at ${o.anytime_scorer.home_scorer_prob.toFixed(1)}%. Recommended strategy: Core banker on ${topPick} with Over 1.5 Goals accumulator booster.`;
-  }, [prediction?.metadata, poissonData, fixture, isSecondaryRedacted]);
 
   // If the match is live and the prediction has been met or settled while live, it settles the match by showing WON.
   const isLost = prediction?.settlement_status === 'lost';
