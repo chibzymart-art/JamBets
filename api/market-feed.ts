@@ -506,7 +506,7 @@ async function fetchMarketDataFromUpstream(
 
     const unified: UnifiedMarketPrediction[] = [
       ...(Array.isArray(cr) ? cr : [])
-        .filter((item: any) => (item.settlement_status === 'pending' || (item.settlement_notes && item.settlement_notes.startsWith('Verified:'))) && item.fixture?.status !== 'cancelled' && item.fixture?.status !== 'postponed')
+        .filter((item: any) => item.settlement_status !== 'void' && item.publication_status !== 'archived' && item.fixture?.status !== 'cancelled' && item.fixture?.status !== 'postponed')
         .map((item: any) => normalizePrediction(item, 'corners')),
       ...(Array.isArray(gl) ? gl : [])
         .filter((item: any) => item.settlement_status !== 'void' && item.publication_status !== 'archived' && item.fixture?.status !== 'cancelled' && item.fixture?.status !== 'postponed')
@@ -561,9 +561,6 @@ async function fetchMarketDataFromUpstream(
     if (item.fixture?.status === 'cancelled' || item.fixture?.status === 'postponed') {
       return false;
     }
-    if (category === 'corners') {
-      return item.settlement_status === 'pending' || (item.settlement_notes && item.settlement_notes.startsWith('Verified:'));
-    }
     return true;
   });
   return filteredList.map((item: any) => normalizePrediction(item, category, market));
@@ -612,9 +609,7 @@ async function computeAllMarketCounts(
             item.settlement_status !== 'void' &&
             item.publication_status !== 'archived' &&
             item.fixture?.status !== 'cancelled' &&
-            item.fixture?.status !== 'postponed' &&
-            (item.settlement_status === 'pending' ||
-              (item.settlement_notes && item.settlement_notes.startsWith('Verified:')))
+            item.fixture?.status !== 'postponed'
         )
       : [];
 
@@ -813,14 +808,7 @@ export default async function handler(req: Request) {
         // Rule 3: Upcoming / pending predictions remain visible for teams & market tab, but are locked:
         //         - Visitor: '🔒 Register to view Oddsbanta AI predictions'
         //         - Expired Trial: '🔒 Subscribe to Oddsbanta VIP'
-        let filteredForAudience = filtered;
-        if (authStatus !== 'paid_or_trial') {
-          filteredForAudience = filtered.filter((p) => {
-            const isFinished = (p.fixture?.status || '').toLowerCase() === 'finished' || Boolean(p.settled_at);
-            const isSettled = ['won', 'lost', 'void', 'voided'].includes((p.settlement_status || '').toLowerCase());
-            return !isFinished && !isSettled;
-          });
-        }
+        const filteredForAudience = filtered;
 
         const total = filteredForAudience.length;
         const totalPages = Math.ceil(total / limitParam) || 1;
@@ -851,6 +839,10 @@ export default async function handler(req: Request) {
             metrics: {},
             tactical_rationale: null,
             tactical_tag: null,
+            settlement_status: 'pending',
+            settlement_notes: null,
+            ht_score: null,
+            actual_corners: null,
             metadata: {
               locked: true,
               auth_status: authStatus,

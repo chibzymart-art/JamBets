@@ -2290,6 +2290,9 @@ export default function App() {
                 userRole={profile?.role}
                 isAdmin={isAdmin}
                 canViewPredictions={canViewSpecialistMarkets}
+                isVisitor={trialState.isVisitor}
+                isTrialExpired={trialState.isTrialExpired}
+                canViewSettlements={trialState.canViewFootballSettlements}
                 onOpenAuth={(mode) => {
                   setAuthModalMode(mode);
                   setIsAuthModalOpen(true);

@@ -622,22 +622,13 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
   // Format Kickoff in Lagos WAT (UTC+1)
   const kickoffDate = new Date(fixture.target_kickoff_at);
 
-  const isSettled = isFinished ||
-    prediction.settlement_status === 'won' ||
-    prediction.settlement_status === 'lost' ||
-    prediction.settlement_status === 'void' ||
-    prediction.settlement_status === 'voided';
 
   // Strict Paywall Evaluation:
   // Paid / Admin / Active 3-Day Trial: 100% full visibility of predictions and settlements.
   // Non-paid users (visitors & expired trial users):
   // 1. Blinded from all settlements (won, lost, void) and finished matches.
   // 2. All pending/upcoming predictions are strictly locked.
-  if (!isAdmin && !canViewPredictions) {
-    if (isSettled) {
-      return null;
-    }
-  }
+
 
   // Universal Paywall:
   // Visitors and expired trial users have ALL upcoming predictions locked.

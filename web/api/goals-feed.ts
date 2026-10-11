@@ -278,25 +278,23 @@ function applyGoalsPaywallRedaction(preds: any[], authStatus: AuthStatus): any[]
     }));
   }
 
-  // Non-paid users (visitors & expired trial users) are strictly blinded from settlements:
-  // Exclude all finished / settled matches!
-  const upcomingOnly = preds.filter((p: any) => {
-    const isFinished = (p.fixture?.status || '').toLowerCase() === 'finished' || Boolean(p.settled_at);
-    const isSettled = ['won', 'lost', 'void', 'voided'].includes((p.settlement_status || '').toLowerCase());
-    return !isFinished && !isSettled;
-  });
-
   const isExpired = authStatus === 'expired';
   const lockedPrompt = isExpired
     ? '🔒 Subscribe to Oddsbanta VIP'
     : '🔒 Register to view Oddsbanta AI predictions';
 
-  return upcomingOnly.map((p: any) => {
+  return preds.map((p: any) => {
     return {
       ...p,
       is_locked: true,
       predicted_outcome: lockedPrompt,
       probability: null,
+      tactical_rationale: null,
+      tactical_tag: null,
+      settlement_status: 'pending',
+      settlement_notes: null,
+      ht_score: null,
+      actual_score: null,
       metadata: {
         locked: true,
         auth_status: authStatus,

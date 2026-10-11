@@ -30,6 +30,7 @@ function localApiDevPlugin(): Plugin {
           '/api/basketball-feed': './api/basketball-feed.ts',
           '/api/goals-feed': './api/goals-feed.ts',
           '/api/tennis-feed': './api/tennis-feed.ts',
+          '/api/market-feed': './api/market-feed.ts',
         };
         if (apiModules[reqPath]) {
           try {

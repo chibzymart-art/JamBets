@@ -22,6 +22,9 @@ export interface OtherMarketsPageProps {
   userRole?: string;
   isAdmin: boolean;
   canViewPredictions?: boolean;
+  isVisitor?: boolean;
+  isTrialExpired?: boolean;
+  canViewSettlements?: boolean;
   onOpenAuth: (mode: 'signin' | 'register') => void;
   onOpenSubscription: () => void;
   favoriteItems?: FavoritePredictionItem[];
@@ -43,11 +46,14 @@ const VALID_MARKETS: MarketType[] = [
 ];
 
 export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
-  currentUser: _currentUser,
+  currentUser,
   userRole,
   isAdmin,
   canViewPredictions,
-  onOpenAuth: _onOpenAuth,
+  isVisitor: propIsVisitor,
+  isTrialExpired: propIsTrialExpired,
+  canViewSettlements: propCanViewSettlements,
+  onOpenAuth,
   onOpenSubscription,
   favoriteItems = [],
   onToggleFavoriteItem,
@@ -177,6 +183,10 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
     return false;
   }, [isAdmin, userRole, canViewPredictions]);
 
+  const isVisitor = propIsVisitor ?? !currentUser;
+  const isTrialExpired = propIsTrialExpired ?? Boolean(currentUser && !isPaidUser);
+  const canViewSettlements = propCanViewSettlements ?? isPaidUser;
+
   // Load predictions for current market and filters (Continuous scroll: limit 200)
   const loadMarketData = async () => {
     try {
@@ -234,13 +244,7 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
       // Exclude void or archived legacy records completely from user display
       if (p.settlement_status === 'void' || (p as any).publication_status === 'archived') return false;
 
-      // Strict Paywall: Non-paid users ONLY see won predictions for finished matches, never lost/void/unsettled
-      if (!isPaidUser) {
-        const isFinished = p.fixture?.status === 'finished' || Boolean(p.settled_at);
-        if (p.settlement_status === 'lost' || p.settlement_status === 'void' || (isFinished && p.settlement_status !== 'won')) {
-          return false;
-        }
-      }
+
 
       // Status filter
       if (statusFilter === 'won' && p.settlement_status !== 'won') return false;
@@ -286,13 +290,15 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
     let pending = 0;
     for (const p of predictions) {
       if (p.settlement_status === 'void' || (p as any).publication_status === 'archived') continue;
-      if (p.settlement_status === 'won') won++;
-      else if (p.settlement_status === 'lost') {
-        if (isPaidUser) lost++;
+      if (p.settlement_status === 'won') {
+        if (canViewSettlements) won++;
+      } else if (p.settlement_status === 'lost') {
+        if (canViewSettlements) lost++;
+      } else {
+        pending++;
       }
-      else pending++;
     }
-    return { total: won + (isPaidUser ? lost : 0) + pending, won, lost, pending };
+    return { total: won + lost + pending, won, lost, pending };
   }, [predictions, isPaidUser]);
 
   // Synchronize active market count with actual predictions loaded for 100% badge-to-card harmony
@@ -499,18 +505,32 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
             <button
               type="button"
               className={`scorecard-pill won ${statusFilter === 'won' ? 'active' : ''}`}
-              onClick={() => setStatusFilter('won')}
+              onClick={() => {
+                if (!canViewSettlements) {
+                  if (isTrialExpired) onOpenSubscription();
+                  else onOpenAuth('register');
+                  return;
+                }
+                setStatusFilter('won');
+              }}
             >
-              <span className="scorecard-text-desktop">Won ✅ ({statusStats.won})</span>
-              <span className="scorecard-text-mobile">Won ({statusStats.won})</span>
+              <span className="scorecard-text-desktop">Won ✅ ({canViewSettlements ? statusStats.won : '🔒'})</span>
+              <span className="scorecard-text-mobile">Won ({canViewSettlements ? statusStats.won : '🔒'})</span>
             </button>
             <button
               type="button"
               className={`scorecard-pill lost ${statusFilter === 'lost' ? 'active' : ''}`}
-              onClick={() => setStatusFilter('lost')}
+              onClick={() => {
+                if (!canViewSettlements) {
+                  if (isTrialExpired) onOpenSubscription();
+                  else onOpenAuth('register');
+                  return;
+                }
+                setStatusFilter('lost');
+              }}
             >
-              <span className="scorecard-text-desktop">Lost ❌ ({statusStats.lost})</span>
-              <span className="scorecard-text-mobile">Lost ({statusStats.lost})</span>
+              <span className="scorecard-text-desktop">Lost ❌ ({canViewSettlements ? statusStats.lost : '🔒'})</span>
+              <span className="scorecard-text-mobile">Lost ({canViewSettlements ? statusStats.lost : '🔒'})</span>
             </button>
             <button
               type="button"
@@ -540,7 +560,96 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
               Retry
             </button>
           </div>
-        ) : filteredPredictions.length === 0 ? (
+        ) : (
+          <>
+            {dateFilter !== 'all' && dateFilter < dateTabs.today.iso && !canViewSettlements && (
+          /* Past Dates Settlement Paywall Gate Banner */
+          isTrialExpired ? (
+            <div
+              className="trial-expired-settlement-gate-card"
+              style={{
+                padding: '36px 24px',
+                background: '#ffffff',
+                borderRadius: 16,
+                border: '1.5px solid var(--border-subtle)',
+                textAlign: 'center',
+                boxShadow: '0 4px 20px rgba(0, 0, 0, 0.04)',
+                margin: '12px 0 24px 0',
+              }}
+            >
+              <div style={{ fontSize: 36, marginBottom: 8 }}>⌛</div>
+              <h2 style={{ fontSize: 20, fontWeight: 900, color: 'var(--text-primary)', marginBottom: 6 }}>
+                Your Oddsbanta 3-Day Free Trial Has Ended
+              </h2>
+              <p style={{ color: 'var(--text-muted)', fontSize: 13, maxWidth: 520, margin: '0 auto 16px', lineHeight: 1.5 }}>
+                Historical settlements and full AI prediction models are reserved for active VIP members. Upgrade to Oddsbanta VIP to restore full access.
+              </p>
+              <button
+                type="button"
+                onClick={onOpenSubscription}
+                style={{
+                  background: 'linear-gradient(135deg, #059669 0%, #047857 100%)',
+                  color: '#ffffff',
+                  border: 'none',
+                  borderRadius: 10,
+                  padding: '12px 24px',
+                  fontSize: 14,
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 14px rgba(5, 150, 105, 0.35)',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 8,
+                }}
+              >
+                👑 Upgrade to Oddsbanta VIP →
+              </button>
+            </div>
+          ) : (
+            <div
+              className="visitor-settlement-gate-card"
+              style={{
+                padding: '36px 24px',
+                background: '#ffffff',
+                borderRadius: 16,
+                border: '1.5px solid var(--border-subtle)',
+                textAlign: 'center',
+                boxShadow: '0 4px 20px rgba(0, 0, 0, 0.04)',
+                margin: '12px 0 24px 0',
+              }}
+            >
+              <div style={{ fontSize: 36, marginBottom: 8 }}>🔒</div>
+              <h2 style={{ fontSize: 20, fontWeight: 900, color: 'var(--text-primary)', marginBottom: 6 }}>
+                Register to View Verified Settlements &amp; Past Track Record
+              </h2>
+              <p style={{ color: 'var(--text-muted)', fontSize: 13, maxWidth: 520, margin: '0 auto 16px', lineHeight: 1.5 }}>
+                Oddsbanta transparently audits 100% of finished matches, verified wins, and mathematical simulations. Create your free account to unlock historical settlements and start your <strong>3-day free trial</strong> of live football predictions.
+              </p>
+              <button
+                type="button"
+                onClick={() => onOpenAuth('register')}
+                style={{
+                  background: 'linear-gradient(135deg, #059669 0%, #047857 100%)',
+                  color: '#ffffff',
+                  border: 'none',
+                  borderRadius: 10,
+                  padding: '12px 24px',
+                  fontSize: 14,
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 14px rgba(5, 150, 105, 0.35)',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 8,
+                }}
+              >
+                🎁 Register for 3 Days Free VIP →
+              </button>
+            </div>
+          )
+        )}
+
+        {filteredPredictions.length === 0 ? (
           <div className="goals-empty-state" style={{ textAlign: 'center', padding: '40px 20px', background: '#fff', borderRadius: 14, border: '1px solid #e2e8f0' }}>
             <span className="empty-icon" style={{ fontSize: '2rem' }}>⚽</span>
             <h3 style={{ margin: '10px 0 6px', fontWeight: 800 }}>No Signals in this Market</h3>
@@ -608,6 +717,9 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
                     onOpenUpgrade={onOpenSubscription}
                     isAdmin={isAdmin}
                     isPaidUser={isPaidUser}
+                    isVisitor={isVisitor}
+                    isTrialExpired={isTrialExpired}
+                    onOpenAuth={onOpenAuth}
                   />
                   {(idx === 2 || idx === 6) && (
                     <div style={{ margin: '8px 0' }}>
@@ -618,6 +730,8 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
               );
             })}
           </div>
+        )}
+          </>
         )}
       </section>
     </div>

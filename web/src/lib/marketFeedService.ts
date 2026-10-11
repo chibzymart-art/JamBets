@@ -354,19 +354,20 @@ export async function fetchMarketFeed(
                 if (p.settlement_status === 'void' || (p as any).publication_status === 'archived') {
                   return false;
                 }
-                if (p.market_category === 'corners') {
-                  return p.settlement_status === 'pending' || (p.settlement_notes && p.settlement_notes.startsWith('Verified:'));
-                }
                 return true;
               })
               .map((p: UnifiedMarketPrediction) => {
                 if (isAdmin || canViewPredictions) {
                   p.is_locked = false;
-                }
-                if (!p.tactical_rationale) {
-                  const tactical = computeTacticalAnalysis(p, p.market_category, p.market as MarketType);
-                  p.tactical_tag = p.tactical_tag || tactical.tag;
-                  p.tactical_rationale = tactical.rationale;
+                  if (!p.tactical_rationale) {
+                    const tactical = computeTacticalAnalysis(p, p.market_category, p.market as MarketType);
+                    p.tactical_tag = p.tactical_tag || tactical.tag;
+                    p.tactical_rationale = tactical.rationale;
+                  }
+                } else {
+                  p.is_locked = true;
+                  p.tactical_tag = undefined;
+                  p.tactical_rationale = undefined;
                 }
                 return p;
               });
@@ -411,9 +412,7 @@ export async function fetchMarketFeed(
       (data || []).map((r) => normalizePrediction(r, cat, forced));
 
     const allCr = normalizeList(
-      (crRes.data || []).filter(
-        (r: any) => r.settlement_status === 'pending' || (r.settlement_notes && r.settlement_notes.startsWith('Verified:'))
-      ),
+      crRes.data || [],
       'corners'
     );
     const rawGoals: any[] = (glRes.data as any[]) || [];
@@ -474,47 +473,28 @@ export async function fetchMarketFeed(
     // Sort by probability descending
     targetList.sort((a, b) => (b.probability || 0) - (a.probability || 0));
 
+    const isSubscriber = isAdmin || canViewPredictions;
     const total = targetList.length;
     const totalPages = Math.max(1, Math.ceil(total / limit));
     const safePage = Math.min(Math.max(1, page), totalPages);
     const start = (safePage - 1) * limit;
     const paged = targetList.slice(start, start + limit);
 
-    // Universal Tier Paywall: Mid-Confidence is visible to everyone; High/VIP tiers are locked
-    const isSubscriber = isAdmin || canViewPredictions;
     const finalData = paged.map((pred) => {
-      const isWon = pred.settlement_status === 'won';
-      const cat = (pred.confidence_category || pred.confidence_tier || '').toUpperCase().replace(/[\s-]+/g, '_');
-      let prob = pred.probability;
-      if (prob != null && typeof prob === 'number' && prob > 1) prob = prob / 100;
-      const isVipTier =
-        cat === 'BANGER' ||
-        cat.includes('BANGER') ||
-        cat === 'TOP_PICK' ||
-        cat === 'TOPPICK' ||
-        cat.includes('TOP') ||
-        cat === 'HIGH_CONFIDENCE' ||
-        cat === 'HIGHCONFIDENCE' ||
-        cat.includes('HIGH') ||
-        cat === 'GOAL_MACHINE' ||
-        cat === 'OVER_25_LOCK' ||
-        cat === 'EARLY_STRIKE' ||
-        (prob != null && prob >= 0.80) ||
-        pred.is_locked === true;
-
-      const isLocked = !isSubscriber && !isWon && isVipTier;
-      if (isLocked) {
+      if (isSubscriber) {
         return {
           ...pred,
-          is_locked: true,
-          prediction: '🔒 Premium VIP Pick',
-          probability: null,
-          display_probability: null,
+          is_locked: false,
         };
       }
       return {
         ...pred,
-        is_locked: false,
+        is_locked: true,
+        prediction: '🔒 Premium VIP Pick',
+        probability: null,
+        display_probability: null,
+        tactical_rationale: undefined,
+        tactical_tag: undefined,
       };
     });
 

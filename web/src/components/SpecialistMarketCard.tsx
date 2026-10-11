@@ -2,7 +2,6 @@ import React from 'react';
 import { UnifiedMarketPrediction } from '../lib/marketFeedService';
 import { FavoritePredictionItem } from './FavoritesDrawer';
 import { formatClubName } from './GoalCard';
-import { useGeoCurrency } from '../lib/geoCurrency';
 import { formatKickoff } from '../lib/dateUtils';
 
 export interface SpecialistMarketCardProps {
@@ -12,6 +11,9 @@ export interface SpecialistMarketCardProps {
   onOpenUpgrade?: () => void;
   isAdmin?: boolean;
   isPaidUser?: boolean;
+  isVisitor?: boolean;
+  isTrialExpired?: boolean;
+  onOpenAuth?: (mode: 'signin' | 'register') => void;
 }
 
 export const SpecialistMarketCard: React.FC<SpecialistMarketCardProps> = ({
@@ -21,10 +23,12 @@ export const SpecialistMarketCard: React.FC<SpecialistMarketCardProps> = ({
   onOpenUpgrade,
   isAdmin = false,
   isPaidUser = false,
+  isVisitor = false,
+  isTrialExpired = false,
+  onOpenAuth,
 }) => {
-  const { pricing, formatPrice } = useGeoCurrency();
   const { fixture, metrics, is_locked: rawIsLocked } = prediction;
-  const isLocked = (isAdmin || isPaidUser) ? false : Boolean(rawIsLocked);
+  const isLocked = (!isAdmin && !isPaidUser) || Boolean(rawIsLocked);
   const homeName = formatClubName(fixture?.home_team?.short_name || fixture?.home_team?.name || 'Home Club');
   const awayName = formatClubName(fixture?.away_team?.short_name || fixture?.away_team?.name || 'Away Club');
   const leagueName = fixture?.league?.name || fixture?.league?.code || 'Football';
@@ -60,12 +64,8 @@ export const SpecialistMarketCard: React.FC<SpecialistMarketCardProps> = ({
   const isSettled = ['won', 'lost', 'void'].includes(prediction.settlement_status);
   const isWon = prediction.settlement_status === 'won';
   const isLost = prediction.settlement_status === 'lost';
-  const isVoid = prediction.settlement_status === 'void' || prediction.settlement_status === 'voided';
 
-  // Strict Paywall: Non-paid users strictly see only won fixtures (never lost, void, or un-won finished)
-  if (isLocked && (isLost || isVoid || (isFinished && !isWon))) {
-    return null;
-  }
+
 
   // Full-time final score display
   const ftHome = fixture?.home_score ?? (prediction.actual_score ? prediction.actual_score.split('-')[0]?.trim() : null);
@@ -216,9 +216,13 @@ export const SpecialistMarketCard: React.FC<SpecialistMarketCardProps> = ({
               <span className="live-pulsing-dot" />
               <span>{period === 'HT' ? 'HALF TIME' : `LIVE ${minute ? `${minute}'` : ''}`}</span>
             </span>
-          ) : isSettled ? (
+          ) : isSettled && !isLocked ? (
             <span className={`settle-status-pill ${isWon ? 'won' : isLost ? 'lost' : 'void'}`}>
               {isWon ? '✓ WON' : isLost ? '✕ LOST' : '⟲ VOID'}
+            </span>
+          ) : isFinished ? (
+            <span className="kickoff-time-pill">
+              <span>FULL TIME</span>
             </span>
           ) : (
             <span className="kickoff-time-pill">
@@ -261,7 +265,7 @@ export const SpecialistMarketCard: React.FC<SpecialistMarketCardProps> = ({
       </div>
 
       {/* Settled Prediction-Specific Outcome Score Bar */}
-      {isFinished && predictionOutcomeDetail && (
+      {!isLocked && isFinished && predictionOutcomeDetail && (
         <div className={`settled-outcome-bar ${isWon ? 'is-won' : isLost ? 'is-lost' : 'is-void'}`}>
           <div className="outcome-metric-left">
             <span className="outcome-icon">{isWon ? '🎯' : '📊'}</span>
@@ -289,7 +293,7 @@ export const SpecialistMarketCard: React.FC<SpecialistMarketCardProps> = ({
       </div>
 
       {/* AI Tactical Scout Written Analysis (Just like in early Over 2.5 & 1H 0.5 versions) */}
-      {prediction.tactical_rationale && (
+      {!isLocked && prediction.tactical_rationale && (
         <div className="specialist-ai-scout-banner">
           <span className="scout-icon">🤖</span>
           <div className="scout-content">
@@ -308,18 +312,35 @@ export const SpecialistMarketCard: React.FC<SpecialistMarketCardProps> = ({
           <div className="freemium-locked-overlay">
             <div className="locked-mask-content">
               <div className="locked-icon-shield">🔒</div>
-              <div className="locked-title-text">VIP CALIBRATED SIGNAL</div>
-              <div className="locked-sub-text">
-                Monte Carlo edge & high-conviction mathematical pick locked
+              <div className="locked-title-text">
+                {isVisitor ? 'REGISTER TO UNLOCK' : 'VIP CALIBRATED SIGNAL'}
               </div>
-              <button
-                type="button"
-                className="locked-unlock-cta-btn"
-                onClick={onOpenUpgrade}
-              >
-                <span>⚡ Unlock for {formatPrice(pricing.standard.monthly)}</span>
-                <span className="arrow-chip">→</span>
-              </button>
+              <div className="locked-sub-text">
+                {isVisitor
+                  ? 'Register for a 3-day free trial to view Oddsbanta AI predictions'
+                  : isTrialExpired
+                  ? 'Free trial expired. Subscribe to Oddsbanta VIP to view calibrated signals'
+                  : 'Monte Carlo edge & high-conviction mathematical pick locked'}
+              </div>
+              {isVisitor ? (
+                <button
+                  type="button"
+                  className="locked-unlock-cta-btn"
+                  onClick={() => (onOpenAuth ? onOpenAuth('register') : onOpenUpgrade?.())}
+                >
+                  <span>Register to view</span>
+                  <span className="arrow-chip">→</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="locked-unlock-cta-btn"
+                  onClick={onOpenUpgrade}
+                >
+                  <span>Subscribe</span>
+                  <span className="arrow-chip">→</span>
+                </button>
+              )}
             </div>
           </div>
         ) : (
