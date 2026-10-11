@@ -11,6 +11,7 @@ export interface SpecialistMarketCardProps {
   onToggleFavorite?: (item: FavoritePredictionItem) => void;
   onOpenUpgrade?: () => void;
   isAdmin?: boolean;
+  isPaidUser?: boolean;
 }
 
 export const SpecialistMarketCard: React.FC<SpecialistMarketCardProps> = ({
@@ -19,10 +20,11 @@ export const SpecialistMarketCard: React.FC<SpecialistMarketCardProps> = ({
   onToggleFavorite,
   onOpenUpgrade,
   isAdmin = false,
+  isPaidUser = false,
 }) => {
   const { pricing, formatPrice } = useGeoCurrency();
   const { fixture, metrics, is_locked: rawIsLocked } = prediction;
-  const isLocked = isAdmin ? false : Boolean(rawIsLocked);
+  const isLocked = (isAdmin || isPaidUser) ? false : Boolean(rawIsLocked);
   const homeName = formatClubName(fixture?.home_team?.short_name || fixture?.home_team?.name || 'Home Club');
   const awayName = formatClubName(fixture?.away_team?.short_name || fixture?.away_team?.name || 'Away Club');
   const leagueName = fixture?.league?.name || fixture?.league?.code || 'Football';

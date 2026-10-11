@@ -228,8 +228,8 @@ export function useTrialStatus(
       // Main football predictions & settlements are unlocked during 3-day trial!
       canViewFootballPredictions: isTrialActive,
       canViewFootballSettlements: isTrialActive,
-      // Specialist predictions, tennis, and basketball remain VIP only!
-      canViewSpecialistMarkets: false,
+      // Specialist predictions are unlocked during 3-day trial! Multi-sport (tennis & basketball) remains strictly VIP only!
+      canViewSpecialistMarkets: isTrialActive,
       canViewTennis: false,
       canViewBasketball: false,
     };

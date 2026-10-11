@@ -607,6 +607,7 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
                     onToggleFavorite={onToggleFavoriteItem}
                     onOpenUpgrade={onOpenSubscription}
                     isAdmin={isAdmin}
+                    isPaidUser={isPaidUser}
                   />
                   {(idx === 2 || idx === 6) && (
                     <div style={{ margin: '8px 0' }}>

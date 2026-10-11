@@ -317,7 +317,7 @@ export async function fetchMarketFeed(
     canViewPredictions = false,
   } = options;
 
-  const cacheKey = `${market}:${date}:${page}:${limit}:${Boolean(token)}`;
+  const cacheKey = `${market}:${date}:${page}:${limit}:${Boolean(token)}:${Boolean(canViewPredictions)}:${Boolean(isAdmin)}`;
   const cached = clientMemoryCache.get(cacheKey);
   if (cached && Date.now() - cached.timestamp < CLIENT_CACHE_TTL_MS) {
     return cached.data;
