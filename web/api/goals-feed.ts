@@ -34,21 +34,23 @@ let memoryCache: MemoryCacheEntry | null = null;
 let inflightPromise: Promise<GoalsFeedData> | null = null;
 const CACHE_TTL_MS = 30 * 1000; // 30 seconds instance memory cache
 
-// In-memory cache for user auth verification (120s for valid users, 30s for invalid)
-const userAuthCache = new Map<string, { isPaid: boolean; expiresAt: number }>();
+export type AuthStatus = 'paid_or_trial' | 'expired' | 'visitor';
 
-async function checkIsPaidOrAdmin(authToken: string | null): Promise<boolean> {
-  if (!authToken) return false;
+// In-memory cache for user auth verification (120s for valid users, 30s for invalid)
+const userAuthCache = new Map<string, { status: AuthStatus; expiresAt: number }>();
+
+async function checkAuthStatus(authToken: string | null): Promise<AuthStatus> {
+  if (!authToken) return 'visitor';
   const rawToken = authToken.startsWith('Bearer ') ? authToken.slice(7).trim() : authToken.trim();
-  if (!rawToken) return false;
+  if (!rawToken) return 'visitor';
 
   if (SUPABASE_SERVICE_ROLE_KEY && rawToken === SUPABASE_SERVICE_ROLE_KEY) {
-    return true;
+    return 'paid_or_trial';
   }
 
   const cached = userAuthCache.get(rawToken);
   if (cached && Date.now() < cached.expiresAt) {
-    return cached.isPaid;
+    return cached.status;
   }
 
   try {
@@ -60,14 +62,14 @@ async function checkIsPaidOrAdmin(authToken: string | null): Promise<boolean> {
     });
 
     if (!authRes.ok) {
-      userAuthCache.set(rawToken, { isPaid: false, expiresAt: Date.now() + 30 * 1000 });
-      return false;
+      userAuthCache.set(rawToken, { status: 'visitor', expiresAt: Date.now() + 30 * 1000 });
+      return 'visitor';
     }
 
     const authUser = await authRes.json();
     if (!authUser || !authUser.id) {
-      userAuthCache.set(rawToken, { isPaid: false, expiresAt: Date.now() + 30 * 1000 });
-      return false;
+      userAuthCache.set(rawToken, { status: 'visitor', expiresAt: Date.now() + 30 * 1000 });
+      return 'visitor';
     }
 
     const email = (authUser.email || '').toLowerCase().trim();
@@ -76,8 +78,8 @@ async function checkIsPaidOrAdmin(authToken: string | null): Promise<boolean> {
       authUser.user_metadata?.role === 'admin' ||
       (email && ADMIN_EMAILS.has(email))
     ) {
-      userAuthCache.set(rawToken, { isPaid: true, expiresAt: Date.now() + 120 * 1000 });
-      return true;
+      userAuthCache.set(rawToken, { status: 'paid_or_trial', expiresAt: Date.now() + 120 * 1000 });
+      return 'paid_or_trial';
     }
 
     const userId = authUser.id;
@@ -94,12 +96,11 @@ async function checkIsPaidOrAdmin(authToken: string | null): Promise<boolean> {
     ]);
 
     let userData: any = null;
-    // Check users table role
     if (userRes.ok) {
       userData = await userRes.json();
       if (Array.isArray(userData) && userData.length > 0 && userData[0].role === 'admin') {
-        userAuthCache.set(rawToken, { isPaid: true, expiresAt: Date.now() + 120 * 1000 });
-        return true;
+        userAuthCache.set(rawToken, { status: 'paid_or_trial', expiresAt: Date.now() + 120 * 1000 });
+        return 'paid_or_trial';
       }
     }
 
@@ -157,11 +158,12 @@ async function checkIsPaidOrAdmin(authToken: string | null): Promise<boolean> {
       }
     }
 
-    userAuthCache.set(rawToken, { isPaid, expiresAt: Date.now() + (isPaid ? 120 * 1000 : 30 * 1000) });
-    return isPaid;
+    const status: AuthStatus = isPaid ? 'paid_or_trial' : 'expired';
+    userAuthCache.set(rawToken, { status, expiresAt: Date.now() + (isPaid ? 120 * 1000 : 30 * 1000) });
+    return status;
   } catch (err) {
     console.error('Cryptographic auth check failed in goals feed:', err);
-    return false;
+    return 'visitor';
   }
 }
 
@@ -268,45 +270,42 @@ export function applyGoalsScraperBlinding(preds: any[]): any[] {
     }));
 }
 
-function applyGoalsPaywallRedaction(preds: any[]): any[] {
-  return preds
-    .filter((p: any) => {
-      const status = (p.settlement_status || '').toLowerCase();
-      if (status === 'lost' || status === 'void') return false;
-      return true;
-    })
-    .map((p: any) => {
-      if (p.settlement_status === 'won') {
-        return {
-          ...p,
-          is_locked: false,
-        };
-      }
+function applyGoalsPaywallRedaction(preds: any[], authStatus: AuthStatus): any[] {
+  if (authStatus === 'paid_or_trial') {
+    return preds.map((p: any) => ({
+      ...p,
+      is_locked: false,
+    }));
+  }
 
-      const tier = (p.confidence_tier || '').toUpperCase();
-      let prob = p.probability;
-      if (prob != null && typeof prob === 'number' && prob > 1) prob = prob / 100;
-      const isVipTier =
-        tier === 'GOAL_MACHINE' ||
-        tier === 'OVER_25_LOCK' ||
-        tier === 'EARLY_STRIKE' ||
-        (prob != null && prob >= 0.80);
+  // Non-paid users (visitors & expired trial users) are strictly blinded from settlements:
+  // Exclude all finished / settled matches!
+  const upcomingOnly = preds.filter((p: any) => {
+    const isFinished = (p.fixture?.status || '').toLowerCase() === 'finished' || Boolean(p.settled_at);
+    const isSettled = ['won', 'lost', 'void', 'voided'].includes((p.settlement_status || '').toLowerCase());
+    return !isFinished && !isSettled;
+  });
 
-      if (isVipTier) {
-        return {
-          ...p,
-          is_locked: true,
-          predicted_outcome: 'LOCKED',
-          probability: null,
-          metadata: {},
-        };
-      }
+  const isExpired = authStatus === 'expired';
+  const lockedPrompt = isExpired
+    ? '🔒 Subscribe to Oddsbanta VIP'
+    : '🔒 Register to view Oddsbanta AI predictions';
 
-      return {
-        ...p,
-        is_locked: false,
-      };
-    });
+  return upcomingOnly.map((p: any) => {
+    return {
+      ...p,
+      is_locked: true,
+      predicted_outcome: lockedPrompt,
+      probability: null,
+      metadata: {
+        locked: true,
+        auth_status: authStatus,
+        subscription_required: isExpired,
+        registration_required: !isExpired,
+        trial_expired: isExpired,
+      },
+    };
+  });
 }
 
 export default async function handler(req: Request) {
@@ -354,7 +353,8 @@ export default async function handler(req: Request) {
   const isInternalService = Boolean(SUPABASE_SERVICE_ROLE_KEY && rawToken === SUPABASE_SERVICE_ROLE_KEY);
   const isBot = !isInternalService && isScraperBot(req);
 
-  const isVipOrAdmin = isBot ? false : await checkIsPaidOrAdmin(userAuthToken);
+  const authStatus = isBot ? 'visitor' : await checkAuthStatus(userAuthToken);
+  const isVipOrAdmin = authStatus === 'paid_or_trial';
 
   const corsOrigin = getCorsOrigin(req);
   const responseHeaders: Record<string, string> = {
@@ -379,13 +379,14 @@ export default async function handler(req: Request) {
       const preds = isBot
         ? applyGoalsScraperBlinding(memoryCache.data.predictions)
         : !isVipOrAdmin
-        ? applyGoalsPaywallRedaction(memoryCache.data.predictions)
+        ? applyGoalsPaywallRedaction(memoryCache.data.predictions, authStatus)
         : memoryCache.data.predictions;
 
       const payload = {
         ...memoryCache.data,
         predictions: preds,
         is_scraper_blinded: isBot,
+        auth_status: authStatus,
       };
       return new Response(
         JSON.stringify({ success: true, ...payload }),
@@ -412,13 +413,14 @@ export default async function handler(req: Request) {
     const preds = isBot
       ? applyGoalsScraperBlinding(feedData.predictions)
       : !isVipOrAdmin
-      ? applyGoalsPaywallRedaction(feedData.predictions)
+      ? applyGoalsPaywallRedaction(feedData.predictions, authStatus)
       : feedData.predictions;
 
     const payload = {
       ...feedData,
       predictions: preds,
       is_scraper_blinded: isBot,
+      auth_status: authStatus,
     };
 
     return new Response(
@@ -429,7 +431,7 @@ export default async function handler(req: Request) {
     if (!isVipOrAdmin && memoryCache) {
       const preds = isBot
         ? applyGoalsScraperBlinding(memoryCache.data.predictions)
-        : applyGoalsPaywallRedaction(memoryCache.data.predictions);
+        : applyGoalsPaywallRedaction(memoryCache.data.predictions, authStatus);
 
       return new Response(
         JSON.stringify({
@@ -437,6 +439,7 @@ export default async function handler(req: Request) {
           ...memoryCache.data,
           predictions: preds,
           is_scraper_blinded: isBot,
+          auth_status: authStatus,
           stale: true,
         }),
         { status: 200, headers: responseHeaders }

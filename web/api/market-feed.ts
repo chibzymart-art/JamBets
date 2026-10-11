@@ -85,6 +85,7 @@ interface MarketFeedResponse {
   counts: Record<MarketType, number>;
   leagues: Array<{ code: string; name: string }>;
   predictions: UnifiedMarketPrediction[];
+  auth_status?: AuthStatus;
   cached_at: string;
 }
 
@@ -112,23 +113,25 @@ const ADMIN_EMAILS = new Set([
 
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 
-// In-memory cache for user auth verification (120s for valid users, 30s for invalid)
-const userAuthCache = new Map<string, { isPaid: boolean; expiresAt: number }>();
+export type AuthStatus = 'paid_or_trial' | 'expired' | 'visitor';
 
-async function checkIsPaidOrAdmin(authToken: string | null): Promise<boolean> {
-  if (!authToken) return false;
+// In-memory cache for user auth verification (120s for valid users, 30s for invalid)
+const userAuthCache = new Map<string, { status: AuthStatus; expiresAt: number }>();
+
+async function checkAuthStatus(authToken: string | null): Promise<AuthStatus> {
+  if (!authToken) return 'visitor';
   const rawToken = authToken.startsWith('Bearer ') ? authToken.slice(7).trim() : authToken.trim();
-  if (!rawToken) return false;
+  if (!rawToken) return 'visitor';
 
   // 1. Direct Service Role Key Match (internal/admin scripts)
   if (SUPABASE_SERVICE_ROLE_KEY && rawToken === SUPABASE_SERVICE_ROLE_KEY) {
-    return true;
+    return 'paid_or_trial';
   }
 
   // 2. Check in-memory cache to eliminate duplicate Supabase Auth roundtrips
   const cached = userAuthCache.get(rawToken);
   if (cached && Date.now() < cached.expiresAt) {
-    return cached.isPaid;
+    return cached.status;
   }
 
   try {
@@ -142,14 +145,14 @@ async function checkIsPaidOrAdmin(authToken: string | null): Promise<boolean> {
 
     if (!authRes.ok) {
       // Signature is invalid, token is forged or expired -> fail closed
-      userAuthCache.set(rawToken, { isPaid: false, expiresAt: Date.now() + 30 * 1000 });
-      return false;
+      userAuthCache.set(rawToken, { status: 'visitor', expiresAt: Date.now() + 30 * 1000 });
+      return 'visitor';
     }
 
     const authUser = await authRes.json();
     if (!authUser || !authUser.id) {
-      userAuthCache.set(rawToken, { isPaid: false, expiresAt: Date.now() + 30 * 1000 });
-      return false;
+      userAuthCache.set(rawToken, { status: 'visitor', expiresAt: Date.now() + 30 * 1000 });
+      return 'visitor';
     }
 
     // 4. Server-verified role or admin email whitelist
@@ -159,8 +162,8 @@ async function checkIsPaidOrAdmin(authToken: string | null): Promise<boolean> {
       authUser.user_metadata?.role === 'admin' ||
       (email && ADMIN_EMAILS.has(email))
     ) {
-      userAuthCache.set(rawToken, { isPaid: true, expiresAt: Date.now() + 120 * 1000 });
-      return true;
+      userAuthCache.set(rawToken, { status: 'paid_or_trial', expiresAt: Date.now() + 120 * 1000 });
+      return 'paid_or_trial';
     }
 
     const userId = authUser.id;
@@ -182,8 +185,8 @@ async function checkIsPaidOrAdmin(authToken: string | null): Promise<boolean> {
     if (userRes.ok) {
       userData = await userRes.json();
       if (Array.isArray(userData) && userData.length > 0 && userData[0].role === 'admin') {
-        userAuthCache.set(rawToken, { isPaid: true, expiresAt: Date.now() + 120 * 1000 });
-        return true;
+        userAuthCache.set(rawToken, { status: 'paid_or_trial', expiresAt: Date.now() + 120 * 1000 });
+        return 'paid_or_trial';
       }
     }
 
@@ -241,11 +244,12 @@ async function checkIsPaidOrAdmin(authToken: string | null): Promise<boolean> {
       }
     }
 
-    userAuthCache.set(rawToken, { isPaid, expiresAt: Date.now() + (isPaid ? 120 * 1000 : 30 * 1000) });
-    return isPaid;
+    const status: AuthStatus = isPaid ? 'paid_or_trial' : 'expired';
+    userAuthCache.set(rawToken, { status, expiresAt: Date.now() + (isPaid ? 120 * 1000 : 30 * 1000) });
+    return status;
   } catch (err) {
     console.error('Cryptographic auth verification error:', err);
-    return false;
+    return 'visitor';
   }
 }
 
@@ -710,7 +714,8 @@ export default async function handler(req: Request) {
   const activeMarket = validMarkets.includes(marketParam) ? marketParam : 'general';
 
   const userAuthToken = req.headers.get('Authorization');
-  const isVipOrAdmin = await checkIsPaidOrAdmin(userAuthToken);
+  const authStatus = await checkAuthStatus(userAuthToken);
+  const isVipOrAdmin = authStatus === 'paid_or_trial';
   const authKey = SUPABASE_SERVICE_ROLE_KEY || SUPABASE_ANON_KEY;
   const headers: Record<string, string> = {
     apikey: authKey,
@@ -720,175 +725,158 @@ export default async function handler(req: Request) {
 
   const corsOrigin = getCorsOrigin(req);
 
-    const responseHeaders = {
-      'Content-Type': 'application/json',
-      'Cache-Control': isVipOrAdmin
-        ? 'private, no-cache, no-store, must-revalidate'
-        : 'public, s-maxage=60, stale-while-revalidate=300',
-      'CDN-Cache-Control': isVipOrAdmin ? 'no-store' : 'public, s-maxage=60',
-      'Vercel-CDN-Cache-Control': isVipOrAdmin ? 'no-store' : 'public, s-maxage=60',
-      'Vary': 'Authorization, Origin',
-      'Access-Control-Allow-Origin': corsOrigin,
-      'Access-Control-Allow-Credentials': 'true',
-    };
+  const responseHeaders = {
+    'Content-Type': 'application/json',
+    'Cache-Control': isVipOrAdmin
+      ? 'private, no-cache, no-store, must-revalidate'
+      : 'public, s-maxage=60, stale-while-revalidate=300',
+    'CDN-Cache-Control': isVipOrAdmin ? 'no-store' : 'public, s-maxage=60',
+    'Vercel-CDN-Cache-Control': isVipOrAdmin ? 'no-store' : 'public, s-maxage=60',
+    'Vary': 'Authorization, Origin',
+    'Access-Control-Allow-Origin': corsOrigin,
+    'Access-Control-Allow-Credentials': 'true',
+  };
 
-    const cacheKey = `${activeMarket}:${dateParam}:${leagueParam}:${pageParam}:${limitParam}:${Boolean(isVipOrAdmin)}`;
+  const cacheKey = `${activeMarket}:${dateParam}:${leagueParam}:${pageParam}:${limitParam}:${authStatus}`;
 
-    try {
-      const now = Date.now();
+  try {
+    const now = Date.now();
 
-      // Check memory cache for fresh data (shields Supabase for both guest & VIP queries!)
-      const cached = memoryCache.get(cacheKey);
-      if (cached && now < cached.expiresAt) {
-        return new Response(JSON.stringify(cached.data), {
-          status: 200,
-          headers: responseHeaders,
-        });
-      }
+    // Check memory cache for fresh data (shields Supabase for both guest & VIP queries!)
+    const cached = memoryCache.get(cacheKey);
+    if (cached && now < cached.expiresAt) {
+      return new Response(JSON.stringify(cached.data), {
+        status: 200,
+        headers: responseHeaders,
+      });
+    }
 
-      // 3. Fetch predictions & counts
-      let fetchPromise = inflightPromises.get(cacheKey);
-      if (!fetchPromise) {
-        fetchPromise = (async () => {
-          const [allPredictions, counts] = await Promise.all([
-            fetchMarketDataFromUpstream(activeMarket, headers),
-            computeAllMarketCounts(headers, dateParam),
-          ]);
+    // 3. Fetch predictions & counts
+    let fetchPromise = inflightPromises.get(cacheKey);
+    if (!fetchPromise) {
+      fetchPromise = (async () => {
+        const [allPredictions, counts] = await Promise.all([
+          fetchMarketDataFromUpstream(activeMarket, headers),
+          computeAllMarketCounts(headers, dateParam),
+        ]);
 
-          // 4. In-Memory Date & League Filtering
-          let filtered = allPredictions;
+        // 4. In-Memory Date & League Filtering
+        let filtered = allPredictions;
 
-          if (dateParam !== 'all') {
-            let targetDateStr = dateParam;
-            const todayStr = getLagosDate();
-            if (dateParam === 'today') {
-              targetDateStr = todayStr;
-            } else if (dateParam === 'tomorrow') {
-              targetDateStr = getLagosDate(new Date(Date.now() + 86400000));
-            } else if (dateParam === 'yesterday') {
-              targetDateStr = getLagosDate(new Date(Date.now() - 86400000));
-            }
-
-            filtered = filtered.filter((p) => {
-              const pDate = getLagosDateFromIso(p.target_kickoff_at);
-              return pDate === targetDateStr;
-            });
-          } else {
-            // All dates: current date and future dates, no past dates
-            const todayStr = getLagosDate();
-            filtered = filtered.filter((p) => {
-              const pDate = getLagosDateFromIso(p.target_kickoff_at);
-              return !pDate || pDate >= todayStr;
-            });
+        if (dateParam !== 'all') {
+          let targetDateStr = dateParam;
+          const todayStr = getLagosDate();
+          if (dateParam === 'today') {
+            targetDateStr = todayStr;
+          } else if (dateParam === 'tomorrow') {
+            targetDateStr = getLagosDate(new Date(Date.now() + 86400000));
+          } else if (dateParam === 'yesterday') {
+            targetDateStr = getLagosDate(new Date(Date.now() - 86400000));
           }
 
-          if (leagueParam) {
-            filtered = filtered.filter((p) => {
-              const lCode = (p.fixture?.league?.code || '').toLowerCase();
-              return lCode === leagueParam.toLowerCase();
-            });
+          filtered = filtered.filter((p) => {
+            const pDate = getLagosDateFromIso(p.target_kickoff_at);
+            return pDate === targetDateStr;
+          });
+        } else {
+          // All dates: current date and future dates, no past dates
+          const todayStr = getLagosDate();
+          filtered = filtered.filter((p) => {
+            const pDate = getLagosDateFromIso(p.target_kickoff_at);
+            return !pDate || pDate >= todayStr;
+          });
+        }
+
+        if (leagueParam) {
+          filtered = filtered.filter((p) => {
+            const lCode = (p.fixture?.league?.code || '').toLowerCase();
+            return lCode === leagueParam.toLowerCase();
+          });
+        }
+
+        // Collect available leagues
+        const leagueMap = new Map<string, string>();
+        for (const p of allPredictions) {
+          const code = p.fixture?.league?.code;
+          const name = p.fixture?.league?.name;
+          if (code && name && !leagueMap.has(code)) {
+            leagueMap.set(code, name);
           }
+        }
+        const leagues = Array.from(leagueMap.entries()).map(([code, name]) => ({ code, name }));
 
-          // Collect available leagues
-          const leagueMap = new Map<string, string>();
-          for (const p of allPredictions) {
-            const code = p.fixture?.league?.code;
-            const name = p.fixture?.league?.name;
-            if (code && name && !leagueMap.has(code)) {
-              leagueMap.set(code, name);
-            }
-          }
-          const leagues = Array.from(leagueMap.entries()).map(([code, name]) => ({ code, name }));
+        // 5. Strict Paywall Redaction:
+        // Rule 1: Paid or 3-Day Free Trial users see everything (pending, won, lost, void).
+        // Rule 2: Non-paid users (visitors & expired trial users) are strictly BLINDED from settlement results:
+        //         - All finished / settled matches are excluded (never leaked as free proof).
+        //         - On past dates, this returns 0 matches, exactly matching general football.
+        // Rule 3: Upcoming / pending predictions remain visible for teams & market tab, but are locked:
+        //         - Visitor: '🔒 Register to view Oddsbanta AI predictions'
+        //         - Expired Trial: '🔒 Subscribe to Oddsbanta VIP'
+        let filteredForAudience = filtered;
+        if (authStatus !== 'paid_or_trial') {
+          filteredForAudience = filtered.filter((p) => {
+            const isFinished = (p.fixture?.status || '').toLowerCase() === 'finished' || Boolean(p.settled_at);
+            const isSettled = ['won', 'lost', 'void', 'voided'].includes((p.settlement_status || '').toLowerCase());
+            return !isFinished && !isSettled;
+          });
+        }
 
-          // 5. Strict Paywall Redaction:
-          // Rule 1: Non-paid users are locked from seeing any pending predictions (0 free)
-          // Rule 2: Non-paid users only see WON predictions for the day (unlocked)
-          // Rule 3: Lost predictions are completely hidden from non-paid visitors
-          let filteredForAudience = filtered;
-          if (!isVipOrAdmin) {
-            filteredForAudience = filtered.filter((p) => {
-              return p.settlement_status !== 'lost' && p.settlement_status !== 'void';
-            });
-          }
+        const total = filteredForAudience.length;
+        const totalPages = Math.ceil(total / limitParam) || 1;
+        const offset = (pageParam - 1) * limitParam;
+        const paginatedRaw = filteredForAudience.slice(offset, offset + limitParam);
 
-          const total = filteredForAudience.length;
-          const totalPages = Math.ceil(total / limitParam) || 1;
-          const offset = (pageParam - 1) * limitParam;
-          const paginatedRaw = filteredForAudience.slice(offset, offset + limitParam);
-
-          const predictions = paginatedRaw.map((item) => {
-            if (isVipOrAdmin) {
-              return item;
-            }
-
-            // Won predictions are visible as proof
-            if (item.settlement_status === 'won') {
-              return {
-                ...item,
-                is_locked: false,
-              };
-            }
-
-            // Check if VIP tier: High Confidence, Top Pick, Banger, Goal Machine, Early Strike, Over 25 Lock
-            const cat = (item.confidence_category || item.confidence_tier || '').toUpperCase().replace(/[\s-]+/g, '_');
-            let prob = item.probability;
-            if (prob != null && typeof prob === 'number') {
-              if (prob > 1) prob = prob / 100;
-            }
-
-            const isVipTier =
-              cat === 'BANGER' ||
-              cat.includes('BANGER') ||
-              cat === 'TOP_PICK' ||
-              cat === 'TOPPICK' ||
-              cat.includes('TOP') ||
-              cat === 'HIGH_CONFIDENCE' ||
-              cat === 'HIGHCONFIDENCE' ||
-              cat.includes('HIGH') ||
-              cat === 'GOAL_MACHINE' ||
-              cat === 'OVER_25_LOCK' ||
-              cat === 'EARLY_STRIKE' ||
-              (prob !== null && typeof prob === 'number' && prob >= 0.80);
-
-            if (isVipTier) {
-              return {
-                ...item,
-                is_locked: true,
-                prediction: '🔒 Premium VIP Pick',
-                probability: null,
-                display_probability: null,
-                confidence_tier: item.confidence_tier || 'TOP_PICK',
-                confidence_category: item.confidence_category || 'TOP PICK',
-                metrics: {},
-                tactical_rationale: null,
-                tactical_tag: null,
-              };
-            }
-
-            // Mid-Confidence (6.0–7.9) is free and visible to all users
+        const predictions = paginatedRaw.map((item) => {
+          if (authStatus === 'paid_or_trial') {
             return {
               ...item,
               is_locked: false,
-              confidence_tier: item.confidence_tier || 'MID_CONFIDENCE',
-              confidence_category: item.confidence_category || 'MID CONFIDENCE',
             };
-          });
+          }
 
-        const responsePayload: MarketFeedResponse = {
-          success: true,
-          market: activeMarket,
-          page: pageParam,
-          limit: limitParam,
-          total,
-          total_pages: totalPages,
-          has_next: pageParam < totalPages,
-          has_prev: pageParam > 1,
-          date_filter: dateParam,
-          counts,
-          leagues,
-          predictions,
-          cached_at: new Date().toISOString(),
-        };
+          const isExpired = authStatus === 'expired';
+          const lockedPrompt = isExpired
+            ? '🔒 Subscribe to Oddsbanta VIP'
+            : '🔒 Register to view Oddsbanta AI predictions';
+
+          return {
+            ...item,
+            is_locked: true,
+            prediction: lockedPrompt,
+            probability: null,
+            display_probability: null,
+            confidence_tier: item.confidence_tier || 'TOP_PICK',
+            confidence_category: item.confidence_category || 'TOP PICK',
+            metrics: {},
+            tactical_rationale: null,
+            tactical_tag: null,
+            metadata: {
+              locked: true,
+              auth_status: authStatus,
+              subscription_required: isExpired,
+              registration_required: !isExpired,
+              trial_expired: isExpired,
+            },
+          };
+        });
+
+      const responsePayload: MarketFeedResponse = {
+        success: true,
+        market: activeMarket,
+        page: pageParam,
+        limit: limitParam,
+        total,
+        total_pages: totalPages,
+        has_next: pageParam < totalPages,
+        has_prev: pageParam > 1,
+        date_filter: dateParam,
+        counts,
+        leagues,
+        predictions,
+        auth_status: authStatus,
+        cached_at: new Date().toISOString(),
+      };
 
         memoryCache.set(cacheKey, { data: responsePayload, expiresAt: Date.now() + CACHE_TTL_MS });
 
