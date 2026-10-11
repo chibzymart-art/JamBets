@@ -27,8 +27,10 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
   onProfileUpdated
 }) => {
   const navigate = useNavigate();
+  const { currency, symbol, pricing, formatPrice } = useGeoCurrency();
+
   // Derive robust effective profile ensuring modal NEVER fails to render for authenticated users
-  const effectiveProfile: UserProfile | null = profile || (currentUser ? {
+  const effectiveProfile: UserProfile = profile || (currentUser ? {
     id: currentUser.id,
     email: currentUser.email || '',
     display_name: currentUser.user_metadata?.full_name || currentUser.user_metadata?.display_name || currentUser.email?.split('@')[0] || 'Member',
@@ -37,7 +39,16 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
     disclaimer_financial_accepted: true,
     created_at: currentUser.created_at || new Date().toISOString(),
     updated_at: new Date().toISOString(),
-  } : null);
+  } : {
+    id: 'guest',
+    email: '',
+    display_name: 'Member',
+    role: 'free',
+    disclaimer_age_accepted: false,
+    disclaimer_financial_accepted: false,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  });
 
   // Username / Display Name state
   const [displayName, setDisplayName] = useState(
@@ -149,9 +160,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
     }
   };
 
-  if (!isOpen || !effectiveProfile) return null;
-
-  const { currency, symbol, pricing, formatPrice } = useGeoCurrency();
+  if (!isOpen) return null;
   const currentTier = (effectiveProfile.role || subscription?.tier || 'free').toLowerCase();
 
   const handleTierChange = (targetTier: 'free' | 'standard' | 'bigbang') => {
@@ -304,6 +313,32 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
             (entitlement?.features as any)?.basketball === true
           );
 
+          // 3-Day Free Trial status evaluation
+          let isTrialActive = false;
+          let remainingTimeDisplay = '';
+          const userCreatedAt = effectiveProfile.created_at || currentUser?.created_at;
+          if (userCreatedAt) {
+            const createdMs = new Date(userCreatedAt).getTime();
+            const trialEndMs = createdMs + 3 * 24 * 60 * 60 * 1000;
+            const diffMs = trialEndMs - Date.now();
+            if (diffMs > 0) {
+              isTrialActive = true;
+              const hours = Math.ceil(diffMs / (1000 * 60 * 60));
+              const days = Math.floor(hours / 24);
+              remainingTimeDisplay = days > 0 ? `${days}d ${hours % 24}h left` : `${hours}h left`;
+            }
+          }
+          if (entitlement?.valid_until) {
+            const validUntilMs = new Date(entitlement.valid_until).getTime();
+            if (validUntilMs > Date.now()) {
+              isTrialActive = true;
+              const diffMs = validUntilMs - Date.now();
+              const hours = Math.ceil(diffMs / (1000 * 60 * 60));
+              const days = Math.floor(hours / 24);
+              remainingTimeDisplay = days > 0 ? `${days}d ${hours % 24}h left` : `${hours}h left`;
+            }
+          }
+
           return (
             <div className="profile-details-grid">
               <div className="profile-detail-card">
@@ -312,16 +347,24 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
               </div>
               <div className="profile-detail-card">
                 <span className="detail-label">Current Role / Tier</span>
-                <span className={`detail-value tier-badge-${isSuperAdmin ? 'admin' : currentTier}`}>
-                  {isSuperAdmin ? '🛡 SUPER ADMIN' : currentTier.toUpperCase()}
+                <span className={`detail-value tier-badge-${isSuperAdmin ? 'admin' : (isTrialActive ? 'trial' : currentTier)}`}>
+                  {isSuperAdmin
+                    ? '🛡 SUPER ADMIN'
+                    : isTrialActive
+                    ? `🎁 3-DAY FREE TRIAL (${remainingTimeDisplay})`
+                    : currentTier.toUpperCase()}
                 </span>
               </div>
               <div className="profile-detail-card">
                 <span className="detail-label">Predictions Access</span>
-                <span className="detail-value" style={{ color: isFullAccess ? '#34d399' : '#f87171' }}>
+                <span className="detail-value" style={{ color: (isFullAccess || isTrialActive) ? '#34d399' : '#f87171' }}>
                   {isSuperAdmin
                     ? '🛡 Super Admin (Full Unrestricted Access)'
-                    : (isFullAccess ? 'Unlocked (Full Access)' : 'Locked (Teaser View Only)')}
+                    : isFullAccess
+                    ? 'Unlocked (Full Access)'
+                    : isTrialActive
+                    ? `🎁 Unlocked (3-Day Free Trial - ${remainingTimeDisplay})`
+                    : 'Locked (Trial Expired - Upgrade VIP)'}
                 </span>
               </div>
               <div className="profile-detail-card">
