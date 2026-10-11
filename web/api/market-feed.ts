@@ -174,12 +174,13 @@ async function checkIsPaidOrAdmin(authToken: string | null): Promise<boolean> {
     const [subRes, entRes, userRes] = await Promise.all([
       fetch(`${SUPABASE_URL}/rest/v1/subscriptions?user_id=eq.${userId}&status=eq.active&select=tier&limit=1`, { headers }),
       fetch(`${SUPABASE_URL}/rest/v1/entitlements?user_id=eq.${userId}&select=tier,valid_until,features&limit=1`, { headers }),
-      fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${userId}&select=role&limit=1`, { headers }),
+      fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${userId}&select=role,created_at&limit=1`, { headers }),
     ]);
 
+    let userData: any = null;
     // Check users table role
     if (userRes.ok) {
-      const userData = await userRes.json();
+      userData = await userRes.json();
       if (Array.isArray(userData) && userData.length > 0 && userData[0].role === 'admin') {
         userAuthCache.set(rawToken, { isPaid: true, expiresAt: Date.now() + 120 * 1000 });
         return true;
@@ -188,6 +189,7 @@ async function checkIsPaidOrAdmin(authToken: string | null): Promise<boolean> {
 
     let isPaid = false;
 
+    // 1. Check active paid subscriptions
     if (subRes.ok) {
       const subData = await subRes.json();
       if (Array.isArray(subData) && subData.length > 0) {
@@ -198,6 +200,7 @@ async function checkIsPaidOrAdmin(authToken: string | null): Promise<boolean> {
       }
     }
 
+    // 2. Check entitlements (active 3-day trial or active entitlement)
     if (!isPaid && entRes.ok) {
       const entData = await entRes.json();
       if (Array.isArray(entData) && entData.length > 0) {
@@ -207,21 +210,38 @@ async function checkIsPaidOrAdmin(authToken: string | null): Promise<boolean> {
           const tier = (ent.tier || '').toLowerCase();
           const feats = ent.features || {};
           const isEntAdmin = tier === 'admin' || feats.admin === true;
-          const hasVipFeatures = Boolean(
+          const hasVipOrTrialFeatures = Boolean(
+            tier === 'trial' ||
+            tier === 'free_trial' ||
+            ['standard', 'bigbang', 'vip', 'pro', 'admin'].includes(tier) ||
+            feats.trial === true ||
             feats.vip === true ||
             feats.football_predictions === true ||
+            feats.specialist_markets === true ||
             feats.simulations === true ||
             feats.all_sports === true ||
             feats.bigbang === true
           );
-          if (['standard', 'bigbang', 'vip', 'pro', 'admin'].includes(tier) || isEntAdmin || hasVipFeatures) {
+          if (['standard', 'bigbang', 'vip', 'pro', 'admin'].includes(tier) || isEntAdmin || hasVipOrTrialFeatures) {
             isPaid = true;
           }
         }
       }
     }
 
-    userAuthCache.set(rawToken, { isPaid, expiresAt: Date.now() + 120 * 1000 });
+    // 3. 3-Day Free Trial evaluation (72 hours from user registration)
+    if (!isPaid) {
+      const createdAt = authUser.created_at || (Array.isArray(userData) && userData[0]?.created_at);
+      if (createdAt) {
+        const createdMs = new Date(createdAt).getTime();
+        const trialDurationMs = 3 * 24 * 60 * 60 * 1000; // 72 hours
+        if (Date.now() - createdMs < trialDurationMs) {
+          isPaid = true; // Active 3-Day Free Trial
+        }
+      }
+    }
+
+    userAuthCache.set(rawToken, { isPaid, expiresAt: Date.now() + (isPaid ? 120 * 1000 : 30 * 1000) });
     return isPaid;
   } catch (err) {
     console.error('Cryptographic auth verification error:', err);
@@ -266,11 +286,11 @@ const FIXTURE_JOIN =
 
 const SELECTS: Record<string, { table: string; select: string }> = {
   corners: {
-    table: 'corner_predictions',
+    table: 'corner_predictions_paywall',
     select: `id,fixture_id,prediction,market,probability,confidence_category,corner_tier,predicted_total_corners,home_corners_avg,away_corners_avg,over_8_5_prob,over_9_5_prob,over_10_5_prob,target_kickoff_at,settlement_status,settled_at,actual_corners,settlement_notes,publication_status,is_locked,${FIXTURE_JOIN}`,
   },
   goals: {
-    table: 'goals_predictions',
+    table: 'goals_predictions_paywall',
     select: `id,fixture_id,market,predicted_outcome,probability,confidence_tier,xg_combined,home_over25_rate,away_over25_rate,h2h_over25_rate,ht_goal_frequency,avg_first_goal_minute,target_kickoff_at,settlement_status,settled_at,actual_score,ht_score,settlement_notes,metadata,is_locked,${FIXTURE_JOIN}`,
   },
 };
