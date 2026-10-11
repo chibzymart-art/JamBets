@@ -433,8 +433,11 @@ export default function App() {
   // Permissions: Football (3-Day Free Trial + Standard + BigBang VIP + Admin)
   const canViewFootball = trialState.canViewFootballPredictions;
 
-  // Permissions: Multi-Sport (Tennis, Basketball, Cricket - Strictly BigBang VIP + Admin only, excluded from Trial)
+  // Permissions: Multi-Sport (Tennis, Basketball, Cricket - Strictly BigBang VIP + Admin only, excluded from Trial and Standard)
   const canViewMultiSport = trialState.canViewTennis;
+
+  // Permissions: Specialist Football Markets (Goals, Corners - Standard + BigBang VIP + Admin)
+  const canViewSpecialistMarkets = trialState.canViewSpecialistMarkets;
 
   // Backward compatibility alias for football predictions
   const canViewPredictions = canViewFootball;
@@ -1735,6 +1738,8 @@ export default function App() {
                             ? profile?.role === 'bigbang'
                               ? '💥 BigBang VIP'
                               : '⭐ Oddsbanta VIP'
+                            : trialState.isPaidStandard
+                            ? '⚽ Standard Football'
                             : trialState.isTrialActive
                             ? `🎁 3-Day Trial (${trialState.remainingTimeDisplay})`
                             : trialState.isTrialExpired
@@ -2062,7 +2067,7 @@ export default function App() {
             ) : (
               <>
                 {/* Active Trial Pill */}
-                {trialState.isTrialActive && !trialState.isPaidVip && !trialState.isAdmin && (
+                {trialState.isTrialActive && !trialState.isPaidVip && !trialState.isPaidStandard && !trialState.isAdmin && (
                   <button
                     type="button"
                     className="trial-header-status-pill desktop-only"
@@ -2088,7 +2093,7 @@ export default function App() {
                 )}
 
                 {/* Expired Trial Pill */}
-                {trialState.isTrialExpired && !trialState.isPaidVip && !trialState.isAdmin && (
+                {trialState.isTrialExpired && !trialState.isPaidVip && !trialState.isPaidStandard && !trialState.isAdmin && (
                   <button
                     type="button"
                     className="trial-header-status-pill expired desktop-only"
@@ -2110,6 +2115,32 @@ export default function App() {
                   >
                     <span>⏰</span>
                     <span>Trial Expired • Upgrade VIP</span>
+                  </button>
+                )}
+
+                {/* Standard Subscriber Badge */}
+                {trialState.isPaidStandard && (
+                  <button
+                    type="button"
+                    className="standard-header-badge desktop-only"
+                    onClick={() => setIsPricingModalOpen(true)}
+                    title="Standard Plan Active (All Football Unlocked). Click to upgrade to BigBang VIP for Multi-Sport & Telegram Bot."
+                    style={{
+                      background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)',
+                      border: '1px solid #93c5fd',
+                      borderRadius: 20,
+                      padding: '5px 12px',
+                      fontSize: 12,
+                      fontWeight: 800,
+                      color: '#1e40af',
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 5,
+                    }}
+                  >
+                    <span>⚽</span>
+                    <span>Standard Active</span>
                   </button>
                 )}
 
@@ -2258,7 +2289,7 @@ export default function App() {
                 currentUser={currentUser}
                 userRole={profile?.role}
                 isAdmin={isAdmin}
-                canViewPredictions={canViewFootball}
+                canViewPredictions={canViewSpecialistMarkets}
                 onOpenAuth={(mode) => {
                   setAuthModalMode(mode);
                   setIsAuthModalOpen(true);
@@ -3133,7 +3164,7 @@ export default function App() {
                     )}
 
                     {/* Active Trial User Status Banner */}
-                    {trialState.isTrialActive && !trialState.isPaidVip && !trialState.isAdmin && (
+                    {trialState.isTrialActive && !trialState.isPaidVip && !trialState.isPaidStandard && !trialState.isAdmin && (
                       <div
                         className="trial-active-banner"
                         style={{
@@ -3182,7 +3213,7 @@ export default function App() {
                     )}
 
                     {/* Expired Trial User Urgency Banner */}
-                    {trialState.isTrialExpired && !trialState.isPaidVip && !trialState.isAdmin && (
+                    {trialState.isTrialExpired && !trialState.isPaidVip && !trialState.isPaidStandard && !trialState.isAdmin && (
                       <div
                         className="trial-expired-urgency-banner"
                         style={{
@@ -3228,7 +3259,7 @@ export default function App() {
                             gap: 6,
                           }}
                         >
-                          👑 Unlock VIP Now (₦3,500/mo) →
+                          👑 Unlock Access Now →
                         </button>
                       </div>
                     )}

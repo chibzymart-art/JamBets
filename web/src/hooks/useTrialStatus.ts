@@ -1,13 +1,14 @@
 import { useState, useEffect, useMemo } from 'react';
 import { UserProfile, UserSubscription, UserEntitlement } from '../types';
 
-export type TrialStatusType = 'visitor' | 'trial_active' | 'trial_expired' | 'paid_vip';
+export type TrialStatusType = 'visitor' | 'trial_active' | 'trial_expired' | 'paid_standard' | 'paid_vip';
 
 export interface TrialStatusResult {
   status: TrialStatusType;
   isVisitor: boolean;
   isTrialActive: boolean;
   isTrialExpired: boolean;
+  isPaidStandard: boolean;
   isPaidVip: boolean;
   isAdmin: boolean;
   validUntil: string | null;
@@ -37,7 +38,8 @@ const ADMIN_EMAILS = new Set([
  * - Visitors: Blinded from active predictions and historical settlements.
  * - Active Trial: 100% full access to main football predictions & verified settlements for 3 days.
  * - Expired Trial: Blinded from settlements and active predictions (VIP upgrade prompt).
- * - Specialist engines (goals, corners), tennis, and basketball strictly require Paid VIP.
+ * - Standard Paid: 100% full access to ALL football (main, goals, corners, settlements).
+ * - BigBang VIP / Admin: 100% full access to EVERYTHING (Football + Tennis + Basketball + Multi-Sport).
  */
 export function useTrialStatus(
   currentUser: any | null,
@@ -63,6 +65,7 @@ export function useTrialStatus(
         isVisitor: true,
         isTrialActive: false,
         isTrialExpired: false,
+        isPaidStandard: false,
         isPaidVip: false,
         isAdmin: false,
         validUntil: null,
@@ -94,6 +97,7 @@ export function useTrialStatus(
         isVisitor: false,
         isTrialActive: true,
         isTrialExpired: false,
+        isPaidStandard: false,
         isPaidVip: true,
         isAdmin: true,
         validUntil: null,
@@ -109,40 +113,67 @@ export function useTrialStatus(
       };
     }
 
-    // 3. Paid VIP Subscription Check
+    // 3. Paid VIP & Standard Subscription / Entitlement Checks
     const subTier = (subscription?.tier || '').toLowerCase();
-    const hasActivePaidSub = Boolean(
-      subscription?.status === 'active' &&
-      ['standard', 'bigbang', 'vip', 'pro', 'admin'].includes(subTier)
-    );
+    const isSubActive = subscription?.status === 'active';
 
     const entTier = (entitlement?.tier || '').toLowerCase();
     const entValidUntilMs = entitlement?.valid_until
       ? new Date(entitlement.valid_until).getTime()
       : 0;
-    const hasActivePaidEnt = Boolean(
-      ['standard', 'bigbang', 'vip', 'pro', 'admin'].includes(entTier) &&
-      (!entitlement?.valid_until || entValidUntilMs > nowMs)
-    );
+    const isEntActive = !entitlement?.valid_until || entValidUntilMs > nowMs;
 
-    if (hasActivePaidSub || hasActivePaidEnt) {
+    const isVipSub = isSubActive && ['bigbang', 'vip', 'pro'].includes(subTier);
+    const isVipEnt = isEntActive && ['bigbang', 'vip', 'pro'].includes(entTier);
+    const isPaidVip = isVipSub || isVipEnt;
+
+    const isStdSub = isSubActive && subTier === 'standard';
+    const isStdEnt = isEntActive && entTier === 'standard';
+    const isPaidStandard = (isStdSub || isStdEnt) && !isPaidVip;
+
+    if (isPaidVip) {
       return {
         status: 'paid_vip',
         isVisitor: false,
-        isTrialActive: true,
+        isTrialActive: false,
         isTrialExpired: false,
+        isPaidStandard: false,
         isPaidVip: true,
         isAdmin: false,
         validUntil: entitlement?.valid_until || subscription?.expires_at || null,
         remainingMs: Infinity,
         remainingHours: Infinity,
         remainingDays: Infinity,
-        remainingTimeDisplay: 'Oddsbanta VIP Active',
+        remainingTimeDisplay: 'BigBang VIP Active',
         canViewFootballPredictions: true,
         canViewFootballSettlements: true,
         canViewSpecialistMarkets: true,
         canViewTennis: true,
         canViewBasketball: true,
+      };
+    }
+
+    if (isPaidStandard) {
+      return {
+        status: 'paid_standard',
+        isVisitor: false,
+        isTrialActive: false,
+        isTrialExpired: false,
+        isPaidStandard: true,
+        isPaidVip: false,
+        isAdmin: false,
+        validUntil: entitlement?.valid_until || subscription?.expires_at || null,
+        remainingMs: Infinity,
+        remainingHours: Infinity,
+        remainingDays: Infinity,
+        remainingTimeDisplay: 'Standard Plan Active',
+        // Standard gets everything about Football (predictions, settlements, specialist markets)
+        canViewFootballPredictions: true,
+        canViewFootballSettlements: true,
+        canViewSpecialistMarkets: true,
+        // Multi-sport (Tennis & Basketball) is strictly VIP only
+        canViewTennis: false,
+        canViewBasketball: false,
       };
     }
 
@@ -186,6 +217,7 @@ export function useTrialStatus(
       isVisitor: false,
       isTrialActive,
       isTrialExpired,
+      isPaidStandard: false,
       isPaidVip: false,
       isAdmin: false,
       validUntil: validUntilIso,
