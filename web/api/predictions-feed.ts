@@ -150,6 +150,17 @@ async function checkAuthStatus(authToken: string | null): Promise<AuthStatus> {
       }
     }
 
+    // 6. 3-Day Free Trial fallback based on account creation timestamp
+    const createdAt = authUser.created_at;
+    if (createdAt) {
+      const createdMs = new Date(createdAt).getTime();
+      const trialDurationMs = 3 * 24 * 60 * 60 * 1000; // 72 hours
+      if (Date.now() - createdMs < trialDurationMs) {
+        userAuthCache.set(rawToken, { status: 'paid_or_trial', expiresAt: Date.now() + 60 * 1000 });
+        return 'paid_or_trial';
+      }
+    }
+
     // Authenticated user whose 3-day trial or subscription has expired
     userAuthCache.set(rawToken, { status: 'expired', expiresAt: Date.now() + 120 * 1000 });
     return 'expired';
