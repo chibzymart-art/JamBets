@@ -88,6 +88,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   // Mandatory Legal & Regulatory Disclaimers (Phase 8 Section 15)
   const [ageAccepted, setAgeAccepted] = useState(false);
   const [financialAccepted, setFinancialAccepted] = useState(false);
+  const [disclaimerHighlight, setDisclaimerHighlight] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [queueNotice, setQueueNotice] = useState<string | null>(null);
@@ -109,6 +110,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       setLoading(false);
       setAgeAccepted(false);
       setFinancialAccepted(false);
+      setDisclaimerHighlight(false);
     }
   }, [isOpen, initialMode]);
 
@@ -181,12 +183,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const handleGoogleSignIn = async () => {
     if (loading) return;
     if (mode === 'register' && (!ageAccepted || !financialAccepted)) {
+      setDisclaimerHighlight(true);
       if (!ageAccepted && !financialAccepted) {
-        setErrorMessage('You must confirm you are 18+ and accept the financial indemnity disclaimer to register.');
+        setErrorMessage('⚠️ Action Required: You must verify you are 18+ and accept the financial indemnity disclaimer to register.');
       } else if (!ageAccepted) {
-        setErrorMessage('You must confirm you are 18 years or older and at the legal age for sports betting.');
+        setErrorMessage('⚠️ Action Required: You must verify you are 18 years or older to register.');
       } else {
-        setErrorMessage('You must accept the educational purpose and financial indemnity disclaimer to register.');
+        setErrorMessage('⚠️ Action Required: You must accept the educational purpose and financial indemnity disclaimer to register.');
       }
       return;
     }
@@ -279,16 +282,15 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     setQueueNotice(null);
 
     // Strict validation: BOTH disclaimers MUST be explicitly checked (Cases A, B, C rejected)
-    if (!ageAccepted && !financialAccepted) {
-      setErrorMessage('You must confirm you are 18+ and accept the financial indemnity disclaimer to register.');
-      return;
-    }
-    if (!ageAccepted) {
-      setErrorMessage('You must confirm you are 18 years or older and at the legal age for sports betting.');
-      return;
-    }
-    if (!financialAccepted) {
-      setErrorMessage('You must accept the educational purpose and financial indemnity disclaimer to register.');
+    if (!ageAccepted || !financialAccepted) {
+      setDisclaimerHighlight(true);
+      if (!ageAccepted && !financialAccepted) {
+        setErrorMessage('⚠️ Action Required: Please check both legal acknowledgment boxes above before creating an account.');
+      } else if (!ageAccepted) {
+        setErrorMessage('⚠️ Action Required: Please verify you are 18+ by checking the age verification box above.');
+      } else {
+        setErrorMessage('⚠️ Action Required: Please accept the financial indemnity disclaimer above to register.');
+      }
       return;
     }
 
@@ -576,9 +578,26 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         {mode === 'register' && (
           <div className="auth-form-wrapper">
             {/* MANDATORY LEGAL & AGE DISCLAIMERS (Section 15) */}
-            <div className="disclaimer-container" style={{ marginBottom: '14px' }}>
+            <div
+              className={`disclaimer-container ${disclaimerHighlight ? 'disclaimer-highlight-error' : ''}`}
+              style={{
+                marginBottom: '14px',
+                border: disclaimerHighlight ? '2px solid #ef4444' : undefined,
+                background: disclaimerHighlight ? '#fef2f2' : undefined,
+                boxShadow: disclaimerHighlight ? '0 0 0 3px rgba(239, 68, 68, 0.25)' : undefined,
+                transition: 'all 0.25s ease',
+              }}
+            >
               <div className="disclaimer-header">
-                <span className="disclaimer-badge">MANDATORY LEGAL ACKNOWLEDGMENTS</span>
+                <span
+                  className="disclaimer-badge"
+                  style={{
+                    background: disclaimerHighlight ? '#dc2626' : undefined,
+                    color: disclaimerHighlight ? '#ffffff' : undefined,
+                  }}
+                >
+                  {disclaimerHighlight ? '⚠️ MANDATORY: CHECK BOTH BOXES TO CONTINUE' : 'MANDATORY LEGAL ACKNOWLEDGMENTS'}
+                </span>
                 <span className="disclaimer-version">Version v1.0</span>
               </div>
 
@@ -593,6 +612,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     setAgeAccepted(checked);
                     if (checked && financialAccepted) {
                       setErrorMessage(null);
+                      setDisclaimerHighlight(false);
                     }
                   }}
                   className="disclaimer-checkbox"
@@ -614,6 +634,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     setFinancialAccepted(checked);
                     if (checked && ageAccepted) {
                       setErrorMessage(null);
+                      setDisclaimerHighlight(false);
                     }
                   }}
                   className="disclaimer-checkbox"
@@ -643,20 +664,21 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     onClick={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
+                      setDisclaimerHighlight(true);
                       if (!ageAccepted && !financialAccepted) {
-                        setErrorMessage('You must confirm you are 18+ and accept the financial indemnity disclaimer to register.');
+                        setErrorMessage('⚠️ Action Required: Please check both legal acknowledgment boxes above before registering with Google.');
                       } else if (!ageAccepted) {
-                        setErrorMessage('You must confirm you are 18 years or older and at the legal age for sports betting.');
+                        setErrorMessage('⚠️ Action Required: Please verify you are 18+ by checking the age verification box above.');
                       } else {
-                        setErrorMessage('You must accept the educational purpose and financial indemnity disclaimer to register.');
+                        setErrorMessage('⚠️ Action Required: Please accept the financial indemnity disclaimer above to register with Google.');
                       }
                     }}
-                    title="Please confirm age and disclaimers above first"
+                    title="Please check both boxes above before clicking Google Sign-Up"
                     style={{
                       position: 'absolute',
                       inset: 0,
                       zIndex: 20,
-                      cursor: 'not-allowed',
+                      cursor: 'pointer',
                     }}
                   />
                 )}
@@ -671,7 +693,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   <button
                     type="button"
                     id="btn-google-signup"
-                    disabled={loading || !ageAccepted || !financialAccepted}
+                    disabled={loading}
                     onClick={handleGoogleSignIn}
                     className="google-oauth-btn"
                     title="Instant 1-Click Sign Up with Gmail / Google"
@@ -744,8 +766,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               <button
                 type="submit"
                 id="btn-auth-register"
-                disabled={loading || !ageAccepted || !financialAccepted}
-                className={`auth-submit-btn ${(!ageAccepted || !financialAccepted) ? 'btn-disabled' : ''}`}
+                disabled={loading}
+                className="auth-submit-btn"
+                style={{
+                  cursor: 'pointer',
+                }}
               >
                 {loading ? 'Registering Account...' : 'Agree & Create Account'}
               </button>

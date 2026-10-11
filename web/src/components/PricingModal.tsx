@@ -45,15 +45,15 @@ export const PricingModal: React.FC<PricingModalProps> = ({ isOpen, onClose, onU
                 <span className="amount">{currency === 'NGN' ? '5,000' : '5'}</span>
                 <span className="period">/ month</span>
               </div>
-              <p className="plan-desc">Complete access to daily football predictions, goal specialists and simulation models.</p>
+              <p className="plan-desc">Complete access to everything Football: all 30+ leagues, goal specialists, corners models and verified settlements.</p>
             </div>
 
             <ul className="plan-features">
-              <li>✓ Full Football access (Over 2.5 & First Half Goals)</li>
+              <li>✓ <strong>Everything Football: All 30+ Leagues Unlocked</strong></li>
+              <li>✓ Specialist Goals (Over 2.5 & First Half 0.5) & Corners</li>
               <li>✓ Unlocks all 4-Day Horizon predictions</li>
               <li>✓ Top Picks & High Confidence edges (Score ≥ 8.0)</li>
               <li>✓ Mid & Low confidence value markets</li>
-              <li>✓ Live match scoring & settlement alerts</li>
               <li>✓ 15-Minute automated live settlement sync</li>
             </ul>
 
@@ -87,8 +87,8 @@ export const PricingModal: React.FC<PricingModalProps> = ({ isOpen, onClose, onU
             </div>
 
             <ul className="plan-features">
-              <li>✓ <strong>Everything in Standard (All Football & Goals)</strong></li>
-              <li>✓ <strong>Multi-Sport VIP: Tennis (ATP/WTA) & Basketball (NBA)</strong></li>
+              <li>✓ <strong>Everything in Standard (All Football, Goals & Corners)</strong></li>
+              <li>✓ <strong>Multi-Sport VIP: Tennis (ATP/WTA) & Basketball (NBA & Int'l)</strong></li>
               <li>✓ <strong>Exclusive Top Mathematical Signals (Score 9.0–10.0)</strong></li>
               <li>✓ Full Poisson & Model parameter breakdowns</li>
               <li>✓ Priority settlement & instant match access</li>

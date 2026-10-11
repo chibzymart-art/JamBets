@@ -215,7 +215,7 @@ export const SubscriptionPage: React.FC<SubscriptionPageProps> = ({
               <span className="plan-badge featured-badge">{userRole === 'standard' ? 'CURRENT PLAN' : 'ESSENTIAL ACCESS'}</span>
               <h3 className="plan-name">Standard Plan</h3>
               <p className="plan-summary">
-                Full unredacted access to all Football predictions, Goal specialists & High-Confidence models.
+                Full unredacted access to everything Football: All 30+ World Leagues, Goals & Corners specialist models, and verified settlements.
               </p>
             </div>
 
@@ -239,11 +239,11 @@ export const SubscriptionPage: React.FC<SubscriptionPageProps> = ({
             <ul className="plan-features-list">
               <li className="feature-item active">
                 <span className="check-icon">✓</span>
-                <span><strong>Football (Soccer):</strong> All 30+ World Leagues Unlocked</span>
+                <span><strong>Everything Football:</strong> All 30+ World Leagues Unlocked</span>
               </li>
               <li className="feature-item active">
                 <span className="check-icon">✓</span>
-                <span><strong>Goals Specialist:</strong> Over 2.5 & First Half Over 0.5</span>
+                <span><strong>Specialist Engines:</strong> Over 2.5 Goals, HT 0.5 & Corners</span>
               </li>
               <li className="feature-item active">
                 <span className="check-icon">✓</span>
@@ -259,7 +259,7 @@ export const SubscriptionPage: React.FC<SubscriptionPageProps> = ({
               </li>
               <li className="feature-item disabled">
                 <span className="check-icon">✕</span>
-                <span>Multi-Sport VIP Models (Tennis & Basketball)</span>
+                <span>Multi-Sport VIP Models (Tennis & Basketball reserved for BigBang VIP)</span>
               </li>
             </ul>
 
