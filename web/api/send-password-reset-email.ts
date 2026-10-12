@@ -321,43 +321,26 @@ export default async function handler(req: Request): Promise<Response> {
       text = `Password change\n\nClick the link below to set a new password for your Oddsbanta account:\n${brandedLink}\n\nIf you did not request this, you can safely ignore this email.`;
     }
 
-    const primaryFrom = process.env.RESEND_FROM_EMAIL || 'Oddsbanta <welcome@oddsbanta.com>';
-    const fallbackFrom = process.env.RESEND_FALLBACK_FROM_EMAIL || 'Oddsbanta <onboarding@resend.dev>';
+    const primaryFrom = (process.env.RESEND_FROM_EMAIL && !process.env.RESEND_FROM_EMAIL.includes('resend.dev'))
+      ? process.env.RESEND_FROM_EMAIL
+      : 'Oddsbanta <welcome@oddsbanta.com>';
 
-    const sendWithResend = async (fromAddress: string) => {
-      return await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${resendApiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          from: fromAddress,
-          to: [cleanEmail],
-          subject,
-          html,
-          text,
-        }),
-      });
-    };
+    const resendRes = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${resendApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        from: primaryFrom,
+        to: [cleanEmail],
+        subject,
+        html,
+        text,
+      }),
+    });
 
-    let resendRes = await sendWithResend(primaryFrom);
-    let resendData = await resendRes.json();
-
-    if (!resendRes.ok) {
-      const errorMsg = (resendData?.message || '').toLowerCase();
-      console.warn(`[PASSWORD-EMAIL] Primary send failed (${primaryFrom}):`, resendData);
-
-      if (
-        (errorMsg.includes('domain') || errorMsg.includes('verified') || resendRes.status === 403) &&
-        fallbackFrom &&
-        fallbackFrom !== primaryFrom
-      ) {
-        console.log(`[PASSWORD-EMAIL] Retrying with sandbox fallback sender: ${fallbackFrom}`);
-        resendRes = await sendWithResend(fallbackFrom);
-        resendData = await resendRes.json();
-      }
-    }
+    const resendData = await resendRes.json();
 
     if (!resendRes.ok) {
       console.error('[PASSWORD-EMAIL] Resend API error response:', resendData);

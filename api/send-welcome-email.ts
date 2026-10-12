@@ -319,51 +319,30 @@ export default async function handler(req: Request): Promise<Response> {
       );
     }
 
-    const primaryFrom = process.env.RESEND_FROM_EMAIL || 'Oddsbanta <welcome@oddsbanta.com>';
-    const fallbackFrom = process.env.RESEND_FALLBACK_FROM_EMAIL || 'Oddsbanta <onboarding@resend.dev>';
+    const primaryFrom = (process.env.RESEND_FROM_EMAIL && !process.env.RESEND_FROM_EMAIL.includes('resend.dev'))
+      ? process.env.RESEND_FROM_EMAIL
+      : 'Oddsbanta <welcome@oddsbanta.com>';
 
     const subject = 'Welcome to Oddsbanta — Your 3-Day VIP Prediction Pass is Active! ⚽🔥';
     const html = generateWelcomeEmailHtml(cleanName, cleanEmail);
     const text = generateWelcomeEmailText(cleanName, cleanEmail);
 
-    // Function to dispatch via Resend REST API
-    const sendWithResend = async (fromAddress: string) => {
-      return await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${resendApiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          from: fromAddress,
-          to: [cleanEmail],
-          subject,
-          html,
-          text,
-        }),
-      });
-    };
+    const resendRes = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${resendApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        from: primaryFrom,
+        to: [cleanEmail],
+        subject,
+        html,
+        text,
+      }),
+    });
 
-    // Attempt 1: Try primary sender (welcome@oddsbanta.com)
-    let resendRes = await sendWithResend(primaryFrom);
-    let resendData = await resendRes.json();
-
-    // If primary failed due to domain verification, retry with fallback if applicable
-    if (!resendRes.ok) {
-      const errorMsg = (resendData?.message || '').toLowerCase();
-      console.warn(`[WELCOME-EMAIL] Primary send failed (${primaryFrom}):`, resendData);
-
-      // Check if domain is unverified or sender is rejected
-      if (
-        (errorMsg.includes('domain') || errorMsg.includes('verified') || resendRes.status === 403) &&
-        fallbackFrom &&
-        fallbackFrom !== primaryFrom
-      ) {
-        console.log(`[WELCOME-EMAIL] Retrying with sandbox fallback sender: ${fallbackFrom}`);
-        resendRes = await sendWithResend(fallbackFrom);
-        resendData = await resendRes.json();
-      }
-    }
+    const resendData = await resendRes.json();
 
     if (!resendRes.ok) {
       console.error('[WELCOME-EMAIL] Resend API error response:', resendData);
