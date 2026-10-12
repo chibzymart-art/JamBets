@@ -24,14 +24,28 @@ interface RetryOptions {
 
 function isRetryableAuthError(error: any): boolean {
   if (!error) return false;
+  const msg = (error.message || error.error_description || '').toLowerCase();
+  
+  // NEVER retry security cooldowns or rate limits with rapid automated retry loops
+  if (
+    msg.includes('only request this after') ||
+    msg.includes('security purposes') ||
+    msg.includes('rate limit') ||
+    msg.includes('over_email_send_rate_limit') ||
+    msg.includes('cooldown') ||
+    msg.includes('too many requests')
+  ) {
+    return false;
+  }
+
   const status = error.status || error.statusCode;
-  if (status === 429 || status === 503 || status === 504 || status === 502) {
+  if (status === 429) {
+    return false; // Rate limit status 429 must not be auto-retried
+  }
+  if (status === 503 || status === 504 || status === 502) {
     return true;
   }
-  const msg = (error.message || error.error_description || '').toLowerCase();
   if (
-    msg.includes('rate limit') ||
-    msg.includes('too many requests') ||
     msg.includes('over_request_rate_limit') ||
     msg.includes('fetch failed') ||
     msg.includes('failed to fetch') ||
@@ -131,6 +145,20 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           }).eq('id', userId);
         } catch (e) {
           console.warn('Could not record disclaimers on profile:', e);
+        }
+
+        // Send branded welcome email via Resend on registration (non-blocking)
+        const userEmail = authData?.user?.email || authData?.session?.user?.email;
+        const userName = authData?.user?.user_metadata?.full_name || authData?.user?.user_metadata?.display_name || userEmail?.split('@')[0];
+        if (mode === 'register' && userEmail) {
+          fetch('/api/send-welcome-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              email: userEmail,
+              name: userName || 'Member',
+            }),
+          }).catch((e) => console.warn('[WELCOME-EMAIL] Google registration welcome dispatch warning:', e));
         }
       }
       onAuthSuccess();
@@ -335,8 +363,22 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       }
 
       if (data?.user) {
+        // Send branded welcome email via Resend (fire-and-forget, non-blocking)
+        const userEmail = email.trim();
+        const userName = displayName.trim() || userEmail.split('@')[0];
+        fetch('/api/send-welcome-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: userEmail,
+            name: userName,
+          }),
+        }).catch((err) => {
+          console.warn('[WELCOME-EMAIL] Client dispatch warning:', err);
+        });
+
         setQueueNotice(null);
-        setSuccessMessage('Account created successfully! Disclaimers recorded.');
+        setSuccessMessage('Account created successfully! Welcome email sent.');
         setTimeout(() => {
           onAuthSuccess();
           onClose();
@@ -371,6 +413,24 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     setLoading(true);
 
     try {
+      // 1. Dispatch custom Oddsbanta password change mailer via Resend
+      const apiRes = await fetch('/api/send-password-reset-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: email.trim(),
+          type: 'reset_request',
+          redirectTo: `${window.location.origin}/reset-password`,
+        }),
+      }).catch(() => null);
+
+      if (apiRes && apiRes.ok) {
+        setQueueNotice(null);
+        setSuccessMessage('Password reset link sent! Check your inbox (and spam folder) for instructions.');
+        return;
+      }
+
+      // 2. Resilient fallback to Supabase built-in auth mailer
       const { error } = await executeAuthWithRetry(async () => {
         const res = await supabase.auth.resetPasswordForEmail(email.trim(), {
           redirectTo: `${window.location.origin}/reset-password`
@@ -380,7 +440,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         }
         return res;
       }, {
-        maxRetries: 2,
+        maxRetries: 1, // Only 1 attempt for fallback, never rapid retry loops
         initialDelayMs: 1000,
         onRetry: (attempt, max) => {
           setQueueNotice(`Sending secure recovery link... (Attempt ${attempt} of ${max})`);
@@ -397,8 +457,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       console.error('Forgot password error:', err);
       setQueueNotice(null);
       const msg = err.message || '';
-      if (msg.toLowerCase().includes('rate limit') || msg.toLowerCase().includes('over_email_send_rate_limit')) {
-        setErrorMessage('Email rate limit reached. Supabase limits password recovery emails to prevent abuse. Please wait a short while before requesting another link.');
+      if (msg.toLowerCase().includes('only request this after')) {
+        setErrorMessage(`⚠️ ${msg}`);
+      } else if (
+        msg.toLowerCase().includes('rate limit') ||
+        msg.toLowerCase().includes('over_email_send_rate_limit') ||
+        msg.toLowerCase().includes('security purposes')
+      ) {
+        setErrorMessage('⚠️ Email rate limit reached. For security, please wait 60 seconds before requesting another reset link, or check your spam/junk folder for previous emails.');
       } else {
         setErrorMessage(msg || 'Failed to send reset link. Please check the email and try again.');
       }

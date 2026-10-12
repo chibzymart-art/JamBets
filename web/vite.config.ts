@@ -31,6 +31,9 @@ function localApiDevPlugin(): Plugin {
           '/api/goals-feed': './api/goals-feed.ts',
           '/api/tennis-feed': './api/tennis-feed.ts',
           '/api/market-feed': './api/market-feed.ts',
+          '/api/send-welcome-email': './api/send-welcome-email.ts',
+          '/api/send-subscription-email': './api/send-subscription-email.ts',
+          '/api/send-password-reset-email': './api/send-password-reset-email.ts',
         };
         if (apiModules[reqPath]) {
           try {
@@ -40,9 +43,22 @@ function localApiDevPlugin(): Plugin {
             if (mod) server.moduleGraph.invalidateModule(mod);
             const { default: handler } = await server.ssrLoadModule(modulePath);
             const fullUrl = `http://${req.headers.host || 'localhost:5173'}${req.url}`;
+            
+            let reqBody: string | undefined;
+            if (req.method !== 'GET' && req.method !== 'HEAD') {
+              const chunks: any[] = [];
+              for await (const chunk of req) {
+                chunks.push(chunk);
+              }
+              if (chunks.length > 0) {
+                reqBody = Buffer.concat(chunks).toString('utf8');
+              }
+            }
+
             const fetchReq = new Request(fullUrl, {
               method: req.method || 'GET',
               headers: req.headers as HeadersInit,
+              body: reqBody,
             });
             const response = await handler(fetchReq);
             res.statusCode = response.status;

@@ -16,13 +16,38 @@ export const PasswordRecoveryPage: React.FC = () => {
   const [isResettingPassword, setIsResettingPassword] = useState(false);
 
   useEffect(() => {
-    // Check if the URL has recovery tokens (from Supabase password reset email)
+    // 1. Check for branded query parameter token_hash (?token_hash=...&type=recovery)
+    const searchParams = new URLSearchParams(window.location.search);
+    const tokenHash = searchParams.get('token_hash');
+    const authType = searchParams.get('type') || 'recovery';
+
+    if (tokenHash) {
+      setLoading(true);
+      supabase.auth.verifyOtp({
+        token_hash: tokenHash,
+        type: authType as any,
+      }).then(({ data, error }) => {
+        if (error) {
+          console.error('[RECOVERY] OTP verification failed:', error);
+          setErrorMessage(error.message || 'The password reset link is invalid or has expired. Please request a new link.');
+        } else if (data?.session) {
+          setIsResettingPassword(true);
+        }
+      }).catch((err: any) => {
+        console.error('[RECOVERY] OTP verification error:', err);
+        setErrorMessage(err.message || 'Verification failed. Please request a new link.');
+      }).finally(() => {
+        setLoading(false);
+      });
+    }
+
+    // 2. Check if the URL has recovery tokens in hash (direct or legacy Supabase callback)
     const hash = window.location.hash;
     if (hash && (hash.includes('type=recovery') || hash.includes('access_token='))) {
       setIsResettingPassword(true);
     }
 
-    // Also listen to Supabase auth state change for recovery event
+    // 3. Also listen to Supabase auth state change for recovery event
     const { data: authListener } = supabase.auth.onAuthStateChange(async (event) => {
       if (event === 'PASSWORD_RECOVERY') {
         setIsResettingPassword(true);
@@ -48,6 +73,25 @@ export const PasswordRecoveryPage: React.FC = () => {
 
     setLoading(true);
     try {
+      // 1. Dispatch custom Oddsbanta password change mailer via Resend
+      const apiRes = await fetch('/api/send-password-reset-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: cleanEmail,
+          type: 'reset_request',
+          redirectTo: `${window.location.origin}/reset-password`,
+        }),
+      }).catch(() => null);
+
+      if (apiRes && apiRes.ok) {
+        setSuccessMessage(
+          'Password recovery email has been sent! Please check your inbox and spam folder for instructions to change your password.'
+        );
+        return;
+      }
+
+      // 2. Resilient fallback to Supabase built-in auth mailer
       const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
         redirectTo: `${window.location.origin}/reset-password`
       });
@@ -57,13 +101,19 @@ export const PasswordRecoveryPage: React.FC = () => {
       }
 
       setSuccessMessage(
-        'Password recovery email has been sent! Please check your inbox and spam folder for instructions to create a new password.'
+        'Password recovery email has been sent! Please check your inbox and spam folder for instructions to change your password.'
       );
     } catch (err: any) {
       console.error('Password reset request error:', err);
       const msg = err.message || '';
-      if (msg.toLowerCase().includes('rate limit') || msg.toLowerCase().includes('over_email_send_rate_limit')) {
-        setErrorMessage('Email rate limit reached. Supabase limits password recovery emails to a few per hour for security. Please wait a short while before requesting another link, or log in directly with your password.');
+      if (msg.toLowerCase().includes('only request this after')) {
+        setErrorMessage(`⚠️ ${msg}`);
+      } else if (
+        msg.toLowerCase().includes('rate limit') ||
+        msg.toLowerCase().includes('over_email_send_rate_limit') ||
+        msg.toLowerCase().includes('security purposes')
+      ) {
+        setErrorMessage('⚠️ Email rate limit reached. For security, please wait 60 seconds before requesting another link, or check your spam/junk folder for previous emails.');
       } else {
         setErrorMessage(msg || 'Failed to send recovery email. Please verify your address and try again.');
       }
@@ -96,6 +146,20 @@ export const PasswordRecoveryPage: React.FC = () => {
 
       if (error) {
         throw error;
+      }
+
+      // Notify user of password change confirmation via Resend
+      const { data: sessionData } = await supabase.auth.getSession();
+      const userEmail = sessionData?.session?.user?.email;
+      if (userEmail) {
+        fetch('/api/send-password-reset-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: userEmail,
+            type: 'changed_notice',
+          }),
+        }).catch(() => null);
       }
 
       setSuccessMessage('🎉 Your password has been successfully updated! Directing you to the Dashboard...');

@@ -368,8 +368,22 @@ export default function App() {
       if (isMounted) setIsAuthChecking(false);
     });
 
+    // Password Recovery Interceptor:
+    // If user arrived with a Supabase recovery token in URL hash (#access_token=...&type=recovery),
+    // immediately route them to the dedicated /reset-password page rather than leaving them on the homepage.
+    if (window.location.hash && (window.location.hash.includes('type=recovery') || window.location.hash.includes('access_token=')) && window.location.pathname !== '/reset-password') {
+      navigate('/reset-password' + window.location.hash);
+    }
+
     const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (!isMounted) return;
+
+      // When Supabase triggers PASSWORD_RECOVERY event, route directly to /reset-password
+      if (event === 'PASSWORD_RECOVERY') {
+        navigate('/reset-password' + (window.location.hash || ''));
+        return;
+      }
+
       if (session?.user) {
         if (session.user.user_metadata?.status === 'disabled' || session.user.user_metadata?.is_deleted === true) {
           await supabase.auth.signOut();

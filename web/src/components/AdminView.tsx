@@ -1376,6 +1376,21 @@ export const AdminView: React.FC<AdminViewProps> = ({
         });
       }
 
+      // Dispatch Oddsbanta Subscription Confirmation email via Resend
+      const targetUser = usersList.find((u: any) => u.id === userId);
+      if (targetUser?.email && (targetTier === 'standard' || targetTier === 'bigbang')) {
+        fetch('/api/send-subscription-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: targetUser.email,
+            name: targetUser.display_name || targetUser.email.split('@')[0],
+            tier: targetTier,
+            validUntil: validUntilIso || undefined,
+          }),
+        }).catch((err) => console.warn('[SUBSCRIPTION-EMAIL] Dispatch error:', err));
+      }
+
       playSfx('success');
       setActionSuccess(`User updated: ${targetTier.toUpperCase()} (${targetStatus.toUpperCase()})${durationDays ? ` for ${durationDays} days` : ''}!`);
       setTimeout(() => setActionSuccess(null), 4000);
