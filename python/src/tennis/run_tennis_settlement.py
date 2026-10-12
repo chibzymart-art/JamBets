@@ -147,7 +147,8 @@ def main():
                 from python.src.engines.feed_snapshot_engine import FeedSnapshotEngine
                 snap_eng = FeedSnapshotEngine()
                 snap_eng.write_snapshot("feed:tennis", snap_eng.build_tennis_snapshot())
-                print("  [OK] Tennis feed snapshot refreshed in cached_feeds.", flush=True)
+                snap_eng.notify_edge_invalidation(["tennis"])
+                print("  [OK] Tennis feed snapshot refreshed in cached_feeds and Edge invalidated.", flush=True)
             except Exception as exc:
                 print(f"  [WARN] Tennis snapshot refresh failed (non-fatal): {exc}", flush=True)
 

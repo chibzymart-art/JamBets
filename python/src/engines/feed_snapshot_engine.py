@@ -725,13 +725,19 @@ if __name__ == "__main__":
         engine.sync_all_feeds()
     elif args.feed == "football":
         engine.write_snapshot("feed:football:today", engine.build_football_today_snapshot())
+        engine.notify_edge_invalidation(["football"])
     elif args.feed == "goals":
         engine.write_snapshot("feed:goals", engine.build_goals_snapshot())
+        engine.notify_edge_invalidation(["goals"])
     elif args.feed == "corners":
         engine.write_snapshot("feed:corners", engine.build_corners_snapshot())
+        engine.notify_edge_invalidation(["market", "corners"])
     elif args.feed == "counts":
         engine.write_snapshot("feed:market:counts", engine.build_market_counts_snapshot())
+        engine.notify_edge_invalidation(["counts", "market"])
     elif args.feed == "basketball":
         engine.write_snapshot("feed:basketball", engine.build_basketball_snapshot())
+        engine.notify_edge_invalidation(["basketball"])
     elif args.feed == "tennis":
         engine.write_snapshot("feed:tennis", engine.build_tennis_snapshot())
+        engine.notify_edge_invalidation(["tennis"])

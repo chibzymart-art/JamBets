@@ -167,21 +167,27 @@ export function isScraperBot(req: Request): boolean {
   return botPatterns.some((pattern) => ua.includes(pattern));
 }
 
-export function applyBasketballScraperBlinding(data: BasketballFeedData): BasketballFeedData {
-  const wonPreds = data.predictions
-    .filter((p: any) => p.settlement_status === 'won')
+export function applyBasketballScraperBlinding(predictionsOrData: any): any {
+  const preds = Array.isArray(predictionsOrData)
+    ? predictionsOrData
+    : (predictionsOrData?.predictions || []);
+  const wonPreds = preds
+    .filter((p: any) => p && p.settlement_status === 'won')
     .map((p: any) => ({
       ...p,
       is_locked: false,
       metadata: { proof_of_work: 'verified_won_settlement' },
     }));
-  const wonSettles = (data.settlements || []).filter((s: any) => (s.status || '').toLowerCase() === 'won');
+  if (Array.isArray(predictionsOrData)) {
+    return wonPreds;
+  }
+  const wonSettles = (predictionsOrData?.settlements || []).filter((s: any) => (s.status || '').toLowerCase() === 'won');
   return {
-    ...data,
+    ...predictionsOrData,
     predictions: wonPreds,
     settlements: wonSettles,
     stats: {
-      ...data.stats,
+      ...predictionsOrData?.stats,
       total_matches: wonPreds.length,
       settled_count: wonSettles.length,
     },

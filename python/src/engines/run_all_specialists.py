@@ -44,7 +44,8 @@ def run_all(predict: bool = True, settle: bool = True):
         snap_eng = FeedSnapshotEngine()
         snap_eng.write_snapshot("feed:corners", snap_eng.build_corners_snapshot())
         snap_eng.write_snapshot("feed:market:counts", snap_eng.build_market_counts_snapshot())
-        print("  [OK] Specialist feed snapshots refreshed successfully.")
+        snap_eng.notify_edge_invalidation(["market", "counts", "corners"])
+        print("  [OK] Specialist feed snapshots refreshed successfully and Edge invalidated.")
     except Exception as exc:
         print(f"  [WARN] Failed to refresh specialist feed snapshots: {exc}")
 

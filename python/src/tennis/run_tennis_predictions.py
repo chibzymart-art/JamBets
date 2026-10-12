@@ -166,7 +166,8 @@ def run_prediction_cycle(
             from python.src.engines.feed_snapshot_engine import FeedSnapshotEngine
             snap_eng = FeedSnapshotEngine()
             snap_eng.write_snapshot("feed:tennis", snap_eng.build_tennis_snapshot())
-            logger.info("Feed snapshot for feed:tennis refreshed in cached_feeds.")
+            snap_eng.notify_edge_invalidation(["tennis"])
+            logger.info("Feed snapshot for feed:tennis refreshed in cached_feeds and Edge invalidated.")
         except Exception as exc:
             logger.warning("Failed to refresh feed:tennis snapshot: %s", exc)
 
