@@ -286,33 +286,37 @@ export default async function handler(req: Request): Promise<Response> {
           metadata: { proof_of_work: 'verified_won_settlement' },
         }));
       const wonSettlements = (feedData.settlements || []).filter((s: any) => (s.status || '').toLowerCase() === 'won');
-      return new Response(
-        JSON.stringify({
-          success: true,
-          is_subscriber: false,
-          is_scraper_blinded: true,
-          stats: {
-            ...feedData.stats,
-            total_matches: wonOnly.length,
-            settled_count: wonSettlements.length,
-          },
-          tournaments: feedData.tournaments,
-          settlements: wonSettlements,
-          predictions: wonOnly,
-          cached_at: feedData.cached_at,
-          is_stale: isStale,
-        }),
-        {
-          status: 200,
-          headers: {
-            ...corsHeaders,
-            'Cache-Control': 'public, max-age=30, s-maxage=60, stale-while-revalidate=300',
-            'CDN-Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300',
-            'Vercel-CDN-Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300',
-            'Vary': 'Authorization, Origin, User-Agent',
-          },
-        }
-      );
+      const botHeaders: Record<string, string> = {
+        ...corsHeaders,
+        'Cache-Control': 'public, max-age=30, s-maxage=60, stale-while-revalidate=300',
+        'CDN-Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300',
+        'Vercel-CDN-Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300',
+        'Vary': 'Authorization, Origin, User-Agent',
+      };
+      const botBodyStr = JSON.stringify({
+        success: true,
+        is_subscriber: false,
+        is_scraper_blinded: true,
+        stats: {
+          ...feedData.stats,
+          total_matches: wonOnly.length,
+          settled_count: wonSettlements.length,
+        },
+        tournaments: feedData.tournaments,
+        settlements: wonSettlements,
+        predictions: wonOnly,
+        cached_at: feedData.cached_at,
+        is_stale: isStale,
+      });
+      const botEtag = generateEtag(botBodyStr);
+      if (matchesEtag(req, botEtag)) {
+        return create304Response(botEtag, botHeaders);
+      }
+      botHeaders['ETag'] = botEtag;
+      return new Response(botBodyStr, {
+        status: 200,
+        headers: botHeaders,
+      });
     }
 
     const url = new URL(req.url);
