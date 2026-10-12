@@ -95,6 +95,16 @@ jobs:
               print(f'Failed to dispatch email alert: {e}')
           "
 
+      - name: Refresh Basketball Feed Snapshot Cache (Zero-Database Architecture)
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          echo "=== REFRESHING BASKETBALL FEED SNAPSHOT CACHE ==="
+          python -m python.src.engines.feed_snapshot_engine --feed basketball
+
       - name: Notify IndexNow (Bing, Yandex) of changed pages
         if: ${{ !cancelled() }}
         continue-on-error: true

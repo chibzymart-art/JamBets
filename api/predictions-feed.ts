@@ -1,4 +1,7 @@
 import { checkRateLimit, getClientIp } from './rate-limiter';
+import { verifyEdgeAuth, AuthStatus } from './_lib/jwt-verifier';
+import { EdgeSwrCache, EdgeCacheRegistry } from './_lib/edge-cache';
+import { generateEtag, matchesEtag, create304Response } from './_lib/etag';
 
 export const config = {
   runtime: 'edge',
@@ -11,163 +14,29 @@ const SUPABASE_ANON_KEY =
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZlcGNvb3BvbWxmamFnZWlqc2V3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg4NTM4NzIsImV4cCI6MjEwNDQyOTg3Mn0.KMbk71HHpEX_RzdMgFy_jYO6DhE3iwd50aHv9waWh2g';
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 
-const ADMIN_EMAILS = new Set([
-  'chibzymart@gmail.com',
-  'whizzchibz@gmail.com',
-  'chibuezec.amuchie@gmail.com',
-  'chibuezeamuchie@gmail.com',
-  'nnamdiamuchie@gmail.com',
-]);
-
 interface FeedData {
   predictions: any[];
   leagues: any[];
   cached_at: string;
 }
 
-interface MemoryCacheEntry {
-  data: FeedData;
-  expiresAt: number;
+// Global SWR Edge Cache: 180s fresh (3 min default) + 3600s stale (1 hour)
+const feedSwrCache = new EdgeSwrCache<FeedData>(180 * 1000, 3600 * 1000);
+EdgeCacheRegistry.register('football', feedSwrCache);
+
+// Adaptive Dynamic TTL for Live Scores and Instant Settlement Invalidation (Sub-Phase 2.4)
+function computeFootballTtl(data: FeedData): number {
+  const hasLive = (data.predictions || []).some((p: any) => {
+    const st = (p.fixture?.status || '').toLowerCase();
+    return st === 'live' || st === '1h' || st === '2h' || st === 'ht' || st === 'in_progress';
+  });
+  return hasLive ? 15 * 1000 : 180 * 1000;
 }
 
-// In-memory cache & promise deduplication to prevent cache stampedes
-const memoryCache = new Map<string, MemoryCacheEntry>();
-const inflightPromises = new Map<string, Promise<FeedData>>();
-const CACHE_TTL_MS = 120 * 1000; // 120 seconds edge memory cache (reduces Supabase upstream load)
-
-export type AuthStatus = 'paid_or_trial' | 'expired' | 'visitor';
-
-// In-memory cache for user auth verification (120s for valid users, 30s for invalid)
-const userAuthCache = new Map<string, { status: AuthStatus; expiresAt: number }>();
+export type { AuthStatus };
 
 async function checkAuthStatus(authToken: string | null): Promise<AuthStatus> {
-  if (!authToken) return 'visitor';
-  const rawToken = authToken.startsWith('Bearer ') ? authToken.slice(7).trim() : authToken.trim();
-  if (!rawToken) return 'visitor';
-
-  // 1. Direct Service Role Key Match (internal/admin scripts)
-  if (SUPABASE_SERVICE_ROLE_KEY && rawToken === SUPABASE_SERVICE_ROLE_KEY) {
-    return 'paid_or_trial';
-  }
-
-  // 2. Check in-memory cache to eliminate duplicate Supabase Auth roundtrips
-  const cached = userAuthCache.get(rawToken);
-  if (cached && Date.now() < cached.expiresAt) {
-    return cached.status;
-  }
-
-  try {
-    // 3. Cryptographically verify token signature against Supabase Auth API
-    const authRes = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
-      headers: {
-        apikey: SUPABASE_ANON_KEY,
-        Authorization: `Bearer ${rawToken}`,
-      },
-    });
-
-    if (!authRes.ok) {
-      // Signature is invalid, token is forged or expired -> fail closed
-      userAuthCache.set(rawToken, { status: 'visitor', expiresAt: Date.now() + 30 * 1000 });
-      return 'visitor';
-    }
-
-    const authUser = await authRes.json();
-    if (!authUser || !authUser.id) {
-      userAuthCache.set(rawToken, { status: 'visitor', expiresAt: Date.now() + 30 * 1000 });
-      return 'visitor';
-    }
-
-    // 4. Server-verified role or admin email whitelist
-    const email = (authUser.email || '').toLowerCase().trim();
-    if (
-      authUser.app_metadata?.role === 'admin' ||
-      authUser.user_metadata?.role === 'admin' ||
-      (email && ADMIN_EMAILS.has(email))
-    ) {
-      userAuthCache.set(rawToken, { status: 'paid_or_trial', expiresAt: Date.now() + 120 * 1000 });
-      return 'paid_or_trial';
-    }
-
-    const userId = authUser.id;
-    const headers = {
-      apikey: SUPABASE_ANON_KEY,
-      Authorization: `Bearer ${rawToken}`,
-      Accept: 'application/json',
-    };
-
-    // 5. Query active subscriptions, entitlements & users table for this verified user
-    const [subRes, entRes, userRes] = await Promise.all([
-      fetch(`${SUPABASE_URL}/rest/v1/subscriptions?user_id=eq.${userId}&status=eq.active&select=tier&limit=1`, { headers }),
-      fetch(`${SUPABASE_URL}/rest/v1/entitlements?user_id=eq.${userId}&select=tier,valid_until,features&limit=1`, { headers }),
-      fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${userId}&select=role&limit=1`, { headers }),
-    ]);
-
-    // Check users table role
-    if (userRes.ok) {
-      const userData = await userRes.json();
-      if (Array.isArray(userData) && userData.length > 0 && userData[0].role === 'admin') {
-        userAuthCache.set(rawToken, { status: 'paid_or_trial', expiresAt: Date.now() + 120 * 1000 });
-        return 'paid_or_trial';
-      }
-    }
-
-    // Check active paid subscriptions
-    if (subRes.ok) {
-      const subData = await subRes.json();
-      if (Array.isArray(subData) && subData.length > 0) {
-        const tier = (subData[0].tier || '').toLowerCase();
-        if (['standard', 'bigbang', 'vip', 'pro', 'admin'].includes(tier)) {
-          userAuthCache.set(rawToken, { status: 'paid_or_trial', expiresAt: Date.now() + 120 * 1000 });
-          return 'paid_or_trial';
-        }
-      }
-    }
-
-    // Check entitlements (active 3-day trial or active entitlement)
-    if (entRes.ok) {
-      const entData = await entRes.json();
-      if (Array.isArray(entData) && entData.length > 0) {
-        const ent = entData[0];
-        const validUntil = ent.valid_until ? new Date(ent.valid_until).getTime() : 0;
-        const tier = (ent.tier || '').toLowerCase();
-        const feats = ent.features || {};
-        const isEntAdmin = tier === 'admin' || feats.admin === true;
-        const hasVipOrTrial = Boolean(
-          tier === 'trial' ||
-          ['standard', 'bigbang', 'vip', 'pro', 'admin'].includes(tier) ||
-          feats.trial === true ||
-          feats.vip === true ||
-          feats.football_predictions === true ||
-          feats.simulations === true ||
-          feats.all_sports === true ||
-          feats.bigbang === true
-        );
-
-        if ((isEntAdmin || hasVipOrTrial) && validUntil > Date.now()) {
-          userAuthCache.set(rawToken, { status: 'paid_or_trial', expiresAt: Date.now() + 120 * 1000 });
-          return 'paid_or_trial';
-        }
-      }
-    }
-
-    // 6. 3-Day Free Trial fallback based on account creation timestamp
-    const createdAt = authUser.created_at;
-    if (createdAt) {
-      const createdMs = new Date(createdAt).getTime();
-      const trialDurationMs = 3 * 24 * 60 * 60 * 1000; // 72 hours
-      if (Date.now() - createdMs < trialDurationMs) {
-        userAuthCache.set(rawToken, { status: 'paid_or_trial', expiresAt: Date.now() + 60 * 1000 });
-        return 'paid_or_trial';
-      }
-    }
-
-    // Authenticated user whose 3-day trial or subscription has expired
-    userAuthCache.set(rawToken, { status: 'expired', expiresAt: Date.now() + 120 * 1000 });
-    return 'expired';
-  } catch (err) {
-    console.error('Cryptographic auth verification error:', err);
-    return 'visitor';
-  }
+  return verifyEdgeAuth(authToken);
 }
 
 // Scraper Bot Detector: Checks User-Agent for curl, python-requests, scrapers, and headless crawlers
@@ -358,10 +227,34 @@ function prunePrediction(p: any): any {
 }
 
 async function fetchFromUpstream(): Promise<FeedData> {
+  const authKey = SUPABASE_SERVICE_ROLE_KEY || SUPABASE_ANON_KEY;
+  const headers = {
+    apikey: authKey,
+    Authorization: `Bearer ${authKey}`,
+    Accept: 'application/json',
+  };
+
+  // 1. Primary Path: Zero-Join Point Read from pre-computed cached_feeds table (Sub-Phase 2.3)
+  try {
+    const snapRes = await fetch(
+      `${SUPABASE_URL}/rest/v1/cached_feeds?key=eq.feed:football:today&select=payload,updated_at&limit=1`,
+      { headers }
+    );
+    if (snapRes.ok) {
+      const snapRows = await snapRes.json();
+      if (Array.isArray(snapRows) && snapRows.length > 0 && snapRows[0]?.payload) {
+        const payload = snapRows[0].payload as FeedData;
+        if (Array.isArray(payload.predictions) && Array.isArray(payload.leagues)) {
+          return payload;
+        }
+      }
+    }
+  } catch (snapErr) {
+    console.warn('[PRED-FEED] Failed point-read from cached_feeds, falling back to relational query:', snapErr);
+  }
+
+  // 2. Fallback Path: Direct relational multi-table join (cold bootstrap / resilience)
   const now = new Date();
-  // Anchor live feed to start of yesterday (00:00:00 UTC) through +5 days forward.
-  // This guarantees 100% of Yesterday, Today, and upcoming forward fixtures fit within the 1000 limit without truncation.
-  // Older historical dates (2 to 30 days ago) are seamlessly loaded on-demand via fetchPastDateArchive.
   const yesterdayUtc = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 1, 0, 0, 0));
   const minDate = yesterdayUtc.toISOString();
   const maxDate = new Date(now.getTime() + 5 * 24 * 60 * 60 * 1000).toISOString();
@@ -369,13 +262,6 @@ async function fetchFromUpstream(): Promise<FeedData> {
   const selectQuery = encodeURIComponent(
     `id,fixture_id,prediction,market,probability,confidence_category,secondary_predictions,metadata,settlement_status,settlement_notes,settled_at,actual_score,publication_status,simulations_count,target_kickoff_at,tier_required,fixture:football_fixtures!inner(id,canonical_key,target_kickoff_at,status,home_score,away_score,match_minute,period,half_time_home_score,half_time_away_score,corners_home,corners_away,postponed_at,cancelled_at,venue,league:football_leagues!inner(id,name,code,country),home_team:football_teams!football_fixtures_home_team_id_fkey(id,name),away_team:football_teams!football_fixtures_away_team_id_fkey(id,name))`
   );
-
-  const authKey = SUPABASE_SERVICE_ROLE_KEY || SUPABASE_ANON_KEY;
-  const headers = {
-    apikey: authKey,
-    Authorization: `Bearer ${authKey}`,
-    Accept: 'application/json',
-  };
 
   const [predRes, leagueRes] = await Promise.all([
     fetch(
@@ -447,10 +333,10 @@ export default async function handler(req: Request) {
   const responseHeaders: Record<string, string> = {
     'Content-Type': 'application/json',
     'Cache-Control': isPaidOrTrial
-      ? 'private, no-cache, no-store, must-revalidate'
-      : 'public, s-maxage=60, stale-while-revalidate=300',
-    'CDN-Cache-Control': isPaidOrTrial ? 'no-store' : 'public, s-maxage=60',
-    'Vercel-CDN-Cache-Control': isPaidOrTrial ? 'no-store' : 'public, s-maxage=60',
+      ? 'private, max-age=30, stale-while-revalidate=120'
+      : 'public, max-age=30, s-maxage=60, stale-while-revalidate=300',
+    'CDN-Cache-Control': isPaidOrTrial ? 'no-store' : 'public, s-maxage=60, stale-while-revalidate=300',
+    'Vercel-CDN-Cache-Control': isPaidOrTrial ? 'no-store' : 'public, s-maxage=60, stale-while-revalidate=300',
     'Vary': 'Authorization, Origin, User-Agent',
     'Access-Control-Allow-Origin': corsOrigin,
     'Access-Control-Allow-Credentials': 'true',
@@ -458,108 +344,42 @@ export default async function handler(req: Request) {
     'X-RateLimit-Remaining': String(rateLimit.remaining),
   };
 
-  const cacheKey = `feed:public`;
+  const url = new URL(req.url);
+  const forceRefresh = (isInternalService || isPaidOrTrial) &&
+    (url.searchParams.get('refresh') === 'true' || req.headers.get('x-force-refresh') === 'true');
+  if (forceRefresh) {
+    feedSwrCache.invalidate('feed:raw');
+  }
 
   try {
-    const now = Date.now();
+    const { data: rawFeed, isStale } = await feedSwrCache.getOrFetch('feed:raw', fetchFromUpstream, computeFootballTtl);
 
-    // 1. Return cached Edge data if fresh (shields Supabase from both guest & VIP queries!)
-    const cached = memoryCache.get(cacheKey);
-    if (cached && now < cached.expiresAt) {
-      if (isBot) {
-        return new Response(
-          JSON.stringify({
-            success: true,
-            predictions: applyScraperBlinding(cached.data.predictions),
-            leagues: cached.data.leagues,
-            cached_at: cached.data.cached_at,
+    const bodyStr = JSON.stringify({
+      success: true,
+      ...(isBot
+        ? {
+            predictions: applyScraperBlinding(rawFeed.predictions),
+            leagues: rawFeed.leagues,
+            cached_at: rawFeed.cached_at,
             auth_status: 'scraper_blinded',
+            is_stale: isStale,
+          }
+        : {
+            ...rawFeed,
+            predictions: applyPaywallRedaction(rawFeed.predictions, authStatus),
+            auth_status: authStatus,
+            is_stale: isStale,
           }),
-          { status: 200, headers: responseHeaders }
-        );
-      }
+    });
 
-      const payload = {
-        ...cached.data,
-        predictions: applyPaywallRedaction(cached.data.predictions, authStatus),
-        auth_status: authStatus,
-      };
-      return new Response(
-        JSON.stringify({ success: true, ...payload }),
-        { status: 200, headers: responseHeaders }
-      );
+    const etag = generateEtag(bodyStr);
+    if (matchesEtag(req, etag)) {
+      return create304Response(etag, responseHeaders);
     }
 
-    // 2. Fetch with promise deduplication to avoid thundering herd
-    let fetchPromise = inflightPromises.get('upstream');
-    if (!fetchPromise) {
-      fetchPromise = fetchFromUpstream()
-        .then((data) => {
-          memoryCache.set(cacheKey, { data, expiresAt: Date.now() + CACHE_TTL_MS });
-          inflightPromises.delete('upstream');
-          return data;
-        })
-        .catch((err) => {
-          inflightPromises.delete('upstream');
-          throw err;
-        });
-      inflightPromises.set('upstream', fetchPromise);
-    }
-
-    const rawFeed = await fetchPromise;
-
-    if (isBot) {
-      return new Response(
-        JSON.stringify({
-          success: true,
-          predictions: applyScraperBlinding(rawFeed.predictions),
-          leagues: rawFeed.leagues,
-          cached_at: rawFeed.cached_at,
-          auth_status: 'scraper_blinded',
-        }),
-        { status: 200, headers: responseHeaders }
-      );
-    }
-
-    const payload = {
-      ...rawFeed,
-      predictions: applyPaywallRedaction(rawFeed.predictions, authStatus),
-      auth_status: authStatus,
-    };
-
-    return new Response(
-      JSON.stringify({ success: true, ...payload }),
-      { status: 200, headers: responseHeaders }
-    );
+    responseHeaders['ETag'] = etag;
+    return new Response(bodyStr, { status: 200, headers: responseHeaders });
   } catch (err: any) {
-    // Fallback: If upstream errors but we have stale cache, serve stale cache
-    const cached = memoryCache.get(cacheKey);
-    if (cached) {
-      if (isBot) {
-        return new Response(
-          JSON.stringify({
-            success: true,
-            predictions: applyScraperBlinding(cached.data.predictions),
-            leagues: cached.data.leagues,
-            cached_at: cached.data.cached_at,
-            auth_status: 'scraper_blinded',
-            stale: true,
-          }),
-          { status: 200, headers: responseHeaders }
-        );
-      }
-
-      const paywalledData = {
-        ...cached.data,
-        predictions: applyPaywallRedaction(cached.data.predictions, authStatus),
-        auth_status: authStatus,
-      };
-      return new Response(
-        JSON.stringify({ success: true, ...paywalledData, stale: true }),
-        { status: 200, headers: responseHeaders }
-      );
-    }
-
     return new Response(
       JSON.stringify({ success: false, error: err.message || 'Edge proxy error' }),
       {

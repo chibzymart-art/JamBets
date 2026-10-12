@@ -1,6 +1,7 @@
 import { supabase } from './supabase';
 import { formatClubName } from '../components/GoalCard';
 import { getTodayIsoDate, getFixtureLocalDate } from './dateUtils';
+import { getCircuitBreaker, SafeStorage, withTimeout } from './circuitBreaker';
 
 export type MarketType =
   | 'general'
@@ -373,6 +374,7 @@ export async function fetchMarketFeed(
               });
             const response = json as UnifiedMarketFeedResponse;
             clientMemoryCache.set(cacheKey, { data: response, timestamp: Date.now() });
+            SafeStorage.set(cacheKey, response, 30 * 60 * 1000);
             return response;
           }
         }
@@ -386,27 +388,91 @@ export async function fetchMarketFeed(
 
   // 2. If Edge route fails, return stale client cache if available to shield DB
   if (cached) {
-    return cached.data;
+    return { ...cached.data, is_stale: true };
   }
 
-  // 3. Direct Supabase Fallback (strict emergency fallback with reduced limit to shield connection pool)
+  const sessionCached = SafeStorage.get<UnifiedMarketFeedResponse>(cacheKey);
+  if (sessionCached) {
+    console.warn('[marketFeedService] Serving persistent session cache to shield Supabase');
+    clientMemoryCache.set(cacheKey, { data: sessionCached, timestamp: Date.now() });
+    return { ...sessionCached, is_stale: true };
+  }
+
+  // 3. Circuit Breaker Guard: Check if direct Supabase fallback is permitted
+  const breaker = getCircuitBreaker('market-feed');
+  if (!breaker.canExecute()) {
+    console.warn('[marketFeedService] Circuit breaker OPEN. Blocking direct Supabase query to prevent connection saturation.');
+    const anyMarketFeed = SafeStorage.get<UnifiedMarketFeedResponse>(`${market}:all:1:2000:false:false:false`);
+    if (anyMarketFeed) {
+      return { ...anyMarketFeed, is_stale: true };
+    }
+    return {
+      success: false,
+      market,
+      page,
+      limit,
+      total: 0,
+      total_pages: 1,
+      has_next: false,
+      has_prev: false,
+      date_filter: date,
+      counts: {
+        general: 0,
+        curated: 0,
+        home_win: 0,
+        away_win: 0,
+        draw: 0,
+        'over_2.5_goals': 0,
+        'ht_over_0.5_goals': 0,
+        corners: 0,
+      },
+      predictions: [],
+      error: 'Feed temporarily unavailable. Retrying automatically...',
+    };
+  }
+
+  // 4. Direct Supabase Fallback (strictly bounded and targeted by market to shield connection pool)
   try {
-    const [crRes, glRes] = await Promise.all([
-      supabase
-        .from(SELECTS.corners.table)
-        .select(SELECTS.corners.select)
-        .neq('settlement_status', 'void')
-        .neq('publication_status', 'archived')
-        .order('probability', { ascending: false })
-        .limit(2000),
-      supabase
+    const isCorners = market === 'corners';
+    const isGoals = market === 'over_2.5_goals' || market === 'ht_over_0.5_goals';
+    const isCurated = market === 'curated' || market === 'general';
+
+    const executeFallback = async () => {
+      const crPromise = (isCorners || isCurated)
+        ? supabase
+            .from(SELECTS.corners.table)
+            .select(SELECTS.corners.select)
+            .neq('settlement_status', 'void')
+            .neq('publication_status', 'archived')
+            .order('probability', { ascending: false })
+            .limit(isCorners ? 100 : 40)
+        : Promise.resolve({ data: [] });
+
+      let glQuery = supabase
         .from(SELECTS.goals.table)
         .select(SELECTS.goals.select)
         .neq('settlement_status', 'void')
         .neq('publication_status', 'archived')
-        .order('probability', { ascending: false })
-        .limit(2000),
-    ]);
+        .order('probability', { ascending: false });
+
+      if (market === 'over_2.5_goals' || market === 'ht_over_0.5_goals') {
+        glQuery = glQuery.eq('market', market);
+      }
+
+      const glPromise = (isGoals || isCurated)
+        ? glQuery.limit(isGoals ? 100 : 40)
+        : Promise.resolve({ data: [] });
+
+      const [crRes, glRes] = await Promise.all([crPromise, glPromise]);
+      return { crRes, glRes };
+    };
+
+    const { crRes, glRes } = await withTimeout(
+      executeFallback(),
+      breaker.getTimeoutMs(),
+      'Supabase emergency fallback timed out'
+    );
+    breaker.recordSuccess();
 
     const normalizeList = (data: any[], cat: any, forced?: MarketType) =>
       (data || []).map((r) => normalizePrediction(r, cat, forced));
@@ -513,8 +579,10 @@ export async function fetchMarketFeed(
       cached_at: new Date().toISOString(),
     };
     clientMemoryCache.set(cacheKey, { data: fallbackResult, timestamp: Date.now() });
+    SafeStorage.set(cacheKey, fallbackResult, 15 * 60 * 1000);
     return fallbackResult;
   } catch (err: any) {
+    breaker.recordFailure(err);
     return {
       success: false,
       market,

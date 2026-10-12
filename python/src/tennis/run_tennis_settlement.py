@@ -140,6 +140,17 @@ def main():
         print(f" Execution Duration:          {duration_ms}ms")
         print("==================================================================")
 
+        # Refresh High-Performance Feed Snapshot Cache in Cloud Supabase
+        if not args.dry_run:
+            print("\n[STEP 2] Refreshing Tennis Feed Snapshot Cache in Cloud Supabase...", flush=True)
+            try:
+                from python.src.engines.feed_snapshot_engine import FeedSnapshotEngine
+                snap_eng = FeedSnapshotEngine()
+                snap_eng.write_snapshot("feed:tennis", snap_eng.build_tennis_snapshot())
+                print("  [OK] Tennis feed snapshot refreshed in cached_feeds.", flush=True)
+            except Exception as exc:
+                print(f"  [WARN] Tennis snapshot refresh failed (non-fatal): {exc}", flush=True)
+
 
 if __name__ == "__main__":
     try:

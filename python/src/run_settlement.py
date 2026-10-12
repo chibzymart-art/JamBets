@@ -67,6 +67,14 @@ def main():
             try:
                 metrics = scheduler.run_settlement_cycle(slot_override=args.slot, force=args.force)
                 print(f"[DAEMON] 15m slot check: {metrics.get('status')}. Next slot check in 60s...")
+                # Automatically refresh pre-computed feed snapshots if games settled or live scores active
+                if metrics.get('predictions_settled', 0) > 0 or metrics.get('fixtures_live', 0) > 0:
+                    try:
+                        from python.src.engines.feed_snapshot_engine import FeedSnapshotEngine
+                        FeedSnapshotEngine().sync_all_feeds()
+                        print("[DAEMON] Feed snapshot cache refreshed after live score / settlement change.")
+                    except Exception as snap_err:
+                        print(f"[DAEMON WARN] Failed to refresh feed snapshot cache: {snap_err}")
             except Exception as e:
                 print(f"[DAEMON ERROR] Unexpected failure in settlement cycle: {e}")
             time.sleep(60)  # Check slot boundary every minute
@@ -90,6 +98,16 @@ def main():
         print(f" Conflicts Detected:      {metrics.get('conflicts_detected', 0)}")
         print(f" Execution Duration:      {metrics.get('duration_ms', 0)}ms")
         print("==================================================================")
+
+        # Refresh High-Performance Feed Snapshot Cache in Cloud Supabase
+        print("\n[STEP 2] Refreshing Edge Pre-Computed Feed Snapshot Cache in Cloud Supabase...", flush=True)
+        try:
+            from python.src.engines.feed_snapshot_engine import FeedSnapshotEngine
+            snapshot_engine = FeedSnapshotEngine()
+            snap_results = snapshot_engine.sync_all_feeds()
+            print(f"  [OK] Public feed snapshots refreshed in cached_feeds: {snap_results}", flush=True)
+        except Exception as exc:
+            print(f"  [WARN] Feed snapshot cache refresh failed (non-fatal): {exc}", flush=True)
 
 
 if __name__ == "__main__":

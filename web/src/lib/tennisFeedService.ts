@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { getCircuitBreaker, SafeStorage, withTimeout } from './circuitBreaker';
 import {
   TennisPrediction,
   TennisTournament,
@@ -203,6 +204,11 @@ export async function fetchTennisFeed(options: FetchTennisFeedOptions = {}): Pro
               rawTournaments = edgeData.tournaments || [];
               rawSettlements = edgeData.settlements || [];
               usedEdge = true;
+              SafeStorage.set('tennis_feed', {
+                predictions: rawPredictions,
+                tournaments: rawTournaments,
+                settlements: rawSettlements,
+              }, 30 * 60 * 1000);
             }
           }
         }
@@ -212,37 +218,77 @@ export async function fetchTennisFeed(options: FetchTennisFeedOptions = {}): Pro
     }
 
     if (!usedEdge) {
-      // 2. Direct Cloud Supabase Fallback (strictly bounded by rolling date window & limit 1000)
-      const now = new Date();
-      const minDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
-      const maxDate = new Date(now.getTime() + 5 * 24 * 60 * 60 * 1000).toISOString();
+      // Check resilient persistent cache before hitting database
+      const cached = SafeStorage.get<{
+        predictions: TennisPrediction[];
+        tournaments: TennisTournament[];
+        settlements: TennisSettlement[];
+      }>('tennis_feed');
 
-      const predTable = isUnlocked ? 'tennis_predictions' : 'tennis_predictions_paywall';
+      if (cached) {
+        console.warn('[tennisFeedService] Serving persistent session cache to shield Supabase');
+        rawPredictions = cached.predictions || [];
+        rawTournaments = cached.tournaments || [];
+        rawSettlements = cached.settlements || [];
+        usedEdge = true;
+      }
+    }
 
-      const [predRes, tourneysRes, settleRes] = await Promise.all([
-        supabase
-          .from(predTable)
-          .select(PRED_SELECT)
-          .gte('target_kickoff_at', minDate)
-          .lte('target_kickoff_at', maxDate)
-          .order('target_kickoff_at', { ascending: true })
-          .limit(1000),
-        supabase
-          .from('tennis_tournaments')
-          .select('*')
-          .eq('is_active', true)
-          .order('name', { ascending: true })
-          .limit(100),
-        supabase
-          .from('tennis_settlements')
-          .select(SETTLE_SELECT)
-          .order('settled_at', { ascending: false })
-          .limit(100),
-      ]);
+    if (!usedEdge) {
+      const breaker = getCircuitBreaker('tennis-feed');
+      if (!breaker.canExecute()) {
+        console.warn('[tennisFeedService] Circuit breaker OPEN. Shielding Supabase from direct query.');
+        rawPredictions = [];
+        rawTournaments = [];
+        rawSettlements = [];
+      } else {
+        try {
+          const now = new Date();
+          const minDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
+          const maxDate = new Date(now.getTime() + 5 * 24 * 60 * 60 * 1000).toISOString();
 
-      rawPredictions = predRes.data || [];
-      rawTournaments = (tourneysRes.data as TennisTournament[]) || [];
-      rawSettlements = settleRes.data || [];
+          const predTable = isUnlocked ? 'tennis_predictions' : 'tennis_predictions_paywall';
+
+          const executeDirect = async () => {
+            return await Promise.all([
+              supabase
+                .from(predTable)
+                .select(PRED_SELECT)
+                .gte('target_kickoff_at', minDate)
+                .lte('target_kickoff_at', maxDate)
+                .order('target_kickoff_at', { ascending: true })
+                .limit(150),
+              supabase
+                .from('tennis_tournaments')
+                .select('*')
+                .eq('is_active', true)
+                .order('name', { ascending: true })
+                .limit(50),
+              supabase
+                .from('tennis_settlements')
+                .select(SETTLE_SELECT)
+                .order('settled_at', { ascending: false })
+                .limit(50),
+            ]);
+          };
+
+          const [predRes, tourneysRes, settleRes] = await withTimeout(
+            executeDirect(),
+            breaker.getTimeoutMs(),
+            'Tennis direct fallback timed out'
+          );
+
+          breaker.recordSuccess();
+          rawPredictions = predRes.data || [];
+          rawTournaments = (tourneysRes.data as TennisTournament[]) || [];
+          rawSettlements = settleRes.data || [];
+        } catch (err) {
+          breaker.recordFailure(err);
+          rawPredictions = [];
+          rawTournaments = [];
+          rawSettlements = [];
+        }
+      }
     }
 
     // 2.5 Defensive Client-Side Deduplication (Pair + Date dedupe)

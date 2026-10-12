@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef, Fragment } from 'react';
 import { Routes, Route, Navigate, useNavigate, useLocation, Link } from 'react-router-dom';
 import { supabase } from './lib/supabase';
+import { getCircuitBreaker, SafeStorage, withTimeout } from './lib/circuitBreaker';
 import { initGoogleIdentityServices, promptGoogleOneTap } from './lib/googleAuth';
 import {
   QueueFixture,
@@ -532,7 +533,9 @@ export default function App() {
           if (edgeRes.ok) {
             const edgeData = await edgeRes.json();
             if (edgeData.success && Array.isArray(edgeData.predictions) && edgeData.predictions.length > 0) {
-              const hasMasked = edgeData.predictions.some((p: any) => p.prediction === 'LOCKED');
+              const hasMasked = edgeData.predictions.some(
+                (p: any) => p.is_locked === true || p.prediction === 'LOCKED' || (typeof p.prediction === 'string' && p.prediction.startsWith('🔒'))
+              );
               if ((isAdmin || canViewPredictions) && hasMasked) {
                 // Anonymous cache returned; bypass to direct Supabase query
                 usedEdgeCache = false;
@@ -540,6 +543,7 @@ export default function App() {
                 rawPredRecords = edgeData.predictions;
                 returnedLeagues = edgeData.leagues || [];
                 usedEdgeCache = true;
+                SafeStorage.set('football_feed', { predictions: rawPredRecords, leagues: returnedLeagues }, 30 * 60 * 1000);
               }
             }
           }
@@ -549,77 +553,106 @@ export default function App() {
       }
 
       if (!usedEdgeCache) {
-        // Direct Supabase Query (Used for Admins, Paid Subscribers, or when Edge is local/unavailable)
-        const now = new Date();
-        // Anchor live feed to start of yesterday (00:00:00 UTC) through +5 days forward.
-        // This guarantees 100% of Yesterday, Today, and upcoming forward fixtures fit within the 1000 limit without truncation.
-        // Older historical dates (2 to 30 days ago) are seamlessly loaded on-demand via fetchPastDateArchive.
-        const yesterdayUtc = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 1, 0, 0, 0));
-        const minDate = yesterdayUtc.toISOString();
-        const maxDate = new Date(now.getTime() + 5 * 24 * 60 * 60 * 1000).toISOString();
+        // Check resilient persistent cache before hitting database
+        const cached = SafeStorage.get<{ predictions: any[]; leagues: LeagueRecord[] }>('football_feed');
+        if (cached && cached.predictions && cached.predictions.length > 0) {
+          console.warn('[App] Serving persistent session cache to shield Supabase');
+          rawPredRecords = cached.predictions;
+          returnedLeagues = cached.leagues || [];
+          usedEdgeCache = true;
+        }
+      }
 
-        const predictionsQuery = supabase
-          .from('football_predictions')
-          .select(`
-            id,
-            fixture_id,
-            prediction,
-            market,
-            probability,
-            confidence_category,
-            secondary_predictions,
-            metadata,
-            settlement_status,
-            settlement_notes,
-            settled_at,
-            actual_score,
-            publication_status,
-            simulations_count,
-            target_kickoff_at,
-            tier_required,
-            fixture:football_fixtures!inner(
-              id,
-              canonical_key,
-              target_kickoff_at,
-              status,
-              queue_day,
-              in_prediction_queue,
-              home_score,
-              away_score,
-              match_minute,
-              period,
-              half_time_home_score,
-              half_time_away_score,
-              corners_home,
-              corners_away,
-              postponed_at,
-              cancelled_at,
-              venue,
-              league:football_leagues!inner(id, name, code, country),
-              home_team:football_teams!football_fixtures_home_team_id_fkey(id, name),
-              away_team:football_teams!football_fixtures_away_team_id_fkey(id, name)
-            )
-          `)
-          .eq('publication_status', 'published')
-          .gte('target_kickoff_at', minDate)
-          .lte('target_kickoff_at', maxDate)
-          .order('target_kickoff_at', { ascending: true })
-          .order('id', { ascending: true })
-          .limit(1000);
+      if (!usedEdgeCache) {
+        const breaker = getCircuitBreaker('football-feed');
+        if (!breaker.canExecute()) {
+          console.warn('[App] Circuit breaker OPEN for football feed. Shielding Supabase from direct query.');
+          rawPredRecords = [];
+          returnedLeagues = [];
+        } else {
+          try {
+            // Direct Supabase Query (Used for Admins, Paid Subscribers, or when Edge is local/unavailable)
+            const now = new Date();
+            const yesterdayUtc = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 1, 0, 0, 0));
+            const minDate = yesterdayUtc.toISOString();
+            const maxDate = new Date(now.getTime() + 5 * 24 * 60 * 60 * 1000).toISOString();
 
-        const leagueQuery = supabase
-          .from('football_leagues')
-          .select('id, name, code, country')
-          .order('name', { ascending: true });
+            const executeDirect = async () => {
+              const predictionsQuery = supabase
+                .from('football_predictions')
+                .select(`
+                  id,
+                  fixture_id,
+                  prediction,
+                  market,
+                  probability,
+                  confidence_category,
+                  secondary_predictions,
+                  metadata,
+                  settlement_status,
+                  settlement_notes,
+                  settled_at,
+                  actual_score,
+                  publication_status,
+                  simulations_count,
+                  target_kickoff_at,
+                  tier_required,
+                  fixture:football_fixtures!inner(
+                    id,
+                    canonical_key,
+                    target_kickoff_at,
+                    status,
+                    queue_day,
+                    in_prediction_queue,
+                    home_score,
+                    away_score,
+                    match_minute,
+                    period,
+                    half_time_home_score,
+                    half_time_away_score,
+                    corners_home,
+                    corners_away,
+                    postponed_at,
+                    cancelled_at,
+                    venue,
+                    league:football_leagues!inner(id, name, code, country),
+                    home_team:football_teams!football_fixtures_home_team_id_fkey(id, name),
+                    away_team:football_teams!football_fixtures_away_team_id_fkey(id, name)
+                  )
+                `)
+                .eq('publication_status', 'published')
+                .gte('target_kickoff_at', minDate)
+                .lte('target_kickoff_at', maxDate)
+                .order('target_kickoff_at', { ascending: true })
+                .order('id', { ascending: true })
+                .limit(200);
 
-        const [predictionsRes, leagueRes] = await Promise.all([
-          predictionsQuery,
-          leagueQuery
-        ]);
+              const leagueQuery = supabase
+                .from('football_leagues')
+                .select('id, name, code, country')
+                .order('name', { ascending: true });
 
-        if (predictionsRes.error) throw predictionsRes.error;
-        rawPredRecords = predictionsRes.data || [];
-        returnedLeagues = leagueRes.data || [];
+              return await Promise.all([predictionsQuery, leagueQuery]);
+            };
+
+            const [predictionsRes, leagueRes] = await withTimeout(
+              executeDirect(),
+              breaker.getTimeoutMs(),
+              'Football predictions direct query timed out'
+            );
+
+            if (predictionsRes.error) throw predictionsRes.error;
+            breaker.recordSuccess();
+            rawPredRecords = predictionsRes.data || [];
+            returnedLeagues = leagueRes.data || [];
+            SafeStorage.set('football_feed', { predictions: rawPredRecords, leagues: returnedLeagues }, 15 * 60 * 1000);
+          } catch (directErr) {
+            breaker.recordFailure(directErr);
+            console.error('[App] Direct query failed or timed out:', directErr);
+            rawPredRecords = [];
+            returnedLeagues = [];
+          }
+        }
       }
 
       const elapsed = Math.round(performance.now() - start);

@@ -160,6 +160,16 @@ def run_prediction_cycle(
         pipeline.close()
         db.close()
 
+    # Refresh High-Performance Feed Snapshot Cache in Cloud Supabase
+    if summary.get("status") == "success" and not dry_run:
+        try:
+            from python.src.engines.feed_snapshot_engine import FeedSnapshotEngine
+            snap_eng = FeedSnapshotEngine()
+            snap_eng.write_snapshot("feed:tennis", snap_eng.build_tennis_snapshot())
+            logger.info("Feed snapshot for feed:tennis refreshed in cached_feeds.")
+        except Exception as exc:
+            logger.warning("Failed to refresh feed:tennis snapshot: %s", exc)
+
     return summary
 
 

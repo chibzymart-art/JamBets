@@ -1,4 +1,7 @@
 import { checkRateLimit, getClientIp } from './rate-limiter';
+import { verifyEdgeAuth, AuthStatus } from './_lib/jwt-verifier';
+import { EdgeSwrCache, EdgeCacheRegistry } from './_lib/edge-cache';
+import { generateEtag, matchesEtag, create304Response } from './_lib/etag';
 
 export const config = {
   runtime: 'edge',
@@ -8,6 +11,7 @@ const SUPABASE_URL = process.env.VITE_SUPABASE_URL || 'https://vepcoopomlfjageij
 const SUPABASE_ANON_KEY =
   process.env.VITE_SUPABASE_ANON_KEY ||
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZlcGNvb3BvbWxmamFnZWlqc2V3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg4NTM4NzIsImV4cCI6MjEwNDQyOTg3Mn0.KMbk71HHpEX_RzdMgFy_jYO6DhE3iwd50aHv9waWh2g';
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 
 export type MarketType =
   | 'general'
@@ -86,171 +90,29 @@ interface MarketFeedResponse {
   leagues: Array<{ code: string; name: string }>;
   predictions: UnifiedMarketPrediction[];
   auth_status?: AuthStatus;
+  is_stale?: boolean;
   cached_at: string;
 }
 
-// In-memory cache for ultra-low latency (< 5ms on cache hit)
-interface CacheEntry {
-  data: MarketFeedResponse;
-  expiresAt: number;
+// Global SWR Edge Caches: 180s fresh (3 min default) + 3600s stale (1 hour)
+const marketSwrCache = new EdgeSwrCache<UnifiedMarketPrediction[]>(180 * 1000, 3600 * 1000);
+const countsSwrCache = new EdgeSwrCache<Record<MarketType, number>>(180 * 1000, 3600 * 1000);
+EdgeCacheRegistry.register('market', marketSwrCache);
+EdgeCacheRegistry.register('counts', countsSwrCache);
+
+// Adaptive Dynamic TTL for Live Scores and Instant Settlement Invalidation (Sub-Phase 2.4)
+function computeMarketTtl(preds: UnifiedMarketPrediction[]): number {
+  const hasLive = (preds || []).some((p: any) => {
+    const st = (p.fixture?.status || '').toLowerCase();
+    return st === 'live' || st === '1h' || st === '2h' || st === 'ht' || st === 'in_progress';
+  });
+  return hasLive ? 15 * 1000 : 180 * 1000;
 }
 
-const memoryCache = new Map<string, CacheEntry>();
-const inflightPromises = new Map<string, Promise<MarketFeedResponse>>();
-const CACHE_TTL_MS = 60 * 1000; // 60s edge cache
-
-// Dedicated memory cache for cross-market counts to avoid 4 redundant Supabase calls per tab switch
-const countsMemoryCache = new Map<string, { counts: Record<MarketType, number>; expiresAt: number }>();
-const COUNTS_TTL_MS = 60 * 1000; // 60s memory cache for counts
-
-const ADMIN_EMAILS = new Set([
-  'chibzymart@gmail.com',
-  'whizzchibz@gmail.com',
-  'chibuezec.amuchie@gmail.com',
-  'chibuezeamuchie@gmail.com',
-  'nnamdiamuchie@gmail.com',
-]);
-
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
-
-export type AuthStatus = 'paid_or_trial' | 'expired' | 'visitor';
-
-// In-memory cache for user auth verification (120s for valid users, 30s for invalid)
-const userAuthCache = new Map<string, { status: AuthStatus; expiresAt: number }>();
+export type { AuthStatus };
 
 async function checkAuthStatus(authToken: string | null): Promise<AuthStatus> {
-  if (!authToken) return 'visitor';
-  const rawToken = authToken.startsWith('Bearer ') ? authToken.slice(7).trim() : authToken.trim();
-  if (!rawToken) return 'visitor';
-
-  // 1. Direct Service Role Key Match (internal/admin scripts)
-  if (SUPABASE_SERVICE_ROLE_KEY && rawToken === SUPABASE_SERVICE_ROLE_KEY) {
-    return 'paid_or_trial';
-  }
-
-  // 2. Check in-memory cache to eliminate duplicate Supabase Auth roundtrips
-  const cached = userAuthCache.get(rawToken);
-  if (cached && Date.now() < cached.expiresAt) {
-    return cached.status;
-  }
-
-  try {
-    // 3. Cryptographically verify token signature against Supabase Auth API
-    const authRes = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
-      headers: {
-        apikey: SUPABASE_ANON_KEY,
-        Authorization: `Bearer ${rawToken}`,
-      },
-    });
-
-    if (!authRes.ok) {
-      // Signature is invalid, token is forged or expired -> fail closed
-      userAuthCache.set(rawToken, { status: 'visitor', expiresAt: Date.now() + 30 * 1000 });
-      return 'visitor';
-    }
-
-    const authUser = await authRes.json();
-    if (!authUser || !authUser.id) {
-      userAuthCache.set(rawToken, { status: 'visitor', expiresAt: Date.now() + 30 * 1000 });
-      return 'visitor';
-    }
-
-    // 4. Server-verified role or admin email whitelist
-    const email = (authUser.email || '').toLowerCase().trim();
-    if (
-      authUser.app_metadata?.role === 'admin' ||
-      authUser.user_metadata?.role === 'admin' ||
-      (email && ADMIN_EMAILS.has(email))
-    ) {
-      userAuthCache.set(rawToken, { status: 'paid_or_trial', expiresAt: Date.now() + 120 * 1000 });
-      return 'paid_or_trial';
-    }
-
-    const userId = authUser.id;
-    const headers = {
-      apikey: SUPABASE_ANON_KEY,
-      Authorization: `Bearer ${rawToken}`,
-      Accept: 'application/json',
-    };
-
-    // 5. Query active subscriptions, entitlements & users table for this verified user
-    const [subRes, entRes, userRes] = await Promise.all([
-      fetch(`${SUPABASE_URL}/rest/v1/subscriptions?user_id=eq.${userId}&status=eq.active&select=tier&limit=1`, { headers }),
-      fetch(`${SUPABASE_URL}/rest/v1/entitlements?user_id=eq.${userId}&select=tier,valid_until,features&limit=1`, { headers }),
-      fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${userId}&select=role,created_at&limit=1`, { headers }),
-    ]);
-
-    let userData: any = null;
-    // Check users table role
-    if (userRes.ok) {
-      userData = await userRes.json();
-      if (Array.isArray(userData) && userData.length > 0 && userData[0].role === 'admin') {
-        userAuthCache.set(rawToken, { status: 'paid_or_trial', expiresAt: Date.now() + 120 * 1000 });
-        return 'paid_or_trial';
-      }
-    }
-
-    let isPaid = false;
-
-    // 1. Check active paid subscriptions
-    if (subRes.ok) {
-      const subData = await subRes.json();
-      if (Array.isArray(subData) && subData.length > 0) {
-        const tier = (subData[0].tier || '').toLowerCase();
-        if (['standard', 'bigbang', 'vip', 'pro', 'admin'].includes(tier)) {
-          isPaid = true;
-        }
-      }
-    }
-
-    // 2. Check entitlements (active 3-day trial or active entitlement)
-    if (!isPaid && entRes.ok) {
-      const entData = await entRes.json();
-      if (Array.isArray(entData) && entData.length > 0) {
-        const ent = entData[0];
-        const validUntil = ent.valid_until ? new Date(ent.valid_until).getTime() : Infinity;
-        if (validUntil > Date.now()) {
-          const tier = (ent.tier || '').toLowerCase();
-          const feats = ent.features || {};
-          const isEntAdmin = tier === 'admin' || feats.admin === true;
-          const hasVipOrTrialFeatures = Boolean(
-            tier === 'trial' ||
-            tier === 'free_trial' ||
-            ['standard', 'bigbang', 'vip', 'pro', 'admin'].includes(tier) ||
-            feats.trial === true ||
-            feats.vip === true ||
-            feats.football_predictions === true ||
-            feats.specialist_markets === true ||
-            feats.simulations === true ||
-            feats.all_sports === true ||
-            feats.bigbang === true
-          );
-          if (['standard', 'bigbang', 'vip', 'pro', 'admin'].includes(tier) || isEntAdmin || hasVipOrTrialFeatures) {
-            isPaid = true;
-          }
-        }
-      }
-    }
-
-    // 3. 3-Day Free Trial evaluation (72 hours from user registration)
-    if (!isPaid) {
-      const createdAt = authUser.created_at || (Array.isArray(userData) && userData[0]?.created_at);
-      if (createdAt) {
-        const createdMs = new Date(createdAt).getTime();
-        const trialDurationMs = 3 * 24 * 60 * 60 * 1000; // 72 hours
-        if (Date.now() - createdMs < trialDurationMs) {
-          isPaid = true; // Active 3-Day Free Trial
-        }
-      }
-    }
-
-    const status: AuthStatus = isPaid ? 'paid_or_trial' : 'expired';
-    userAuthCache.set(rawToken, { status, expiresAt: Date.now() + (isPaid ? 120 * 1000 : 30 * 1000) });
-    return status;
-  } catch (err) {
-    console.error('Cryptographic auth verification error:', err);
-    return 'visitor';
-  }
+  return verifyEdgeAuth(authToken);
 }
 
 function getCorsOrigin(req: Request): string {
@@ -491,7 +353,80 @@ async function fetchMarketDataFromUpstream(
   market: MarketType,
   headers: Record<string, string>
 ): Promise<UnifiedMarketPrediction[]> {
-  // 1. Determine which views to query
+  // 0. Primary Path: Zero-Join Point Read from pre-computed cached_feeds (Sub-Phase 2.3)
+  try {
+    if (market === 'corners') {
+      const snapRes = await fetch(
+        `${SUPABASE_URL}/rest/v1/cached_feeds?key=eq.feed:corners&select=payload&limit=1`,
+        { headers }
+      );
+      if (snapRes.ok) {
+        const rows = await snapRes.json();
+        const rawList = rows[0]?.payload?.predictions;
+        if (Array.isArray(rawList) && rawList.length > 0) {
+          const filtered = rawList.filter((item: any) => {
+            if (item.settlement_status === 'void' || item.publication_status === 'archived') return false;
+            if (item.fixture?.status === 'cancelled' || item.fixture?.status === 'postponed') return false;
+            return true;
+          });
+          return filtered.map((item: any) => normalizePrediction(item, 'corners', 'corners'));
+        }
+      }
+    } else if (market === 'goals' || market === 'ht_over_0.5_goals' || market === 'over_2.5_goals') {
+      const snapRes = await fetch(
+        `${SUPABASE_URL}/rest/v1/cached_feeds?key=eq.feed:goals&select=payload&limit=1`,
+        { headers }
+      );
+      if (snapRes.ok) {
+        const rows = await snapRes.json();
+        const rawList = rows[0]?.payload?.predictions;
+        if (Array.isArray(rawList) && rawList.length > 0) {
+          const filtered = rawList.filter((item: any) => {
+            if (item.settlement_status === 'void' || item.publication_status === 'archived') return false;
+            if (item.fixture?.status === 'cancelled' || item.fixture?.status === 'postponed') return false;
+            if (market === 'ht_over_0.5_goals' && item.market !== 'ht_over_0.5_goals') return false;
+            if (market === 'over_2.5_goals' && item.market !== 'over_2.5_goals') return false;
+            return true;
+          });
+          return filtered.map((item: any) => normalizePrediction(item, 'goals', market));
+        }
+      }
+    } else if (market === 'curated') {
+      const [cornSnap, goalsSnap] = await Promise.all([
+        fetch(`${SUPABASE_URL}/rest/v1/cached_feeds?key=eq.feed:corners&select=payload&limit=1`, { headers }),
+        fetch(`${SUPABASE_URL}/rest/v1/cached_feeds?key=eq.feed:goals&select=payload&limit=1`, { headers }),
+      ]);
+      if (cornSnap.ok && goalsSnap.ok) {
+        const [crRows, glRows] = await Promise.all([cornSnap.json(), goalsSnap.json()]);
+        const crList = crRows[0]?.payload?.predictions;
+        const glList = glRows[0]?.payload?.predictions;
+        if (Array.isArray(crList) && Array.isArray(glList)) {
+          const unified: UnifiedMarketPrediction[] = [
+            ...crList
+              .filter((item: any) => item.settlement_status !== 'void' && item.publication_status !== 'archived' && item.fixture?.status !== 'cancelled' && item.fixture?.status !== 'postponed')
+              .map((item: any) => normalizePrediction(item, 'corners')),
+            ...glList
+              .filter((item: any) => item.settlement_status !== 'void' && item.publication_status !== 'archived' && item.fixture?.status !== 'cancelled' && item.fixture?.status !== 'postponed')
+              .map((item: any) => normalizePrediction(item, 'goals')),
+          ];
+          const seenFixtures = new Set<string>();
+          const curated: UnifiedMarketPrediction[] = [];
+          unified.sort((a, b) => (b.probability || 0) - (a.probability || 0));
+          for (const item of unified) {
+            if (!seenFixtures.has(item.fixture_id)) {
+              seenFixtures.add(item.fixture_id);
+              curated.push(item);
+            }
+          }
+          return curated;
+        }
+      }
+    }
+  } catch (snapErr) {
+    console.warn('[MARKET-FEED] Failed point read from cached_feeds, falling back to relational query:', snapErr);
+  }
+
+  // 1. Fallback: Determine which views to query
   if (market === 'curated') {
     // Top edge queries top signals across remaining specialist engines (Goals & Corners)
     const [cornRes, goalsRes] = await Promise.all([
@@ -527,7 +462,7 @@ async function fetchMarketDataFromUpstream(
     return curated;
   }
 
-  // 2. Specific Engine Query
+  // 2. Fallback: Specific Engine Query
   let configKey = market;
   if (market === 'corners') {
     configKey = 'corners';
@@ -571,94 +506,112 @@ async function computeAllMarketCounts(
   headers: Record<string, string>,
   dateParam: string = 'all'
 ): Promise<Record<MarketType, number>> {
-  const cached = countsMemoryCache.get(dateParam);
-  if (cached && Date.now() < cached.expiresAt) {
-    return cached.counts;
-  }
-
-  try {
-    const [cr, gl] = await Promise.all([
-      fetch(`${SUPABASE_URL}/rest/v1/corner_predictions?select=id,target_kickoff_at,settlement_status,publication_status,settlement_notes,fixture:football_fixtures!inner(id,status)&settlement_status=neq.void&publication_status=neq.archived&limit=1000`, { headers }).then((r) => r.json()),
-      fetch(`${SUPABASE_URL}/rest/v1/goals_predictions?select=id,market,target_kickoff_at,settlement_status,publication_status,fixture:football_fixtures!inner(id,status)&settlement_status=neq.void&publication_status=neq.archived&limit=1000`, { headers }).then((r) => r.json()),
-    ]);
-
-    let targetDateStr = dateParam;
-    const todayStr = getLagosDate();
-    if (dateParam === 'today') {
-      targetDateStr = todayStr;
-    } else if (dateParam === 'tomorrow') {
-      targetDateStr = getLagosDate(new Date(Date.now() + 86400000));
-    } else if (dateParam === 'yesterday') {
-      targetDateStr = getLagosDate(new Date(Date.now() - 86400000));
-    }
-
-    const filterByDate = (list: any[]) => {
-      if (!Array.isArray(list)) return [];
-      if (dateParam !== 'all') {
-        return list.filter((item) => getLagosDateFromIso(item.target_kickoff_at) === targetDateStr);
+  const result = await countsSwrCache.getOrFetch(`counts:${dateParam}`, async () => {
+    // Primary Path: Read pre-computed market counts from cached_feeds (Sub-Phase 2.3)
+    try {
+      const snapRes = await fetch(
+        `${SUPABASE_URL}/rest/v1/cached_feeds?key=eq.feed:market:counts&select=payload&limit=1`,
+        { headers }
+      );
+      if (snapRes.ok) {
+        const rows = await snapRes.json();
+        const payload = rows[0]?.payload;
+        if (payload) {
+          if (dateParam === 'today' && payload.counts_today) return payload.counts_today;
+          if (dateParam === 'tomorrow' && payload.counts_tomorrow) return payload.counts_tomorrow;
+          if (dateParam === 'yesterday' && payload.counts_yesterday) return payload.counts_yesterday;
+          if (payload.counts_all) return payload.counts_all;
+        }
       }
-      return list.filter((item) => {
-        const d = getLagosDateFromIso(item.target_kickoff_at);
-        return !d || d >= todayStr;
-      });
-    };
-
-    const validCr = Array.isArray(cr)
-      ? cr.filter(
-          (item: any) =>
-            item.settlement_status !== 'void' &&
-            item.publication_status !== 'archived' &&
-            item.fixture?.status !== 'cancelled' &&
-            item.fixture?.status !== 'postponed'
-        )
-      : [];
-
-    const validGl = Array.isArray(gl)
-      ? gl.filter(
-          (item: any) =>
-            item.settlement_status !== 'void' &&
-            item.publication_status !== 'archived' &&
-            item.fixture?.status !== 'cancelled' &&
-            item.fixture?.status !== 'postponed'
-        )
-      : [];
-
-    const filteredCr = filterByDate(validCr);
-    const filteredGl = filterByDate(validGl);
-
-    const crCount = filteredCr.length;
-
-    let o25Count = 0;
-    let ht05Count = 0;
-    for (const item of filteredGl) {
-      if (item.market === 'ht_over_0.5_goals') ht05Count++;
-      else o25Count++;
+    } catch (snapErr) {
+      console.warn('[MARKET-FEED] Failed point read for market counts from cached_feeds:', snapErr);
     }
 
-    const counts: Record<MarketType, number> = {
-      general: Math.min(20, o25Count),
-      curated: Math.min(20, o25Count + crCount),
-      home_win: 0,
-      away_win: 0,
-      draw: 0,
-      'over_2.5_goals': o25Count,
-      'ht_over_0.5_goals': ht05Count,
-      corners: crCount,
-    };
-    countsMemoryCache.set(dateParam, { counts, expiresAt: Date.now() + COUNTS_TTL_MS });
-    return counts;
-  } catch (err) {
-    return {
-      general: 0,
-      curated: 0,
-      home_win: 0,
-      away_win: 0,
-      draw: 0,
-      'over_2.5_goals': 0,
-      'ht_over_0.5_goals': 0,
-      corners: 0,
-    };
-  }
+    // Fallback Path: Direct query
+    try {
+      const [cr, gl] = await Promise.all([
+        fetch(`${SUPABASE_URL}/rest/v1/corner_predictions?select=id,target_kickoff_at,settlement_status,publication_status,settlement_notes,fixture:football_fixtures!inner(id,status)&settlement_status=neq.void&publication_status=neq.archived&limit=1000`, { headers }).then((r) => r.json()),
+        fetch(`${SUPABASE_URL}/rest/v1/goals_predictions?select=id,market,target_kickoff_at,settlement_status,publication_status,fixture:football_fixtures!inner(id,status)&settlement_status=neq.void&publication_status=neq.archived&limit=1000`, { headers }).then((r) => r.json()),
+      ]);
+
+      let targetDateStr = dateParam;
+      const todayStr = getLagosDate();
+      if (dateParam === 'today') {
+        targetDateStr = todayStr;
+      } else if (dateParam === 'tomorrow') {
+        targetDateStr = getLagosDate(new Date(Date.now() + 86400000));
+      } else if (dateParam === 'yesterday') {
+        targetDateStr = getLagosDate(new Date(Date.now() - 86400000));
+      }
+
+      const filterByDate = (list: any[]) => {
+        if (!Array.isArray(list)) return [];
+        if (dateParam !== 'all') {
+          return list.filter((item) => getLagosDateFromIso(item.target_kickoff_at) === targetDateStr);
+        }
+        return list.filter((item) => {
+          const d = getLagosDateFromIso(item.target_kickoff_at);
+          return !d || d >= todayStr;
+        });
+      };
+
+      const validCr = Array.isArray(cr)
+        ? cr.filter(
+            (item: any) =>
+              item.settlement_status !== 'void' &&
+              item.publication_status !== 'archived' &&
+              item.fixture?.status !== 'cancelled' &&
+              item.fixture?.status !== 'postponed'
+          )
+        : [];
+
+      const validGl = Array.isArray(gl)
+        ? gl.filter(
+            (item: any) =>
+              item.settlement_status !== 'void' &&
+              item.publication_status !== 'archived' &&
+              item.fixture?.status !== 'cancelled' &&
+              item.fixture?.status !== 'postponed'
+          )
+        : [];
+
+      const filteredCr = filterByDate(validCr);
+      const filteredGl = filterByDate(validGl);
+
+      const crCount = filteredCr.length;
+
+      let o25Count = 0;
+      let ht05Count = 0;
+      for (const item of filteredGl) {
+        if (item.market === 'ht_over_0.5_goals') ht05Count++;
+        else o25Count++;
+      }
+
+      const counts: Record<MarketType, number> = {
+        general: Math.min(20, o25Count),
+        curated: Math.min(20, o25Count + crCount),
+        home_win: 0,
+        away_win: 0,
+        draw: 0,
+        'over_2.5_goals': o25Count,
+        'ht_over_0.5_goals': ht05Count,
+        corners: crCount,
+      };
+      return counts;
+    } catch (err) {
+      return {
+        general: 0,
+        curated: 0,
+        home_win: 0,
+        away_win: 0,
+        draw: 0,
+        'over_2.5_goals': 0,
+        'ht_over_0.5_goals': 0,
+        corners: 0,
+      };
+    }
+  });
+  return result.data;
 }
 
 export default async function handler(req: Request) {
@@ -709,8 +662,10 @@ export default async function handler(req: Request) {
   const activeMarket = validMarkets.includes(marketParam) ? marketParam : 'general';
 
   const userAuthToken = req.headers.get('Authorization');
+  const rawToken = userAuthToken?.startsWith('Bearer ') ? userAuthToken.slice(7).trim() : userAuthToken?.trim() || null;
+  const isInternalService = Boolean(SUPABASE_SERVICE_ROLE_KEY && rawToken === SUPABASE_SERVICE_ROLE_KEY);
   const authStatus = await checkAuthStatus(userAuthToken);
-  const isVipOrAdmin = authStatus === 'paid_or_trial';
+  const isVipOrAdmin = isInternalService || authStatus === 'paid_or_trial';
   const authKey = SUPABASE_SERVICE_ROLE_KEY || SUPABASE_ANON_KEY;
   const headers: Record<string, string> = {
     apikey: authKey,
@@ -723,174 +678,163 @@ export default async function handler(req: Request) {
   const responseHeaders = {
     'Content-Type': 'application/json',
     'Cache-Control': isVipOrAdmin
-      ? 'private, no-cache, no-store, must-revalidate'
-      : 'public, s-maxage=60, stale-while-revalidate=300',
-    'CDN-Cache-Control': isVipOrAdmin ? 'no-store' : 'public, s-maxage=60',
-    'Vercel-CDN-Cache-Control': isVipOrAdmin ? 'no-store' : 'public, s-maxage=60',
+      ? 'private, max-age=30, stale-while-revalidate=120'
+      : 'public, max-age=30, s-maxage=60, stale-while-revalidate=300',
+    'CDN-Cache-Control': isVipOrAdmin ? 'no-store' : 'public, s-maxage=60, stale-while-revalidate=300',
+    'Vercel-CDN-Cache-Control': isVipOrAdmin ? 'no-store' : 'public, s-maxage=60, stale-while-revalidate=300',
     'Vary': 'Authorization, Origin',
     'Access-Control-Allow-Origin': corsOrigin,
     'Access-Control-Allow-Credentials': 'true',
   };
 
-  const cacheKey = `${activeMarket}:${dateParam}:${leagueParam}:${pageParam}:${limitParam}:${authStatus}`;
+  const forceRefresh = (isInternalService || isVipOrAdmin) &&
+    (url.searchParams.get('refresh') === 'true' || req.headers.get('x-force-refresh') === 'true');
+  if (forceRefresh) {
+    marketSwrCache.invalidate();
+    countsSwrCache.invalidate();
+  }
 
   try {
-    const now = Date.now();
+    const [marketResult, counts] = await Promise.all([
+      marketSwrCache.getOrFetch(`market:${activeMarket}`, () => fetchMarketDataFromUpstream(activeMarket, headers), computeMarketTtl),
+      computeAllMarketCounts(headers, dateParam),
+    ]);
 
-    // Check memory cache for fresh data (shields Supabase for both guest & VIP queries!)
-    const cached = memoryCache.get(cacheKey);
-    if (cached && now < cached.expiresAt) {
-      return new Response(JSON.stringify(cached.data), {
-        status: 200,
-        headers: responseHeaders,
+    const allPredictions = marketResult.data;
+    const isStale = marketResult.isStale;
+
+    // 4. In-Memory Date & League Filtering
+    let filtered = allPredictions;
+
+    if (dateParam !== 'all') {
+      let targetDateStr = dateParam;
+      const todayStr = getLagosDate();
+      if (dateParam === 'today') {
+        targetDateStr = todayStr;
+      } else if (dateParam === 'tomorrow') {
+        targetDateStr = getLagosDate(new Date(Date.now() + 86400000));
+      } else if (dateParam === 'yesterday') {
+        targetDateStr = getLagosDate(new Date(Date.now() - 86400000));
+      }
+
+      filtered = filtered.filter((p) => {
+        const pDate = getLagosDateFromIso(p.target_kickoff_at);
+        return pDate === targetDateStr;
+      });
+    } else {
+      // All dates: current date and future dates, no past dates
+      const todayStr = getLagosDate();
+      filtered = filtered.filter((p) => {
+        const pDate = getLagosDateFromIso(p.target_kickoff_at);
+        return !pDate || pDate >= todayStr;
       });
     }
 
-    // 3. Fetch predictions & counts
-    let fetchPromise = inflightPromises.get(cacheKey);
-    if (!fetchPromise) {
-      fetchPromise = (async () => {
-        const [allPredictions, counts] = await Promise.all([
-          fetchMarketDataFromUpstream(activeMarket, headers),
-          computeAllMarketCounts(headers, dateParam),
-        ]);
-
-        // 4. In-Memory Date & League Filtering
-        let filtered = allPredictions;
-
-        if (dateParam !== 'all') {
-          let targetDateStr = dateParam;
-          const todayStr = getLagosDate();
-          if (dateParam === 'today') {
-            targetDateStr = todayStr;
-          } else if (dateParam === 'tomorrow') {
-            targetDateStr = getLagosDate(new Date(Date.now() + 86400000));
-          } else if (dateParam === 'yesterday') {
-            targetDateStr = getLagosDate(new Date(Date.now() - 86400000));
-          }
-
-          filtered = filtered.filter((p) => {
-            const pDate = getLagosDateFromIso(p.target_kickoff_at);
-            return pDate === targetDateStr;
-          });
-        } else {
-          // All dates: current date and future dates, no past dates
-          const todayStr = getLagosDate();
-          filtered = filtered.filter((p) => {
-            const pDate = getLagosDateFromIso(p.target_kickoff_at);
-            return !pDate || pDate >= todayStr;
-          });
-        }
-
-        if (leagueParam) {
-          filtered = filtered.filter((p) => {
-            const lCode = (p.fixture?.league?.code || '').toLowerCase();
-            return lCode === leagueParam.toLowerCase();
-          });
-        }
-
-        // Collect available leagues
-        const leagueMap = new Map<string, string>();
-        for (const p of allPredictions) {
-          const code = p.fixture?.league?.code;
-          const name = p.fixture?.league?.name;
-          if (code && name && !leagueMap.has(code)) {
-            leagueMap.set(code, name);
-          }
-        }
-        const leagues = Array.from(leagueMap.entries()).map(([code, name]) => ({ code, name }));
-
-        // 5. Strict Paywall Redaction:
-        // Rule 1: Paid or 3-Day Free Trial users see everything (pending, won, lost, void).
-        // Rule 2: Non-paid users (visitors & expired trial users) are strictly BLINDED from settlement results:
-        //         - All finished / settled matches are excluded (never leaked as free proof).
-        //         - On past dates, this returns 0 matches, exactly matching general football.
-        // Rule 3: Upcoming / pending predictions remain visible for teams & market tab, but are locked:
-        //         - Visitor: '🔒 Register to view Oddsbanta AI predictions'
-        //         - Expired Trial: '🔒 Subscribe to Oddsbanta VIP'
-        const filteredForAudience = filtered;
-
-        const total = filteredForAudience.length;
-        const totalPages = Math.ceil(total / limitParam) || 1;
-        const offset = (pageParam - 1) * limitParam;
-        const paginatedRaw = filteredForAudience.slice(offset, offset + limitParam);
-
-        const predictions = paginatedRaw.map((item) => {
-          if (authStatus === 'paid_or_trial') {
-            return {
-              ...item,
-              is_locked: false,
-            };
-          }
-
-          const isExpired = authStatus === 'expired';
-          const lockedPrompt = isExpired
-            ? '🔒 Subscribe to Oddsbanta VIP'
-            : '🔒 Register to view Oddsbanta AI predictions';
-
-          return {
-            ...item,
-            is_locked: true,
-            prediction: lockedPrompt,
-            probability: null,
-            display_probability: null,
-            confidence_tier: item.confidence_tier || 'TOP_PICK',
-            confidence_category: item.confidence_category || 'TOP PICK',
-            metrics: {},
-            tactical_rationale: null,
-            tactical_tag: null,
-            settlement_status: 'pending',
-            settlement_notes: null,
-            ht_score: null,
-            actual_corners: null,
-            metadata: {
-              locked: true,
-              auth_status: authStatus,
-              subscription_required: isExpired,
-              registration_required: !isExpired,
-              trial_expired: isExpired,
-            },
-          };
-        });
-
-      const responsePayload: MarketFeedResponse = {
-        success: true,
-        market: activeMarket,
-        page: pageParam,
-        limit: limitParam,
-        total,
-        total_pages: totalPages,
-        has_next: pageParam < totalPages,
-        has_prev: pageParam > 1,
-        date_filter: dateParam,
-        counts,
-        leagues,
-        predictions,
-        auth_status: authStatus,
-        cached_at: new Date().toISOString(),
-      };
-
-        memoryCache.set(cacheKey, { data: responsePayload, expiresAt: Date.now() + CACHE_TTL_MS });
-
-        return responsePayload;
-      })();
-
-      inflightPromises.set(cacheKey, fetchPromise);
+    if (leagueParam) {
+      filtered = filtered.filter((p) => {
+        const lCode = (p.fixture?.league?.code || '').toLowerCase();
+        return lCode === leagueParam.toLowerCase();
+      });
     }
 
-    const data = await fetchPromise;
-    inflightPromises.delete(cacheKey);
+    // Collect available leagues
+    const leagueMap = new Map<string, string>();
+    for (const p of allPredictions) {
+      const code = p.fixture?.league?.code;
+      const name = p.fixture?.league?.name;
+      if (code && name && !leagueMap.has(code)) {
+        leagueMap.set(code, name);
+      }
+    }
+    const leagues = Array.from(leagueMap.entries()).map(([code, name]) => ({ code, name }));
 
-    return new Response(JSON.stringify(data), {
+    // 5. Strict Paywall Redaction:
+    // Rule 1: Paid or 3-Day Free Trial users see everything (pending, won, lost, void).
+    // Rule 2: Non-paid users (visitors & expired trial users) are strictly BLINDED from settlement results:
+    //         - All finished / settled matches are excluded (never leaked as free proof).
+    //         - On past dates, this returns 0 matches, exactly matching general football.
+    // Rule 3: Upcoming / pending predictions remain visible for teams & market tab, but are locked:
+    //         - Visitor: '🔒 Register to view Oddsbanta AI predictions'
+    //         - Expired Trial: '🔒 Subscribe to Oddsbanta VIP'
+    const filteredForAudience = filtered;
+
+    const total = filteredForAudience.length;
+    const totalPages = Math.ceil(total / limitParam) || 1;
+    const offset = (pageParam - 1) * limitParam;
+    const paginatedRaw = filteredForAudience.slice(offset, offset + limitParam);
+
+    const predictions = paginatedRaw.map((item) => {
+      if (authStatus === 'paid_or_trial') {
+        return {
+          ...item,
+          is_locked: false,
+        };
+      }
+
+      const isExpired = authStatus === 'expired';
+      const lockedPrompt = isExpired
+        ? '🔒 Subscribe to Oddsbanta VIP'
+        : '🔒 Register to view Oddsbanta AI predictions';
+
+      return {
+        ...item,
+        is_locked: true,
+        prediction: lockedPrompt,
+        probability: null,
+        display_probability: null,
+        confidence_tier: item.confidence_tier || 'TOP_PICK',
+        confidence_category: item.confidence_category || 'TOP PICK',
+        metrics: {},
+        tactical_rationale: null,
+        tactical_tag: null,
+        settlement_status: 'pending',
+        settlement_notes: null,
+        ht_score: null,
+        actual_corners: null,
+        metadata: {
+          locked: true,
+          auth_status: authStatus,
+          subscription_required: isExpired,
+          registration_required: !isExpired,
+          trial_expired: isExpired,
+        },
+      };
+    });
+
+    const responsePayload: MarketFeedResponse = {
+      success: true,
+      market: activeMarket,
+      page: pageParam,
+      limit: limitParam,
+      total,
+      total_pages: totalPages,
+      has_next: pageParam < totalPages,
+      has_prev: pageParam > 1,
+      date_filter: dateParam,
+      counts,
+      leagues,
+      predictions,
+      auth_status: authStatus,
+      is_stale: isStale,
+      cached_at: new Date().toISOString(),
+    };
+
+    const bodyStr = JSON.stringify(responsePayload);
+    const etag = generateEtag(bodyStr);
+    if (matchesEtag(req, etag)) {
+      return create304Response(etag, responseHeaders);
+    }
+
+    responseHeaders['ETag'] = etag;
+    return new Response(bodyStr, {
       status: 200,
       headers: responseHeaders,
     });
   } catch (err: any) {
-    inflightPromises.delete(cacheKey);
     console.error('MarketFeed Handler Error:', err);
     return new Response(
       JSON.stringify({ success: false, error: err.message || 'Internal server error in MarketFeed' }),
-      { status: 500, headers: { 'Content-Type': 'application/json' } }
+      { status: 500, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': corsOrigin } }
     );
   }
 }

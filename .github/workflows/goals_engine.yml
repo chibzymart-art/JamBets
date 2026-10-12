@@ -67,6 +67,18 @@ jobs:
         run: |
           python -c "from python.src.alerts.email_notifier import send_pipeline_failure_alert; send_pipeline_failure_alert('Goals & Decoupled Specialists Engine (GitHub Actions)', Exception('Workflow job failed'), {'run_id': '${{ github.run_id }}', 'run_url': 'https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}'})"
 
+      - name: Refresh High-Performance Feed Snapshot Cache (Zero-Database Architecture)
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          echo "=== REFRESHING HIGH-PERFORMANCE FEED SNAPSHOT CACHE ==="
+          python -m python.src.engines.feed_snapshot_engine --feed goals
+          python -m python.src.engines.feed_snapshot_engine --feed corners
+          python -m python.src.engines.feed_snapshot_engine --feed counts
+
       - name: Notify IndexNow (Bing, Yandex) of changed pages
         if: ${{ !cancelled() }}
         continue-on-error: true

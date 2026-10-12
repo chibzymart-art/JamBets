@@ -1,4 +1,7 @@
 import { checkRateLimit, getClientIp } from './rate-limiter';
+import { verifyEdgeAuth, AuthStatus } from './_lib/jwt-verifier';
+import { EdgeSwrCache, EdgeCacheRegistry } from './_lib/edge-cache';
+import { generateEtag, matchesEtag, create304Response } from './_lib/etag';
 
 export const config = {
   runtime: 'edge',
@@ -11,160 +14,29 @@ const SUPABASE_ANON_KEY =
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZlcGNvb3BvbWxmamFnZWlqc2V3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg4NTM4NzIsImV4cCI6MjEwNDQyOTg3Mn0.KMbk71HHpEX_RzdMgFy_jYO6DhE3iwd50aHv9waWh2g';
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 
-const ADMIN_EMAILS = new Set([
-  'chibzymart@gmail.com',
-  'whizzchibz@gmail.com',
-  'chibuezec.amuchie@gmail.com',
-  'chibuezeamuchie@gmail.com',
-  'nnamdiamuchie@gmail.com',
-]);
-
 interface GoalsFeedData {
   predictions: any[];
   leagues: any[];
   cached_at: string;
 }
 
-interface MemoryCacheEntry {
-  data: GoalsFeedData;
-  expiresAt: number;
+// Global SWR Edge Cache: 180s fresh (3 min default) + 3600s stale (1 hour)
+const goalsSwrCache = new EdgeSwrCache<GoalsFeedData>(180 * 1000, 3600 * 1000);
+EdgeCacheRegistry.register('goals', goalsSwrCache);
+
+// Adaptive Dynamic TTL for Live Scores and Instant Settlement Invalidation (Sub-Phase 2.4)
+function computeGoalsTtl(data: GoalsFeedData): number {
+  const hasLive = (data.predictions || []).some((p: any) => {
+    const st = (p.fixture?.status || '').toLowerCase();
+    return st === 'live' || st === '1h' || st === '2h' || st === 'ht' || st === 'in_progress';
+  });
+  return hasLive ? 15 * 1000 : 180 * 1000;
 }
 
-let memoryCache: MemoryCacheEntry | null = null;
-let inflightPromise: Promise<GoalsFeedData> | null = null;
-const CACHE_TTL_MS = 30 * 1000; // 30 seconds instance memory cache
-
-export type AuthStatus = 'paid_or_trial' | 'expired' | 'visitor';
-
-// In-memory cache for user auth verification (120s for valid users, 30s for invalid)
-const userAuthCache = new Map<string, { status: AuthStatus; expiresAt: number }>();
+export type { AuthStatus };
 
 async function checkAuthStatus(authToken: string | null): Promise<AuthStatus> {
-  if (!authToken) return 'visitor';
-  const rawToken = authToken.startsWith('Bearer ') ? authToken.slice(7).trim() : authToken.trim();
-  if (!rawToken) return 'visitor';
-
-  if (SUPABASE_SERVICE_ROLE_KEY && rawToken === SUPABASE_SERVICE_ROLE_KEY) {
-    return 'paid_or_trial';
-  }
-
-  const cached = userAuthCache.get(rawToken);
-  if (cached && Date.now() < cached.expiresAt) {
-    return cached.status;
-  }
-
-  try {
-    const authRes = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
-      headers: {
-        apikey: SUPABASE_ANON_KEY,
-        Authorization: `Bearer ${rawToken}`,
-      },
-    });
-
-    if (!authRes.ok) {
-      userAuthCache.set(rawToken, { status: 'visitor', expiresAt: Date.now() + 30 * 1000 });
-      return 'visitor';
-    }
-
-    const authUser = await authRes.json();
-    if (!authUser || !authUser.id) {
-      userAuthCache.set(rawToken, { status: 'visitor', expiresAt: Date.now() + 30 * 1000 });
-      return 'visitor';
-    }
-
-    const email = (authUser.email || '').toLowerCase().trim();
-    if (
-      authUser.app_metadata?.role === 'admin' ||
-      authUser.user_metadata?.role === 'admin' ||
-      (email && ADMIN_EMAILS.has(email))
-    ) {
-      userAuthCache.set(rawToken, { status: 'paid_or_trial', expiresAt: Date.now() + 120 * 1000 });
-      return 'paid_or_trial';
-    }
-
-    const userId = authUser.id;
-    const headers = {
-      apikey: SUPABASE_ANON_KEY,
-      Authorization: `Bearer ${rawToken}`,
-      Accept: 'application/json',
-    };
-
-    const [subRes, entRes, userRes] = await Promise.all([
-      fetch(`${SUPABASE_URL}/rest/v1/subscriptions?user_id=eq.${userId}&status=eq.active&select=tier&limit=1`, { headers }),
-      fetch(`${SUPABASE_URL}/rest/v1/entitlements?user_id=eq.${userId}&select=tier,valid_until,features&limit=1`, { headers }),
-      fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${userId}&select=role,created_at&limit=1`, { headers }),
-    ]);
-
-    let userData: any = null;
-    if (userRes.ok) {
-      userData = await userRes.json();
-      if (Array.isArray(userData) && userData.length > 0 && userData[0].role === 'admin') {
-        userAuthCache.set(rawToken, { status: 'paid_or_trial', expiresAt: Date.now() + 120 * 1000 });
-        return 'paid_or_trial';
-      }
-    }
-
-    let isPaid = false;
-
-    // 1. Check active paid subscriptions
-    if (subRes.ok) {
-      const subData = await subRes.json();
-      if (Array.isArray(subData) && subData.length > 0) {
-        const tier = (subData[0].tier || '').toLowerCase();
-        if (['standard', 'bigbang', 'vip', 'pro', 'admin'].includes(tier)) {
-          isPaid = true;
-        }
-      }
-    }
-
-    // 2. Check entitlements (active 3-day trial or active entitlement)
-    if (!isPaid && entRes.ok) {
-      const entData = await entRes.json();
-      if (Array.isArray(entData) && entData.length > 0) {
-        const ent = entData[0];
-        const validUntil = ent.valid_until ? new Date(ent.valid_until).getTime() : Infinity;
-        if (validUntil > Date.now()) {
-          const tier = (ent.tier || '').toLowerCase();
-          const feats = ent.features || {};
-          const isEntAdmin = tier === 'admin' || feats.admin === true;
-          const hasVipOrTrialFeatures = Boolean(
-            tier === 'trial' ||
-            tier === 'free_trial' ||
-            ['standard', 'bigbang', 'vip', 'pro', 'admin'].includes(tier) ||
-            feats.trial === true ||
-            feats.vip === true ||
-            feats.football_predictions === true ||
-            feats.specialist_markets === true ||
-            feats.simulations === true ||
-            feats.all_sports === true ||
-            feats.bigbang === true
-          );
-          if (['standard', 'bigbang', 'vip', 'pro', 'admin'].includes(tier) || isEntAdmin || hasVipOrTrialFeatures) {
-            isPaid = true;
-          }
-        }
-      }
-    }
-
-    // 3. 3-Day Free Trial evaluation (72 hours from user registration)
-    if (!isPaid) {
-      const createdAt = authUser.created_at || (Array.isArray(userData) && userData[0]?.created_at);
-      if (createdAt) {
-        const createdMs = new Date(createdAt).getTime();
-        const trialDurationMs = 3 * 24 * 60 * 60 * 1000; // 72 hours
-        if (Date.now() - createdMs < trialDurationMs) {
-          isPaid = true; // Active 3-Day Free Trial
-        }
-      }
-    }
-
-    const status: AuthStatus = isPaid ? 'paid_or_trial' : 'expired';
-    userAuthCache.set(rawToken, { status, expiresAt: Date.now() + (isPaid ? 120 * 1000 : 30 * 1000) });
-    return status;
-  } catch (err) {
-    console.error('Cryptographic auth check failed in goals feed:', err);
-    return 'visitor';
-  }
+  return verifyEdgeAuth(authToken);
 }
 
 function getCorsOrigin(req: Request): string {
@@ -178,17 +50,37 @@ function getCorsOrigin(req: Request): string {
   return allowed.includes(origin) ? origin : 'https://www.oddsbanta.com';
 }
 
-async function fetchGoalsFromUpstream(headers: Record<string, string>): Promise<GoalsFeedData> {
-  const selectQuery = encodeURIComponent(
-    `id,fixture_id,market,predicted_outcome,probability,confidence_tier,xg_combined,home_over25_rate,away_over25_rate,h2h_over25_rate,ht_goal_frequency,avg_first_goal_minute,target_kickoff_at,settlement_status,settled_at,actual_score,ht_score,settlement_notes,metadata,is_locked,fixture:football_fixtures!inner(id,canonical_key,target_kickoff_at,status,queue_day,in_prediction_queue,home_score,away_score,match_minute,period,half_time_home_score,half_time_away_score,corners_home,corners_away,postponed_at,cancelled_at,venue,metadata,league:football_leagues!inner(id,name,code,country),home_team:football_teams!football_fixtures_home_team_id_fkey(id,name,short_name),away_team:football_teams!football_fixtures_away_team_id_fkey(id,name,short_name))`
-  );
-
+async function fetchGoalsFromUpstream(): Promise<GoalsFeedData> {
   const authKey = SUPABASE_SERVICE_ROLE_KEY || SUPABASE_ANON_KEY;
   const upstreamHeaders = {
     apikey: authKey,
     Authorization: `Bearer ${authKey}`,
     Accept: 'application/json',
   };
+
+  // 1. Primary Path: Zero-Join Point Read from pre-computed cached_feeds table (Sub-Phase 2.3)
+  try {
+    const snapRes = await fetch(
+      `${SUPABASE_URL}/rest/v1/cached_feeds?key=eq.feed:goals&select=payload,updated_at&limit=1`,
+      { headers: upstreamHeaders }
+    );
+    if (snapRes.ok) {
+      const snapRows = await snapRes.json();
+      if (Array.isArray(snapRows) && snapRows.length > 0 && snapRows[0]?.payload) {
+        const payload = snapRows[0].payload as GoalsFeedData;
+        if (Array.isArray(payload.predictions) && Array.isArray(payload.leagues)) {
+          return payload;
+        }
+      }
+    }
+  } catch (snapErr) {
+    console.warn('[GOALS-FEED] Failed point-read from cached_feeds, falling back to relational query:', snapErr);
+  }
+
+  // 2. Fallback Path: Direct relational query on goals_predictions_paywall
+  const selectQuery = encodeURIComponent(
+    `id,fixture_id,market,predicted_outcome,probability,confidence_tier,xg_combined,home_over25_rate,away_over25_rate,h2h_over25_rate,ht_goal_frequency,avg_first_goal_minute,target_kickoff_at,settlement_status,settled_at,actual_score,ht_score,settlement_notes,metadata,is_locked,fixture:football_fixtures!inner(id,canonical_key,target_kickoff_at,status,queue_day,in_prediction_queue,home_score,away_score,match_minute,period,half_time_home_score,half_time_away_score,corners_home,corners_away,postponed_at,cancelled_at,venue,metadata,league:football_leagues!inner(id,name,code,country),home_team:football_teams!football_fixtures_home_team_id_fkey(id,name,short_name),away_team:football_teams!football_fixtures_away_team_id_fkey(id,name,short_name))`
+  );
 
   const [goalsRes, leagueRes] = await Promise.all([
     fetch(
@@ -358,55 +250,26 @@ export default async function handler(req: Request) {
   const responseHeaders: Record<string, string> = {
     'Content-Type': 'application/json',
     'Cache-Control': isVipOrAdmin
-      ? 'private, no-cache, no-store, must-revalidate'
-      : 'public, s-maxage=30, stale-while-revalidate=60',
-    'CDN-Cache-Control': isVipOrAdmin ? 'no-store' : 'public, s-maxage=30',
-    'Vercel-CDN-Cache-Control': isVipOrAdmin ? 'no-store' : 'public, s-maxage=30',
+      ? 'private, max-age=30, stale-while-revalidate=120'
+      : 'public, max-age=30, s-maxage=60, stale-while-revalidate=300',
+    'CDN-Cache-Control': isVipOrAdmin ? 'no-store' : 'public, s-maxage=60, stale-while-revalidate=300',
+    'Vercel-CDN-Cache-Control': isVipOrAdmin ? 'no-store' : 'public, s-maxage=60, stale-while-revalidate=300',
     'Vary': 'Authorization, Origin, User-Agent',
     'Access-Control-Allow-Origin': corsOrigin,
     'Access-Control-Allow-Credentials': 'true',
-    'X-RateLimit-Limit': '60',
+    'X-RateLimit-Limit': '120',
     'X-RateLimit-Remaining': String(rateLimit.remaining),
   };
 
+  const url = new URL(req.url);
+  const forceRefresh = (isInternalService || isVipOrAdmin) &&
+    (url.searchParams.get('refresh') === 'true' || req.headers.get('x-force-refresh') === 'true');
+  if (forceRefresh) {
+    goalsSwrCache.invalidate('goals:raw');
+  }
+
   try {
-    const now = Date.now();
-
-    // 1. Return fresh in-memory cache if available
-    if (memoryCache && now < memoryCache.expiresAt) {
-      const preds = isBot
-        ? applyGoalsScraperBlinding(memoryCache.data.predictions)
-        : !isVipOrAdmin
-        ? applyGoalsPaywallRedaction(memoryCache.data.predictions, authStatus)
-        : memoryCache.data.predictions;
-
-      const payload = {
-        ...memoryCache.data,
-        predictions: preds,
-        is_scraper_blinded: isBot,
-        auth_status: authStatus,
-      };
-      return new Response(
-        JSON.stringify({ success: true, ...payload }),
-        { status: 200, headers: responseHeaders }
-      );
-    }
-
-    // 2. Anti-stampede fetch: deduplicate concurrent in-flight requests
-    let feedData: GoalsFeedData;
-    if (!inflightPromise) {
-      inflightPromise = fetchGoalsFromUpstream()
-        .then((data) => {
-          memoryCache = { data, expiresAt: Date.now() + CACHE_TTL_MS };
-          inflightPromise = null;
-          return data;
-        })
-        .catch((err) => {
-          inflightPromise = null;
-          throw err;
-        });
-    }
-    feedData = await inflightPromise;
+    const { data: feedData, isStale } = await goalsSwrCache.getOrFetch('goals:raw', fetchGoalsFromUpstream, computeGoalsTtl);
 
     const preds = isBot
       ? applyGoalsScraperBlinding(feedData.predictions)
@@ -419,31 +282,18 @@ export default async function handler(req: Request) {
       predictions: preds,
       is_scraper_blinded: isBot,
       auth_status: authStatus,
+      is_stale: isStale,
     };
 
-    return new Response(
-      JSON.stringify({ success: true, ...payload }),
-      { status: 200, headers: responseHeaders }
-    );
-  } catch (err: any) {
-    if (!isVipOrAdmin && memoryCache) {
-      const preds = isBot
-        ? applyGoalsScraperBlinding(memoryCache.data.predictions)
-        : applyGoalsPaywallRedaction(memoryCache.data.predictions, authStatus);
-
-      return new Response(
-        JSON.stringify({
-          success: true,
-          ...memoryCache.data,
-          predictions: preds,
-          is_scraper_blinded: isBot,
-          auth_status: authStatus,
-          stale: true,
-        }),
-        { status: 200, headers: responseHeaders }
-      );
+    const bodyStr = JSON.stringify({ success: true, ...payload });
+    const etag = generateEtag(bodyStr);
+    if (matchesEtag(req, etag)) {
+      return create304Response(etag, responseHeaders);
     }
 
+    responseHeaders['ETag'] = etag;
+    return new Response(bodyStr, { status: 200, headers: responseHeaders });
+  } catch (err: any) {
     return new Response(
       JSON.stringify({
         success: false,
@@ -451,7 +301,7 @@ export default async function handler(req: Request) {
       }),
       {
         status: 502,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': corsOrigin },
       }
     );
   }

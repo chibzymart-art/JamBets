@@ -8,6 +8,7 @@
  */
 
 import { supabase } from './supabase';
+import { getCircuitBreaker, SafeStorage, withTimeout } from './circuitBreaker';
 import {
   BasketballPrediction,
   BasketballSecondaryPrediction,
@@ -214,6 +215,11 @@ export async function fetchBasketballFeed(
               rawLeagues = edgeData.leagues || [];
               rawSettlements = edgeData.settlements || [];
               usedEdge = true;
+              SafeStorage.set('basketball_feed', {
+                predictions: rawPredictions,
+                leagues: rawLeagues,
+                settlements: rawSettlements,
+              }, 30 * 60 * 1000);
             }
           }
         }
@@ -223,34 +229,75 @@ export async function fetchBasketballFeed(
     }
 
     if (!usedEdge) {
-      // 2. Direct Supabase PostgREST Fallback (strictly bounded)
-      const predTable = isUnlocked ? 'basketball_predictions' : 'basketball_predictions_paywall';
-      const minDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-      const predQuery = supabase
-        .from(predTable)
-        .select(PRED_SELECT)
-        .gte('target_kickoff_at', minDate)
-        .order('target_kickoff_at', { ascending: true })
-        .limit(1000);
+      // Check resilient persistent cache before hitting database
+      const cached = SafeStorage.get<{
+        predictions: BasketballPrediction[];
+        leagues: BasketballLeague[];
+        settlements: BasketballSettlement[];
+      }>('basketball_feed');
 
-      const [predRes, leaguesRes, settleRes] = await Promise.all([
-        predQuery,
-        supabase
-          .from('basketball_leagues')
-          .select('id,code,name,country,quarter_minutes,periods_count,default_pace')
-          .eq('is_active', true)
-          .order('name', { ascending: true })
-          .limit(100),
-        supabase
-          .from('basketball_settlements')
-          .select(SETTLE_SELECT)
-          .order('settled_at', { ascending: false })
-          .limit(100),
-      ]);
+      if (cached) {
+        console.warn('[basketballFeedService] Serving persistent session cache to shield Supabase');
+        rawPredictions = cached.predictions || [];
+        rawLeagues = cached.leagues || [];
+        rawSettlements = cached.settlements || [];
+        usedEdge = true;
+      }
+    }
 
-      rawPredictions = (predRes.data as unknown as BasketballPrediction[]) || [];
-      rawLeagues = (leaguesRes.data as BasketballLeague[]) || [];
-      rawSettlements = (settleRes.data as BasketballSettlement[]) || [];
+    if (!usedEdge) {
+      const breaker = getCircuitBreaker('basketball-feed');
+      if (!breaker.canExecute()) {
+        console.warn('[basketballFeedService] Circuit breaker OPEN. Shielding Supabase from direct query.');
+        rawPredictions = [];
+        rawLeagues = [];
+        rawSettlements = [];
+      } else {
+        try {
+          const predTable = isUnlocked ? 'basketball_predictions' : 'basketball_predictions_paywall';
+          const minDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+
+          const executeDirect = async () => {
+            const predQuery = supabase
+              .from(predTable)
+              .select(PRED_SELECT)
+              .gte('target_kickoff_at', minDate)
+              .order('target_kickoff_at', { ascending: true })
+              .limit(150);
+
+            return await Promise.all([
+              predQuery,
+              supabase
+                .from('basketball_leagues')
+                .select('id,code,name,country,quarter_minutes,periods_count,default_pace')
+                .eq('is_active', true)
+                .order('name', { ascending: true })
+                .limit(50),
+              supabase
+                .from('basketball_settlements')
+                .select(SETTLE_SELECT)
+                .order('settled_at', { ascending: false })
+                .limit(50),
+            ]);
+          };
+
+          const [predRes, leaguesRes, settleRes] = await withTimeout(
+            executeDirect(),
+            breaker.getTimeoutMs(),
+            'Basketball direct fallback timed out'
+          );
+
+          breaker.recordSuccess();
+          rawPredictions = (predRes.data as unknown as BasketballPrediction[]) || [];
+          rawLeagues = (leaguesRes.data as BasketballLeague[]) || [];
+          rawSettlements = (settleRes.data as BasketballSettlement[]) || [];
+        } catch (err) {
+          breaker.recordFailure(err);
+          rawPredictions = [];
+          rawLeagues = [];
+          rawSettlements = [];
+        }
+      }
     }
 
     // Fallback: If remote table is currently unpopulated, use high-fidelity verified sample models

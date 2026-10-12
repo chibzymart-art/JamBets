@@ -1,4 +1,7 @@
 import { checkRateLimit, getClientIp } from './rate-limiter';
+import { verifyEdgeAuth } from './_lib/jwt-verifier';
+import { EdgeSwrCache, EdgeCacheRegistry } from './_lib/edge-cache';
+import { generateEtag, matchesEtag, create304Response } from './_lib/etag';
 
 export const config = {
   runtime: 'edge',
@@ -10,14 +13,6 @@ const SUPABASE_ANON_KEY =
   process.env.SUPABASE_ANON_KEY ||
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZlcGNvb3BvbWxmamFnZWlqc2V3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg4NTM4NzIsImV4cCI6MjEwNDQyOTg3Mn0.KMbk71HHpEX_RzdMgFy_jYO6DhE3iwd50aHv9waWh2g';
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
-
-const ADMIN_EMAILS = new Set([
-  'chibzymart@gmail.com',
-  'whizzchibz@gmail.com',
-  'chibuezec.amuchie@gmail.com',
-  'chibuezeamuchie@gmail.com',
-  'nnamdiamuchie@gmail.com',
-]);
 
 interface BasketballFeedData {
   predictions: any[];
@@ -38,124 +33,23 @@ interface BasketballFeedData {
   cached_at: string;
 }
 
-interface MemoryCacheEntry {
-  data: BasketballFeedData;
-  expiresAt: number;
+// Global SWR Edge Cache: 180s fresh (3 min default) + 3600s stale (1 hour)
+const basketballSwrCache = new EdgeSwrCache<BasketballFeedData>(180 * 1000, 3600 * 1000);
+EdgeCacheRegistry.register('basketball', basketballSwrCache);
+
+// Adaptive Dynamic TTL for Live Scores and Instant Settlement Invalidation (Sub-Phase 2.4)
+function computeBasketballTtl(data: BasketballFeedData): number {
+  const hasLive = (data.predictions || []).some((p: any) => {
+    const st = (p.fixture?.status || '').toLowerCase();
+    const period = (p.fixture?.current_period || '').toLowerCase();
+    return st === 'live' || st === 'in_progress' || period.includes('q') || period.includes('ot') || period.includes('half');
+  });
+  return hasLive ? 15 * 1000 : 180 * 1000;
 }
 
-const memoryCache = new Map<string, MemoryCacheEntry>();
-const inflightPromises = new Map<string, Promise<BasketballFeedData>>();
-const CACHE_TTL_MS = 120 * 1000; // 120 seconds edge memory cache
-
-const userAuthCache = new Map<string, { isPaid: boolean; expiresAt: number }>();
-
 async function checkIsPaidOrAdmin(authToken: string | null): Promise<boolean> {
-  if (!authToken) return false;
-  const rawToken = authToken.startsWith('Bearer ') ? authToken.slice(7).trim() : authToken.trim();
-  if (!rawToken) return false;
-
-  if (SUPABASE_SERVICE_ROLE_KEY && rawToken === SUPABASE_SERVICE_ROLE_KEY) {
-    return true;
-  }
-
-  const cached = userAuthCache.get(rawToken);
-  if (cached && Date.now() < cached.expiresAt) {
-    return cached.isPaid;
-  }
-
-  try {
-    const authRes = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
-      headers: {
-        apikey: SUPABASE_ANON_KEY,
-        Authorization: `Bearer ${rawToken}`,
-      },
-    });
-
-    if (!authRes.ok) {
-      userAuthCache.set(rawToken, { isPaid: false, expiresAt: Date.now() + 30 * 1000 });
-      return false;
-    }
-
-    const authUser = await authRes.json();
-    if (!authUser || !authUser.id) {
-      userAuthCache.set(rawToken, { isPaid: false, expiresAt: Date.now() + 30 * 1000 });
-      return false;
-    }
-
-    const email = (authUser.email || '').toLowerCase().trim();
-    if (
-      authUser.app_metadata?.role === 'admin' ||
-      authUser.user_metadata?.role === 'admin' ||
-      (email && ADMIN_EMAILS.has(email))
-    ) {
-      userAuthCache.set(rawToken, { isPaid: true, expiresAt: Date.now() + 120 * 1000 });
-      return true;
-    }
-
-    const userId = authUser.id;
-    const headers = {
-      apikey: SUPABASE_ANON_KEY,
-      Authorization: `Bearer ${rawToken}`,
-      Accept: 'application/json',
-    };
-
-    const [subRes, entRes, userRes] = await Promise.all([
-      fetch(`${SUPABASE_URL}/rest/v1/subscriptions?user_id=eq.${userId}&status=eq.active&select=tier&limit=1`, { headers }),
-      fetch(`${SUPABASE_URL}/rest/v1/entitlements?user_id=eq.${userId}&select=tier,valid_until,features&limit=1`, { headers }),
-      fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${userId}&select=role&limit=1`, { headers }),
-    ]);
-
-    // Check users table role
-    if (userRes.ok) {
-      const userData = await userRes.json();
-      if (Array.isArray(userData) && userData.length > 0 && userData[0].role === 'admin') {
-        userAuthCache.set(rawToken, { isPaid: true, expiresAt: Date.now() + 120 * 1000 });
-        return true;
-      }
-    }
-
-    let isPaid = false;
-
-    // Subscriptions: Only BigBang VIP & Admin have access to multi-sport (Basketball)
-    if (subRes.ok) {
-      const subData = await subRes.json();
-      if (Array.isArray(subData) && subData.length > 0) {
-        const tier = (subData[0].tier || '').toLowerCase();
-        if (['bigbang', 'vip', 'admin'].includes(tier)) {
-          isPaid = true;
-        }
-      }
-    }
-
-    // Entitlements: Must be BigBang, VIP, Admin, or have multi-sport/basketball features
-    if (!isPaid && entRes.ok) {
-      const entData = await entRes.json();
-      if (Array.isArray(entData) && entData.length > 0) {
-        const ent = entData[0];
-        const validUntil = ent.valid_until ? new Date(ent.valid_until).getTime() : Infinity;
-        if (validUntil > Date.now()) {
-          const tier = (ent.tier || '').toLowerCase();
-          const feats = ent.features || {};
-          const isEntAdmin = tier === 'admin' || feats.admin === true;
-          const hasVipFeatures = Boolean(
-            feats.bigbang === true ||
-            feats.all_sports === true ||
-            feats.multi_sport === true ||
-            feats.basketball === true
-          );
-          if (['bigbang', 'vip', 'admin'].includes(tier) || isEntAdmin || hasVipFeatures) {
-            isPaid = true;
-          }
-        }
-      }
-    }
-
-    userAuthCache.set(rawToken, { isPaid, expiresAt: Date.now() + 120 * 1000 });
-    return isPaid;
-  } catch (err) {
-    console.error('Cryptographic auth check failed in basketball feed:', err);
-    return false;
-  }
+  const status = await verifyEdgeAuth(authToken);
+  return status === 'paid_or_trial';
 }
 
 function getCorsOrigin(req: Request): string {
@@ -326,7 +220,7 @@ function applyBasketballPaywallRedaction(preds: any[]): any[] {
   });
 }
 
-async function fetchBasketballFromUpstream(isPaidOrAdmin: boolean): Promise<BasketballFeedData> {
+async function fetchBasketballFromUpstream(): Promise<BasketballFeedData> {
   const authKey = SUPABASE_SERVICE_ROLE_KEY || SUPABASE_ANON_KEY;
   const headers = {
     apikey: authKey,
@@ -334,6 +228,26 @@ async function fetchBasketballFromUpstream(isPaidOrAdmin: boolean): Promise<Bask
     Accept: 'application/json',
   };
 
+  // 1. Primary Path: Zero-Join Point Read from pre-computed cached_feeds table (Sub-Phase 2.3)
+  try {
+    const snapRes = await fetch(
+      `${SUPABASE_URL}/rest/v1/cached_feeds?key=eq.feed:basketball&select=payload,updated_at&limit=1`,
+      { headers }
+    );
+    if (snapRes.ok) {
+      const snapRows = await snapRes.json();
+      if (Array.isArray(snapRows) && snapRows.length > 0 && snapRows[0]?.payload) {
+        const payload = snapRows[0].payload as BasketballFeedData;
+        if (Array.isArray(payload.predictions) && Array.isArray(payload.leagues)) {
+          return payload;
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('[BasketballFeed] Zero-join cached feed lookup failed, falling back to relational join:', err);
+  }
+
+  // 2. Fallback Path: 3-Table Join on basketball_predictions + fixtures + leagues
   const predTable = 'basketball_predictions';
 
   const predSelect = encodeURIComponent(
@@ -400,8 +314,6 @@ async function fetchBasketballFromUpstream(isPaidOrAdmin: boolean): Promise<Bask
   let settledLost = 0;
   let settledVoid = 0;
 
-
-
   for (const s of settlements) {
     const st = (s.status || '').toLowerCase();
     if (st === 'won') settledWon++;
@@ -412,22 +324,20 @@ async function fetchBasketballFromUpstream(isPaidOrAdmin: boolean): Promise<Bask
   const finishedDecisive = settledWon + settledLost;
   const winRate = finishedDecisive > 0 ? Math.round((settledWon / finishedDecisive) * 100) : (settledWon > 0 ? 100 : 0);
 
-  const sanitizedPredictions = !isPaidOrAdmin ? applyBasketballPaywallRedaction(predictions) : predictions;
-
   return {
-    predictions: sanitizedPredictions,
+    predictions,
     leagues,
     settlements: settlements,
     stats: {
-      total_matches: sanitizedPredictions.length,
+      total_matches: predictions.length,
       bangers_count: bangers,
       top_picks_count: topPicks,
       high_confidence_count: highConf,
       leagues_count: leagues.length,
       settled_count: settlements.length,
       settled_won: settledWon,
-      settled_lost: isPaidOrAdmin ? settledLost : 0,
-      settled_void: isPaidOrAdmin ? settledVoid : 0,
+      settled_lost: settledLost,
+      settled_void: settledVoid,
       win_rate: winRate,
     },
     cached_at: new Date().toISOString(),
@@ -482,76 +392,54 @@ export default async function handler(req: Request): Promise<Response> {
   const responseHeaders: Record<string, string> = {
     ...corsHeaders,
     'Cache-Control': isPaidOrAdmin
-      ? 'private, no-cache, no-store, must-revalidate'
-      : 'public, s-maxage=60, stale-while-revalidate=300',
-    'CDN-Cache-Control': isPaidOrAdmin ? 'no-store' : 'public, s-maxage=60',
-    'Vercel-CDN-Cache-Control': isPaidOrAdmin ? 'no-store' : 'public, s-maxage=60',
+      ? 'private, max-age=30, stale-while-revalidate=120'
+      : 'public, max-age=30, s-maxage=60, stale-while-revalidate=300',
+    'CDN-Cache-Control': isPaidOrAdmin ? 'no-store' : 'public, s-maxage=60, stale-while-revalidate=300',
+    'Vercel-CDN-Cache-Control': isPaidOrAdmin ? 'no-store' : 'public, s-maxage=60, stale-while-revalidate=300',
     'Vary': 'Authorization, Origin, User-Agent',
     'Access-Control-Allow-Credentials': 'true',
     'X-RateLimit-Limit': '120',
     'X-RateLimit-Remaining': String(rateLimit.remaining),
   };
 
-  const cacheKey = `bball:${isPaidOrAdmin ? 'vip' : 'public'}`;
+  const url = new URL(req.url);
+  const forceRefresh = (isInternalService || isPaidOrAdmin) &&
+    (url.searchParams.get('refresh') === 'true' || req.headers.get('x-force-refresh') === 'true');
+  if (forceRefresh) {
+    basketballSwrCache.invalidate('basketball:raw');
+  }
 
   try {
-    const now = Date.now();
-    const cached = memoryCache.get(cacheKey);
-    if (cached && now < cached.expiresAt) {
-      const dataToServe = isBot ? applyBasketballScraperBlinding(cached.data) : cached.data;
-      return new Response(
-        JSON.stringify({
-          success: true,
-          is_subscriber: isPaidOrAdmin,
-          is_scraper_blinded: isBot,
-          ...dataToServe,
-        }),
-        { status: 200, headers: responseHeaders }
-      );
+    const { data: rawFeed, isStale } = await basketballSwrCache.getOrFetch('basketball:raw', fetchBasketballFromUpstream, computeBasketballTtl);
+
+    const sanitizedPredictions = !isPaidOrAdmin ? applyBasketballPaywallRedaction(rawFeed.predictions) : rawFeed.predictions;
+    const dataToServe = {
+      ...rawFeed,
+      predictions: isBot ? applyBasketballScraperBlinding(sanitizedPredictions) : sanitizedPredictions,
+      stats: {
+        ...rawFeed.stats,
+        total_matches: sanitizedPredictions.length,
+        settled_lost: isPaidOrAdmin ? rawFeed.stats.settled_lost : 0,
+        settled_void: isPaidOrAdmin ? rawFeed.stats.settled_void : 0,
+      },
+      is_stale: isStale,
+    };
+
+    const bodyStr = JSON.stringify({
+      success: true,
+      is_subscriber: isPaidOrAdmin,
+      is_scraper_blinded: isBot,
+      ...dataToServe,
+    });
+
+    const etag = generateEtag(bodyStr);
+    if (matchesEtag(req, etag)) {
+      return create304Response(etag, responseHeaders);
     }
 
-    let fetchPromise = inflightPromises.get(cacheKey);
-    if (!fetchPromise) {
-      fetchPromise = fetchBasketballFromUpstream(isPaidOrAdmin)
-        .then((data) => {
-          memoryCache.set(cacheKey, { data, expiresAt: Date.now() + CACHE_TTL_MS });
-          inflightPromises.delete(cacheKey);
-          return data;
-        })
-        .catch((err) => {
-          inflightPromises.delete(cacheKey);
-          throw err;
-        });
-      inflightPromises.set(cacheKey, fetchPromise);
-    }
-
-    const feedData = await fetchPromise;
-    const dataToServe = isBot ? applyBasketballScraperBlinding(feedData) : feedData;
-    return new Response(
-      JSON.stringify({
-        success: true,
-        is_subscriber: isPaidOrAdmin,
-        is_scraper_blinded: isBot,
-        ...dataToServe,
-      }),
-      { status: 200, headers: responseHeaders }
-    );
+    responseHeaders['ETag'] = etag;
+    return new Response(bodyStr, { status: 200, headers: responseHeaders });
   } catch (err: any) {
-    const cached = memoryCache.get(cacheKey);
-    if (cached) {
-      const dataToServe = isBot ? applyBasketballScraperBlinding(cached.data) : cached.data;
-      return new Response(
-        JSON.stringify({
-          success: true,
-          is_subscriber: isPaidOrAdmin,
-          is_scraper_blinded: isBot,
-          ...dataToServe,
-          stale: true,
-        }),
-        { status: 200, headers: responseHeaders }
-      );
-    }
-
     return new Response(
       JSON.stringify({ success: false, error: err.message || 'Basketball Edge proxy error' }),
       {
