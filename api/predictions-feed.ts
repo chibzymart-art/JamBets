@@ -1,3 +1,4 @@
+// v2.4-edge-cache-prod-sync
 import { checkRateLimit, getClientIp } from './rate-limiter';
 import { verifyEdgeAuth, AuthStatus } from './_lib/jwt-verifier';
 import { EdgeSwrCache, EdgeCacheRegistry } from './_lib/edge-cache';
