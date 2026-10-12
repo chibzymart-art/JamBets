@@ -15,6 +15,7 @@ import {
   getPastDatesList
 } from '../lib/dateUtils';
 import { getFootballTierPriority, getTierHeaderByRank } from '../lib/confidenceScore';
+import { useVirtualWindow } from '../hooks';
 import '../goals.css';
 
 export interface OtherMarketsPageProps {
@@ -311,6 +312,17 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
       [activeMarket]: validCount,
     };
   }, [marketCounts, activeMarket, predictions]);
+
+  // Progressive list windowing (60 FPS Mobile Scrolling)
+  const {
+    visibleItems: visiblePredictions,
+    hasMore: hasMorePredictions,
+    sentinelRef: predictionsSentinelRef,
+  } = useVirtualWindow(filteredPredictions, {
+    initialCount: 25,
+    batchSize: 25,
+    resetDeps: [activeMarket, dateFilter, statusFilter, searchQuery],
+  });
 
   return (
     <DesktopSidebarLayout
@@ -678,9 +690,9 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
           </div>
         ) : (
           <div className="specialist-cards-grid" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {filteredPredictions.map((prediction, idx) => {
+            {visiblePredictions.map((prediction, idx) => {
               const currentRank = getFootballTierPriority(prediction.confidence_category, prediction.confidence_tier, prediction.probability);
-              const prevPred = idx > 0 ? filteredPredictions[idx - 1] : null;
+              const prevPred = idx > 0 ? visiblePredictions[idx - 1] : null;
               const prevRank = prevPred ? getFootballTierPriority(prevPred.confidence_category, prevPred.confidence_tier, prevPred.probability) : null;
               const isTierSlotStart = idx === 0 || currentRank !== prevRank;
               const tierHeader = getTierHeaderByRank(currentRank);
@@ -706,21 +718,23 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
                       <div className="kickoff-slot-line" />
                     </div>
                   )}
-                  <SpecialistMarketCard
-                    prediction={prediction}
-                    isFavorite={
-                      isFavoriteItem
-                        ? isFavoriteItem(prediction.fixture_id, prediction.market_label, prediction.prediction)
-                        : false
-                    }
-                    onToggleFavorite={onToggleFavoriteItem}
-                    onOpenUpgrade={onOpenSubscription}
-                    isAdmin={isAdmin}
-                    isPaidUser={isPaidUser}
-                    isVisitor={isVisitor}
-                    isTrialExpired={isTrialExpired}
-                    onOpenAuth={onOpenAuth}
-                  />
+                  <div className={idx >= 3 ? 'card-virtualized' : undefined} style={{ width: '100%' }}>
+                    <SpecialistMarketCard
+                      prediction={prediction}
+                      isFavorite={
+                        isFavoriteItem
+                          ? isFavoriteItem(prediction.fixture_id, prediction.market_label, prediction.prediction)
+                          : false
+                      }
+                      onToggleFavorite={onToggleFavoriteItem}
+                      onOpenUpgrade={onOpenSubscription}
+                      isAdmin={isAdmin}
+                      isPaidUser={isPaidUser}
+                      isVisitor={isVisitor}
+                      isTrialExpired={isTrialExpired}
+                      onOpenAuth={onOpenAuth}
+                    />
+                  </div>
                   {(idx === 2 || idx === 6) && (
                     <div style={{ margin: '8px 0' }}>
                       <AdBannerSlot slotType="native-card" />
@@ -729,6 +743,13 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
                 </React.Fragment>
               );
             })}
+            {hasMorePredictions && (
+              <div
+                ref={predictionsSentinelRef}
+                style={{ height: 2, width: '100%', margin: '12px 0', opacity: 0, pointerEvents: 'none' }}
+                aria-hidden="true"
+              />
+            )}
           </div>
         )}
           </>

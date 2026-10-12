@@ -11,6 +11,7 @@ import { LeftSidebarAd } from './LeftSidebarAd';
 import { WatchlistSidebar } from './WatchlistSidebar';
 import { FavoritePredictionItem } from './FavoritesDrawer';
 import { getSportTierPriority, getTierHeaderByRank } from '../lib/confidenceScore';
+import { useVirtualWindow } from '../hooks';
 
 export interface TennisHubViewProps {
   currentUser?: any;
@@ -331,6 +332,17 @@ export const TennisHubView: React.FC<TennisHubViewProps> = ({
       return (a.id || '').localeCompare(b.id || '');
     });
   }, [dateScopedPredictions, selectedTour, selectedTournament, selectedTier, settlementFilter, searchQuery, isSubscriber]);
+
+  // Progressive list windowing (60 FPS Mobile Scrolling)
+  const {
+    visibleItems: visiblePredictions,
+    hasMore: hasMorePredictions,
+    sentinelRef: predictionsSentinelRef,
+  } = useVirtualWindow(filteredPredictions, {
+    initialCount: 25,
+    batchSize: 25,
+    resetDeps: [dateScopedPredictions, selectedTour, selectedTournament, selectedTier, settlementFilter, searchQuery, selectedDate],
+  });
 
   // Compute live scorecard KPI statistics from date-scoped predictions
   const scorecardStats = useMemo(() => {
@@ -915,9 +927,9 @@ export const TennisHubView: React.FC<TennisHubViewProps> = ({
                 )}
               </div>
             ) : (
-              filteredPredictions.map((prediction, idx) => {
+              visiblePredictions.map((prediction, idx) => {
                 const currentRank = getSportTierPriority(prediction.confidence_category, undefined, prediction.probability);
-                const prevPred = idx > 0 ? filteredPredictions[idx - 1] : null;
+                const prevPred = idx > 0 ? visiblePredictions[idx - 1] : null;
                 const prevRank = prevPred ? getSportTierPriority(prevPred.confidence_category, undefined, prevPred.probability) : null;
                 const isTierSlotStart = idx === 0 || currentRank !== prevRank;
                 const tierHeader = getTierHeaderByRank(currentRank, 'tennis');
@@ -943,24 +955,33 @@ export const TennisHubView: React.FC<TennisHubViewProps> = ({
                         <div className="kickoff-slot-line" />
                       </div>
                     )}
-                    <TennisPredictionCard
-                      prediction={prediction}
-                      isSubscriber={isSubscriber}
-                      isAdmin={isAdmin}
-                      canViewPredictions={canViewPredictions}
-                      isFavorite={
-                        isFavoriteItem
-                          ? isFavoriteItem(prediction.fixture_id, 'Match Winner', prediction.prediction)
-                          : false
-                      }
-                      isFavoriteItem={isFavoriteItem}
-                      onToggleFavorite={onToggleFavoriteItem}
-                      onOpenUpgrade={onOpenSubscription}
-                      onOpenAuth={onOpenAuth}
-                    />
+                    <div className={idx >= 3 ? 'card-virtualized' : undefined} style={{ width: '100%' }}>
+                      <TennisPredictionCard
+                        prediction={prediction}
+                        isSubscriber={isSubscriber}
+                        isAdmin={isAdmin}
+                        canViewPredictions={canViewPredictions}
+                        isFavorite={
+                          isFavoriteItem
+                            ? isFavoriteItem(prediction.fixture_id, 'Match Winner', prediction.prediction)
+                            : false
+                        }
+                        isFavoriteItem={isFavoriteItem}
+                        onToggleFavorite={onToggleFavoriteItem}
+                        onOpenUpgrade={onOpenSubscription}
+                        onOpenAuth={onOpenAuth}
+                      />
+                    </div>
                   </React.Fragment>
                 );
               })
+            )}
+            {hasMorePredictions && (
+              <div
+                ref={predictionsSentinelRef}
+                style={{ height: 2, width: '100%', margin: '12px 0', opacity: 0, pointerEvents: 'none' }}
+                aria-hidden="true"
+              />
             )}
           </div>
         </div>

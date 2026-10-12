@@ -2905,6 +2905,12 @@ body {
   transition: all 0.2s ease;
 }
 
+/* Match Card DOM Virtualization & Rendering Deferral (60 FPS Mobile Scrolling) */
+.card-virtualized {
+  content-visibility: auto;
+  contain-intrinsic-size: auto none auto 220px;
+}
+
 .fixture-card:hover {
   border-color: var(--border-strong);
   box-shadow: var(--shadow-md);
@@ -16026,6 +16032,15 @@ body {
   .ssr-content h1 { font-size: 1.5rem; }
   .ssr-skeleton-grid { grid-template-columns: 1fr; }
   .ssr-content ul { grid-template-columns: 1fr; }
+}
+
+/* =====================================================================
+   Sub-Phase 4.3: Match Card List Virtualization (60 FPS Mobile Scrolling)
+   Offloads offscreen layout and paint calculations to browser compositor
+   ===================================================================== */
+.card-virtualized {
+  content-visibility: auto;
+  contain-intrinsic-size: auto none auto 220px;
 }
 
 

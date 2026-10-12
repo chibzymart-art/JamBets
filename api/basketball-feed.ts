@@ -1,4 +1,4 @@
-import { checkRateLimit, getClientIp } from './rate-limiter';
+import { checkAdaptiveRateLimit, getClientIp } from './rate-limiter';
 import { verifyEdgeAuth } from './_lib/jwt-verifier';
 import { EdgeSwrCache, EdgeCacheRegistry } from './_lib/edge-cache';
 import { generateEtag, matchesEtag, create304Response } from './_lib/etag';
@@ -371,7 +371,7 @@ export default async function handler(req: Request): Promise<Response> {
   }
 
   const clientIp = getClientIp(req);
-  const rateLimit = checkRateLimit(`bball-feed:${clientIp}`, 120, 60);
+  const rateLimit = checkAdaptiveRateLimit(req, 'bball-feed');
   if (!rateLimit.allowed) {
     return new Response(
       JSON.stringify({ success: false, error: 'Rate limit exceeded. Please retry shortly.' }),
@@ -380,7 +380,7 @@ export default async function handler(req: Request): Promise<Response> {
         headers: {
           ...corsHeaders,
           'Retry-After': String(rateLimit.resetSec),
-          'X-RateLimit-Limit': '120',
+          'X-RateLimit-Limit': String(rateLimit.limit),
           'X-RateLimit-Remaining': '0',
           'X-RateLimit-Reset': String(rateLimit.resetSec),
         },
@@ -404,7 +404,7 @@ export default async function handler(req: Request): Promise<Response> {
     'Vercel-CDN-Cache-Control': isPaidOrAdmin ? 'no-store' : 'public, s-maxage=60, stale-while-revalidate=300',
     'Vary': 'Authorization, Origin, User-Agent',
     'Access-Control-Allow-Credentials': 'true',
-    'X-RateLimit-Limit': '120',
+    'X-RateLimit-Limit': String(rateLimit.limit),
     'X-RateLimit-Remaining': String(rateLimit.remaining),
   };
 

@@ -1,4 +1,4 @@
-import { checkRateLimit, getClientIp } from './rate-limiter';
+import { checkAdaptiveRateLimit, getClientIp } from './rate-limiter';
 
 export const config = {
   runtime: 'edge',
@@ -17,9 +17,9 @@ export default async function handler(req: Request) {
     });
   }
 
-  // Rate Limiting (SEC-04): Max 5 link code requests per minute per IP
+  // Rate Limiting (SEC-04): Max 10 link code requests per minute per user/IP (CGNAT-safe)
   const clientIp = getClientIp(req);
-  const rateLimit = checkRateLimit(`tg-auth:${clientIp}`, 5, 60);
+  const rateLimit = checkAdaptiveRateLimit(req, 'tg-auth', { userLimit: 10, ipLimit: 10, windowSec: 60 });
   if (!rateLimit.allowed) {
     return new Response(
       JSON.stringify({
@@ -31,7 +31,7 @@ export default async function handler(req: Request) {
         headers: {
           'Content-Type': 'application/json',
           'Retry-After': String(rateLimit.resetSec),
-          'X-RateLimit-Limit': '5',
+          'X-RateLimit-Limit': String(rateLimit.limit),
           'X-RateLimit-Remaining': '0',
           'X-RateLimit-Reset': String(rateLimit.resetSec),
         },

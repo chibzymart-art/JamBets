@@ -1,4 +1,4 @@
-import { checkRateLimit, getClientIp } from './rate-limiter';
+import { checkAdaptiveRateLimit, getClientIp } from './rate-limiter';
 import { verifyEdgeAuth } from './_lib/jwt-verifier';
 import { EdgeSwrCache, EdgeCacheRegistry } from './_lib/edge-cache';
 import { generateEtag, matchesEtag, create304Response } from './_lib/etag';
@@ -249,12 +249,21 @@ export default async function handler(req: Request): Promise<Response> {
   }
 
   const clientIp = getClientIp(req);
-  const isAllowed = checkRateLimit(clientIp);
-  if (!isAllowed) {
-    return new Response(JSON.stringify({ error: 'Too many requests. Please slow down.' }), {
-      status: 429,
-      headers: corsHeaders,
-    });
+  const rateLimit = checkAdaptiveRateLimit(req, 'tennis-feed');
+  if (!rateLimit.allowed) {
+    return new Response(
+      JSON.stringify({ success: false, error: 'Rate limit exceeded. Please retry shortly.' }),
+      {
+        status: 429,
+        headers: {
+          ...corsHeaders,
+          'Retry-After': String(rateLimit.resetSec),
+          'X-RateLimit-Limit': String(rateLimit.limit),
+          'X-RateLimit-Remaining': '0',
+          'X-RateLimit-Reset': String(rateLimit.resetSec),
+        },
+      }
+    );
   }
 
   const authHeader = req.headers.get('Authorization');
@@ -394,6 +403,8 @@ export default async function handler(req: Request): Promise<Response> {
       'CDN-Cache-Control': isPaidOrAdmin ? 'no-store' : 'public, s-maxage=60, stale-while-revalidate=300',
       'Vercel-CDN-Cache-Control': isPaidOrAdmin ? 'no-store' : 'public, s-maxage=60, stale-while-revalidate=300',
       'Vary': 'Authorization, Origin',
+      'X-RateLimit-Limit': String(rateLimit.limit),
+      'X-RateLimit-Remaining': String(rateLimit.remaining),
     };
 
     const bodyStr = JSON.stringify({

@@ -1,4 +1,4 @@
-import { checkRateLimit, getClientIp } from './rate-limiter';
+import { checkAdaptiveRateLimit, getClientIp } from './rate-limiter';
 import { verifyEdgeAuth, AuthStatus } from './_lib/jwt-verifier';
 import { EdgeSwrCache, EdgeCacheRegistry } from './_lib/edge-cache';
 import { generateEtag, matchesEtag, create304Response } from './_lib/etag';
@@ -622,9 +622,9 @@ export default async function handler(req: Request) {
     });
   }
 
-  // 1. Rate Limiting: 120 req/min per IP (tuned for African mobile CGNAT gateways e.g. MTN, Airtel, Glo)
+  // 1. Rate Limiting: User-Centric CGNAT-Safe (180 req/min for auth users, 120 req/min for anon IPs)
   const clientIp = getClientIp(req);
-  const rateLimit = checkRateLimit(`market-feed:${clientIp}`, 120, 60);
+  const rateLimit = checkAdaptiveRateLimit(req, 'market-feed');
   if (!rateLimit.allowed) {
     return new Response(
       JSON.stringify({ success: false, error: 'Rate limit exceeded. Please retry shortly.' }),
@@ -633,7 +633,7 @@ export default async function handler(req: Request) {
         headers: {
           'Content-Type': 'application/json',
           'Retry-After': String(rateLimit.resetSec),
-          'X-RateLimit-Limit': '120',
+          'X-RateLimit-Limit': String(rateLimit.limit),
           'X-RateLimit-Remaining': '0',
           'X-RateLimit-Reset': String(rateLimit.resetSec),
         },

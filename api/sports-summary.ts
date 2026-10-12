@@ -1,4 +1,4 @@
-import { checkRateLimit, getClientIp } from './rate-limiter';
+import { checkAdaptiveRateLimit, getClientIp } from './rate-limiter';
 
 export const config = {
   runtime: 'edge',
@@ -119,7 +119,7 @@ export default async function handler(req: Request): Promise<Response> {
   }
 
   const clientIp = getClientIp(req);
-  const rateLimit = checkRateLimit(`sports-summary:${clientIp}`, 120, 60);
+  const rateLimit = checkAdaptiveRateLimit(req, 'sports-summary');
   if (!rateLimit.allowed) {
     return new Response(
       JSON.stringify({ success: false, error: 'Rate limit exceeded. Please retry shortly.' }),
@@ -128,6 +128,9 @@ export default async function handler(req: Request): Promise<Response> {
         headers: {
           ...corsHeaders,
           'Retry-After': String(rateLimit.resetSec),
+          'X-RateLimit-Limit': String(rateLimit.limit),
+          'X-RateLimit-Remaining': '0',
+          'X-RateLimit-Reset': String(rateLimit.resetSec),
         },
       }
     );
@@ -139,6 +142,8 @@ export default async function handler(req: Request): Promise<Response> {
     'CDN-Cache-Control': 'public, s-maxage=300',
     'Vercel-CDN-Cache-Control': 'public, s-maxage=300',
     'Vary': 'Origin',
+    'X-RateLimit-Limit': String(rateLimit.limit),
+    'X-RateLimit-Remaining': String(rateLimit.remaining),
   };
 
   try {

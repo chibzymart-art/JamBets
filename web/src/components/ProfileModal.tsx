@@ -282,14 +282,6 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
 
         {/* Account Details & Status Grid */}
         {(() => {
-          const adminEmails = [
-            'chibzymart@gmail.com',
-            'whizzchibz@gmail.com',
-            'chibuezec.amuchie@gmail.com',
-            'chibuezeamuchie@gmail.com',
-            'nnamdiamuchie@gmail.com'
-          ];
-          const userEmail = (effectiveProfile.email || currentUser?.email || '').toLowerCase().trim();
           const isSuperAdmin = Boolean(
             isAdmin ||
             effectiveProfile.role === 'admin' ||
@@ -297,8 +289,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
             (currentUser as any)?.app_metadata?.role === 'admin' ||
             subscription?.tier === 'admin' ||
             entitlement?.tier === 'admin' ||
-            (entitlement?.features as any)?.admin === true ||
-            (userEmail ? adminEmails.includes(userEmail) : false)
+            (entitlement?.features as any)?.admin === true
           );
 
           const isFullAccess = Boolean(

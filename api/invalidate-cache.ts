@@ -1,5 +1,5 @@
 import { EdgeCacheRegistry } from './_lib/edge-cache';
-import { checkRateLimit, getClientIp } from './rate-limiter';
+import { checkAdaptiveRateLimit, getClientIp } from './rate-limiter';
 
 export const config = {
   runtime: 'edge',
@@ -48,13 +48,22 @@ export default async function handler(req: Request) {
     return new Response(null, { status: 204, headers: corsHeaders });
   }
 
-  // Rate Limiting: 60 requests per minute per IP for invalidation endpoint
+  // Rate Limiting: 60 requests per minute per IP for invalidation endpoint (services exempt)
   const clientIp = getClientIp(req);
-  const rateLimit = checkRateLimit(`invalidate-cache:${clientIp}`, 60, 60);
+  const rateLimit = checkAdaptiveRateLimit(req, 'invalidate-cache', { ipLimit: 60, userLimit: 120, windowSec: 60 });
   if (!rateLimit.allowed) {
     return new Response(
       JSON.stringify({ success: false, error: 'Rate limit exceeded. Please retry shortly.' }),
-      { status: 429, headers: corsHeaders }
+      {
+        status: 429,
+        headers: {
+          ...corsHeaders,
+          'Retry-After': String(rateLimit.resetSec),
+          'X-RateLimit-Limit': String(rateLimit.limit),
+          'X-RateLimit-Remaining': '0',
+          'X-RateLimit-Reset': String(rateLimit.resetSec),
+        },
+      }
     );
   }
 

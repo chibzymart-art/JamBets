@@ -511,19 +511,8 @@ export const AdminView: React.FC<AdminViewProps> = ({
   const verifyServerAdmin = async () => {
     setCheckingAuth(true);
     try {
-      const email = currentUserProfile?.email?.toLowerCase().trim();
       const isProfileAdmin = (currentUserProfile as any)?.role === 'admin';
-      const adminEmails = [
-        'chibzymart@gmail.com',
-        'whizzchibz@gmail.com',
-        'chibuezec.amuchie@gmail.com',
-        'chibuezeamuchie@gmail.com',
-        'nnamdiamuchie@gmail.com'
-      ];
-      if (
-        isProfileAdmin ||
-        (email ? adminEmails.includes(email) : false)
-      ) {
+      if (isProfileAdmin) {
         setIsAdminVerified(true);
         setCheckingAuth(false);
         return;

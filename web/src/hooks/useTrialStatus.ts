@@ -24,13 +24,6 @@ export interface TrialStatusResult {
   canViewBasketball: boolean;
 }
 
-const ADMIN_EMAILS = new Set([
-  'chibzymart@gmail.com',
-  'whizzchibz@gmail.com',
-  'chibuezec.amuchie@gmail.com',
-  'chibuezeamuchie@gmail.com',
-  'nnamdiamuchie@gmail.com',
-]);
 
 /**
  * useTrialStatus
@@ -81,13 +74,13 @@ export function useTrialStatus(
       };
     }
 
-    // 2. Admin Check
-    const userEmail = (currentUser.email || profile?.email || '').toLowerCase().trim();
+    // 2. Admin Check (Decoupled from client bundle)
     const isAdmin = Boolean(
       profile?.role === 'admin' ||
       currentUser.app_metadata?.role === 'admin' ||
       currentUser.user_metadata?.role === 'admin' ||
-      (userEmail && ADMIN_EMAILS.has(userEmail)) ||
+      subscription?.tier === 'admin' ||
+      entitlement?.tier === 'admin' ||
       (entitlement?.features as any)?.admin === true
     );
 

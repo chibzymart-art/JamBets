@@ -26,7 +26,7 @@ import { AdBannerSlot } from './components/AdBannerSlot';
 import { initAttributionTracker } from './lib/attribution';
 import { updatePageSeo } from './lib/seo';
 import { useGeoCurrency } from './lib/geoCurrency';
-import { useTrialStatus } from './hooks/useTrialStatus';
+import { useTrialStatus, useVirtualWindow } from './hooks';
 import { LandingPage } from './pages/Landing';
 import { SubscriptionPage } from './pages/Subscription';
 import { PasswordRecoveryPage } from './pages/PasswordRecovery';
@@ -420,25 +420,16 @@ export default function App() {
     };
   }, [navigate]);
 
-  // Strict RBAC: Check whether active user is an administrator
+  // Strict RBAC: Check whether active user is an administrator (Decoupled from client bundle)
   const isAdmin = useMemo(() => {
     if (!currentUser) return false;
-    const email = currentUser.email?.toLowerCase().trim();
-    const adminEmails = [
-      'chibzymart@gmail.com',
-      'whizzchibz@gmail.com',
-      'chibuezec.amuchie@gmail.com',
-      'chibuezeamuchie@gmail.com',
-      'nnamdiamuchie@gmail.com'
-    ];
-    return (
+    return Boolean(
       profile?.role === 'admin' ||
       currentUser.user_metadata?.role === 'admin' ||
       (currentUser as any)?.app_metadata?.role === 'admin' ||
       subscription?.tier === 'admin' ||
       entitlement?.tier === 'admin' ||
-      (entitlement?.features as any)?.admin === true ||
-      (email ? adminEmails.includes(email) : false)
+      (entitlement?.features as any)?.admin === true
     );
   }, [currentUser, profile, subscription, entitlement]);
 
@@ -1686,6 +1677,25 @@ export default function App() {
     isFixtureUnlocked,
     timeZone,
   ]);
+
+  // Progressive list windowing (60 FPS Mobile Scrolling)
+  const {
+    visibleItems: visibleFixtures,
+    hasMore: hasMoreFixtures,
+    sentinelRef: fixturesSentinelRef,
+  } = useVirtualWindow(filteredFixtures, {
+    initialCount: 25,
+    batchSize: 25,
+    resetDeps: [
+      selectedLeague,
+      selectedDate,
+      scoreStatusFilter,
+      selectedTier,
+      settlementFilter,
+      searchQuery,
+      timeZone,
+    ],
+  });
 
   const resetAllFilters = () => {
     setSelectedLeague('all');
@@ -3314,8 +3324,8 @@ export default function App() {
                       </div>
                     )}
 
-                    {filteredFixtures.map((fixture, idx) => {
-                      const prevFixture = idx > 0 ? filteredFixtures[idx - 1] : null;
+                    {visibleFixtures.map((fixture, idx) => {
+                      const prevFixture = idx > 0 ? visibleFixtures[idx - 1] : null;
                       const currentRank = getFixtureRankAndProb(fixture.id, predsByFixture).rank;
                       const prevRank = prevFixture ? getFixtureRankAndProb(prevFixture.id, predsByFixture).rank : null;
                       const isTierSlotStart = idx === 0 || currentRank !== prevRank;
@@ -3343,20 +3353,22 @@ export default function App() {
                             </div>
                           )}
 
-                          <FixtureCard
-                            fixture={fixture}
-                            prediction={predsByFixture.get(fixture.id)?.[0] || null}
-                            isAdmin={isAdmin}
-                            canViewPredictions={canViewPredictions}
-                            isVisitor={trialState.isVisitor}
-                            onRegisterClick={handleRegisterClick}
-                            isStarred={favorites.includes(fixture.id)}
-                            onToggleFavorite={toggleFavorite}
-                            isFavoriteItem={isFavoriteItem}
-                            onToggleFavoriteItem={toggleFavoriteItem}
-                            isExpanded={expandedFixtures.has(fixture.id)}
-                            onToggleExpand={() => toggleFixtureExpand(fixture.id)}
-                          />
+                          <div className={idx >= 3 ? 'card-virtualized' : undefined} style={{ width: '100%' }}>
+                            <FixtureCard
+                              fixture={fixture}
+                              prediction={predsByFixture.get(fixture.id)?.[0] || null}
+                              isAdmin={isAdmin}
+                              canViewPredictions={canViewPredictions}
+                              isVisitor={trialState.isVisitor}
+                              onRegisterClick={handleRegisterClick}
+                              isStarred={favorites.includes(fixture.id)}
+                              onToggleFavorite={toggleFavorite}
+                              isFavoriteItem={isFavoriteItem}
+                              onToggleFavoriteItem={toggleFavoriteItem}
+                              isExpanded={expandedFixtures.has(fixture.id)}
+                              onToggleExpand={() => toggleFixtureExpand(fixture.id)}
+                            />
+                          </div>
                           {idx === 2 && (
                             <div style={{ margin: '14px 0' }}>
                               <AdBannerSlot slotType="native-card" />
@@ -3365,6 +3377,13 @@ export default function App() {
                         </Fragment>
                       );
                     })}
+                    {hasMoreFixtures && (
+                      <div
+                        ref={fixturesSentinelRef}
+                        style={{ height: 2, width: '100%', margin: '12px 0', opacity: 0, pointerEvents: 'none' }}
+                        aria-hidden="true"
+                      />
+                    )}
                   </div>
                 )}
           </div>

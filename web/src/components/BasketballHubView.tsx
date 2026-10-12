@@ -16,6 +16,7 @@ import { LeftSidebarAd } from './LeftSidebarAd';
 import { WatchlistSidebar } from './WatchlistSidebar';
 import { FavoritePredictionItem } from './FavoritesDrawer';
 import { getSportTierPriority, getTierHeaderByRank } from '../lib/confidenceScore';
+import { useVirtualWindow } from '../hooks';
 import '../basketball.css';
 
 export interface BasketballHubViewProps {
@@ -293,6 +294,17 @@ export const BasketballHubView: React.FC<BasketballHubViewProps> = ({
       return (a.id || '').localeCompare(b.id || '');
     });
   }, [allPredictions, selectedDate, selectedLeague, selectedMarket, settlementFilter, selectedTier, isSubscriber]);
+
+  // Progressive list windowing (60 FPS Mobile Scrolling)
+  const {
+    visibleItems: visiblePredictions,
+    hasMore: hasMorePredictions,
+    sentinelRef: predictionsSentinelRef,
+  } = useVirtualWindow(filteredPredictions, {
+    initialCount: 25,
+    batchSize: 25,
+    resetDeps: [allPredictions, selectedDate, selectedLeague, selectedMarket, settlementFilter, selectedTier],
+  });
 
   // Compute live scorecard KPI statistics from date-scoped predictions
   const scorecardStats = useMemo(() => {
@@ -835,7 +847,7 @@ export const BasketballHubView: React.FC<BasketballHubViewProps> = ({
             </div>
           ) : (
             <div className="bball-grid">
-              {filteredPredictions.map((pred, idx) => {
+              {visiblePredictions.map((pred, idx) => {
                 const standardMarket = (() => {
                   const s = (pred.market || '').toLowerCase();
                   if (s.includes('spread')) return 'Point Spread';
@@ -844,7 +856,7 @@ export const BasketballHubView: React.FC<BasketballHubViewProps> = ({
                 })();
 
                 const currentRank = getSportTierPriority(pred.confidence_category, undefined, pred.probability);
-                const prevPred = idx > 0 ? filteredPredictions[idx - 1] : null;
+                const prevPred = idx > 0 ? visiblePredictions[idx - 1] : null;
                 const prevRank = prevPred ? getSportTierPriority(prevPred.confidence_category, undefined, prevPred.probability) : null;
                 const isTierSlotStart = idx === 0 || currentRank !== prevRank;
                 const tierHeader = getTierHeaderByRank(currentRank, 'basketball');
@@ -876,20 +888,29 @@ export const BasketballHubView: React.FC<BasketballHubViewProps> = ({
                         <div className="kickoff-slot-line" />
                       </div>
                     )}
-                    <BasketballPredictionCard
-                      prediction={pred}
-                      isSubscriber={isSubscriber}
-                      isAdmin={isAdmin}
-                      canViewPredictions={canViewPredictions}
-                      isFavorite={isFavoriteItem ? isFavoriteItem(pred.fixture_id, standardMarket, pred.prediction) : false}
-                      isFavoriteItem={isFavoriteItem}
-                      onToggleFavorite={onToggleFavoriteItem}
-                      onOpenUpgrade={onOpenSubscription}
-                      onOpenAuth={onOpenAuth}
-                    />
+                    <div className={idx >= 3 ? 'card-virtualized' : undefined} style={{ width: '100%' }}>
+                      <BasketballPredictionCard
+                        prediction={pred}
+                        isSubscriber={isSubscriber}
+                        isAdmin={isAdmin}
+                        canViewPredictions={canViewPredictions}
+                        isFavorite={isFavoriteItem ? isFavoriteItem(pred.fixture_id, standardMarket, pred.prediction) : false}
+                        isFavoriteItem={isFavoriteItem}
+                        onToggleFavorite={onToggleFavoriteItem}
+                        onOpenUpgrade={onOpenSubscription}
+                        onOpenAuth={onOpenAuth}
+                      />
+                    </div>
                   </React.Fragment>
                 );
               })}
+              {hasMorePredictions && (
+                <div
+                  ref={predictionsSentinelRef}
+                  style={{ gridColumn: '1 / -1', height: 2, width: '100%', margin: '12px 0', opacity: 0, pointerEvents: 'none' }}
+                  aria-hidden="true"
+                />
+              )}
             </div>
           )}
         </main>
