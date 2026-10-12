@@ -349,11 +349,6 @@ export default async function handler(req: Request): Promise<Response> {
           success: false,
           error: resendData?.message || 'Failed to dispatch password email via Resend',
           code: resendData?.name || 'RESEND_ERROR',
-          debug: {
-            from: primaryFrom,
-            keyLen: resendApiKey?.length,
-            keyPrefix: resendApiKey ? resendApiKey.substring(0, 7) : null,
-          },
         }),
         { status: resendRes.status || 500, headers }
       );
