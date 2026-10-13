@@ -33,8 +33,8 @@ interface TennisFeedData {
   cached_at: string;
 }
 
-// Global SWR Edge Cache: 180s fresh (3 min default) + 3600s stale (1 hour)
-const tennisSwrCache = new EdgeSwrCache<TennisFeedData>(180 * 1000, 3600 * 1000);
+// Global SWR Edge Cache: 900s fresh (15 min default) + 3600s stale (1 hour)
+const tennisSwrCache = new EdgeSwrCache<TennisFeedData>(900 * 1000, 3600 * 1000);
 EdgeCacheRegistry.register('tennis', tennisSwrCache);
 
 // Adaptive Dynamic TTL for Live Scores and Instant Settlement Invalidation (Sub-Phase 2.4)
@@ -43,7 +43,7 @@ function computeTennisTtl(data: TennisFeedData): number {
     const st = (p.fixture?.status || '').toLowerCase();
     return st === 'live' || st === 'in_progress' || st.includes('set') || st.includes('game');
   });
-  return hasLive ? 15 * 1000 : 180 * 1000;
+  return hasLive ? 15 * 1000 : 900 * 1000;
 }
 
 async function checkIsPaidOrAdmin(authToken: string | null): Promise<boolean> {
@@ -297,9 +297,9 @@ export default async function handler(req: Request): Promise<Response> {
       const wonSettlements = (feedData.settlements || []).filter((s: any) => (s.status || '').toLowerCase() === 'won');
       const botHeaders: Record<string, string> = {
         ...corsHeaders,
-        'Cache-Control': 'public, max-age=30, s-maxage=60, stale-while-revalidate=300',
-        'CDN-Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300',
-        'Vercel-CDN-Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300',
+        'Cache-Control': 'public, max-age=60, s-maxage=900, stale-while-revalidate=86400',
+        'CDN-Cache-Control': 'public, s-maxage=900, stale-while-revalidate=86400',
+        'Vercel-CDN-Cache-Control': 'public, s-maxage=900, stale-while-revalidate=86400',
         'Vary': 'Authorization, Origin, User-Agent',
       };
       const botBodyStr = JSON.stringify({
@@ -398,10 +398,10 @@ export default async function handler(req: Request): Promise<Response> {
     const responseHeaders: Record<string, string> = {
       ...corsHeaders,
       'Cache-Control': isPaidOrAdmin
-        ? 'private, max-age=30, stale-while-revalidate=120'
-        : 'public, max-age=30, s-maxage=60, stale-while-revalidate=300',
-      'CDN-Cache-Control': isPaidOrAdmin ? 'no-store' : 'public, s-maxage=60, stale-while-revalidate=300',
-      'Vercel-CDN-Cache-Control': isPaidOrAdmin ? 'no-store' : 'public, s-maxage=60, stale-while-revalidate=300',
+        ? 'private, max-age=60, stale-while-revalidate=300'
+        : 'public, max-age=60, s-maxage=900, stale-while-revalidate=86400',
+      'CDN-Cache-Control': isPaidOrAdmin ? 'no-store' : 'public, s-maxage=900, stale-while-revalidate=86400',
+      'Vercel-CDN-Cache-Control': isPaidOrAdmin ? 'no-store' : 'public, s-maxage=900, stale-while-revalidate=86400',
       'Vary': 'Authorization, Origin',
       'X-RateLimit-Limit': String(rateLimit.limit),
       'X-RateLimit-Remaining': String(rateLimit.remaining),

@@ -33,8 +33,8 @@ interface BasketballFeedData {
   cached_at: string;
 }
 
-// Global SWR Edge Cache: 180s fresh (3 min default) + 3600s stale (1 hour)
-const basketballSwrCache = new EdgeSwrCache<BasketballFeedData>(180 * 1000, 3600 * 1000);
+// Global SWR Edge Cache: 900s fresh (15 min default) + 3600s stale (1 hour)
+const basketballSwrCache = new EdgeSwrCache<BasketballFeedData>(900 * 1000, 3600 * 1000);
 EdgeCacheRegistry.register('basketball', basketballSwrCache);
 
 // Adaptive Dynamic TTL for Live Scores and Instant Settlement Invalidation (Sub-Phase 2.4)
@@ -44,7 +44,7 @@ function computeBasketballTtl(data: BasketballFeedData): number {
     const period = (p.fixture?.current_period || '').toLowerCase();
     return st === 'live' || st === 'in_progress' || period.includes('q') || period.includes('ot') || period.includes('half');
   });
-  return hasLive ? 15 * 1000 : 180 * 1000;
+  return hasLive ? 15 * 1000 : 900 * 1000;
 }
 
 async function checkIsPaidOrAdmin(authToken: string | null): Promise<boolean> {
@@ -398,10 +398,10 @@ export default async function handler(req: Request): Promise<Response> {
   const responseHeaders: Record<string, string> = {
     ...corsHeaders,
     'Cache-Control': isPaidOrAdmin
-      ? 'private, max-age=30, stale-while-revalidate=120'
-      : 'public, max-age=30, s-maxage=60, stale-while-revalidate=300',
-    'CDN-Cache-Control': isPaidOrAdmin ? 'no-store' : 'public, s-maxage=60, stale-while-revalidate=300',
-    'Vercel-CDN-Cache-Control': isPaidOrAdmin ? 'no-store' : 'public, s-maxage=60, stale-while-revalidate=300',
+      ? 'private, max-age=60, stale-while-revalidate=300'
+      : 'public, max-age=60, s-maxage=900, stale-while-revalidate=86400',
+    'CDN-Cache-Control': isPaidOrAdmin ? 'no-store' : 'public, s-maxage=900, stale-while-revalidate=86400',
+    'Vercel-CDN-Cache-Control': isPaidOrAdmin ? 'no-store' : 'public, s-maxage=900, stale-while-revalidate=86400',
     'Vary': 'Authorization, Origin, User-Agent',
     'Access-Control-Allow-Credentials': 'true',
     'X-RateLimit-Limit': String(rateLimit.limit),

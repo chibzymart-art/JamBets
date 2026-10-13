@@ -85,7 +85,7 @@ class FeedSnapshotEngine:
         now = datetime.now(timezone.utc)
         yesterday_utc = datetime(now.year, now.month, now.day, 0, 0, 0, tzinfo=timezone.utc) - timedelta(days=1)
         min_date = yesterday_utc.isoformat()
-        max_date = (now + timedelta(days=5)).isoformat()
+        max_date = (now + timedelta(days=2)).isoformat()
 
         select_query = (
             "id,fixture_id,prediction,market,probability,confidence_category,secondary_predictions,"
@@ -216,10 +216,17 @@ class FeedSnapshotEngine:
             ")"
         )
 
+        now = datetime.now(timezone.utc)
+        yesterday_utc = datetime(now.year, now.month, now.day, 0, 0, 0, tzinfo=timezone.utc) - timedelta(days=1)
+        min_date = yesterday_utc.isoformat()
+        max_date = (now + timedelta(days=2)).isoformat()
+
         resp = self.client.get(
             "/goals_predictions_paywall",
             params={
                 "select": select_query,
+                "target_kickoff_at": f"gte.{min_date}",
+                "and": f"(target_kickoff_at.lte.{max_date})",
                 "order": "probability.desc",
                 "limit": "1000"
             }
@@ -258,12 +265,19 @@ class FeedSnapshotEngine:
             ")"
         )
 
+        now = datetime.now(timezone.utc)
+        yesterday_utc = datetime(now.year, now.month, now.day, 0, 0, 0, tzinfo=timezone.utc) - timedelta(days=1)
+        min_date = yesterday_utc.isoformat()
+        max_date = (now + timedelta(days=2)).isoformat()
+
         resp = self.client.get(
             "/corner_predictions",
             params={
                 "select": select_query,
                 "settlement_status": "neq.void",
                 "publication_status": "neq.archived",
+                "target_kickoff_at": f"gte.{min_date}",
+                "and": f"(target_kickoff_at.lte.{max_date})",
                 "order": "probability.desc",
                 "limit": "1000"
             }
@@ -296,13 +310,19 @@ class FeedSnapshotEngine:
     def build_market_counts_snapshot(self) -> Dict[str, Any]:
         """Pre-computes badge counts for market-feed.ts."""
         logger.info("Building market counts snapshot...")
-        # Fetch minimal fields for corners and goals
+        now_lagos = datetime.now(timezone(timedelta(hours=1)))
+        today_str = now_lagos.strftime("%Y-%m-%d")
+        tomorrow_str = (now_lagos + timedelta(days=1)).strftime("%Y-%m-%d")
+        yesterday_str = (now_lagos - timedelta(days=1)).strftime("%Y-%m-%d")
+
+        # Fetch minimal fields for corners and goals bounded to yesterday onwards
         cr_resp = self.client.get(
             "/corner_predictions",
             params={
                 "select": "id,target_kickoff_at,settlement_status,publication_status,fixture:football_fixtures!inner(id,status)",
                 "settlement_status": "neq.void",
                 "publication_status": "neq.archived",
+                "target_kickoff_at": f"gte.{yesterday_str}T00:00:00Z",
                 "limit": "1000"
             }
         )
@@ -312,6 +332,7 @@ class FeedSnapshotEngine:
                 "select": "id,market,target_kickoff_at,settlement_status,publication_status,fixture:football_fixtures!inner(id,status)",
                 "settlement_status": "neq.void",
                 "publication_status": "neq.archived",
+                "target_kickoff_at": f"gte.{yesterday_str}T00:00:00Z",
                 "limit": "1000"
             }
         )
@@ -381,7 +402,9 @@ class FeedSnapshotEngine:
         """Pre-computes feed:basketball for basketball-feed.ts."""
         logger.info("Building basketball snapshot...")
         now = datetime.now(timezone.utc)
-        min_date = (now - timedelta(days=7)).isoformat()
+        yesterday_utc = datetime(now.year, now.month, now.day, 0, 0, 0, tzinfo=timezone.utc) - timedelta(days=1)
+        min_date = yesterday_utc.isoformat()
+        max_date = (now + timedelta(days=2)).isoformat()
 
         pred_select = (
             "id,fixture_id,market,prediction,probability,confidence_category,secondary_predictions,"
@@ -404,8 +427,9 @@ class FeedSnapshotEngine:
             params={
                 "select": pred_select,
                 "target_kickoff_at": f"gte.{min_date}",
+                "and": f"(target_kickoff_at.lte.{max_date})",
                 "order": "target_kickoff_at.asc",
-                "limit": "1000"
+                "limit": "500"
             }
         )
         leagues_resp = self.client.get(
@@ -422,7 +446,7 @@ class FeedSnapshotEngine:
             params={
                 "select": settle_select,
                 "order": "settled_at.desc",
-                "limit": "100"
+                "limit": "25"
             }
         )
 
@@ -544,8 +568,9 @@ class FeedSnapshotEngine:
         """Pre-computes feed:tennis for tennis-feed.ts."""
         logger.info("Building tennis snapshot...")
         now = datetime.now(timezone.utc)
-        min_date = (now - timedelta(days=7)).isoformat()
-        max_date = (now + timedelta(days=5)).isoformat()
+        yesterday_utc = datetime(now.year, now.month, now.day, 0, 0, 0, tzinfo=timezone.utc) - timedelta(days=1)
+        min_date = yesterday_utc.isoformat()
+        max_date = (now + timedelta(days=2)).isoformat()
 
         pred_select = (
             "*,fixture:tennis_fixtures("
@@ -572,7 +597,7 @@ class FeedSnapshotEngine:
                 "target_kickoff_at": f"gte.{min_date}",
                 "and": f"(target_kickoff_at.lte.{max_date})",
                 "order": "target_kickoff_at.asc",
-                "limit": "1000"
+                "limit": "500"
             }
         )
         tourneys_resp = self.client.get(
@@ -581,7 +606,7 @@ class FeedSnapshotEngine:
         )
         settle_resp = self.client.get(
             "/tennis_settlements",
-            params={"select": settle_select, "order": "settled_at.desc", "limit": "100"}
+            params={"select": settle_select, "order": "settled_at.desc", "limit": "25"}
         )
 
         predictions = preds_resp.json() if preds_resp.status_code == 200 else []

@@ -94,9 +94,9 @@ interface MarketFeedResponse {
   cached_at: string;
 }
 
-// Global SWR Edge Caches: 180s fresh (3 min default) + 3600s stale (1 hour)
-const marketSwrCache = new EdgeSwrCache<UnifiedMarketPrediction[]>(180 * 1000, 3600 * 1000);
-const countsSwrCache = new EdgeSwrCache<Record<MarketType, number>>(180 * 1000, 3600 * 1000);
+// Global SWR Edge Caches: 900s fresh (15 min default) + 3600s stale (1 hour)
+const marketSwrCache = new EdgeSwrCache<UnifiedMarketPrediction[]>(900 * 1000, 3600 * 1000);
+const countsSwrCache = new EdgeSwrCache<Record<MarketType, number>>(900 * 1000, 3600 * 1000);
 EdgeCacheRegistry.register('market', marketSwrCache);
 EdgeCacheRegistry.register('counts', countsSwrCache);
 
@@ -106,7 +106,7 @@ function computeMarketTtl(preds: UnifiedMarketPrediction[]): number {
     const st = (p.fixture?.status || '').toLowerCase();
     return st === 'live' || st === '1h' || st === '2h' || st === 'ht' || st === 'in_progress';
   });
-  return hasLive ? 15 * 1000 : 180 * 1000;
+  return hasLive ? 15 * 1000 : 900 * 1000;
 }
 
 export type { AuthStatus };
@@ -678,10 +678,10 @@ export default async function handler(req: Request) {
   const responseHeaders = {
     'Content-Type': 'application/json',
     'Cache-Control': isVipOrAdmin
-      ? 'private, max-age=30, stale-while-revalidate=120'
-      : 'public, max-age=30, s-maxage=60, stale-while-revalidate=300',
-    'CDN-Cache-Control': isVipOrAdmin ? 'no-store' : 'public, s-maxage=60, stale-while-revalidate=300',
-    'Vercel-CDN-Cache-Control': isVipOrAdmin ? 'no-store' : 'public, s-maxage=60, stale-while-revalidate=300',
+      ? 'private, max-age=60, stale-while-revalidate=300'
+      : 'public, max-age=60, s-maxage=900, stale-while-revalidate=86400',
+    'CDN-Cache-Control': isVipOrAdmin ? 'no-store' : 'public, s-maxage=900, stale-while-revalidate=86400',
+    'Vercel-CDN-Cache-Control': isVipOrAdmin ? 'no-store' : 'public, s-maxage=900, stale-while-revalidate=86400',
     'Vary': 'Authorization, Origin',
     'Access-Control-Allow-Origin': corsOrigin,
     'Access-Control-Allow-Credentials': 'true',
@@ -816,7 +816,7 @@ export default async function handler(req: Request) {
       predictions,
       auth_status: authStatus,
       is_stale: isStale,
-      cached_at: new Date().toISOString(),
+      cached_at: new Date(marketSwrCache.getEntry(`market:${activeMarket}`)?.cachedAt || Date.now()).toISOString(),
     };
 
     const bodyStr = JSON.stringify(responsePayload);

@@ -1296,18 +1296,26 @@ export const AdminView: React.FC<AdminViewProps> = ({
     targetTier: 'free' | 'standard' | 'bigbang' | 'admin',
     targetStatus: 'active' | 'disabled' | 'suspended' = 'active',
     durationDays: number | null = null,
-    reason?: string
+    reason?: string,
+    isExtension: boolean = false
   ) => {
     playSfx('click');
     setActionLoading(userId);
     setActionError(null);
     setActionSuccess(null);
 
+    const DAY_MS = 24 * 60 * 60 * 1000;
     let validUntilIso: string | null = null;
     if (durationDays && durationDays > 0) {
-      const d = new Date();
-      d.setDate(d.getDate() + durationDays);
-      validUntilIso = d.toISOString();
+      const targetUser = usersList.find((u: any) => u.id === userId);
+      const existingEnd = targetUser?.subscription?.current_period_end || targetUser?.entitlement?.valid_until;
+      const existingMs = existingEnd ? new Date(existingEnd).getTime() : 0;
+      const nowMs = Date.now();
+
+      // If isExtension is requested and user has an active cycle, stack on existing end; otherwise start from now
+      const baseMs = (isExtension && existingMs > nowMs) ? existingMs : nowMs;
+      const targetEndMs = baseMs + (durationDays * DAY_MS);
+      validUntilIso = new Date(targetEndMs).toISOString();
     }
 
     try {
@@ -1317,7 +1325,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
         p_new_tier: targetTier,
         p_status: targetStatus,
         p_valid_until: validUntilIso,
-        p_reason: reason || roleReason || `Admin allocated ${targetTier.toUpperCase()} tier`
+        p_reason: reason || roleReason || `Admin allocated ${targetTier.toUpperCase()} tier${durationDays ? ` for ${durationDays} days` : ''}`
       });
 
       if (rpcErr) {
@@ -1354,14 +1362,17 @@ export const AdminView: React.FC<AdminViewProps> = ({
         }, { onConflict: 'user_id' });
 
         await supabase.from('audit_logs').insert({
-          actor_id: currentUserProfile?.id,
-          actor_email: currentUserProfile?.email,
-          actor_role: 'admin',
+          actor_type: 'admin',
+          actor_id: currentUserProfile?.id || 'admin',
           action: 'admin_user_tier_allocated_direct',
-          affected_table: 'users',
-          affected_record_id: userId,
-          new_state: { role: targetTier, status: targetStatus, valid_until: validUntilIso },
-          reason: reason || roleReason || `Admin updated tier to ${targetTier}`
+          resource_type: 'users',
+          resource_id: userId,
+          details: {
+            actor_email: currentUserProfile?.email,
+            actor_role: 'admin',
+            new_state: { role: targetTier, status: targetStatus, valid_until: validUntilIso },
+            reason: reason || roleReason || `Admin updated tier to ${targetTier}`
+          }
         });
       }
 
@@ -3438,8 +3449,13 @@ export const AdminView: React.FC<AdminViewProps> = ({
                   filteredUsers.map((u) => {
                     const isDeactivated = u.is_deleted === true || u.status === 'disabled';
                     const subEnd = u.subscription?.current_period_end || u.entitlement?.valid_until;
-                    const isExpired = subEnd ? new Date(subEnd) < new Date() : false;
-                    const expDays = 30;
+                    const isExpired = subEnd ? new Date(subEnd).getTime() < Date.now() : false;
+                    const isFree = u.role === 'free';
+                    const daysLeft = isFree
+                      ? 0
+                      : subEnd && !isExpired
+                      ? Math.max(0, Math.ceil((new Date(subEnd).getTime() - Date.now()) / (24 * 60 * 60 * 1000)))
+                      : 0;
 
                     return (
                       <tr key={u.id} className={isDeactivated ? 'row-deactivated' : ''}>
@@ -3461,11 +3477,12 @@ export const AdminView: React.FC<AdminViewProps> = ({
                                 const role = e.target.value as any;
                                 setRoleChangeUserId(u.id);
                                 setNewRole(role);
-                                handleAllocateTier(u.id, role, u.status || 'active', expDays);
+                                const allocDays = (role === 'free' || role === 'admin') ? null : 30;
+                                handleAllocateTier(u.id, role, u.status || 'active', allocDays, undefined, false);
                               }}
                               disabled={actionLoading === u.id}
                               className="genz-role-select"
-                              title="Select tier to immediately allocate"
+                              title="Select tier to immediately allocate (defaults to 30 days for VIP)"
                             >
                               <option value="free">Free Tier</option>
                               <option value="standard">Standard Plan (₦5,000)</option>
@@ -3476,8 +3493,16 @@ export const AdminView: React.FC<AdminViewProps> = ({
                         </td>
                         <td>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-                            <span style={{ fontSize: '0.85rem', fontWeight: 600, color: isExpired ? '#ef4444' : subEnd ? '#10b981' : '#64748b' }}>
-                              {isExpired ? '⚠️ Expired' : subEnd ? `Valid until ${new Date(subEnd).toLocaleDateString()}` : 'Lifetime / None'}
+                            <span style={{ fontSize: '0.85rem', fontWeight: 600, color: isFree ? '#64748b' : isExpired ? '#ef4444' : subEnd ? '#10b981' : '#64748b' }}>
+                              {isFree
+                                ? 'Free Tier (0d left)'
+                                : isExpired
+                                ? `⚠️ Expired (${new Date(subEnd!).toLocaleDateString()})`
+                                : subEnd
+                                ? `Valid until ${new Date(subEnd).toLocaleDateString()} (${daysLeft}d left)`
+                                : u.role === 'admin'
+                                ? '🛡 Admin Lifetime'
+                                : 'Lifetime / None'}
                             </span>
                             <div style={{ display: 'flex', gap: '0.25rem', flexWrap: 'wrap' }}>
                               <button
@@ -3485,7 +3510,10 @@ export const AdminView: React.FC<AdminViewProps> = ({
                                 className="genz-pill"
                                 style={{ padding: '2px 6px', fontSize: '0.7rem' }}
                                 disabled={actionLoading === u.id}
-                                onClick={() => handleAllocateTier(u.id, u.role, 'active', 30, 'Admin +30 Days extension')}
+                                onClick={() => {
+                                  const targetRole = u.role === 'free' ? 'bigbang' : u.role;
+                                  handleAllocateTier(u.id, targetRole, 'active', 30, 'Admin +30 Days extension', true);
+                                }}
                                 title="Grant 30 days active access"
                               >
                                 +30d
@@ -3495,7 +3523,23 @@ export const AdminView: React.FC<AdminViewProps> = ({
                                 className="genz-pill"
                                 style={{ padding: '2px 6px', fontSize: '0.7rem' }}
                                 disabled={actionLoading === u.id}
-                                onClick={() => handleAllocateTier(u.id, u.role, 'active', 90, 'Admin +90 Days extension')}
+                                onClick={() => {
+                                  const targetRole = u.role === 'free' ? 'bigbang' : u.role;
+                                  handleAllocateTier(u.id, targetRole, 'active', 60, 'Admin +60 Days extension', true);
+                                }}
+                                title="Grant 60 days active access"
+                              >
+                                +60d
+                              </button>
+                              <button
+                                type="button"
+                                className="genz-pill"
+                                style={{ padding: '2px 6px', fontSize: '0.7rem' }}
+                                disabled={actionLoading === u.id}
+                                onClick={() => {
+                                  const targetRole = u.role === 'free' ? 'bigbang' : u.role;
+                                  handleAllocateTier(u.id, targetRole, 'active', 90, 'Admin +90 Days extension', true);
+                                }}
                                 title="Grant 90 days active access"
                               >
                                 +90d
@@ -3505,7 +3549,10 @@ export const AdminView: React.FC<AdminViewProps> = ({
                                 className="genz-pill"
                                 style={{ padding: '2px 6px', fontSize: '0.7rem' }}
                                 disabled={actionLoading === u.id}
-                                onClick={() => handleAllocateTier(u.id, u.role, 'active', null, 'Admin Lifetime access')}
+                                onClick={() => {
+                                  const targetRole = u.role === 'free' ? 'bigbang' : u.role;
+                                  handleAllocateTier(u.id, targetRole, 'active', null, 'Admin Lifetime access', false);
+                                }}
                                 title="Grant permanent / lifetime access"
                               >
                                 Lifetime

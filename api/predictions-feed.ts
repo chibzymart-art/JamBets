@@ -21,8 +21,8 @@ interface FeedData {
   cached_at: string;
 }
 
-// Global SWR Edge Cache: 180s fresh (3 min default) + 3600s stale (1 hour)
-const feedSwrCache = new EdgeSwrCache<FeedData>(180 * 1000, 3600 * 1000);
+// Global SWR Edge Cache: 900s fresh (15 min default) + 3600s stale (1 hour)
+const feedSwrCache = new EdgeSwrCache<FeedData>(900 * 1000, 3600 * 1000);
 EdgeCacheRegistry.register('football', feedSwrCache);
 
 // Adaptive Dynamic TTL for Live Scores and Instant Settlement Invalidation (Sub-Phase 2.4)
@@ -31,7 +31,7 @@ function computeFootballTtl(data: FeedData): number {
     const st = (p.fixture?.status || '').toLowerCase();
     return st === 'live' || st === '1h' || st === '2h' || st === 'ht' || st === 'in_progress';
   });
-  return hasLive ? 15 * 1000 : 180 * 1000;
+  return hasLive ? 15 * 1000 : 900 * 1000;
 }
 
 export type { AuthStatus };
@@ -334,10 +334,10 @@ export default async function handler(req: Request) {
   const responseHeaders: Record<string, string> = {
     'Content-Type': 'application/json',
     'Cache-Control': isPaidOrTrial
-      ? 'private, max-age=30, stale-while-revalidate=120'
-      : 'public, max-age=30, s-maxage=60, stale-while-revalidate=300',
-    'CDN-Cache-Control': isPaidOrTrial ? 'no-store' : 'public, s-maxage=60, stale-while-revalidate=300',
-    'Vercel-CDN-Cache-Control': isPaidOrTrial ? 'no-store' : 'public, s-maxage=60, stale-while-revalidate=300',
+      ? 'private, max-age=60, stale-while-revalidate=300'
+      : 'public, max-age=60, s-maxage=900, stale-while-revalidate=86400',
+    'CDN-Cache-Control': isPaidOrTrial ? 'no-store' : 'public, s-maxage=900, stale-while-revalidate=86400',
+    'Vercel-CDN-Cache-Control': isPaidOrTrial ? 'no-store' : 'public, s-maxage=900, stale-while-revalidate=86400',
     'Vary': 'Authorization, Origin, User-Agent',
     'Access-Control-Allow-Origin': corsOrigin,
     'Access-Control-Allow-Credentials': 'true',
