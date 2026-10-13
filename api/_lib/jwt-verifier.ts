@@ -292,6 +292,72 @@ export async function verifyEdgeAuth(authToken: string | null): Promise<AuthStat
         }
       }
 
+      // Check users table (authoritative role and tier for admin allocations)
+      const serviceOrAnonKey = SUPABASE_SERVICE_ROLE_KEY || SUPABASE_ANON_KEY;
+      try {
+        const userTableRes = await fetch(
+          `${SUPABASE_URL}/rest/v1/users?id=eq.${authUser.id}&select=role,status,valid_until&limit=1`,
+          {
+            headers: {
+              apikey: serviceOrAnonKey,
+              Authorization: `Bearer ${serviceOrAnonKey}`,
+              Accept: 'application/json',
+            },
+          }
+        );
+        if (userTableRes.ok) {
+          const uData = await userTableRes.json();
+          if (Array.isArray(uData) && uData.length > 0) {
+            const u = uData[0];
+            const role = (u.role || '').toLowerCase();
+            const validUntil = u.valid_until ? new Date(u.valid_until).getTime() : 0;
+            if (['standard', 'bigbang', 'vip', 'pro', 'admin'].includes(role) && (!validUntil || validUntil > Date.now())) {
+              userAuthCache.set(rawToken, {
+                status: 'paid_or_trial',
+                userId: authUser.id,
+                email: verifiedEmail,
+                expiresAt: Date.now() + VALID_AUTH_TTL_MS,
+              });
+              return 'paid_or_trial';
+            }
+          }
+        }
+      } catch (userErr) {
+        console.warn('Edge users table check failed:', userErr);
+      }
+
+      // Check profiles table (role column fallback)
+      try {
+        const profRes = await fetch(
+          `${SUPABASE_URL}/rest/v1/profiles?id=eq.${authUser.id}&select=role&limit=1`,
+          {
+            headers: {
+              apikey: serviceOrAnonKey,
+              Authorization: `Bearer ${serviceOrAnonKey}`,
+              Accept: 'application/json',
+            },
+          }
+        );
+        if (profRes.ok) {
+          const pData = await profRes.json();
+          if (Array.isArray(pData) && pData.length > 0) {
+            const p = pData[0];
+            const role = (p.role || '').toLowerCase();
+            if (['standard', 'bigbang', 'vip', 'pro', 'admin'].includes(role)) {
+              userAuthCache.set(rawToken, {
+                status: 'paid_or_trial',
+                userId: authUser.id,
+                email: verifiedEmail,
+                expiresAt: Date.now() + VALID_AUTH_TTL_MS,
+              });
+              return 'paid_or_trial';
+            }
+          }
+        }
+      } catch (profErr) {
+        console.warn('Edge profiles table check failed:', profErr);
+      }
+
       // Expired trial user
       userAuthCache.set(rawToken, {
         status: 'expired',

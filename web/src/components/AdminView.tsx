@@ -822,14 +822,29 @@ export const AdminView: React.FC<AdminViewProps> = ({
     }
   }, [isAdminVerified]);
 
-  // Auto-refresh logs timer
+  // Auto-refresh logs timer (Egress Shield: 60s cadence, paused when document hidden or audit tab inactive)
   useEffect(() => {
     if (!isAdminVerified || !autoRefreshLogs) return;
+    const isAuditActive = activeAdminTab === 'audit' || activeAdminTab === 'all';
+    if (!isAuditActive) return;
+
     const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) return;
       fetchAuditLogs();
-    }, 12000);
-    return () => clearInterval(interval);
-  }, [isAdminVerified, autoRefreshLogs]);
+    }, 60000);
+
+    const handleVisibilityChange = () => {
+      if (typeof document !== 'undefined' && !document.hidden && (activeAdminTab === 'audit' || activeAdminTab === 'all')) {
+        fetchAuditLogs();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [isAdminVerified, autoRefreshLogs, activeAdminTab]);
 
   // Direct Client-Side Goals Specialist Settlement Pass (Instant execution guarantee)
   const directClientGoalsSettlement = async (): Promise<{ settled: number; won: number; lost: number; voidCount: number }> => {
@@ -3831,9 +3846,18 @@ export const AdminView: React.FC<AdminViewProps> = ({
                 type="button"
                 className={`genz-pill ${autoRefreshLogs ? 'active-green' : ''}`}
                 onClick={() => { playSfx('click'); setAutoRefreshLogs(!autoRefreshLogs); }}
-                title="Toggle live 12s auto-refresh"
+                title="Toggle live 60s auto-refresh (automatically pauses when browser tab is hidden)"
               >
-                {autoRefreshLogs ? '● Auto-Sync ON' : '○ Auto-Sync OFF'}
+                {autoRefreshLogs ? '● Auto-Sync ON (60s)' : '○ Auto-Sync OFF'}
+              </button>
+              <button
+                type="button"
+                className="genz-pill"
+                disabled={auditLoading}
+                onClick={() => { playSfx('click'); fetchAuditLogs(); }}
+                title="Manually fetch latest audit logs"
+              >
+                {auditLoading ? '⏳ Refreshing...' : '↻ Refresh'}
               </button>
             </div>
           </div>

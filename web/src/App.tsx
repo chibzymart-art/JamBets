@@ -517,17 +517,40 @@ export default function App() {
             reqHeaders['Authorization'] = `Bearer ${session.access_token}`;
           }
 
-          const edgeRes = await fetch('/api/predictions-feed', {
+          let edgeRes = await fetch('/api/predictions-feed', {
             headers: reqHeaders,
             cache: (session?.access_token || isAdmin || canViewPredictions) ? 'no-cache' : 'default'
           });
           if (edgeRes.ok) {
-            const edgeData = await edgeRes.json();
+            let edgeData = await edgeRes.json();
             if (edgeData.success && Array.isArray(edgeData.predictions) && edgeData.predictions.length > 0) {
               const hasMasked = edgeData.predictions.some(
                 (p: any) => p.is_locked === true || p.prediction === 'LOCKED' || (typeof p.prediction === 'string' && p.prediction.startsWith('🔒'))
               );
-              if ((isAdmin || canViewPredictions) && hasMasked) {
+
+              if ((isAdmin || canViewPredictions) && hasMasked && session?.access_token) {
+                // If authenticated VIP/admin received cached masked feed, trigger direct Edge serverless unmasking pass
+                try {
+                  const unmaskRes = await fetch('/api/predictions-feed?refresh=true', {
+                    headers: { ...reqHeaders, 'x-force-refresh': 'true' },
+                    cache: 'no-cache'
+                  });
+                  if (unmaskRes.ok) {
+                    const unmaskData = await unmaskRes.json();
+                    if (unmaskData.success && Array.isArray(unmaskData.predictions) && unmaskData.predictions.length > 0) {
+                      edgeData = unmaskData;
+                    }
+                  }
+                } catch {
+                  // Ignore network error on unmask pass
+                }
+              }
+
+              const stillMasked = (isAdmin || canViewPredictions) && edgeData.predictions.some(
+                (p: any) => p.is_locked === true || p.prediction === 'LOCKED' || (typeof p.prediction === 'string' && p.prediction.startsWith('🔒'))
+              );
+
+              if (stillMasked) {
                 // Anonymous cache returned; bypass to direct Supabase query
                 usedEdgeCache = false;
               } else {
@@ -562,11 +585,11 @@ export default function App() {
           returnedLeagues = [];
         } else {
           try {
-            // Direct Supabase Query (Used for Admins, Paid Subscribers, or when Edge is local/unavailable)
+            // Direct Supabase Query (Emergency fallback only - strictly bounded to active window)
             const now = new Date();
             const yesterdayUtc = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 1, 0, 0, 0));
             const minDate = yesterdayUtc.toISOString();
-            const maxDate = new Date(now.getTime() + 5 * 24 * 60 * 60 * 1000).toISOString();
+            const maxDate = new Date(now.getTime() + 2 * 24 * 60 * 60 * 1000).toISOString();
 
             const executeDirect = async () => {
               const predictionsQuery = supabase
@@ -616,7 +639,7 @@ export default function App() {
                 .lte('target_kickoff_at', maxDate)
                 .order('target_kickoff_at', { ascending: true })
                 .order('id', { ascending: true })
-                .limit(200);
+                .limit(75);
 
               const leagueQuery = supabase
                 .from('football_leagues')
