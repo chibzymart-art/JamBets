@@ -400,7 +400,7 @@ export const SubscriptionPage: React.FC<SubscriptionPageProps> = ({
             <div className="plan-price-block">
               <span className="price-currency">{symbol}</span>
               <span className="price-number">
-                {currency === 'NGN' ? '7,500' : '5'}
+                {currency === 'NGN' ? '5,000' : '5'}
               </span>
               <span className="price-interval">
                 {currency === 'NGN' ? '/ 30-day pass' : '/ month'}
@@ -457,7 +457,7 @@ export const SubscriptionPage: React.FC<SubscriptionPageProps> = ({
                   : processingPlan === 'standard'
                   ? 'Connecting to Bachs...'
                   : currency === 'NGN'
-                  ? 'Get Standard 30-Day Pass — ₦7,500'
+                  ? 'Get Standard 30-Day Pass — ₦5,000'
                   : 'Subscribe Standard — $5/mo'}
               </button>
             </div>
@@ -476,7 +476,7 @@ export const SubscriptionPage: React.FC<SubscriptionPageProps> = ({
             <div className="plan-price-block">
               <span className="price-currency">{symbol}</span>
               <span className="price-number">
-                {currency === 'NGN' ? '15,000' : '10'}
+                {currency === 'NGN' ? '10,000' : '10'}
               </span>
               <span className="price-interval">
                 {currency === 'NGN' ? '/ 30-day pass' : '/ month'}
@@ -534,10 +534,10 @@ export const SubscriptionPage: React.FC<SubscriptionPageProps> = ({
                   ? 'Connecting to Bachs...'
                   : userRole === 'standard'
                   ? currency === 'NGN'
-                    ? 'Upgrade BigBang 30-Day Pass — ₦15,000'
+                    ? 'Upgrade BigBang 30-Day Pass — ₦10,000'
                     : 'Upgrade BigBang VIP — $10/mo'
                   : currency === 'NGN'
-                  ? 'Unlock BigBang 30-Day Pass — ₦15,000'
+                  ? 'Unlock BigBang 30-Day Pass — ₦10,000'
                   : 'Unlock BigBang VIP — $10/mo'}
               </button>
             </div>

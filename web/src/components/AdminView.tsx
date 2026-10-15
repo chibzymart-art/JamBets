@@ -4022,14 +4022,14 @@ export const AdminView: React.FC<AdminViewProps> = ({
                     setManualPayPlan(val);
                     if (val.includes('5,000')) setManualPayAmount(5000);
                     else if (val.includes('13,500')) setManualPayAmount(13500);
-                    else if (val.includes('15,000')) setManualPayAmount(15000);
-                    else if (val.includes('40,000')) setManualPayAmount(40000);
+                    else if (val.includes('10,000')) setManualPayAmount(10000);
+                    else if (val.includes('27,000')) setManualPayAmount(27000);
                   }}
                 >
                   <option value="Standard VIP Monthly (₦5,000)">Standard VIP Monthly (₦5,000 / 30 Days)</option>
                   <option value="Standard VIP Quarterly (₦13,500)">Standard VIP Quarterly (₦13,500 / 90 Days)</option>
-                  <option value="BigBang VIP Monthly (₦15,000)">BigBang VIP Monthly (₦15,000 / 30 Days)</option>
-                  <option value="BigBang VIP Quarterly (₦40,000)">BigBang VIP Quarterly (₦40,000 / 90 Days)</option>
+                  <option value="BigBang VIP Monthly (₦10,000)">BigBang VIP Monthly (₦10,000 / 30 Days)</option>
+                  <option value="BigBang VIP Quarterly (₦27,000)">BigBang VIP Quarterly (₦27,000 / 90 Days)</option>
                   <option value="Custom Offline Grant">Custom Plan / Offline Grant</option>
                 </select>
               </div>

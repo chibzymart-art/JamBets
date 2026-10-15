@@ -234,7 +234,7 @@ async function handleOneTimePaymentFulfillment(event: any, dbKey: string) {
     }
 
     if (!alreadyLogged) {
-      const defaultAmount = currency === 'NGN' ? (tier === 'bigbang' ? 15000 : 7500) : (tier === 'bigbang' ? 10 : 5);
+      const defaultAmount = currency === 'NGN' ? (tier === 'bigbang' ? 10000 : 5000) : (tier === 'bigbang' ? 10 : 5);
       const parsedAmount = parseFloat(data.amount) || defaultAmount;
       await fetch(`${SUPABASE_URL}/rest/v1/payments`, {
         method: 'POST',

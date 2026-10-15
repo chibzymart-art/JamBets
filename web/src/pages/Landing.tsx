@@ -486,7 +486,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           <div className="pricing-light-right">
             <div className="pricing-light-price-box">
               <span className="pricing-curr">{symbol}</span>
-              <span className="pricing-amt">{currency === 'NGN' ? '7,500' : '5'}</span>
+              <span className="pricing-amt">{currency === 'NGN' ? '5,000' : '5'}</span>
               <span className="pricing-mo">{currency === 'NGN' ? '/ 30 days' : '/ month'}</span>
             </div>
             <Link to="/subscription" className="btn-pricing-action">
