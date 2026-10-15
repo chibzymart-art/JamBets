@@ -14,7 +14,7 @@ if (fs.existsSync(rootEnvPath)) {
     if (eqIdx !== -1) {
       const k = trimmed.slice(0, eqIdx).trim();
       const v = trimmed.slice(eqIdx + 1).trim();
-      if (!process.env[k]) process.env[k] = v;
+      process.env[k] = v;
     }
   }
 }
@@ -34,6 +34,9 @@ function localApiDevPlugin(): Plugin {
           '/api/send-welcome-email': './api/send-welcome-email.ts',
           '/api/send-subscription-email': './api/send-subscription-email.ts',
           '/api/send-password-reset-email': './api/send-password-reset-email.ts',
+          '/api/checkout/bachs': './api/checkout/bachs.ts',
+          '/api/webhooks/bachs': './api/webhooks/bachs.ts',
+          '/api/billing/portal': './api/billing/portal.ts',
         };
         if (apiModules[reqPath]) {
           try {

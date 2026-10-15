@@ -2333,6 +2333,10 @@ export default function App() {
               <SubscriptionPage
                 currentUser={currentUser}
                 userRole={profile?.role}
+                subscription={subscription}
+                onRefreshUser={() => {
+                  if (currentUser?.id) fetchUserData(currentUser.id);
+                }}
                 onOpenAuth={(mode) => {
                   setAuthModalMode(mode);
                   setIsAuthModalOpen(true);

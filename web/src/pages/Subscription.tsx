@@ -3,10 +3,56 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { DesktopSidebarLayout } from '../components/DesktopSidebarLayout';
 import { FavoritePredictionItem } from '../components/FavoritesDrawer';
 import { useGeoCurrency, BillingCycle } from '../lib/geoCurrency';
+import { supabase } from '../lib/supabase';
+
+// Bachs.io Browser SDK Global Interface
+declare global {
+  interface Window {
+    Bachs?: {
+      Initialize: (opts: { baseUrl?: string; onEvent?: (event: { type: string; data: any }) => void }) => void;
+      Checkout: {
+        open: (opts: {
+          checkoutUrl?: string;
+          token?: string;
+          onEvent?: (event: { type: string; data: any }) => void;
+        }) => Promise<any>;
+        close: () => void;
+        isOpen: () => boolean;
+      };
+    };
+  }
+}
+
+// Resilient loader for Bachs Overlay SDK
+const ensureBachsLoaded = (): Promise<void> => {
+  if (typeof window !== 'undefined' && window.Bachs?.Checkout) {
+    return Promise.resolve();
+  }
+  return new Promise((resolve) => {
+    if (typeof document === 'undefined') return resolve();
+    const existing = document.querySelector('script[src*="bachs.js"]');
+    if (existing) {
+      if (window.Bachs?.Checkout) return resolve();
+      existing.addEventListener('load', () => resolve());
+      existing.addEventListener('error', () => resolve());
+      setTimeout(resolve, 1500);
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = 'https://checkout.bachs.io/bachs.js';
+    script.async = true;
+    script.onload = () => resolve();
+    script.onerror = () => resolve();
+    document.body.appendChild(script);
+    setTimeout(resolve, 1500);
+  });
+};
 
 interface SubscriptionPageProps {
   currentUser: any;
   userRole?: string;
+  subscription?: any;
+  onRefreshUser?: () => void;
   onOpenAuth: (mode: 'signin' | 'register') => void;
   favoriteItems?: FavoritePredictionItem[];
   onToggleFavoriteItem?: (item: FavoritePredictionItem) => void;
@@ -16,6 +62,8 @@ interface SubscriptionPageProps {
 export const SubscriptionPage: React.FC<SubscriptionPageProps> = ({
   currentUser,
   userRole,
+  subscription,
+  onRefreshUser,
   onOpenAuth,
   favoriteItems = [],
   onToggleFavoriteItem,
@@ -26,11 +74,13 @@ export const SubscriptionPage: React.FC<SubscriptionPageProps> = ({
 
   const [selectedBilling, setSelectedBilling] = useState<BillingCycle>('monthly');
   const [processingPlan, setProcessingPlan] = useState<string | null>(null);
+  const [isOpeningPortal, setIsOpeningPortal] = useState(false);
   const [subscribeSuccess, setSubscribeSuccess] = useState<string | null>(null);
   const [subscribeError, setSubscribeError] = useState<string | null>(null);
 
   const { currency, symbol, pricing, setCurrency, formatPrice } = useGeoCurrency();
 
+  // Scroll to focused tier if query parameter provided
   useEffect(() => {
     if (highlightedTier === 'standard' || highlightedTier === 'bigbang' || highlightedTier === 'free') {
       const timer = setTimeout(() => {
@@ -43,6 +93,22 @@ export const SubscriptionPage: React.FC<SubscriptionPageProps> = ({
     }
   }, [highlightedTier]);
 
+  // Handle Return Status from Bachs Checkout Session
+  useEffect(() => {
+    const status = searchParams.get('status');
+    if (status === 'success') {
+      setSubscribeSuccess(
+        '🎉 Payment verified! Your subscription is active. All VIP bankers and predictive models are unlocked.'
+      );
+      if (onRefreshUser) {
+        onRefreshUser();
+      }
+    } else if (status === 'cancelled') {
+      setSubscribeError('Checkout was cancelled. No charges were made to your account.');
+    }
+  }, [searchParams, onRefreshUser]);
+
+  // 1. Authoritative Bachs Checkout Session Handler
   const handleSubscribe = async (tier: 'standard' | 'bigbang') => {
     if (!currentUser) {
       onOpenAuth('register');
@@ -54,29 +120,117 @@ export const SubscriptionPage: React.FC<SubscriptionPageProps> = ({
     setSubscribeSuccess(null);
 
     try {
-      const activeAmount = selectedBilling === 'quarterly' ? pricing[tier].quarterly : pricing[tier].monthly;
-      const formattedAmount = formatPrice(activeAmount);
-      const planTitle = tier === 'bigbang' ? 'BigBang VIP' : 'Standard VIP';
-      const cycleTitle = selectedBilling === 'quarterly' ? '3-Month Plan (10% Discount)' : 'Monthly Plan';
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      if (!token) {
+        onOpenAuth('signin');
+        setProcessingPlan(null);
+        return;
+      }
 
-      const promptText = `Hello Oddsbanta Billing! I would like to activate ${planTitle} [${cycleTitle}] for ${formattedAmount} (${currency}).\n\nAccount Email: ${currentUser.email}\nUser ID: ${currentUser.id}`;
-      const waUrl = `https://wa.me/?text=${encodeURIComponent(promptText)}`;
+      const planName = tier === 'bigbang' ? 'BigBang VIP' : 'Standard VIP';
+      setSubscribeSuccess(`Connecting to secure Bachs payment gateway for ${planName}...`);
 
-      setSubscribeSuccess(
-        `💳 Redirecting to Oddsbanta VIP Billing Concierge to complete payment (${formattedAmount}) and instantly activate your ${planTitle} entitlement...`
-      );
+      const res = await fetch('/api/checkout/bachs', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ tier }),
+      });
 
-      // Open payment concierge in new tab
-      window.open(waUrl, '_blank', 'noopener,noreferrer');
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to initialize checkout session with Bachs.');
+      }
+
+      if (!data.checkout_url) {
+        throw new Error('No checkout URL received from payment provider.');
+      }
+
+      // First attempt: Open Bachs Overlay Modal SDK (Zero page navigation)
+      try {
+        await ensureBachsLoaded();
+        if (window.Bachs?.Checkout) {
+          setSubscribeSuccess('Opening secure Bachs checkout overlay...');
+          await window.Bachs.Checkout.open({
+            checkoutUrl: data.checkout_url,
+            onEvent: (event: any) => {
+              if (event.type === 'checkout.completed') {
+                setSubscribeSuccess('✨ Payment confirmed! Activating your VIP features...');
+                if (onRefreshUser) onRefreshUser();
+                setTimeout(() => {
+                  window.location.href = '/subscription?status=success';
+                }, 1200);
+              } else if (event.type === 'checkout.closed') {
+                setProcessingPlan(null);
+              }
+            },
+          });
+          return;
+        }
+      } catch (overlayErr) {
+        console.warn('Bachs overlay checkout unavailable, redirecting directly:', overlayErr);
+      }
+
+      // Second attempt / Fallback: Direct Redirect (PCI compliant, Bachs-hosted)
+      setSubscribeSuccess('Redirecting to secure Bachs payment gateway...');
+      window.location.href = data.checkout_url;
     } catch (err: any) {
-      console.error('Subscription error:', err);
-      setSubscribeError(err.message || 'Payment initiation error. Please contact billing support.');
-    } finally {
+      console.error('[Subscription] Checkout initiation error:', err);
+      setSubscribeError(err.message || 'Payment initiation failed. Please try again or contact support.');
       setProcessingPlan(null);
     }
   };
 
+  // 2. Self-Service Bachs Customer Portal Handler
+  const handleOpenBillingPortal = async () => {
+    if (!currentUser) {
+      onOpenAuth('signin');
+      return;
+    }
+
+    setIsOpeningPortal(true);
+    setSubscribeError(null);
+
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      if (!token) {
+        onOpenAuth('signin');
+        return;
+      }
+
+      const res = await fetch('/api/billing/portal', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Unable to load customer billing portal.');
+      }
+
+      if (data.url) {
+        window.open(data.url, '_blank', 'noopener,noreferrer');
+      } else {
+        throw new Error('Billing portal URL was not returned.');
+      }
+    } catch (err: any) {
+      console.error('[Subscription] Billing portal error:', err);
+      setSubscribeError(err.message || 'Could not open billing portal. Please contact support.');
+    } finally {
+      setIsOpeningPortal(false);
+    }
+  };
+
   const isQuarterly = selectedBilling === 'quarterly';
+  const hasActiveSub = currentUser && (userRole === 'standard' || userRole === 'bigbang' || userRole === 'admin');
 
   return (
     <DesktopSidebarLayout
@@ -91,7 +245,7 @@ export const SubscriptionPage: React.FC<SubscriptionPageProps> = ({
           <h1 className="sub-header-title">Invest in Mathematical Edge</h1>
           <p className="sub-header-subtitle">
             Unlock daily calibrated banker signals, 4-day forecast horizons, and verified quantitative models.
-            Billed in {currency === 'NGN' ? 'Nigerian Naira (NGN)' : 'US Dollars (USD)'}.
+            Billed in {currency === 'NGN' ? 'Nigerian Naira (NGN)' : 'US Dollars (USD)'} via Bachs.
           </p>
 
           {/* Billing Period Toggle & Geolocation Currency Switcher */}
@@ -144,6 +298,31 @@ export const SubscriptionPage: React.FC<SubscriptionPageProps> = ({
             </div>
           )}
         </div>
+
+        {/* Active Subscription Banner (Bachs Self-Service Customer Portal) */}
+        {hasActiveSub && (
+          <div className="sub-active-management-card">
+            <div>
+              <div className="sub-active-badge">
+                <span>✓</span> ACTIVE {userRole.toUpperCase()} SUBSCRIPTION
+              </div>
+              <h3 className="sub-active-title">
+                You are currently on {userRole === 'bigbang' ? 'BigBang VIP' : userRole === 'standard' ? 'Standard VIP' : 'Admin'}
+              </h3>
+              <p className="sub-active-desc">
+                Your subscription renews automatically{subscription?.current_period_end ? ` (Current period ends ${new Date(subscription.current_period_end).toLocaleDateString()})` : ''}. Update payment cards, view invoices, or cancel renewal anytime with zero card data stored on our servers.
+              </p>
+            </div>
+            <button
+              type="button"
+              className="btn-manage-portal"
+              onClick={handleOpenBillingPortal}
+              disabled={isOpeningPortal}
+            >
+              {isOpeningPortal ? 'Opening Portal...' : '⚙️ Manage Billing & Cards'}
+            </button>
+          </div>
+        )}
 
         {/* Pricing Cards Grid */}
         <div className="pricing-cards-grid">
@@ -267,13 +446,19 @@ export const SubscriptionPage: React.FC<SubscriptionPageProps> = ({
               <button
                 type="button"
                 className="btn-plan-primary"
-                disabled={processingPlan === 'standard' || userRole === 'standard'}
-                onClick={() => handleSubscribe('standard')}
+                disabled={processingPlan === 'standard'}
+                onClick={() => {
+                  if (userRole === 'standard') {
+                    handleOpenBillingPortal();
+                  } else {
+                    handleSubscribe('standard');
+                  }
+                }}
               >
                 {userRole === 'standard'
-                  ? 'Current Active Plan'
+                  ? 'Current Plan (Manage)'
                   : processingPlan === 'standard'
-                  ? 'Processing...'
+                  ? 'Connecting to Bachs...'
                   : `Subscribe Standard — ${isQuarterly ? formatPrice(pricing.standard.quarterly) + ' for 3 mo' : formatPrice(pricing.standard.monthly) + '/mo'}`}
               </button>
             </div>
@@ -338,11 +523,21 @@ export const SubscriptionPage: React.FC<SubscriptionPageProps> = ({
                 type="button"
                 className="btn-plan-vip"
                 disabled={processingPlan === 'bigbang'}
-                onClick={() => handleSubscribe('bigbang')}
+                onClick={() => {
+                  if (userRole === 'bigbang') {
+                    handleOpenBillingPortal();
+                  } else {
+                    handleSubscribe('bigbang');
+                  }
+                }}
               >
-                {processingPlan === 'bigbang'
-                  ? 'Processing...'
-                  : `Upgrade BigBang VIP — ${isQuarterly ? formatPrice(pricing.bigbang.quarterly) + ' for 3 mo' : formatPrice(pricing.bigbang.monthly) + '/mo'}`}
+                {userRole === 'bigbang'
+                  ? 'Current Plan (Manage)'
+                  : processingPlan === 'bigbang'
+                  ? 'Connecting to Bachs...'
+                  : userRole === 'standard'
+                  ? `Upgrade BigBang VIP — ${isQuarterly ? formatPrice(pricing.bigbang.quarterly) + ' for 3 mo' : formatPrice(pricing.bigbang.monthly) + '/mo'}`
+                  : `Unlock BigBang VIP — ${isQuarterly ? formatPrice(pricing.bigbang.quarterly) + ' for 3 mo' : formatPrice(pricing.bigbang.monthly) + '/mo'}`}
               </button>
             </div>
           </div>
@@ -353,24 +548,24 @@ export const SubscriptionPage: React.FC<SubscriptionPageProps> = ({
           <div className="trust-item">
             <span className="trust-icon">🔒</span>
             <div>
-              <strong>Secure Payment Processing</strong>
-              <p>Direct bank card, bank transfer, and international payment support with PCI-DSS Level 1 compliance.</p>
+              <strong>Bachs Zero-Card-Data Security</strong>
+              <p>Card numbers and sensitive details are tokenized directly with Bachs.io (PCI-DSS Level 1). No card details ever touch Oddsbanta servers.</p>
             </div>
           </div>
 
           <div className="trust-item">
             <span className="trust-icon">⚡</span>
             <div>
-              <strong>Instant Activation</strong>
-              <p>Database-level permissions activate immediately upon transaction confirmation.</p>
+              <strong>Instant Automated Activation</strong>
+              <p>Database-level permissions and VIP signals unlock automatically the moment your invoice is confirmed.</p>
             </div>
           </div>
 
           <div className="trust-item">
             <span className="trust-icon">🛡</span>
             <div>
-              <strong>Transparent & Accountable</strong>
-              <p>Every prediction timestamped before kickoff and settled on a public track record without alteration.</p>
+              <strong>Transparent & Self-Service</strong>
+              <p>Manage cards, view monthly receipts, or cancel anytime with one click in your dedicated Bachs Customer Portal.</p>
             </div>
           </div>
         </div>
