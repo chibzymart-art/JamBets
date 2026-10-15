@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { DesktopSidebarLayout } from '../components/DesktopSidebarLayout';
 import { FavoritePredictionItem } from '../components/FavoritesDrawer';
-import { useGeoCurrency, BillingCycle } from '../lib/geoCurrency';
+import { useGeoCurrency } from '../lib/geoCurrency';
 import { supabase } from '../lib/supabase';
 
 // Bachs.io Browser SDK Global Interface
@@ -72,13 +72,12 @@ export const SubscriptionPage: React.FC<SubscriptionPageProps> = ({
   const [searchParams] = useSearchParams();
   const highlightedTier = searchParams.get('tier')?.toLowerCase();
 
-  const [selectedBilling, setSelectedBilling] = useState<BillingCycle>('monthly');
   const [processingPlan, setProcessingPlan] = useState<string | null>(null);
   const [isOpeningPortal, setIsOpeningPortal] = useState(false);
   const [subscribeSuccess, setSubscribeSuccess] = useState<string | null>(null);
   const [subscribeError, setSubscribeError] = useState<string | null>(null);
 
-  const { currency, symbol, pricing, setCurrency, formatPrice } = useGeoCurrency();
+  const { currency, symbol, setCurrency } = useGeoCurrency();
 
   // Scroll to focused tier if query parameter provided
   useEffect(() => {
@@ -137,7 +136,7 @@ export const SubscriptionPage: React.FC<SubscriptionPageProps> = ({
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ tier }),
+        body: JSON.stringify({ tier, currency }),
       });
 
       const data = await res.json();
@@ -229,7 +228,6 @@ export const SubscriptionPage: React.FC<SubscriptionPageProps> = ({
     }
   };
 
-  const isQuarterly = selectedBilling === 'quarterly';
   const hasActiveSub = currentUser && (userRole === 'standard' || userRole === 'bigbang' || userRole === 'admin');
 
   return (
@@ -244,46 +242,47 @@ export const SubscriptionPage: React.FC<SubscriptionPageProps> = ({
           <div className="sub-pill-tag">TRANSPARENT PRICING • NO HIDDEN COMMISSIONS</div>
           <h1 className="sub-header-title">Invest in Mathematical Edge</h1>
           <p className="sub-header-subtitle">
-            Unlock daily calibrated banker signals, 4-day forecast horizons, and verified quantitative models.
-            Billed in {currency === 'NGN' ? 'Nigerian Naira (NGN)' : 'US Dollars (USD)'} via Bachs.
+            {currency === 'NGN'
+              ? 'Unlock daily calibrated banker signals, 4-day forecast horizons, and verified quantitative models. Pay in Nigerian Naira (NGN) via Instant Bank Transfer or Local Card.'
+              : 'Unlock daily calibrated banker signals, 4-day forecast horizons, and verified quantitative models. Billed in US Dollars (USD) via Bachs with global card auto-renewal.'}
           </p>
 
-          {/* Billing Period Toggle & Geolocation Currency Switcher */}
-          <div className="sub-billing-toggle-wrap">
-            <div className="sub-billing-toggle">
-              <button
-                type="button"
-                className={`billing-toggle-btn ${!isQuarterly ? 'active' : ''}`}
-                onClick={() => setSelectedBilling('monthly')}
-              >
-                Monthly Billing
-              </button>
-              <button
-                type="button"
-                className={`billing-toggle-btn ${isQuarterly ? 'active' : ''}`}
-                onClick={() => setSelectedBilling('quarterly')}
-              >
-                3-Month Plan <span className="billing-save-pill">Save 10%</span>
-              </button>
-            </div>
-
-            <div className="sub-currency-switcher" title="Select display & billing currency">
-              <span className="sub-currency-label">Currency:</span>
+          {/* Payment & Currency Selector */}
+          <div className="sub-currency-bar">
+            <span className="sub-currency-title">Select Billing Currency:</span>
+            <div className="sub-currency-switcher" role="group" aria-label="Currency selection">
               <button
                 type="button"
                 className={`currency-toggle-btn ${currency === 'NGN' ? 'active' : ''}`}
                 onClick={() => setCurrency('NGN')}
               >
-                ₦ NGN
+                🇳🇬 ₦ NGN (Bank Transfer & Cards)
               </button>
               <button
                 type="button"
                 className={`currency-toggle-btn ${currency === 'USD' ? 'active' : ''}`}
                 onClick={() => setCurrency('USD')}
               >
-                $ USD
+                🌐 $ USD (Global Cards)
               </button>
             </div>
+          </div>
+
+          {/* Payment Method Badges Banner */}
+          <div className="sub-payment-pill-row">
+            {currency === 'NGN' ? (
+              <>
+                <span className="sub-payment-tag">🏦 Instant Bank Transfer (Virtual Accounts)</span>
+                <span className="sub-payment-tag">💳 Local Naira Cards (Verve, Mastercard, Visa)</span>
+                <span className="sub-payment-tag">🛡️ 30-Day VIP Pass (No Auto-Debit Surprises)</span>
+              </>
+            ) : (
+              <>
+                <span className="sub-payment-tag">💳 Global Credit & Debit Cards</span>
+                <span className="sub-payment-tag">🔄 Automated Monthly Renewal</span>
+                <span className="sub-payment-tag">⚙️ Cancel Anytime via Self-Service Portal</span>
+              </>
+            )}
           </div>
 
           {/* Notification Toasts */}
@@ -401,18 +400,16 @@ export const SubscriptionPage: React.FC<SubscriptionPageProps> = ({
             <div className="plan-price-block">
               <span className="price-currency">{symbol}</span>
               <span className="price-number">
-                {isQuarterly
-                  ? currency === 'NGN' ? '13,500' : '13.50'
-                  : currency === 'NGN' ? '5,000' : '5'}
+                {currency === 'NGN' ? '7,500' : '5'}
               </span>
               <span className="price-interval">
-                {isQuarterly ? '/ 3 months' : '/ month'}
+                {currency === 'NGN' ? '/ 30-day pass' : '/ month'}
               </span>
-              {isQuarterly && (
-                <div className="plan-sub-billed">
-                  {formatPrice(pricing.standard.monthlyEquivalent)}/mo — Save 10%
-                </div>
-              )}
+              <div className="plan-sub-billed">
+                {currency === 'NGN'
+                  ? 'Instant Bank Transfer & Local Cards'
+                  : 'Renews monthly • Cancel anytime'}
+              </div>
             </div>
 
             <ul className="plan-features-list">
@@ -459,7 +456,9 @@ export const SubscriptionPage: React.FC<SubscriptionPageProps> = ({
                   ? 'Current Plan (Manage)'
                   : processingPlan === 'standard'
                   ? 'Connecting to Bachs...'
-                  : `Subscribe Standard — ${isQuarterly ? formatPrice(pricing.standard.quarterly) + ' for 3 mo' : formatPrice(pricing.standard.monthly) + '/mo'}`}
+                  : currency === 'NGN'
+                  ? 'Get Standard 30-Day Pass — ₦7,500'
+                  : 'Subscribe Standard — $5/mo'}
               </button>
             </div>
           </div>
@@ -477,18 +476,16 @@ export const SubscriptionPage: React.FC<SubscriptionPageProps> = ({
             <div className="plan-price-block">
               <span className="price-currency">{symbol}</span>
               <span className="price-number">
-                {isQuarterly
-                  ? currency === 'NGN' ? '27,000' : '27.00'
-                  : currency === 'NGN' ? '10,000' : '10'}
+                {currency === 'NGN' ? '15,000' : '10'}
               </span>
               <span className="price-interval">
-                {isQuarterly ? '/ 3 months' : '/ month'}
+                {currency === 'NGN' ? '/ 30-day pass' : '/ month'}
               </span>
-              {isQuarterly && (
-                <div className="plan-sub-billed">
-                  {formatPrice(pricing.bigbang.monthlyEquivalent)}/mo — Save 10%
-                </div>
-              )}
+              <div className="plan-sub-billed">
+                {currency === 'NGN'
+                  ? 'Instant Bank Transfer & Local Cards'
+                  : 'Renews monthly • Cancel anytime'}
+              </div>
             </div>
 
             <ul className="plan-features-list">
@@ -536,8 +533,12 @@ export const SubscriptionPage: React.FC<SubscriptionPageProps> = ({
                   : processingPlan === 'bigbang'
                   ? 'Connecting to Bachs...'
                   : userRole === 'standard'
-                  ? `Upgrade BigBang VIP — ${isQuarterly ? formatPrice(pricing.bigbang.quarterly) + ' for 3 mo' : formatPrice(pricing.bigbang.monthly) + '/mo'}`
-                  : `Unlock BigBang VIP — ${isQuarterly ? formatPrice(pricing.bigbang.quarterly) + ' for 3 mo' : formatPrice(pricing.bigbang.monthly) + '/mo'}`}
+                  ? currency === 'NGN'
+                    ? 'Upgrade BigBang 30-Day Pass — ₦15,000'
+                    : 'Upgrade BigBang VIP — $10/mo'
+                  : currency === 'NGN'
+                  ? 'Unlock BigBang 30-Day Pass — ₦15,000'
+                  : 'Unlock BigBang VIP — $10/mo'}
               </button>
             </div>
           </div>
@@ -564,8 +565,12 @@ export const SubscriptionPage: React.FC<SubscriptionPageProps> = ({
           <div className="trust-item">
             <span className="trust-icon">🛡</span>
             <div>
-              <strong>Transparent & Self-Service</strong>
-              <p>Manage cards, view monthly receipts, or cancel anytime with one click in your dedicated Bachs Customer Portal.</p>
+              <strong>Transparent & Flexible</strong>
+              <p>
+                {currency === 'NGN'
+                  ? '30-Day non-recurring passes with zero surprise auto-debits. Renew whenever you choose.'
+                  : 'Manage cards, view monthly receipts, or cancel anytime with one click in your dedicated Bachs Customer Portal.'}
+              </p>
             </div>
           </div>
         </div>

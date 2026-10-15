@@ -13,6 +13,8 @@ const SUPABASE_URL =
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 const BACHS_WEBHOOK_SECRET = process.env.BACHS_WEBHOOK_SECRET || '';
 const BACHS_PROD_BIGBANG = process.env.BACHS_PROD_BIGBANG_MONTHLY || 'prod_374d727781934ee6b6a8';
+const BACHS_PROD_BIGBANG_NGN = process.env.BACHS_PROD_BIGBANG_NGN || 'prod_b2260d0a8f214051ba4a';
+const BACHS_PROD_STANDARD_NGN = process.env.BACHS_PROD_STANDARD_NGN || 'prod_212591bd3ed94e3ab424';
 const RESEND_API_KEY = process.env.RESEND_API_KEY || '';
 const RESEND_FROM_EMAIL = process.env.RESEND_FROM_EMAIL || 'Oddsbanta <welcome@oddsbanta.com>';
 
@@ -91,11 +93,15 @@ function toIsoTimestamp(val: any): string {
 }
 
 // Optional Email Dispatcher for New Subscriptions
-async function sendWelcomeEmail(email: string, name: string, tier: string, validUntil?: string) {
+async function sendWelcomeEmail(email: string, name: string, tier: string, validUntil?: string, currency?: string) {
   if (!RESEND_API_KEY || !email) return;
   try {
     const isBigBang = tier === 'bigbang';
-    const planName = isBigBang ? 'BigBang VIP All-Access' : 'Standard Football VIP';
+    const isNgn = currency === 'NGN';
+    const planName = isBigBang
+      ? (isNgn ? 'BigBang VIP All-Access (30-Day Pass)' : 'BigBang VIP All-Access')
+      : (isNgn ? 'Standard Football VIP (30-Day Pass)' : 'Standard Football VIP');
+    const renewalText = isNgn ? '30-Day Pass (Non-recurring)' : 'Active (Renews automatically)';
     const formattedExpiry = validUntil
       ? new Date(validUntil).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
       : 'Active';
@@ -114,7 +120,7 @@ async function sendWelcomeEmail(email: string, name: string, tier: string, valid
           <h1 style="color: #10b981;">ODDSBANTA VIP ACTIVATED</h1>
           <p>Hello ${name || 'VIP Member'},</p>
           <p>Your subscription to <strong>${planName}</strong> is officially active and confirmed.</p>
-          <p><strong>Status:</strong> Active (Renews automatically)</p>
+          <p><strong>Status:</strong> ${renewalText}</p>
           <p><strong>Current Period Valid Until:</strong> ${formattedExpiry}</p>
           <p><a href="https://www.oddsbanta.com/dashboard" style="display: inline-block; padding: 12px 24px; background: #10b981; color: white; text-decoration: none; border-radius: 8px; font-weight: bold;">Go to VIP Dashboard</a></p>
         </div>`,
@@ -122,6 +128,134 @@ async function sendWelcomeEmail(email: string, name: string, tier: string, valid
     });
   } catch (e) {
     console.warn('[BACHS-WEBHOOK] Could not dispatch welcome email:', e);
+  }
+}
+
+// Handler for One-Time Collections / Checkouts (e.g. NGN Bank Transfer / Local Cards)
+async function handleOneTimePaymentFulfillment(event: any, dbKey: string) {
+  const data = event.data || {};
+  const metadata = data.metadata || {};
+  let userId = metadata.user_id;
+
+  const customerEmail = data.customer?.email || data.customer_details?.email || metadata.user_email;
+  const customerName = data.customer?.name || data.customer_details?.name || metadata.user_name || (customerEmail ? customerEmail.split('@')[0] : '');
+
+  // Fallback: If metadata didn't carry user_id, resolve by email
+  if (!userId && customerEmail) {
+    const userRes = await fetch(
+      `${SUPABASE_URL}/rest/v1/users?email=eq.${encodeURIComponent(customerEmail)}&select=id&limit=1`,
+      { headers: { apikey: dbKey, Authorization: `Bearer ${dbKey}` } }
+    );
+    if (userRes.ok) {
+      const userData = await userRes.json();
+      if (userData && userData[0]?.id) userId = userData[0].id;
+    }
+  }
+
+  if (!userId) {
+    console.error('[BACHS-WEBHOOK] Could not associate collection/checkout with user:', data);
+    return;
+  }
+
+  const currency = (data.currency || metadata.currency || 'NGN').toUpperCase();
+  const prodId = data.product_cart?.[0]?.product_id || data.product_id;
+  const tier = metadata.tier || (prodId === BACHS_PROD_BIGBANG_NGN || prodId === BACHS_PROD_BIGBANG ? 'bigbang' : 'standard');
+
+  // Calculate 30-Day Period: Extend from current valid_until if active in future, otherwise from now
+  let baseTime = Date.now();
+  try {
+    const existingSubRes = await fetch(
+      `${SUPABASE_URL}/rest/v1/subscriptions?user_id=eq.${userId}&select=current_period_end&limit=1`,
+      { headers: { apikey: dbKey, Authorization: `Bearer ${dbKey}` } }
+    );
+    if (existingSubRes.ok) {
+      const existingRows = await existingSubRes.json();
+      if (existingRows?.[0]?.current_period_end) {
+        const existingEndMs = new Date(existingRows[0].current_period_end).getTime();
+        if (existingEndMs > baseTime) {
+          baseTime = existingEndMs;
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('[BACHS-WEBHOOK] Warning checking existing period end:', e);
+  }
+
+  const periodEnd = new Date(baseTime + 30 * 24 * 60 * 60 * 1000).toISOString();
+  const custId = data.customer?.customer_id || data.customer?.id;
+  const paymentId = data.charge_id || data.charge?.id || data.checkout_id || event.id;
+
+  // Update public.subscriptions
+  const subPatchRes = await fetch(`${SUPABASE_URL}/rest/v1/subscriptions?user_id=eq.${userId}`, {
+    method: 'PATCH',
+    headers: { apikey: dbKey, Authorization: `Bearer ${dbKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      tier,
+      status: 'active',
+      current_period_end: periodEnd,
+      bachs_customer_id: custId,
+      bachs_product_id: prodId,
+      cancel_at_period_end: true,
+      updated_at: new Date().toISOString(),
+    }),
+  });
+  if (!subPatchRes.ok) {
+    console.error('[BACHS-WEBHOOK] Subscriptions PATCH failed for collection:', subPatchRes.status, await subPatchRes.text());
+  }
+
+  // Update public.entitlements
+  await fetch(`${SUPABASE_URL}/rest/v1/entitlements?user_id=eq.${userId}`, {
+    method: 'PATCH',
+    headers: { apikey: dbKey, Authorization: `Bearer ${dbKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      tier,
+      valid_until: periodEnd,
+      features: {
+        football_predictions: true,
+        simulations: tier === 'bigbang',
+        vip: true,
+      },
+      updated_at: new Date().toISOString(),
+    }),
+  });
+
+  // Deduplicate and record payment in public.payments
+  if (paymentId) {
+    const checkPaymentRes = await fetch(
+      `${SUPABASE_URL}/rest/v1/payments?bachs_payment_id=eq.${encodeURIComponent(paymentId)}&select=id&limit=1`,
+      { headers: { apikey: dbKey, Authorization: `Bearer ${dbKey}` } }
+    );
+    let alreadyLogged = false;
+    if (checkPaymentRes.ok) {
+      const existingPayments = await checkPaymentRes.json();
+      if (existingPayments && existingPayments.length > 0) {
+        alreadyLogged = true;
+      }
+    }
+
+    if (!alreadyLogged) {
+      const defaultAmount = currency === 'NGN' ? (tier === 'bigbang' ? 15000 : 7500) : (tier === 'bigbang' ? 10 : 5);
+      const parsedAmount = parseFloat(data.amount) || defaultAmount;
+      await fetch(`${SUPABASE_URL}/rest/v1/payments`, {
+        method: 'POST',
+        headers: { apikey: dbKey, Authorization: `Bearer ${dbKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: userId,
+          amount: parsedAmount,
+          currency: currency,
+          status: 'succeeded',
+          bachs_payment_id: paymentId,
+          provider: 'bachs',
+          plan_name: tier === 'bigbang' ? 'BigBang VIP All-Access (30-Day Pass)' : 'Standard Football VIP (30-Day Pass)',
+          customer_email: customerEmail,
+        }),
+      });
+
+      // Dispatch Welcome Email
+      if (customerEmail) {
+        await sendWelcomeEmail(customerEmail, customerName, tier, periodEnd, currency);
+      }
+    }
   }
 }
 
@@ -201,7 +335,9 @@ export default async function handler(req: Request): Promise<Response> {
 
     // 5. Handle State Transitions
     switch (eventType) {
-      case 'customer.subscription.created': {
+      case 'customer.subscription.created':
+      case 'subscription.created':
+      case 'subscription.activated': {
         const sub = event.data;
         let userId = sub.metadata?.user_id;
 
@@ -350,7 +486,8 @@ export default async function handler(req: Request): Promise<Response> {
         break;
       }
 
-      case 'customer.subscription.updated': {
+      case 'customer.subscription.updated':
+      case 'subscription.updated': {
         const sub = event.data;
         const subId = sub.id || sub.subscription_id;
 
@@ -375,7 +512,9 @@ export default async function handler(req: Request): Promise<Response> {
         break;
       }
 
-      case 'customer.subscription.deleted': {
+      case 'customer.subscription.deleted':
+      case 'subscription.canceled':
+      case 'subscription.deleted': {
         const sub = event.data;
         const subId = sub.id || sub.subscription_id;
 
@@ -428,6 +567,23 @@ export default async function handler(req: Request): Promise<Response> {
               updated_at: new Date().toISOString(),
             }),
           });
+        }
+        break;
+      }
+
+      case 'collection.succeeded': {
+        const status = (event.data?.status || '').toLowerCase();
+        if (status === 'succeeded') {
+          await handleOneTimePaymentFulfillment(event, dbKey);
+        }
+        break;
+      }
+
+      case 'checkout.completed': {
+        const mode = event.data?.mode;
+        const paymentStatus = (event.data?.payment_status || '').toLowerCase();
+        if (mode === 'payment' && (paymentStatus === 'paid' || paymentStatus === 'succeeded')) {
+          await handleOneTimePaymentFulfillment(event, dbKey);
         }
         break;
       }

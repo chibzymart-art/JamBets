@@ -21,9 +21,15 @@ const BACHS_API_URL = process.env.BACHS_API_URL || 'https://api.bachs.io';
 const BACHS_API_KEY = process.env.BACHS_API_KEY || '';
 
 // Server-controlled immutable product catalog (Anti-Tamper: Client CANNOT modify price or ID)
-const PRODUCT_CATALOG: Record<string, string> = {
-  standard: process.env.BACHS_PROD_STANDARD_MONTHLY || 'prod_0aa1ef3ca6634e68b521',
-  bigbang: process.env.BACHS_PROD_BIGBANG_MONTHLY || 'prod_374d727781934ee6b6a8',
+const PRODUCT_CATALOG: Record<string, Record<string, string>> = {
+  USD: {
+    standard: process.env.BACHS_PROD_STANDARD_MONTHLY || 'prod_0aa1ef3ca6634e68b521',
+    bigbang: process.env.BACHS_PROD_BIGBANG_MONTHLY || 'prod_374d727781934ee6b6a8',
+  },
+  NGN: {
+    standard: process.env.BACHS_PROD_STANDARD_NGN || 'prod_212591bd3ed94e3ab424',
+    bigbang: process.env.BACHS_PROD_BIGBANG_NGN || 'prod_b2260d0a8f214051ba4a',
+  },
 };
 
 const CORS_HEADERS = {
@@ -78,11 +84,22 @@ export default async function handler(req: Request): Promise<Response> {
       });
     }
 
-    // 2. Validate Requested Tier
+    // 2. Validate Requested Tier and Currency
     const body = await req.json().catch(() => ({}));
     const requestedTier = (body.tier || '').toLowerCase().trim();
+    const requestedCurrency = (body.currency || 'USD').toUpperCase().trim();
 
-    if (!requestedTier || !PRODUCT_CATALOG[requestedTier]) {
+    if (requestedCurrency !== 'USD' && requestedCurrency !== 'NGN') {
+      return new Response(
+        JSON.stringify({
+          error: `Invalid currency: "${requestedCurrency}". Supported currencies: USD, NGN.`,
+        }),
+        { status: 400, headers: CORS_HEADERS }
+      );
+    }
+
+    const tierCatalog = PRODUCT_CATALOG[requestedCurrency];
+    if (!requestedTier || !tierCatalog || !tierCatalog[requestedTier]) {
       return new Response(
         JSON.stringify({
           error: `Invalid tier specified: "${requestedTier}". Allowed: standard, bigbang.`,
@@ -91,7 +108,7 @@ export default async function handler(req: Request): Promise<Response> {
       );
     }
 
-    const productId = PRODUCT_CATALOG[requestedTier];
+    const productId = tierCatalog[requestedTier];
 
     // 3. Check for existing Bachs customer ID in Supabase
     let existingCustomerId: string | null = null;
@@ -124,11 +141,13 @@ export default async function handler(req: Request): Promise<Response> {
     const checkoutPayload = {
       product_cart: [{ product_id: productId, quantity: 1 }],
       customer: customerPayload,
-      billing_currency: 'USD',
+      billing_currency: requestedCurrency,
       metadata: {
         user_id: authUser.id,
         user_email: authUser.email,
         tier: requestedTier,
+        currency: requestedCurrency,
+        cycle: requestedCurrency === 'NGN' ? '30_day_pass' : 'monthly_subscription',
       },
       success_url: 'https://www.oddsbanta.com/subscription?status=success',
       cancel_url: 'https://www.oddsbanta.com/subscription?status=cancelled',
@@ -181,6 +200,8 @@ export default async function handler(req: Request): Promise<Response> {
         checkout_id: bachsData.checkout_id,
         checkout_url: bachsData.checkout_url,
         mode: bachsData.mode,
+        currency: requestedCurrency,
+        amount: bachsData.amount,
         expires_at: bachsData.expires_at,
       }),
       { status: 200, headers: CORS_HEADERS }

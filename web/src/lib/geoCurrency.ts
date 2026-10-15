@@ -18,15 +18,15 @@ export interface GeoPricingMatrix {
 export const PRICING_BY_CURRENCY: Record<CurrencyCode, GeoPricingMatrix> = {
   NGN: {
     standard: {
-      monthly: 5000,
-      quarterly: 13500, // ₦15,000 - 10%
-      monthlyEquivalent: 4500,
+      monthly: 7500,
+      quarterly: 20250,
+      monthlyEquivalent: 6750,
       savingsPercent: 10,
     },
     bigbang: {
-      monthly: 10000,
-      quarterly: 27000, // ₦30,000 - 10%
-      monthlyEquivalent: 9000,
+      monthly: 15000,
+      quarterly: 40500,
+      monthlyEquivalent: 13500,
       savingsPercent: 10,
     },
   },
