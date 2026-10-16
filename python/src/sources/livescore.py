@@ -46,7 +46,8 @@ class LiveScoreAdapter(BaseSourceAdapter):
         "POR_PL": ["primeira-liga"],
         "POR_L2": ["segunda-liga", "liga-portugal-2"],
         "BEL_PL": ["belgian-pro-league-2025", "pro-league", "belgian-pro-league"],
-        "TUR_SL": ["super-lig"],
+        "TUR_SL": ["super-lig", "trendyol-super-lig"],
+        "TUR_L1": ["1st-lig", "trendyol-1-lig", "tff-1-lig", "turkey-1-lig"],
         "SUI_SL": ["super-league"],
         "AUT_BL": ["bundesliga"],
         "DEN_SL": ["superliga"],
@@ -126,7 +127,8 @@ class LiveScoreAdapter(BaseSourceAdapter):
                     # Both country AND stage must match precisely (no substring containment that leaks lower leagues)
                     country_matches = (
                         stage_country == league.livescore_country or
-                        stage_country == league.country.lower().replace(" ", "-")
+                        stage_country == league.country.lower().replace(" ", "-") or
+                        (league.livescore_country in ("turkey", "turkiye") and stage_country in ("turkey", "turkiye"))
                     )
                     allowed_stages = self.LIVESCORE_STAGE_ALIASES.get(league.code, [league.livescore_stage])
                     is_tournament_country = league.livescore_country in [

@@ -207,6 +207,10 @@ LEAGUE_REGISTRY: Dict[str, LeagueConfig] = {
         code="TUR_SL", name="Süper Lig", country="Turkey", tier=1,
         espn_slug="tur.1", livescore_country="turkey", livescore_stage="super-lig"
     ),
+    "TUR_L1": LeagueConfig(
+        code="TUR_L1", name="TFF 1. Lig", country="Turkey", tier=2,
+        espn_slug="tur.2", livescore_country="turkey", livescore_stage="1st-lig"
+    ),
     "SUI_SL": LeagueConfig(
         code="SUI_SL", name="Swiss Super League", country="Switzerland", tier=1,
         espn_slug="sui.1", livescore_country="switzerland", livescore_stage="super-league"

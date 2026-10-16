@@ -148,6 +148,7 @@ export const LEAGUE_COUNTRY_MAP: Record<string, string> = {
   POR_L2: 'Portugal',
   BEL_PL: 'Belgium',
   TUR_SL: 'Turkey',
+  TUR_L1: 'Turkey',
   SUI_SL: 'Switzerland',
   AUT_BL: 'Austria',
   DEN_SL: 'Denmark',
