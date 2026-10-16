@@ -842,6 +842,7 @@ export default async function handler(req: Request) {
             settlement_status: 'pending',
             settlement_notes: null,
             ht_score: null,
+            actual_score: null,
             actual_corners: null,
             metadata: {
               locked: true,

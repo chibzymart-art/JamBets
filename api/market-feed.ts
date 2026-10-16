@@ -520,6 +520,7 @@ async function computeAllMarketCounts(
           if (dateParam === 'today' && payload.counts_today) return payload.counts_today;
           if (dateParam === 'tomorrow' && payload.counts_tomorrow) return payload.counts_tomorrow;
           if (dateParam === 'yesterday' && payload.counts_yesterday) return payload.counts_yesterday;
+          if (payload[`counts_${dateParam}`]) return payload[`counts_${dateParam}`];
           if (payload.counts_all) return payload.counts_all;
         }
       }
@@ -790,6 +791,7 @@ export default async function handler(req: Request) {
         settlement_status: 'pending',
         settlement_notes: null,
         ht_score: null,
+        actual_score: null,
         actual_corners: null,
         metadata: {
           locked: true,

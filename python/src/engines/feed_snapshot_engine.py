@@ -54,6 +54,25 @@ class FeedSnapshotEngine:
         }
         self.client = httpx.Client(base_url=f"{self.url}/rest/v1", headers=self.headers, timeout=30.0)
 
+    def _fetch_all_rows(self, endpoint: str, params: Dict[str, Any], page_size: int = 1000) -> List[Dict[str, Any]]:
+        """Paginates PostgREST GET requests to fetch all rows beyond the 1000 server limit."""
+        all_rows = []
+        offset = 0
+        p = dict(params)
+        p["limit"] = str(page_size)
+        while True:
+            p["offset"] = str(offset)
+            resp = self.client.get(endpoint, params=p)
+            resp.raise_for_status()
+            chunk = resp.json()
+            if not isinstance(chunk, list) or len(chunk) == 0:
+                break
+            all_rows.extend(chunk)
+            if len(chunk) < page_size:
+                break
+            offset += page_size
+        return all_rows
+
     def write_snapshot(self, key: str, payload: Dict[str, Any]) -> bool:
         """Upserts a snapshot into public.cached_feeds on conflict 'key'."""
         now_iso = datetime.now(timezone.utc).isoformat()
@@ -199,8 +218,8 @@ class FeedSnapshotEngine:
     # 2. GOALS SNAPSHOT (feed:goals)
     # -------------------------------------------------------------------------
     def build_goals_snapshot(self) -> Dict[str, Any]:
-        """Pre-computes feed:goals for goals-feed.ts and market-feed.ts."""
-        logger.info("Building goals snapshot...")
+        """Pre-computes feed:goals for goals-feed.ts and market-feed.ts (30-day historical window)."""
+        logger.info("Building goals snapshot (30-day historical window)...")
         select_query = (
             "id,fixture_id,market,predicted_outcome,probability,confidence_tier,xg_combined,"
             "home_over25_rate,away_over25_rate,h2h_over25_rate,ht_goal_frequency,avg_first_goal_minute,"
@@ -217,22 +236,18 @@ class FeedSnapshotEngine:
         )
 
         now = datetime.now(timezone.utc)
-        yesterday_utc = datetime(now.year, now.month, now.day, 0, 0, 0, tzinfo=timezone.utc) - timedelta(days=1)
-        min_date = yesterday_utc.isoformat()
+        min_date = (datetime(now.year, now.month, now.day, 0, 0, 0, tzinfo=timezone.utc) - timedelta(days=30)).isoformat()
         max_date = (now + timedelta(days=2)).isoformat()
 
-        resp = self.client.get(
+        goals_predictions = self._fetch_all_rows(
             "/goals_predictions_paywall",
             params={
                 "select": select_query,
                 "target_kickoff_at": f"gte.{min_date}",
                 "and": f"(target_kickoff_at.lte.{max_date})",
                 "order": "probability.desc",
-                "limit": "1000"
             }
         )
-        resp.raise_for_status()
-        goals_predictions = resp.json()
 
         leagues_resp = self.client.get(
             "/football_leagues",
@@ -251,8 +266,8 @@ class FeedSnapshotEngine:
     # 3. CORNERS SNAPSHOT (feed:corners)
     # -------------------------------------------------------------------------
     def build_corners_snapshot(self) -> Dict[str, Any]:
-        """Pre-computes feed:corners for market-feed.ts."""
-        logger.info("Building corners snapshot...")
+        """Pre-computes feed:corners for market-feed.ts (30-day historical window)."""
+        logger.info("Building corners snapshot (30-day historical window)...")
         select_query = (
             "id,fixture_id,market,predicted_total_corners,probability,corner_tier,target_kickoff_at,"
             "settlement_status,settled_at,actual_corners,settlement_notes,publication_status,"
@@ -266,11 +281,10 @@ class FeedSnapshotEngine:
         )
 
         now = datetime.now(timezone.utc)
-        yesterday_utc = datetime(now.year, now.month, now.day, 0, 0, 0, tzinfo=timezone.utc) - timedelta(days=1)
-        min_date = yesterday_utc.isoformat()
+        min_date = (datetime(now.year, now.month, now.day, 0, 0, 0, tzinfo=timezone.utc) - timedelta(days=30)).isoformat()
         max_date = (now + timedelta(days=2)).isoformat()
 
-        resp = self.client.get(
+        raw_corners = self._fetch_all_rows(
             "/corner_predictions",
             params={
                 "select": select_query,
@@ -279,11 +293,8 @@ class FeedSnapshotEngine:
                 "target_kickoff_at": f"gte.{min_date}",
                 "and": f"(target_kickoff_at.lte.{max_date})",
                 "order": "probability.desc",
-                "limit": "1000"
             }
         )
-        resp.raise_for_status()
-        raw_corners = resp.json()
 
         # Filter out cancelled / postponed fixtures
         corners = [
@@ -308,42 +319,33 @@ class FeedSnapshotEngine:
     # 4. MARKET COUNTS SNAPSHOT (feed:market:counts)
     # -------------------------------------------------------------------------
     def build_market_counts_snapshot(self) -> Dict[str, Any]:
-        """Pre-computes badge counts for market-feed.ts."""
-        logger.info("Building market counts snapshot...")
+        """Pre-computes badge counts for market-feed.ts across 30-day window."""
+        logger.info("Building market counts snapshot (30-day window)...")
         now_lagos = datetime.now(timezone(timedelta(hours=1)))
         today_str = now_lagos.strftime("%Y-%m-%d")
         tomorrow_str = (now_lagos + timedelta(days=1)).strftime("%Y-%m-%d")
         yesterday_str = (now_lagos - timedelta(days=1)).strftime("%Y-%m-%d")
+        min_30d_str = (now_lagos - timedelta(days=30)).strftime("%Y-%m-%d")
 
-        # Fetch minimal fields for corners and goals bounded to yesterday onwards
-        cr_resp = self.client.get(
+        # Fetch minimal fields for corners and goals bounded to past 30 days
+        cr_list = self._fetch_all_rows(
             "/corner_predictions",
             params={
                 "select": "id,target_kickoff_at,settlement_status,publication_status,fixture:football_fixtures!inner(id,status)",
                 "settlement_status": "neq.void",
                 "publication_status": "neq.archived",
-                "target_kickoff_at": f"gte.{yesterday_str}T00:00:00Z",
-                "limit": "1000"
+                "target_kickoff_at": f"gte.{min_30d_str}T00:00:00Z",
             }
         )
-        gl_resp = self.client.get(
+        gl_list = self._fetch_all_rows(
             "/goals_predictions",
             params={
                 "select": "id,market,target_kickoff_at,settlement_status,publication_status,fixture:football_fixtures!inner(id,status)",
                 "settlement_status": "neq.void",
                 "publication_status": "neq.archived",
-                "target_kickoff_at": f"gte.{yesterday_str}T00:00:00Z",
-                "limit": "1000"
+                "target_kickoff_at": f"gte.{min_30d_str}T00:00:00Z",
             }
         )
-
-        cr_list = cr_resp.json() if cr_resp.status_code == 200 else []
-        gl_list = gl_resp.json() if gl_resp.status_code == 200 else []
-
-        now_lagos = datetime.now(timezone(timedelta(hours=1)))
-        today_str = now_lagos.strftime("%Y-%m-%d")
-        tomorrow_str = (now_lagos + timedelta(days=1)).strftime("%Y-%m-%d")
-        yesterday_str = (now_lagos - timedelta(days=1)).strftime("%Y-%m-%d")
 
         def compute_for_date(date_param: str) -> Dict[str, int]:
             target_date = ""
@@ -353,6 +355,8 @@ class FeedSnapshotEngine:
                 target_date = tomorrow_str
             elif date_param == "yesterday":
                 target_date = yesterday_str
+            elif date_param != "all":
+                target_date = date_param
 
             def filter_list(items):
                 res = []
@@ -387,13 +391,20 @@ class FeedSnapshotEngine:
                 "over_2.5_goals": over25_count,
             }
 
-        return {
+        counts_payload = {
             "counts_all": compute_for_date("all"),
             "counts_today": compute_for_date("today"),
             "counts_tomorrow": compute_for_date("tomorrow"),
             "counts_yesterday": compute_for_date("yesterday"),
             "cached_at": datetime.now(timezone.utc).isoformat()
         }
+
+        # Also precompute counts for each of the past 30 days
+        for i in range(1, 31):
+            past_d = (now_lagos - timedelta(days=i)).strftime("%Y-%m-%d")
+            counts_payload[f"counts_{past_d}"] = compute_for_date(past_d)
+
+        return counts_payload
 
     # -------------------------------------------------------------------------
     # 5. BASKETBALL SNAPSHOT (feed:basketball)
