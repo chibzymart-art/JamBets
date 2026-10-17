@@ -608,16 +608,29 @@ export const AdminView: React.FC<AdminViewProps> = ({
           .order('created_at', { ascending: false }),
         supabase
           .from('subscriptions')
-          .select('id, user_id, tier, status, current_period_end, created_at, updated_at'),
+          .select('id, user_id, tier, status, current_period_end, created_at, updated_at')
+          .order('created_at', { ascending: false }),
         supabase
           .from('entitlements')
           .select('id, user_id, tier, features, valid_until, updated_at')
+          .order('valid_until', { ascending: false })
       ]);
 
       if (usersRes.error) throw usersRes.error;
 
-      const subsMap = new Map((subsRes.data || []).map(s => [s.user_id, s]));
-      const entsMap = new Map((entsRes.data || []).map(e => [e.user_id, e]));
+      const subsMap = new Map<string, any>();
+      for (const s of (subsRes.data || [])) {
+        if (!subsMap.has(s.user_id)) {
+          subsMap.set(s.user_id, s);
+        }
+      }
+
+      const entsMap = new Map<string, any>();
+      for (const e of (entsRes.data || [])) {
+        if (!entsMap.has(e.user_id)) {
+          entsMap.set(e.user_id, e);
+        }
+      }
 
       const combined: UserProfile[] = (usersRes.data || []).map(u => ({
         ...u,
@@ -1426,18 +1439,35 @@ export const AdminView: React.FC<AdminViewProps> = ({
   const handleToggleUserStatus = async (user: UserProfile) => {
     const isCurrentlyDisabled = user.is_deleted === true || user.status === 'disabled';
     const newStatus = isCurrentlyDisabled ? 'active' : 'disabled';
-    const confirmMsg = isCurrentlyDisabled
-      ? `Re-activate platform access for ${user.email}?`
-      : `Disable/ban ${user.email}? The account will be soft-deleted and immediately blocked from access.`;
-    if (!window.confirm(confirmMsg)) return;
 
-    await handleAllocateTier(
-      user.id,
-      user.role,
-      newStatus,
-      null,
-      isCurrentlyDisabled ? 'Admin re-activated account' : 'Admin disabled/banned account'
-    );
+    if (isCurrentlyDisabled) {
+      const isExpiredOrFree = user.role === 'free' || !user.subscription || user.subscription?.status === 'expired';
+      const allocDays = isExpiredOrFree ? 30 : null;
+      const targetRole = isExpiredOrFree ? 'standard' : user.role;
+      const confirmMsg = isExpiredOrFree
+        ? `Re-activate platform access for ${user.email} and allocate 30-day Standard access?`
+        : `Re-activate platform access for ${user.email}?`;
+      if (!window.confirm(confirmMsg)) return;
+
+      await handleAllocateTier(
+        user.id,
+        targetRole,
+        newStatus,
+        allocDays,
+        'Admin re-activated user account',
+        false
+      );
+    } else {
+      if (!window.confirm(`Disable/ban ${user.email}? The account will be soft-deleted and immediately blocked from access.`)) return;
+
+      await handleAllocateTier(
+        user.id,
+        user.role,
+        newStatus,
+        null,
+        'Admin disabled/banned account'
+      );
+    }
   };
 
   // Record manual or offline payment

@@ -138,7 +138,7 @@ async function isUserPaidOrAdmin(user: any): Promise<{ isPaid: boolean; tier: st
 
   // 3. Check active subscriptions
   const subRes = await fetch(
-    `${SUPABASE_URL}/rest/v1/subscriptions?user_id=eq.${user.id}&status=eq.active&select=tier&limit=1`,
+    `${SUPABASE_URL}/rest/v1/subscriptions?user_id=eq.${user.id}&status=eq.active&select=tier&order=created_at.desc&limit=1`,
     { headers }
   );
   if (subRes.ok) {

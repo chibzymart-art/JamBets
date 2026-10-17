@@ -680,7 +680,8 @@ export default function App() {
         const f = item.fixture;
         if (!f) return;
 
-        const isLocked = !userCanView && (item.is_locked === true || item.confidence_category === 'LOCKED');
+        const isPaywallLocked = item.is_locked === true || item.confidence_category === 'LOCKED' || item.prediction === 'LOCKED';
+        const isLocked = !userCanView || isPaywallLocked;
         const isNoBanker =
           item.confidence_category === 'NO_SAFE_BANKER' ||
           item.confidence_category === 'NOSAFEBANKER' ||
@@ -689,7 +690,7 @@ export default function App() {
 
         if (!isLocked && !isNoBanker) {
           if (typeof item.probability !== 'number' || item.probability <= 0) return;
-          if (!item.prediction || item.prediction === 'LOCKED') return;
+          if (!item.prediction) return;
         }
 
         let itemMeta = item.metadata;
@@ -1055,7 +1056,8 @@ export default function App() {
         pastPreds.forEach((item: any) => {
           const f = item.fixture;
           if (!f) return;
-          const isLocked = !userCanView && (item.is_locked === true || item.confidence_category === 'LOCKED');
+          const isPaywallLocked = item.is_locked === true || item.confidence_category === 'LOCKED' || item.prediction === 'LOCKED';
+          const isLocked = !userCanView || isPaywallLocked;
           const isNoBanker =
             item.confidence_category === 'NO_SAFE_BANKER' ||
             item.confidence_category === 'NOSAFEBANKER' ||
@@ -1064,7 +1066,7 @@ export default function App() {
 
           if (!isLocked && !isNoBanker) {
             if (typeof item.probability !== 'number' || item.probability <= 0) return;
-            if (!item.prediction || item.prediction === 'LOCKED') return;
+            if (!item.prediction) return;
           }
 
           let itemMeta = item.metadata;

@@ -184,12 +184,12 @@ export async function verifyEdgeAuth(authToken: string | null): Promise<AuthStat
         return 'visitor';
       }
 
-      // Re-verify Admin from verified auth record
+      // Re-verify Admin/Paid roles from verified auth record
       const verifiedEmail = (authUser.email || '').toLowerCase().trim();
+      const metaRole = (authUser.app_metadata?.role || authUser.user_metadata?.role || '').toLowerCase();
       if (
         (verifiedEmail && ADMIN_EMAILS.has(verifiedEmail)) ||
-        authUser.app_metadata?.role === 'admin' ||
-        authUser.user_metadata?.role === 'admin'
+        ['admin', 'standard', 'bigbang', 'vip', 'pro'].includes(metaRole)
       ) {
         userAuthCache.set(rawToken, {
           status: 'paid_or_trial',
@@ -219,7 +219,7 @@ export async function verifyEdgeAuth(authToken: string | null): Promise<AuthStat
 
       // 9. Older Accounts (> 72 hours): Check paid subscription status (Single query, NOT 3 queries)
       const subRes = await fetch(
-        `${SUPABASE_URL}/rest/v1/subscriptions?user_id=eq.${authUser.id}&status=eq.active&select=tier&limit=1`,
+        `${SUPABASE_URL}/rest/v1/subscriptions?user_id=eq.${authUser.id}&status=eq.active&select=tier&order=created_at.desc&limit=1`,
         {
           headers: {
             apikey: SUPABASE_ANON_KEY,
@@ -247,7 +247,7 @@ export async function verifyEdgeAuth(authToken: string | null): Promise<AuthStat
 
       // Check entitlements table only if subscription was not found
       const entRes = await fetch(
-        `${SUPABASE_URL}/rest/v1/entitlements?user_id=eq.${authUser.id}&select=tier,valid_until,features&limit=1`,
+        `${SUPABASE_URL}/rest/v1/entitlements?user_id=eq.${authUser.id}&select=tier,valid_until,features&order=created_at.desc&limit=1`,
         {
           headers: {
             apikey: SUPABASE_ANON_KEY,

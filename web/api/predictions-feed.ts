@@ -79,9 +79,9 @@ async function checkAuthStatus(authToken: string | null): Promise<AuthStatus> {
 
     // 4. Server-verified role or admin email whitelist
     const email = (authUser.email || '').toLowerCase().trim();
+    const metaRole = (authUser.app_metadata?.role || authUser.user_metadata?.role || '').toLowerCase();
     if (
-      authUser.app_metadata?.role === 'admin' ||
-      authUser.user_metadata?.role === 'admin' ||
+      ['admin', 'standard', 'bigbang', 'vip', 'pro'].includes(metaRole) ||
       (email && ADMIN_EMAILS.has(email))
     ) {
       userAuthCache.set(rawToken, { status: 'paid_or_trial', expiresAt: Date.now() + 120 * 1000 });
@@ -97,17 +97,20 @@ async function checkAuthStatus(authToken: string | null): Promise<AuthStatus> {
 
     // 5. Query active subscriptions, entitlements & users table for this verified user
     const [subRes, entRes, userRes] = await Promise.all([
-      fetch(`${SUPABASE_URL}/rest/v1/subscriptions?user_id=eq.${userId}&status=eq.active&select=tier&limit=1`, { headers }),
-      fetch(`${SUPABASE_URL}/rest/v1/entitlements?user_id=eq.${userId}&select=tier,valid_until,features&limit=1`, { headers }),
+      fetch(`${SUPABASE_URL}/rest/v1/subscriptions?user_id=eq.${userId}&status=eq.active&select=tier&order=created_at.desc&limit=1`, { headers }),
+      fetch(`${SUPABASE_URL}/rest/v1/entitlements?user_id=eq.${userId}&select=tier,valid_until,features&order=created_at.desc&limit=1`, { headers }),
       fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${userId}&select=role&limit=1`, { headers }),
     ]);
 
     // Check users table role
     if (userRes.ok) {
       const userData = await userRes.json();
-      if (Array.isArray(userData) && userData.length > 0 && userData[0].role === 'admin') {
-        userAuthCache.set(rawToken, { status: 'paid_or_trial', expiresAt: Date.now() + 120 * 1000 });
-        return 'paid_or_trial';
+      if (Array.isArray(userData) && userData.length > 0) {
+        const uRole = (userData[0].role || '').toLowerCase();
+        if (['admin', 'standard', 'bigbang', 'vip', 'pro'].includes(uRole)) {
+          userAuthCache.set(rawToken, { status: 'paid_or_trial', expiresAt: Date.now() + 120 * 1000 });
+          return 'paid_or_trial';
+        }
       }
     }
 

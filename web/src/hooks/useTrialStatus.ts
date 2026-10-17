@@ -107,6 +107,8 @@ export function useTrialStatus(
     }
 
     // 3. Paid VIP & Standard Subscription / Entitlement Checks
+    const userRole = (profile?.role || currentUser?.user_metadata?.role || currentUser?.app_metadata?.role || '').toLowerCase();
+
     const subTier = (subscription?.tier || '').toLowerCase();
     const isSubActive = subscription?.status === 'active';
 
@@ -116,13 +118,15 @@ export function useTrialStatus(
       : 0;
     const isEntActive = !entitlement?.valid_until || entValidUntilMs > nowMs;
 
+    const isVipRole = ['bigbang', 'vip', 'pro'].includes(userRole);
     const isVipSub = isSubActive && ['bigbang', 'vip', 'pro'].includes(subTier);
     const isVipEnt = isEntActive && ['bigbang', 'vip', 'pro'].includes(entTier);
-    const isPaidVip = isVipSub || isVipEnt;
+    const isPaidVip = isVipRole || isVipSub || isVipEnt;
 
+    const isStdRole = userRole === 'standard';
     const isStdSub = isSubActive && subTier === 'standard';
     const isStdEnt = isEntActive && entTier === 'standard';
-    const isPaidStandard = (isStdSub || isStdEnt) && !isPaidVip;
+    const isPaidStandard = (isStdRole || isStdSub || isStdEnt) && !isPaidVip;
 
     if (isPaidVip) {
       return {
@@ -133,7 +137,7 @@ export function useTrialStatus(
         isPaidStandard: false,
         isPaidVip: true,
         isAdmin: false,
-        validUntil: entitlement?.valid_until || subscription?.expires_at || null,
+        validUntil: entitlement?.valid_until || subscription?.current_period_end || subscription?.expires_at || null,
         remainingMs: Infinity,
         remainingHours: Infinity,
         remainingDays: Infinity,
@@ -155,7 +159,7 @@ export function useTrialStatus(
         isPaidStandard: true,
         isPaidVip: false,
         isAdmin: false,
-        validUntil: entitlement?.valid_until || subscription?.expires_at || null,
+        validUntil: entitlement?.valid_until || subscription?.current_period_end || subscription?.expires_at || null,
         remainingMs: Infinity,
         remainingHours: Infinity,
         remainingDays: Infinity,

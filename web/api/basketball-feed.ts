@@ -83,9 +83,9 @@ async function checkIsPaidOrAdmin(authToken: string | null): Promise<boolean> {
     }
 
     const email = (authUser.email || '').toLowerCase().trim();
+    const metaRole = (authUser.app_metadata?.role || authUser.user_metadata?.role || '').toLowerCase();
     if (
-      authUser.app_metadata?.role === 'admin' ||
-      authUser.user_metadata?.role === 'admin' ||
+      ['admin', 'bigbang', 'vip', 'pro'].includes(metaRole) ||
       (email && ADMIN_EMAILS.has(email))
     ) {
       userAuthCache.set(rawToken, { isPaid: true, expiresAt: Date.now() + 120 * 1000 });
@@ -100,17 +100,20 @@ async function checkIsPaidOrAdmin(authToken: string | null): Promise<boolean> {
     };
 
     const [subRes, entRes, userRes] = await Promise.all([
-      fetch(`${SUPABASE_URL}/rest/v1/subscriptions?user_id=eq.${userId}&status=eq.active&select=tier&limit=1`, { headers }),
-      fetch(`${SUPABASE_URL}/rest/v1/entitlements?user_id=eq.${userId}&select=tier,valid_until,features&limit=1`, { headers }),
+      fetch(`${SUPABASE_URL}/rest/v1/subscriptions?user_id=eq.${userId}&status=eq.active&select=tier&order=created_at.desc&limit=1`, { headers }),
+      fetch(`${SUPABASE_URL}/rest/v1/entitlements?user_id=eq.${userId}&select=tier,valid_until,features&order=created_at.desc&limit=1`, { headers }),
       fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${userId}&select=role&limit=1`, { headers }),
     ]);
 
     // Check users table role
     if (userRes.ok) {
       const userData = await userRes.json();
-      if (Array.isArray(userData) && userData.length > 0 && userData[0].role === 'admin') {
-        userAuthCache.set(rawToken, { isPaid: true, expiresAt: Date.now() + 120 * 1000 });
-        return true;
+      if (Array.isArray(userData) && userData.length > 0) {
+        const uRole = (userData[0].role || '').toLowerCase();
+        if (['admin', 'bigbang', 'vip', 'pro'].includes(uRole)) {
+          userAuthCache.set(rawToken, { isPaid: true, expiresAt: Date.now() + 120 * 1000 });
+          return true;
+        }
       }
     }
 
