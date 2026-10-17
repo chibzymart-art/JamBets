@@ -1,5 +1,5 @@
 import { checkAdaptiveRateLimit, getClientIp } from './rate-limiter';
-import { verifyEdgeAuth } from './_lib/jwt-verifier';
+import { verifyEdgeAccess, hasMultiSportAccess } from './_lib/jwt-verifier';
 import { EdgeSwrCache, EdgeCacheRegistry } from './_lib/edge-cache';
 import { generateEtag, matchesEtag, create304Response } from './_lib/etag';
 
@@ -46,9 +46,10 @@ function computeTennisTtl(data: TennisFeedData): number {
   return hasLive ? 15 * 1000 : 900 * 1000;
 }
 
+// Multi-sport (tennis) is strictly BigBang VIP + Admin. Trial / Standard / Expired / Visitor stay locked.
 async function checkIsPaidOrAdmin(authToken: string | null): Promise<boolean> {
-  const status = await verifyEdgeAuth(authToken);
-  return status === 'paid_or_trial';
+  const level = await verifyEdgeAccess(authToken);
+  return hasMultiSportAccess(level);
 }
 
 function getCorsOrigin(req: Request): string {

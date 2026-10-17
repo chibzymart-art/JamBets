@@ -118,9 +118,10 @@ export function useTrialStatus(
       : 0;
     const isEntActive = !entitlement?.valid_until || entValidUntilMs > nowMs;
 
-    const isVipRole = ['bigbang', 'vip', 'pro'].includes(userRole);
-    const isVipSub = isSubActive && ['bigbang', 'vip', 'pro'].includes(subTier);
-    const isVipEnt = isEntActive && ['bigbang', 'vip', 'pro'].includes(entTier);
+    const VIP_TIERS = ['bigbang', 'big_bang', 'vip', 'pro', 'premium'];
+    const isVipRole = VIP_TIERS.includes(userRole);
+    const isVipSub = isSubActive && VIP_TIERS.includes(subTier);
+    const isVipEnt = isEntActive && VIP_TIERS.includes(entTier);
     const isPaidVip = isVipRole || isVipSub || isVipEnt;
 
     const isStdRole = userRole === 'standard';
@@ -175,19 +176,27 @@ export function useTrialStatus(
     }
 
     // 4. 3-Day Free Trial Evaluation
+    // Source of truth = verified auth account creation (identical to the Edge verifier).
+    // `profile.created_at` is intentionally NOT used first: when the profile row cannot be loaded the
+    // app injects a fallback profile stamped with "now", which would otherwise restart the trial forever.
     let validUntilIso: string | null = null;
     let validUntilMs = 0;
 
-    if (entitlement?.valid_until) {
-      validUntilIso = entitlement.valid_until;
-      validUntilMs = new Date(validUntilIso).getTime();
-    } else {
-      // Fallback: 3 days (72h) from user account creation date
-      const createdAt = profile?.created_at || currentUser.created_at;
-      if (createdAt) {
-        const createdMs = new Date(createdAt).getTime();
+    const createdAt = currentUser.created_at || profile?.created_at;
+    if (createdAt) {
+      const createdMs = new Date(createdAt).getTime();
+      if (Number.isFinite(createdMs)) {
         validUntilMs = createdMs + 3 * 24 * 60 * 60 * 1000;
         validUntilIso = new Date(validUntilMs).toISOString();
+      }
+    }
+
+    // An explicit trial entitlement (e.g. admin-extended trial) can only EXTEND the window.
+    if ((entTier === 'trial' || entTier === 'free_trial') && entitlement?.valid_until) {
+      const entMs = new Date(entitlement.valid_until).getTime();
+      if (Number.isFinite(entMs) && entMs > validUntilMs) {
+        validUntilMs = entMs;
+        validUntilIso = entitlement.valid_until;
       }
     }
 

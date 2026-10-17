@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { MarketSwitchboardNav } from '../components/MarketSwitchboardNav';
@@ -188,8 +188,13 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
   const isTrialExpired = propIsTrialExpired ?? Boolean(currentUser && !isPaidUser);
   const canViewSettlements = propCanViewSettlements ?? isPaidUser;
 
+  // Monotonic request id: only the most recent request may write state (stale visitor/locked responses are dropped)
+  const marketRequestSeqRef = useRef(0);
+
   // Load predictions for current market and filters (Continuous scroll: limit 200)
   const loadMarketData = async () => {
+    const requestSeq = ++marketRequestSeqRef.current;
+    const isLatest = () => requestSeq === marketRequestSeqRef.current;
     try {
       setLoading(true);
       setError(null);
@@ -205,6 +210,7 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
         canViewPredictions: isPaidUser,
       });
 
+      if (!isLatest()) return;
       if (res.success) {
         setPredictions(res.predictions || []);
         if (res.counts) setMarketCounts(res.counts);
@@ -213,9 +219,9 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
       }
     } catch (err: any) {
       console.error('Error in OtherMarketsPage loadMarketData:', err);
-      setError(err.message || 'Network error fetching specialist predictions');
+      if (isLatest()) setError(err.message || 'Network error fetching specialist predictions');
     } finally {
-      setLoading(false);
+      if (isLatest()) setLoading(false);
     }
   };
 

@@ -1,10 +1,31 @@
 // Cryptographic Edge JWT & 3-Day Trial Verifier for Oddsbanta
 // Runs on Vercel Edge Runtime (Zero-Latency Web Crypto API)
+//
+// SINGLE SOURCE OF TRUTH for feed entitlements (server side):
+//
+//   level      | football (general / 1H Blitz / O2.5 / Corners) | multi-sport (tennis / basketball)
+//   -----------|------------------------------------------------|-----------------------------------
+//   visitor    | locked                                         | locked
+//   expired    | locked                                         | locked
+//   trial      | UNLOCKED (first 72h after account creation)    | locked
+//   standard   | UNLOCKED                                       | locked
+//   vip        | UNLOCKED (BigBang VIP)                         | UNLOCKED
+//   admin      | UNLOCKED                                       | UNLOCKED
 
 export type AuthStatus = 'paid_or_trial' | 'expired' | 'visitor';
+export type AccessLevel = 'visitor' | 'expired' | 'trial' | 'standard' | 'vip' | 'admin';
 
-interface CachedAuth {
-  status: AuthStatus;
+const LEVEL_RANK: Record<AccessLevel, number> = {
+  visitor: 0,
+  expired: 1,
+  trial: 2,
+  standard: 3,
+  vip: 4,
+  admin: 5,
+};
+
+interface CachedAccess {
+  level: AccessLevel;
   userId?: string;
   email?: string;
   expiresAt: number;
@@ -21,7 +42,6 @@ const SUPABASE_ANON_KEY =
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZlcGNvb3BvbWxmamFnZWlqc2V3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg4NTM4NzIsImV4cCI6MjEwNDQyOTg3Mn0.KMbk71HHpEX_RzdMgFy_jYO6DhE3iwd50aHv9waWh2g';
 
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
-const SUPABASE_JWT_SECRET = process.env.SUPABASE_JWT_SECRET || '';
 
 export const ADMIN_EMAILS = new Set([
   'chibzymart@gmail.com',
@@ -31,25 +51,16 @@ export const ADMIN_EMAILS = new Set([
   'nnamdiamuchie@gmail.com',
 ]);
 
+const TRIAL_DURATION_MS = 3 * 24 * 60 * 60 * 1000; // 72 hours
+
 // Sliding-window memory cache to eliminate repeated Supabase roundtrips
-const userAuthCache = new Map<string, CachedAuth>();
-const inflightAuthChecks = new Map<string, Promise<AuthStatus>>();
+const accessCache = new Map<string, CachedAccess>();
+const inflightAccessChecks = new Map<string, Promise<AccessLevel>>();
 
-// Cache TTLs
-const VALID_AUTH_TTL_MS = 300 * 1000; // 5 minutes for valid trial/paid users
-const EXPIRED_AUTH_TTL_MS = 180 * 1000; // 3 minutes for expired users
+// Cache TTLs (short enough that an upgrade/payment is reflected within seconds)
+const VALID_AUTH_TTL_MS = 120 * 1000; // 2 minutes for trial/standard/vip/admin
+const EXPIRED_AUTH_TTL_MS = 15 * 1000; // 15 seconds for expired users (so an upgrade unlocks quickly)
 const INVALID_AUTH_TTL_MS = 60 * 1000; // 1 minute for invalid/malformed tokens
-
-function base64UrlToUint8Array(base64Url: string): Uint8Array {
-  const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-  const pad = base64.length % 4 === 0 ? '' : '='.repeat(4 - (base64.length % 4));
-  const binary = atob(base64 + pad);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-  return bytes;
-}
 
 function decodeBase64UrlJson(str: string): any {
   try {
@@ -73,11 +84,165 @@ export function decodeJwtPayloadUnsafe(token: string): any {
   return decodeBase64UrlJson(parts[1]);
 }
 
+/** Maps a tier / role string onto the access level it grants (never 'trial'). */
+function levelFromTier(raw: unknown): AccessLevel | null {
+  const tier = String(raw || '').toLowerCase().trim();
+  if (tier === 'admin') return 'admin';
+  if (['bigbang', 'big_bang', 'vip', 'pro', 'premium'].includes(tier)) return 'vip';
+  if (tier === 'standard') return 'standard';
+  if (tier === 'trial' || tier === 'free_trial') return 'trial';
+  return null;
+}
+
+function maxLevel(a: AccessLevel, b: AccessLevel | null): AccessLevel {
+  if (!b) return a;
+  return LEVEL_RANK[b] > LEVEL_RANK[a] ? b : a;
+}
+
+/** True when an entitlement/subscription window is still open. `null` means open-ended. */
+function windowOpen(until: unknown, allowOpenEnded: boolean): boolean {
+  if (!until) return allowOpenEnded;
+  const ms = new Date(String(until)).getTime();
+  return Number.isFinite(ms) && ms > Date.now();
+}
+
+async function safeJson(res: Response): Promise<any> {
+  try {
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
 /**
- * Fast-path edge JWT parser and cryptographic signature check.
- * Rejects expired or malformed tokens in < 0.05ms without touching any network.
+ * Reads the user's tier records. Direct own-row selects through the user's JWT are
+ * blocked by RLS in production (they return []), so we use:
+ *   1. the SECURITY DEFINER bootstrap RPC with the user's own token (always works), and
+ *   2. direct service-role reads when SUPABASE_SERVICE_ROLE_KEY is configured.
+ * Results are merged and the HIGHEST valid level wins.
  */
-export async function verifyEdgeAuth(authToken: string | null): Promise<AuthStatus> {
+async function resolveDbLevel(userId: string, rawToken: string): Promise<AccessLevel> {
+  let level: AccessLevel = 'expired';
+
+  const applyUserRow = (u: any) => {
+    if (!u) return;
+    if (u.is_deleted === true || String(u.status || '').toLowerCase() === 'disabled') return;
+    const roleLevel = levelFromTier(u.role);
+    if (roleLevel && roleLevel !== 'trial' && windowOpen(u.valid_until, true)) {
+      level = maxLevel(level, roleLevel);
+    }
+  };
+
+  const applySubscription = (s: any) => {
+    if (!s) return;
+    if (String(s.status || '').toLowerCase() !== 'active') return;
+    const subLevel = levelFromTier(s.tier);
+    if (subLevel && subLevel !== 'trial' && windowOpen(s.current_period_end, true)) {
+      level = maxLevel(level, subLevel);
+    }
+  };
+
+  const applyEntitlement = (e: any) => {
+    if (!e) return;
+    const feats = e.features || {};
+    const tierLevel = levelFromTier(e.tier);
+    if (tierLevel === 'trial') {
+      // Explicit admin-granted / extended trial window
+      if (windowOpen(e.valid_until, false)) level = maxLevel(level, 'trial');
+    } else if (tierLevel) {
+      // Paid tiers: open-ended entitlement is treated as active; dated ones must be in the future
+      if (windowOpen(e.valid_until, true)) level = maxLevel(level, tierLevel);
+    }
+    // Feature-flag grants are always time-boxed
+    if (windowOpen(e.valid_until, false)) {
+      if (feats.admin === true) level = maxLevel(level, 'admin');
+      if (feats.bigbang === true || feats.vip === true || feats.all_sports === true) {
+        level = maxLevel(level, 'vip');
+      }
+      if (
+        feats.football_predictions === true ||
+        feats.specialist_markets === true ||
+        feats.goals === true ||
+        feats.corners === true ||
+        feats.trial === true
+      ) {
+        level = maxLevel(level, 'trial');
+      }
+    }
+  };
+
+  const tasks: Promise<void>[] = [];
+
+  // 1. SECURITY DEFINER bootstrap RPC (user's own token)
+  tasks.push(
+    (async () => {
+      try {
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/get_user_session_bootstrap`, {
+          method: 'POST',
+          headers: {
+            apikey: SUPABASE_ANON_KEY,
+            Authorization: `Bearer ${rawToken}`,
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+          },
+          body: JSON.stringify({ p_user_id: userId }),
+        });
+        if (!res.ok) return;
+        const data = await safeJson(res);
+        if (!data || typeof data !== 'object') return;
+        applyUserRow(data.user);
+        applySubscription(data.subscription);
+        applyEntitlement(data.entitlement);
+      } catch (err) {
+        console.warn('Edge bootstrap RPC check failed:', err);
+      }
+    })()
+  );
+
+  // 2. Service-role direct reads (full history, bypass RLS)
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || SUPABASE_SERVICE_ROLE_KEY;
+  if (serviceKey) {
+    const svcHeaders = {
+      apikey: serviceKey,
+      Authorization: `Bearer ${serviceKey}`,
+      Accept: 'application/json',
+    };
+    const read = async (path: string, apply: (row: any) => void) => {
+      try {
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, { headers: svcHeaders });
+        if (!res.ok) return;
+        const rows = await safeJson(res);
+        if (Array.isArray(rows)) rows.forEach(apply);
+      } catch (err) {
+        console.warn('Edge service-role check failed:', path, err);
+      }
+    };
+    tasks.push(read(`users?id=eq.${userId}&select=role,status,is_deleted&limit=1`, applyUserRow));
+    tasks.push(
+      read(
+        `subscriptions?user_id=eq.${userId}&status=eq.active&select=tier,status,current_period_end&order=created_at.desc&limit=10`,
+        applySubscription
+      )
+    );
+    tasks.push(
+      read(
+        `entitlements?user_id=eq.${userId}&select=tier,valid_until,features&order=created_at.desc&limit=10`,
+        applyEntitlement
+      )
+    );
+  }
+
+  await Promise.all(tasks);
+  return level;
+}
+
+/**
+ * Tier-aware edge access resolver.
+ * The JWT payload is NEVER trusted on its own: every non-trivial token is validated
+ * against Supabase Auth (/auth/v1/user, ES256/HS256 agnostic), and only server-controlled
+ * data (app_metadata, DB rows, ADMIN_EMAILS, verified account creation date) grants access.
+ */
+export async function verifyEdgeAccess(authToken: string | null): Promise<AccessLevel> {
   if (!authToken) return 'visitor';
   const rawToken = authToken.startsWith('Bearer ') ? authToken.slice(7).trim() : authToken.trim();
   if (!rawToken || rawToken.length < 10) return 'visitor';
@@ -85,295 +250,108 @@ export async function verifyEdgeAuth(authToken: string | null): Promise<AuthStat
   // 1. Direct Service Role Key Match (internal cron/admin backend workers)
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || SUPABASE_SERVICE_ROLE_KEY;
   if (serviceKey && rawToken === serviceKey) {
-    return 'paid_or_trial';
+    return 'admin';
   }
 
   // 2. Check In-Memory Edge Cache (0ms response)
-  const cached = userAuthCache.get(rawToken);
+  const cached = accessCache.get(rawToken);
   if (cached && Date.now() < cached.expiresAt) {
-    return cached.status;
+    return cached.level;
   }
 
   // 3. Promise deduplication: Thundering herd protection for concurrent user requests
-  const inflight = inflightAuthChecks.get(rawToken);
+  const inflight = inflightAccessChecks.get(rawToken);
   if (inflight) {
     return inflight;
   }
 
-  const checkPromise = (async (): Promise<AuthStatus> => {
+  const store = (level: AccessLevel, userId?: string, email?: string): AccessLevel => {
+    const ttl =
+      level === 'visitor' ? INVALID_AUTH_TTL_MS : level === 'expired' ? EXPIRED_AUTH_TTL_MS : VALID_AUTH_TTL_MS;
+    accessCache.set(rawToken, { level, userId, email, expiresAt: Date.now() + ttl });
+    return level;
+  };
+
+  const checkPromise = (async (): Promise<AccessLevel> => {
     try {
       // 4. Structural Token Parse & Expiration Check (0ms, Zero-Network)
       const parts = rawToken.split('.');
-      if (parts.length !== 3) {
-        userAuthCache.set(rawToken, { status: 'visitor', expiresAt: Date.now() + INVALID_AUTH_TTL_MS });
-        return 'visitor';
-      }
+      if (parts.length !== 3) return store('visitor');
 
       const payload = decodeBase64UrlJson(parts[1]);
-      if (!payload || typeof payload !== 'object') {
-        userAuthCache.set(rawToken, { status: 'visitor', expiresAt: Date.now() + INVALID_AUTH_TTL_MS });
-        return 'visitor';
-      }
+      if (!payload || typeof payload !== 'object') return store('visitor');
 
       const nowSec = Math.floor(Date.now() / 1000);
-      if (payload.exp && payload.exp < nowSec) {
-        // Token has expired chronologically -> reject instantly without network call
-        userAuthCache.set(rawToken, { status: 'visitor', expiresAt: Date.now() + INVALID_AUTH_TTL_MS });
-        return 'visitor';
-      }
+      if (payload.exp && payload.exp < nowSec) return store('visitor');
 
-      const email = (payload.email || '').toLowerCase().trim();
-      const userId = payload.sub || payload.id;
+      // The public anon key is a JWT too, but it identifies nobody.
+      if (payload.role === 'anon' || !payload.sub) return store('visitor');
 
-      // 5. Fast-Path: Admin Whitelist Check via Token Claims (0.01ms)
-      if (
-        (email && ADMIN_EMAILS.has(email)) ||
-        payload.app_metadata?.role === 'admin' ||
-        payload.user_metadata?.role === 'admin'
-      ) {
-        userAuthCache.set(rawToken, {
-          status: 'paid_or_trial',
-          userId,
-          email,
-          expiresAt: Date.now() + VALID_AUTH_TTL_MS,
-        });
-        return 'paid_or_trial';
-      }
-
-      // 6. Cryptographic Signature Verification via Web Crypto API (if secret is available)
-      if (SUPABASE_JWT_SECRET) {
-        try {
-          const encoder = new TextEncoder();
-          const cryptoKey = await crypto.subtle.importKey(
-            'raw',
-            encoder.encode(SUPABASE_JWT_SECRET),
-            { name: 'HMAC', hash: 'SHA-256' },
-            false,
-            ['verify']
-          );
-
-          const dataToVerify = encoder.encode(`${parts[0]}.${parts[1]}`);
-          const signatureBytes = base64UrlToUint8Array(parts[2]);
-
-          const isValid = await crypto.subtle.verify('HMAC', cryptoKey, signatureBytes, dataToVerify);
-          if (!isValid) {
-            userAuthCache.set(rawToken, { status: 'visitor', expiresAt: Date.now() + INVALID_AUTH_TTL_MS });
-            return 'visitor';
-          }
-        } catch {
-          // Fall through to upstream check if crypto verification errors
-        }
-      }
-
-      // 7. Verify token against Supabase Auth (Single request, cached for 5 minutes)
+      // 5. Authoritative verification against Supabase Auth (works for ES256 and HS256 keys)
       const authRes = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
         headers: {
           apikey: SUPABASE_ANON_KEY,
           Authorization: `Bearer ${rawToken}`,
         },
       });
+      if (!authRes.ok) return store('visitor');
 
-      if (!authRes.ok) {
-        userAuthCache.set(rawToken, { status: 'visitor', expiresAt: Date.now() + INVALID_AUTH_TTL_MS });
-        return 'visitor';
+      const authUser = await safeJson(authRes);
+      if (!authUser || !authUser.id) return store('visitor');
+
+      const verifiedEmail = String(authUser.email || '').toLowerCase().trim();
+
+      // 6. Admin: whitelist or server-controlled app_metadata (user_metadata is user-editable -> ignored)
+      const appRole = String(authUser.app_metadata?.role || '').toLowerCase();
+      if ((verifiedEmail && ADMIN_EMAILS.has(verifiedEmail)) || appRole === 'admin') {
+        return store('admin', authUser.id, verifiedEmail);
       }
 
-      const authUser = await authRes.json();
-      if (!authUser || !authUser.id) {
-        userAuthCache.set(rawToken, { status: 'visitor', expiresAt: Date.now() + INVALID_AUTH_TTL_MS });
-        return 'visitor';
+      let level: AccessLevel = 'expired';
+      level = maxLevel(level, levelFromTier(appRole) === 'trial' ? null : levelFromTier(appRole));
+
+      // 7. Database tiers (admin role, BigBang VIP, Standard, explicit trial grants)
+      if (level !== 'vip') {
+        level = maxLevel(level, await resolveDbLevel(authUser.id, rawToken));
       }
 
-      // Re-verify Admin/Paid roles from verified auth record
-      const verifiedEmail = (authUser.email || '').toLowerCase().trim();
-      const metaRole = (authUser.app_metadata?.role || authUser.user_metadata?.role || '').toLowerCase();
-      if (
-        (verifiedEmail && ADMIN_EMAILS.has(verifiedEmail)) ||
-        ['admin', 'standard', 'bigbang', 'vip', 'pro'].includes(metaRole)
-      ) {
-        userAuthCache.set(rawToken, {
-          status: 'paid_or_trial',
-          userId: authUser.id,
-          email: verifiedEmail,
-          expiresAt: Date.now() + VALID_AUTH_TTL_MS,
-        });
-        return 'paid_or_trial';
-      }
-
-      // 8. 3-Day Free VIP Trial Check (Instant calculation from account creation)
-      // New users from betting platform partner are immediately in this bucket!
-      const createdAt = authUser.created_at;
-      if (createdAt) {
-        const createdMs = new Date(createdAt).getTime();
-        const trialDurationMs = 3 * 24 * 60 * 60 * 1000; // 72 hours
-        if (Date.now() - createdMs < trialDurationMs) {
-          userAuthCache.set(rawToken, {
-            status: 'paid_or_trial',
-            userId: authUser.id,
-            email: verifiedEmail,
-            expiresAt: Date.now() + VALID_AUTH_TTL_MS,
-          });
-          return 'paid_or_trial';
+      // 8. 3-Day Free Trial: first 72h after verified account creation (works with or without DB rows)
+      if (LEVEL_RANK[level] < LEVEL_RANK.trial && authUser.created_at) {
+        const createdMs = new Date(authUser.created_at).getTime();
+        if (Number.isFinite(createdMs) && Date.now() - createdMs < TRIAL_DURATION_MS) {
+          level = 'trial';
         }
       }
 
-      // 9. Older Accounts (> 72 hours): Check paid subscription status (Single query, NOT 3 queries)
-      const subRes = await fetch(
-        `${SUPABASE_URL}/rest/v1/subscriptions?user_id=eq.${authUser.id}&status=eq.active&select=tier&order=created_at.desc&limit=1`,
-        {
-          headers: {
-            apikey: SUPABASE_ANON_KEY,
-            Authorization: `Bearer ${rawToken}`,
-            Accept: 'application/json',
-          },
-        }
-      );
-
-      if (subRes.ok) {
-        const subData = await subRes.json();
-        if (Array.isArray(subData) && subData.length > 0) {
-          const tier = (subData[0].tier || '').toLowerCase();
-          if (['standard', 'bigbang', 'vip', 'pro', 'admin'].includes(tier)) {
-            userAuthCache.set(rawToken, {
-              status: 'paid_or_trial',
-              userId: authUser.id,
-              email: verifiedEmail,
-              expiresAt: Date.now() + VALID_AUTH_TTL_MS,
-            });
-            return 'paid_or_trial';
-          }
-        }
-      }
-
-      // Check entitlements table only if subscription was not found
-      const entRes = await fetch(
-        `${SUPABASE_URL}/rest/v1/entitlements?user_id=eq.${authUser.id}&select=tier,valid_until,features&order=created_at.desc&limit=1`,
-        {
-          headers: {
-            apikey: SUPABASE_ANON_KEY,
-            Authorization: `Bearer ${rawToken}`,
-            Accept: 'application/json',
-          },
-        }
-      );
-
-      if (entRes.ok) {
-        const entData = await entRes.json();
-        if (Array.isArray(entData) && entData.length > 0) {
-          const ent = entData[0];
-          const validUntil = ent.valid_until ? new Date(ent.valid_until).getTime() : 0;
-          const tier = (ent.tier || '').toLowerCase();
-          const feats = ent.features || {};
-          const isEntAdmin = tier === 'admin' || feats.admin === true;
-          const hasVip = Boolean(
-            tier === 'trial' ||
-            tier === 'free_trial' ||
-            ['standard', 'bigbang', 'vip', 'pro', 'admin'].includes(tier) ||
-            feats.trial === true ||
-            feats.vip === true ||
-            feats.football_predictions === true ||
-            feats.specialist_markets === true ||
-            feats.goals === true ||
-            feats.corners === true ||
-            feats.simulations === true ||
-            feats.all_sports === true ||
-            feats.bigbang === true
-          );
-
-          if ((isEntAdmin || hasVip) && validUntil > Date.now()) {
-            userAuthCache.set(rawToken, {
-              status: 'paid_or_trial',
-              userId: authUser.id,
-              email: verifiedEmail,
-              expiresAt: Date.now() + VALID_AUTH_TTL_MS,
-            });
-            return 'paid_or_trial';
-          }
-        }
-      }
-
-      // Check users table (authoritative role and tier for admin allocations)
-      const serviceOrAnonKey = SUPABASE_SERVICE_ROLE_KEY || SUPABASE_ANON_KEY;
-      try {
-        const userTableRes = await fetch(
-          `${SUPABASE_URL}/rest/v1/users?id=eq.${authUser.id}&select=role,status,valid_until&limit=1`,
-          {
-            headers: {
-              apikey: serviceOrAnonKey,
-              Authorization: `Bearer ${serviceOrAnonKey}`,
-              Accept: 'application/json',
-            },
-          }
-        );
-        if (userTableRes.ok) {
-          const uData = await userTableRes.json();
-          if (Array.isArray(uData) && uData.length > 0) {
-            const u = uData[0];
-            const role = (u.role || '').toLowerCase();
-            const validUntil = u.valid_until ? new Date(u.valid_until).getTime() : 0;
-            if (['standard', 'bigbang', 'vip', 'pro', 'admin'].includes(role) && (!validUntil || validUntil > Date.now())) {
-              userAuthCache.set(rawToken, {
-                status: 'paid_or_trial',
-                userId: authUser.id,
-                email: verifiedEmail,
-                expiresAt: Date.now() + VALID_AUTH_TTL_MS,
-              });
-              return 'paid_or_trial';
-            }
-          }
-        }
-      } catch (userErr) {
-        console.warn('Edge users table check failed:', userErr);
-      }
-
-      // Check profiles table (role column fallback)
-      try {
-        const profRes = await fetch(
-          `${SUPABASE_URL}/rest/v1/profiles?id=eq.${authUser.id}&select=role&limit=1`,
-          {
-            headers: {
-              apikey: serviceOrAnonKey,
-              Authorization: `Bearer ${serviceOrAnonKey}`,
-              Accept: 'application/json',
-            },
-          }
-        );
-        if (profRes.ok) {
-          const pData = await profRes.json();
-          if (Array.isArray(pData) && pData.length > 0) {
-            const p = pData[0];
-            const role = (p.role || '').toLowerCase();
-            if (['standard', 'bigbang', 'vip', 'pro', 'admin'].includes(role)) {
-              userAuthCache.set(rawToken, {
-                status: 'paid_or_trial',
-                userId: authUser.id,
-                email: verifiedEmail,
-                expiresAt: Date.now() + VALID_AUTH_TTL_MS,
-              });
-              return 'paid_or_trial';
-            }
-          }
-        }
-      } catch (profErr) {
-        console.warn('Edge profiles table check failed:', profErr);
-      }
-
-      // Expired trial user
-      userAuthCache.set(rawToken, {
-        status: 'expired',
-        userId: authUser.id,
-        email: verifiedEmail,
-        expiresAt: Date.now() + EXPIRED_AUTH_TTL_MS,
-      });
-      return 'expired';
+      return store(level, authUser.id, verifiedEmail);
     } catch (err) {
       console.error('Edge auth verification error:', err);
       return 'visitor';
     } finally {
-      inflightAuthChecks.delete(rawToken);
+      inflightAccessChecks.delete(rawToken);
     }
   })();
 
-  inflightAuthChecks.set(rawToken, checkPromise);
+  inflightAccessChecks.set(rawToken, checkPromise);
   return checkPromise;
+}
+
+/** Football scope (general, 1H Blitz, Over 2.5, Corners): trial + standard + vip + admin. */
+export function hasFootballAccess(level: AccessLevel): boolean {
+  return LEVEL_RANK[level] >= LEVEL_RANK.trial;
+}
+
+/** Multi-sport scope (tennis, basketball, ...): BigBang VIP + admin ONLY. */
+export function hasMultiSportAccess(level: AccessLevel): boolean {
+  return LEVEL_RANK[level] >= LEVEL_RANK.vip;
+}
+
+/**
+ * Backward-compatible football-scope status used by the football feeds
+ * (predictions-feed, goals-feed, market-feed).
+ */
+export async function verifyEdgeAuth(authToken: string | null): Promise<AuthStatus> {
+  const level = await verifyEdgeAccess(authToken);
+  if (hasFootballAccess(level)) return 'paid_or_trial';
+  return level === 'expired' ? 'expired' : 'visitor';
 }

@@ -492,6 +492,12 @@ export default function App() {
   // Cache ref to prevent hammering Supabase within 30 seconds
   const lastFetchTimeRef = useRef<number>(0);
 
+  // Always-live permission snapshot + request sequencing:
+  // a slow fetch started under an older (e.g. visitor) closure can never overwrite fresher entitled data.
+  const latestPermRef = useRef({ isAdmin: false, canViewPredictions: false });
+  latestPermRef.current = { isAdmin, canViewPredictions };
+  const fetchSeqRef = useRef<number>(0);
+
   // Authoritative Cloud Supabase Query (Optimized Unified Query & Anti-Hammering SWR Cache)
   const fetchCloudData = async (force: boolean = false) => {
     const now = Date.now();
@@ -499,6 +505,11 @@ export default function App() {
       return;
     }
     lastFetchTimeRef.current = now;
+    const fetchSeq = ++fetchSeqRef.current;
+    const isCurrentFetch = () => fetchSeq === fetchSeqRef.current;
+    const canViewNow = () => latestPermRef.current.isAdmin || latestPermRef.current.canViewPredictions;
+    // Session cache is scoped by entitlement so masked (visitor) data is never reused for entitled users
+    const footballCacheKey = () => (canViewNow() ? 'football_feed:entitled' : 'football_feed:public');
 
     setLoading(true);
     setError(null);
@@ -519,7 +530,7 @@ export default function App() {
 
           let edgeRes = await fetch('/api/predictions-feed', {
             headers: reqHeaders,
-            cache: (session?.access_token || isAdmin || canViewPredictions) ? 'no-cache' : 'default'
+            cache: (session?.access_token || canViewNow()) ? 'no-cache' : 'default'
           });
           if (edgeRes.ok) {
             let edgeData = await edgeRes.json();
@@ -528,7 +539,7 @@ export default function App() {
                 (p: any) => p.is_locked === true || p.prediction === 'LOCKED' || (typeof p.prediction === 'string' && p.prediction.startsWith('🔒'))
               );
 
-              if ((isAdmin || canViewPredictions) && hasMasked && session?.access_token) {
+              if (canViewNow() && hasMasked && session?.access_token) {
                 // If authenticated VIP/admin received cached masked feed, trigger direct Edge serverless unmasking pass
                 try {
                   const unmaskRes = await fetch('/api/predictions-feed?refresh=true', {
@@ -546,7 +557,7 @@ export default function App() {
                 }
               }
 
-              const stillMasked = (isAdmin || canViewPredictions) && edgeData.predictions.some(
+              const stillMasked = canViewNow() && edgeData.predictions.some(
                 (p: any) => p.is_locked === true || p.prediction === 'LOCKED' || (typeof p.prediction === 'string' && p.prediction.startsWith('🔒'))
               );
 
@@ -557,7 +568,7 @@ export default function App() {
                 rawPredRecords = edgeData.predictions;
                 returnedLeagues = edgeData.leagues || [];
                 usedEdgeCache = true;
-                SafeStorage.set('football_feed', { predictions: rawPredRecords, leagues: returnedLeagues }, 30 * 60 * 1000);
+                SafeStorage.set(footballCacheKey(), { predictions: rawPredRecords, leagues: returnedLeagues }, 30 * 60 * 1000);
               }
             }
           }
@@ -568,7 +579,7 @@ export default function App() {
 
       if (!usedEdgeCache) {
         // Check resilient persistent cache before hitting database
-        const cached = SafeStorage.get<{ predictions: any[]; leagues: LeagueRecord[] }>('football_feed');
+        const cached = SafeStorage.get<{ predictions: any[]; leagues: LeagueRecord[] }>(footballCacheKey());
         if (cached && cached.predictions && cached.predictions.length > 0) {
           console.warn('[App] Serving persistent session cache to shield Supabase');
           rawPredRecords = cached.predictions;
@@ -659,7 +670,7 @@ export default function App() {
             breaker.recordSuccess();
             rawPredRecords = predictionsRes.data || [];
             returnedLeagues = leagueRes.data || [];
-            SafeStorage.set('football_feed', { predictions: rawPredRecords, leagues: returnedLeagues }, 15 * 60 * 1000);
+            SafeStorage.set(footballCacheKey(), { predictions: rawPredRecords, leagues: returnedLeagues }, 15 * 60 * 1000);
           } catch (directErr) {
             breaker.recordFailure(directErr);
             console.error('[App] Direct query failed or timed out:', directErr);
@@ -669,12 +680,15 @@ export default function App() {
         }
       }
 
+      // A newer fetch superseded this one while it was in flight: drop its (possibly stale-masked) result
+      if (!isCurrentFetch()) return;
+
       const elapsed = Math.round(performance.now() - start);
       setLatencyMs(elapsed);
       const embeddedPreds: FootballPrediction[] = [];
       const fixtureMap = new Map<string, QueueFixture>();
 
-      const userCanView = isAdmin || canViewPredictions;
+      const userCanView = canViewNow();
 
       rawPredRecords.forEach((item: any) => {
         const f = item.fixture;
@@ -865,9 +879,9 @@ export default function App() {
       setLastRefreshed(new Date());
     } catch (err: any) {
       console.error('Error querying Cloud Supabase:', err);
-      setError(err.message || 'Failed to fetch authoritative data from Cloud Supabase');
+      if (isCurrentFetch()) setError(err.message || 'Failed to fetch authoritative data from Cloud Supabase');
     } finally {
-      setLoading(false);
+      if (isCurrentFetch()) setLoading(false);
     }
   };
 
