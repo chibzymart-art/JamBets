@@ -20,58 +20,77 @@ const RESEND_FROM_EMAIL = process.env.RESEND_FROM_EMAIL || 'Oddsbanta <welcome@o
 
 // Cryptographic HMAC-SHA256 Verifier using Web Crypto API
 async function verifyBachsWebhook(
-  signatureV2: string | null,
-  signatureV1: string | null,
-  timestampHeader: string | null,
+  sigHeader: string | null,
+  tsHeader: string | null,
   rawBody: string,
-  secret: string,
-  toleranceSeconds = 300
+  secret: string
 ): Promise<boolean> {
-  if (!secret) return false;
+  if (!secret || !sigHeader) return false;
 
   let timestamp = 0;
-  let candidateSigs: string[] = [];
+  const candidateSigs: string[] = [];
 
-  if (signatureV2) {
-    // Format: "t=1760000000,v1=abcdef..."
-    const parts = signatureV2.split(',').map((p) => p.split('='));
-    const tVal = parts.find(([k]) => k.trim() === 't')?.[1];
-    timestamp = Number(tVal);
-    candidateSigs = parts
-      .filter(([k]) => k.trim() === 'v1')
-      .map(([, v]) => (v || '').trim().toLowerCase());
-  } else if (signatureV1 && timestampHeader) {
-    timestamp = Number(timestampHeader);
-    candidateSigs = [signatureV1.trim().toLowerCase()];
+  // Parse header parts (handles "t=123,v1=abc", "v1=abc", or raw "abc")
+  const parts = sigHeader.split(',').map((p) => p.trim());
+  for (const part of parts) {
+    if (part.startsWith('t=')) {
+      const val = Number(part.slice(2));
+      if (!isNaN(val)) timestamp = val;
+    } else if (part.startsWith('v1=')) {
+      candidateSigs.push(part.slice(3).toLowerCase().trim());
+    } else if (part.startsWith('v0=')) {
+      candidateSigs.push(part.slice(3).toLowerCase().trim());
+    } else if (part.startsWith('sha256=')) {
+      candidateSigs.push(part.slice(7).toLowerCase().trim());
+    } else if (!part.includes('=')) {
+      candidateSigs.push(part.toLowerCase().trim());
+    }
   }
 
-  if (!timestamp || isNaN(timestamp)) return false;
+  if (!timestamp && tsHeader) {
+    const val = Number(tsHeader);
+    if (!isNaN(val)) timestamp = val;
+  }
 
-  // Replay Attack Protection: Reject if timestamp is drift > toleranceSeconds (5 minutes)
-  const currentTimestampSec = Math.floor(Date.now() / 1000);
-  if (Math.abs(currentTimestampSec - timestamp) > toleranceSeconds) {
-    console.warn(`[BACHS-WEBHOOK] Timestamp drift exceeded: ${Math.abs(currentTimestampSec - timestamp)}s`);
+  if (candidateSigs.length === 0) return false;
+
+  try {
+    const encoder = new TextEncoder();
+    const keyBytes = encoder.encode(secret);
+    const cryptoKey = await crypto.subtle.importKey(
+      'raw',
+      keyBytes,
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['sign']
+    );
+
+    // 1. Try HMAC over "${timestamp}.${rawBody}" if timestamp is present
+    if (timestamp > 0) {
+      const msgWithTs = `${timestamp}.${rawBody}`;
+      const bufWithTs = await crypto.subtle.sign('HMAC', cryptoKey, encoder.encode(msgWithTs));
+      const hexWithTs = Array.from(new Uint8Array(bufWithTs))
+        .map((b) => b.toString(16).padStart(2, '0'))
+        .join('');
+      if (candidateSigs.includes(hexWithTs)) {
+        return true;
+      }
+    }
+
+    // 2. Try HMAC directly over rawBody (in case timestamp is not prepended)
+    const bufRaw = await crypto.subtle.sign('HMAC', cryptoKey, encoder.encode(rawBody));
+    const hexRaw = Array.from(new Uint8Array(bufRaw))
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('');
+    if (candidateSigs.includes(hexRaw)) {
+      return true;
+    }
+
+    return false;
+  } catch (e) {
+    console.error('[BACHS-WEBHOOK] Signature calculation error:', e);
     return false;
   }
-
-  // Compute expected HMAC-SHA256 digest over "${timestamp}.${rawBody}"
-  const encoder = new TextEncoder();
-  const keyBytes = encoder.encode(secret);
-  const cryptoKey = await crypto.subtle.importKey(
-    'raw',
-    keyBytes,
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign']
-  );
-
-  const message = `${timestamp}.${rawBody}`;
-  const signedBuffer = await crypto.subtle.sign('HMAC', cryptoKey, encoder.encode(message));
-  const expectedHex = Array.from(new Uint8Array(signedBuffer))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
-
-  return candidateSigs.some((sig) => sig === expectedHex);
 }
 
 function toIsoTimestamp(val: any): string {
@@ -270,12 +289,20 @@ export default async function handler(req: Request): Promise<Response> {
   try {
     // 1. Read Raw Body for byte-exact signature verification
     const rawBody = await req.text();
-    const sigV2 = req.headers.get('x-bachs-signature-v2');
-    const sigV1 = req.headers.get('x-bachs-signature');
-    const tsHeader = req.headers.get('x-bachs-timestamp');
+    const sigHeader =
+      req.headers.get('bachs-signature') ||
+      req.headers.get('x-bachs-signature-v2') ||
+      req.headers.get('x-bachs-signature') ||
+      req.headers.get('signature');
+    const tsHeader =
+      req.headers.get('bachs-timestamp') ||
+      req.headers.get('x-bachs-timestamp') ||
+      req.headers.get('timestamp');
+
+    const webhookSecret = process.env.BACHS_WEBHOOK_SECRET || BACHS_WEBHOOK_SECRET;
 
     // 2. Cryptographic Signature Verification
-    const isValid = await verifyBachsWebhook(sigV2, sigV1, tsHeader, rawBody, BACHS_WEBHOOK_SECRET);
+    const isValid = await verifyBachsWebhook(sigHeader, tsHeader, rawBody, webhookSecret);
     if (!isValid) {
       console.error('[BACHS-WEBHOOK] Signature validation failed or missing.');
       return new Response(JSON.stringify({ error: 'Invalid or missing signature' }), {
