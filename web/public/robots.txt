@@ -2,14 +2,14 @@
 # Oddsbanta Robots Configuration (SEO & Web Crawlers)
 # Canonical host: https://www.oddsbanta.com
 #
-# Public & indexable: home, /track-record, /subscription, and the sport hubs
+# Public & indexable: home, /subscription, and the sport hubs
 # under /dashboard (guests see free picks; paid content stays locked in-card).
-# Blocked: the private admin deck and internal API endpoints only.
+# Blocked: the private admin deck, the admin-only track record, and internal API endpoints.
 # ==============================================================================
 
 User-agent: *
 Allow: /
-Allow: /track-record
+Disallow: /track-record
 Allow: /subscription
 Allow: /dashboard
 Disallow: /admin

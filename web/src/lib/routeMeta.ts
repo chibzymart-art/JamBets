@@ -11,32 +11,32 @@ export const ROUTE_SEO: Record<string, RouteSeo> = {
   '/': {
     title: 'Oddsbanta: AI Sports Analytics & Predictions with a 0–10 Confidence Score',
     description:
-      'AI sports predictions and mathematical models rated on a 0–10 confidence score. Settled on a transparent public track record. Oddsbanta is an analytics tool, not a bookmaker.',
+      'AI sports predictions and mathematical models rated on a 0–10 confidence score. Published before kickoff and settled automatically. Oddsbanta is an analytics tool, not a bookmaker.',
   },
   '/about': {
     title: 'About Oddsbanta | AI Sports Predictive Analytics & Quantitative Modeling',
     description:
-      'About Oddsbanta, our AI sports analytics engine, Poisson probability models, and public settlement track record. Oddsbanta is an analytics tool, not a bookmaker.',
+      'About Oddsbanta, our AI sports analytics engine, Poisson probability models, and automated settlement. Oddsbanta is an analytics tool, not a bookmaker.',
   },
   '/dashboard': {
     title: 'Football Predictions Today | Oddsbanta Dashboard',
     description:
-      'Today’s football predictions with a 0–10 confidence score per pick, published before kickoff. See the settled hit rate for every score tier on the track record.',
+      'Today’s football predictions with a 0–10 confidence score per pick, published before kickoff. Every pick is locked before kickoff.',
   },
   '/dashboard/goals': {
     title: 'Over 2.5 Goals & First-Half Goals Predictions | Oddsbanta',
     description:
-      'Football goals predictions for Over 2.5 goals and first-half goals, rated on a 0–10 confidence score and settled publicly after every match.',
+      'Football goals predictions for Over 2.5 goals and first-half goals, rated on a 0–10 confidence score and settled automatically after every match.',
   },
   '/dashboard/tennis': {
     title: 'Tennis Predictions Today: ATP & WTA | Oddsbanta',
     description:
-      'ATP and WTA tennis match predictions rated on a 0–10 confidence score, published before the first serve and settled on a public track record.',
+      'ATP and WTA tennis match predictions rated on a 0–10 confidence score, published before the first serve and settled automatically after the match.',
   },
   '/dashboard/basketball': {
     title: 'Basketball Predictions Today | Oddsbanta',
     description:
-      'Basketball predictions rated on a 0–10 confidence score, published before tip-off and settled on a public track record.',
+      'Basketball predictions rated on a 0–10 confidence score, published before tip-off and settled automatically after the match.',
   },
   '/track-record': {
     title: 'Track Record: Settled Results by Confidence Score | Oddsbanta',
@@ -54,7 +54,7 @@ export const ROUTE_SEO: Record<string, RouteSeo> = {
   '/subscription': {
     title: 'Plans & Pricing | Oddsbanta',
     description:
-      'Oddsbanta plans unlock every pick and its 0–10 confidence score across football, tennis and basketball. Check the public track record before you subscribe.',
+      'Oddsbanta plans unlock every pick and its 0–10 confidence score across football, tennis and basketball. Start with a free 3-day trial.',
   },
   '/admin': {
     title: 'Admin | Oddsbanta',

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { PICK_DISCLAIMER } from '../lib/confidenceScore';
 import { useGeoCurrency } from '../lib/geoCurrency';
@@ -13,26 +13,6 @@ interface LandingPageProps {
   onOpenBotHub?: () => void;
 }
 
-interface TrackRecordSummary {
-  overall: {
-    totalSettled: number;
-    totalWon: number;
-    totalLost: number;
-    totalVoid: number;
-    hitRate: number | null;
-  };
-  recent?: Array<{
-    home: string;
-    away: string;
-    league: string;
-    kickoff: string;
-    prediction: string;
-    result: string;
-    score: number | null;
-    finalScore?: string;
-  }>;
-}
-
 export const LandingPage: React.FC<LandingPageProps> = ({
   onOpenAuth,
   currentUser,
@@ -44,38 +24,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 }) => {
   const navigate = useNavigate();
   const { currency, symbol, pricing, formatPrice } = useGeoCurrency();
-  const [trackRecord, setTrackRecord] = useState<TrackRecordSummary | null>(null);
-  const [loadingSettled, setLoadingSettled] = useState(true);
   const [selectedSport, setSelectedSport] = useState<string>('football');
 
-  useEffect(() => {
-    let isMounted = true;
-    async function loadLandingData() {
-      try {
-        setLoadingSettled(true);
-        // Single cached CDN edge call — zero direct database load for landing visitors
-        const res = await fetch('/api/track-record');
-        if (res.ok) {
-          const data = await res.json();
-          if (isMounted) {
-            setTrackRecord(data);
-          }
-        }
-      } catch (err) {
-        console.warn('Error fetching landing track record:', err);
-      } finally {
-        if (isMounted) setLoadingSettled(false);
-      }
-    }
 
-    loadLandingData();
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-
-  const totalSettledCount = trackRecord?.overall?.totalSettled || 480;
 
   return (
     <div className="landing-light-root">
@@ -102,7 +53,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
             <p className="hero-light-subtext">
               Statistical models, expected goals, and 0–10 confidence scores for every fixture,
-              delivered daily, with an audited public track record of wins and losses.
+              delivered daily, with every pick published before kickoff and settled automatically.
             </p>
 
             {/* Direct Bot Delivery Callout Banner */}
@@ -199,8 +150,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               </div>
 
               <div className="hero-light-metric-card">
-                <span className="metric-light-label">Settled match ledger</span>
-                <span className="metric-light-val dark">{totalSettledCount}+ picks</span>
+                <span className="metric-light-label">Every pick</span>
+                <span className="metric-light-val dark">Pre-kickoff</span>
               </div>
 
               <Link
@@ -315,10 +266,10 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
           <div className="step-light-card">
             <span className="step-light-badge">Step 3</span>
-            <h3 className="step-light-title">Audit the Public Track Record</h3>
+            <h3 className="step-light-title">Unlock Every Pick</h3>
             <p className="step-light-desc">
-              Every prediction is published and timestamped before kickoff.
-              Every outcome (both wins and losses) is settled automatically on a transparent public ledger.
+              Members unlock every pick with its exact confidence score, probabilities and live kickoff alerts.
+              Every prediction is published before kickoff and settled automatically.
             </p>
           </div>
         </div>
@@ -340,9 +291,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           <div className="trust-light-item">
             <div className="trust-light-icon-wrap">📊</div>
             <div>
-              <h4 className="trust-light-title">Audited Track Record</h4>
+              <h4 className="trust-light-title">Locked Before Kickoff</h4>
               <p className="trust-light-desc">
-                All settled predictions are published with full mathematical audits, sample sizes, and tier hit rates.
+                Every prediction is published and timestamped before kickoff, then settled automatically from verified match statistics.
               </p>
             </div>
           </div>
@@ -402,68 +353,21 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         </div>
       </section>
 
-      {/* 5. SETTLED MATCH ACCURACY LEDGER (WINS AND LOSSES) */}
+      {/* 5. UPGRADE UPSELL (replaces the former public settled ledger) */}
       <section className="ledger-light-section" id="accuracy">
         <div className="section-light-header-centered">
-          <span className="subhead-light-pill">TRANSPARENT PERFORMANCE</span>
-          <h2 className="section-light-title">Settled Match Accuracy Ledger</h2>
+          <span className="subhead-light-pill">UNLOCK THE FULL EDGE</span>
+          <h2 className="section-light-title">Every Pick. Every Score. Before Kickoff.</h2>
           <p className="section-light-desc">
-            Complete mathematical transparency. Both wins and losses are published prior to kickoff and automatically verified post-whistle.
+            Members unlock every prediction with its exact 0-10 confidence score, full model probabilities and
+            live kickoff alerts across football, tennis and basketball. Start with a free 3-day trial and see the edge for yourself.
           </p>
         </div>
 
         <div className="ledger-light-container">
-          {loadingSettled ? (
-            <div className="ledger-light-loading">
-              <div className="loading-spinner" />
-              <p>Loading authoritative settled performance records...</p>
-            </div>
-          ) : trackRecord?.recent && trackRecord.recent.length > 0 ? (
-            <div className="ledger-light-grid">
-              {trackRecord.recent.slice(0, 8).map((pick, i) => {
-                const isWon = pick.result === 'won';
-                const scoreDisplay = pick.finalScore || 'FT';
-
-                return (
-                  <div key={i} className={`ledger-light-card ${isWon ? 'card-won' : 'card-lost'}`}>
-                    <div className="ledger-card-top">
-                      <span className="ledger-league-badge">{pick.league}</span>
-                      <span className={`ledger-status-tag ${isWon ? 'tag-won' : 'tag-lost'}`}>
-                        {isWon ? '✓ WON' : '✗ MISSED'}
-                      </span>
-                    </div>
-
-                    <div className="ledger-card-match">
-                      <span className="team-text">{pick.home}</span>
-                      <span className="score-pill">{scoreDisplay}</span>
-                      <span className="team-text text-right">{pick.away}</span>
-                    </div>
-
-                    <div className="ledger-card-meta">
-                      <div className="meta-item">
-                        <span className="meta-label">Signal:</span>
-                        <strong className="meta-val">{pick.prediction?.toUpperCase() || 'TARGET'}</strong>
-                      </div>
-                      <div className="meta-item text-right">
-                        <span className="meta-label">Confidence:</span>
-                        <strong className={`meta-val ${isWon ? 'green' : 'muted'}`}>
-                          {pick.score !== null ? `${pick.score.toFixed(1)}/10` : '—'}
-                        </strong>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <div className="ledger-light-empty">
-              <p>Settlement records are compiling post-match whistles. Check back as active games conclude.</p>
-            </div>
-          )}
-
           <div className="ledger-light-footer" style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
-            <Link to="/track-record" className="btn-light-view-all">
-              Inspect Full Public Track Record & Hit Rates →
+            <Link to="/subscription" className="btn-light-view-all">
+              View Plans & Start Free Trial →
             </Link>
             <Link to="/dashboard" className="btn-light-view-all" style={{ background: '#0284c7' }}>
               Open Prediction Dashboard →

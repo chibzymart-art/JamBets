@@ -46,7 +46,6 @@ import './tennis.css';
 import { TennisHubView } from './components/TennisHubView';
 import './basketball.css';
 import { BasketballHubView } from './components/BasketballHubView';
-import { TrackRecordPage } from './pages/TrackRecord';
 import { seoForPath, DASHBOARD_PATHS } from './lib/routeMeta';
 import { getFootballTierPriority, getTierHeaderByRank } from './lib/confidenceScore';
 
@@ -1905,15 +1904,6 @@ export default function App() {
                       <span className="hamburger-item-label">{currentUser ? (isDashboard ? 'Dashboard (Football)' : 'Dashboard') : 'View Predictions'}</span>
                     </Link>
 
-                    <Link
-                      to={DASHBOARD_PATHS.trackRecord}
-                      className={`hamburger-menu-item ${location.pathname === DASHBOARD_PATHS.trackRecord ? 'active' : ''}`}
-                      onClick={() => setIsHamburgerOpen(false)}
-                    >
-                      <span className="hamburger-item-icon">📈</span>
-                      <span className="hamburger-item-label">Track Record (Settled Hit Rates)</span>
-                    </Link>
-
                     {isDashboard && (
                       <>
                         <Link
@@ -2377,8 +2367,8 @@ export default function App() {
           <Route path="/basketball" element={<Navigate to={DASHBOARD_PATHS.basketball} replace />} />
           <Route path="/american-football" element={<Navigate to={DASHBOARD_PATHS.american_football} replace />} />
           <Route path="/cricket" element={<Navigate to={DASHBOARD_PATHS.cricket} replace />} />
-          <Route path="/dashboard/track-record" element={<Navigate to={DASHBOARD_PATHS.trackRecord} replace />} />
-          <Route path="/settlement" element={<Navigate to={DASHBOARD_PATHS.trackRecord} replace />} />
+          <Route path="/dashboard/track-record" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/settlement" element={<Navigate to="/dashboard" replace />} />
           <Route path="/pricing" element={<Navigate to="/subscription" replace />} />
 
           {/* DASHBOARD ROUTE: OTHER MARKETS (GOALS & SPECIALIST MODELS) */}
@@ -2462,10 +2452,10 @@ export default function App() {
             }
           />
 
-          {/* DASHBOARD ROUTE: PUBLIC TRACK RECORD */}
+          {/* Track Record is admin-only (Admin panel > Track Record tab); public URL redirects to the dashboard */}
           <Route
             path={DASHBOARD_PATHS.trackRecord}
-            element={<TrackRecordPage />}
+            element={<Navigate to="/dashboard" replace />}
           />
 
           {/* DASHBOARD ROUTE: AMERICAN FOOTBALL (COMING SOON) */}
@@ -3151,7 +3141,7 @@ export default function App() {
                     >
                       <div style={{ fontSize: 44, marginBottom: 12 }}>🔒</div>
                       <h2 style={{ fontSize: 22, fontWeight: 900, color: 'var(--text-primary)', marginBottom: 8 }}>
-                        Register to View Verified Settlements &amp; Past Track Record
+                        Register to Unlock Verified Settlements &amp; Full Match History
                       </h2>
                       <p style={{ color: 'var(--text-muted)', fontSize: 14, maxWidth: 520, margin: '0 auto 24px', lineHeight: 1.6 }}>
                         Oddsbanta transparently audits 100% of finished matches, verified wins, and mathematical simulations. Create your free account to unlock historical settlements and start your <strong>3-day free trial</strong> of live football predictions.

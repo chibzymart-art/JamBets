@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
+import { TrackRecordPage } from '../pages/TrackRecord';
 import { SystemHealthStatus, AuditRecord, UserProfile, LeagueRecord, PaymentRecord } from '../types';
 import {
   getAdBanners,
@@ -103,7 +104,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
   const [sfxEnabled, setSfxEnabled] = useState<boolean>(true);
 
   // Active Admin Section Tab
-  const [activeAdminTab, setActiveAdminTab] = useState<'engines' | 'users' | 'stats' | 'financials' | 'ads' | 'leagues' | 'audit' | 'all'>('engines');
+  const [activeAdminTab, setActiveAdminTab] = useState<'engines' | 'users' | 'stats' | 'financials' | 'ads' | 'leagues' | 'audit' | 'trackrecord' | 'all'>('engines');
 
   // Global action toasts
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
@@ -1862,6 +1863,16 @@ export const AdminView: React.FC<AdminViewProps> = ({
 
         <button
           type="button"
+          id="admin-tab-trackrecord"
+          className={`admin-nav-tab ${activeAdminTab === 'trackrecord' ? 'active' : ''}`}
+          onClick={() => { playSfx('click'); setActiveAdminTab('trackrecord'); }}
+        >
+          <span>📈</span>
+          <span>Track Record</span>
+        </button>
+
+        <button
+          type="button"
           id="admin-tab-all"
           className={`admin-nav-tab ${activeAdminTab === 'all' ? 'active' : ''}`}
           onClick={() => { playSfx('click'); setActiveAdminTab('all'); }}
@@ -1870,6 +1881,11 @@ export const AdminView: React.FC<AdminViewProps> = ({
           <span>All Cards</span>
         </button>
       </nav>
+
+      {/* =====================================================================
+          ADMIN-ONLY: TRACK RECORD (settled hit rates by tier)
+          ===================================================================== */}
+      {activeAdminTab === 'trackrecord' && <TrackRecordPage />}
 
       {/* =====================================================================
           PANEL 1: 6-ENGINE TELEMETRY STATION & AUTOMATION COMMAND DECK

@@ -638,7 +638,7 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
             >
               <div style={{ fontSize: 36, marginBottom: 8 }}>🔒</div>
               <h2 style={{ fontSize: 20, fontWeight: 900, color: 'var(--text-primary)', marginBottom: 6 }}>
-                Register to View Verified Settlements &amp; Past Track Record
+                Register to Unlock Verified Settlements &amp; Full Match History
               </h2>
               <p style={{ color: 'var(--text-muted)', fontSize: 13, maxWidth: 520, margin: '0 auto 16px', lineHeight: 1.5 }}>
                 Oddsbanta transparently audits 100% of finished matches, verified wins, and mathematical simulations. Create your free account to unlock historical settlements and start your <strong>3-day free trial</strong> of live football predictions.

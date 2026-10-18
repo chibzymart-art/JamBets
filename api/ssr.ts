@@ -1,4 +1,4 @@
-import { getTrackRecord, getUpcomingFixtures } from './_lib/trackRecord';
+import { getUpcomingFixtures } from './_lib/trackRecord';
 import { fallbackShell, normalizeRoute, renderPage, routeNeedsUpcoming } from './_lib/ssrRender';
 
 /**
@@ -50,16 +50,20 @@ export default async function handler(req: Request): Promise<Response> {
   const url = new URL(req.url);
   const route = normalizeRoute(url.searchParams.get('path'));
 
-  const [shell, tr, upcoming] = await Promise.all([
+  // Track Record is admin-only (Admin panel). The old public SSR route redirects to the dashboard.
+  if (route === '/track-record') {
+    return new Response(null, { status: 302, headers: { Location: '/dashboard', 'Cache-Control': 'no-store' } });
+  }
+
+  const [shell, upcoming] = await Promise.all([
     getShell(req).catch(() => null),
-    getTrackRecord().catch(() => null),
     routeNeedsUpcoming(route) ? getUpcomingFixtures().catch(() => []) : Promise.resolve([]),
   ]);
 
-  const html = renderPage(shell || fallbackShell(), route, tr, upcoming);
+  const html = renderPage(shell || fallbackShell(), route, null, upcoming);
   // Fast 60s CDN cache with 120s revalidation: keeps response times fast while ensuring newly
   // deployed JavaScript bundle hashes reach visitors in under 1 minute.
-  const healthy = !!shell && !!tr;
+  const healthy = !!shell;
   const cdn = healthy ? 'public, s-maxage=60, stale-while-revalidate=120' : 'no-store';
 
   return new Response(html, {

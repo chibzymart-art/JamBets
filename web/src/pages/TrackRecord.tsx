@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { supabase } from '../lib/supabase';
 import { PICK_DISCLAIMER, SCORE_TIERS, ScoreTierKey } from '../lib/confidenceScore';
-import { updatePageSeo } from '../lib/seo';
 
 interface TierStats {
   tier: ScoreTierKey;
@@ -52,15 +51,12 @@ export function TrackRecordPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    updatePageSeo({
-      title: 'Track Record: Settled Results by Confidence Score | Oddsbanta',
-      description:
-        'Every settled Oddsbanta pick, wins and losses, grouped by 0–10 confidence score tier with sample sizes. Live forward results only, not a backtest.',
-      canonicalPath: '/track-record',
-    });
-
     let isMounted = true;
-    fetch('/api/track-record')
+    // Admin-only endpoint: the API requires the signed-in admin's access token.
+    supabase.auth.getSession().then(({ data: sessionData }) => fetch('/api/track-record', {
+      headers: { Authorization: `Bearer ${sessionData?.session?.access_token ?? ''}` },
+      cache: 'no-store',
+    }))
       .then((res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.json();
@@ -94,18 +90,10 @@ export function TrackRecordPage() {
 
   return (
     <div className="track-record-page" style={{ maxWidth: 1080, margin: '0 auto', padding: '24px 16px' }}>
-      {/* Header & Breadcrumb */}
-      <nav aria-label="Breadcrumb" style={{ marginBottom: 16, fontSize: 13, color: 'var(--text-muted, #64748b)' }}>
-        <Link to="/" style={{ color: 'var(--text-muted, #64748b)', textDecoration: 'none' }}>Home</Link>
-        {' / '}
-        <Link to="/dashboard" style={{ color: 'var(--text-muted, #64748b)', textDecoration: 'none' }}>Dashboard</Link>
-        {' / '}
-        <span style={{ color: 'var(--text-primary, #0f172a)', fontWeight: 600 }}>Track Record</span>
-      </nav>
 
       <div style={{ marginBottom: 32 }}>
         <div style={{ display: 'inline-block', padding: '4px 10px', borderRadius: 999, background: '#ecfdf5', color: '#047857', fontSize: 12, fontWeight: 700, marginBottom: 8 }}>
-          ✓ 100% PUBLIC AUDIT
+          ✓ ADMIN ONLY
         </div>
         <h1 style={{ fontSize: '2rem', fontWeight: 800, margin: '0 0 8px', color: 'var(--text-primary, #0f172a)' }}>
           Settled Results by Confidence Score
@@ -321,7 +309,7 @@ export function TrackRecordPage() {
 
           {/* Legal / Model Disclaimer Banner */}
           <footer style={{ padding: '16px 20px', background: '#f8fafc', borderRadius: 12, border: '1px solid #e2e8f0', fontSize: 12, color: 'var(--text-muted, #64748b)', lineHeight: 1.5 }}>
-            <p style={{ margin: '0 0 6px', fontWeight: 600 }}>Public Audit Disclosure</p>
+            <p style={{ margin: '0 0 6px', fontWeight: 600 }}>ADMIN ONLY — Audit Disclosure</p>
             <p style={{ margin: 0 }}>
               {PICK_DISCLAIMER} Every prediction is recorded in our cryptographic queue prior to kickoff and settled autonomously via verified match statistics. Past performance does not guarantee future results.
             </p>

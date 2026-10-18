@@ -51,7 +51,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
 
           <p className="hero-subtext">
             Statistical models, expected goals and probability analysis for every fixture,
-            delivered daily, with a public track record you can audit.
+            delivered daily, with every pick published before kickoff and settled automatically.
           </p>
 
           <div className="hero-cta-group">
@@ -234,9 +234,9 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
           <div className="trust-pillar-item">
             <div className="pillar-icon">📊</div>
             <div>
-              <h4 className="pillar-title">Transparent track record</h4>
+              <h4 className="pillar-title">Locked before kickoff</h4>
               <p className="pillar-desc">
-                All settled predictions are published with full mathematical audits and ROI benchmarks.
+                Every prediction is published and timestamped before kickoff, then settled automatically.
               </p>
             </div>
           </div>

@@ -1708,7 +1708,7 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
                 </div>
                 <div className="enforcement-badge-item gate-pass">
                   <span className="badge-check-icon">✓</span>
-                  <span>Automated Post-Match Settlement Active • Auditable on Public Track Record</span>
+                  <span>Automated Post-Match Settlement Active • Settled from verified match statistics</span>
                 </div>
               </div>
               <div style={{ marginTop: 12, padding: '8px 12px', background: '#f8fafc', borderRadius: 8, fontSize: 11, color: '#64748b', lineHeight: 1.5, border: '1px solid #e2e8f0' }}>

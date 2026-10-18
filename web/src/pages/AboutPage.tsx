@@ -160,10 +160,10 @@ export const AboutPage: React.FC<AboutPageProps> = ({
             >
               <div style={{ fontSize: '28px', marginBottom: '12px' }}>📜</div>
               <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: '#d97706', margin: '0 0 8px 0' }}>
-                3. Immutable Public Ledger
+                3. Locked Before Kickoff
               </h3>
               <p style={{ fontSize: '0.9rem', color: '#475569', lineHeight: 1.6, margin: 0 }}>
-                Unlike tipster channels that delete losses, all Oddsbanta picks are locked before kickoff and automatically settled on a public, transparent track record ledger.
+                Unlike tipster channels that delete losses, all Oddsbanta picks are locked before kickoff and automatically settled from verified match statistics.
               </p>
             </div>
           </div>
@@ -253,22 +253,6 @@ export const AboutPage: React.FC<AboutPageProps> = ({
             }}
           >
             📊 View Live Dashboard →
-          </Link>
-          <Link
-            to="/track-record"
-            style={{
-              padding: '12px 24px',
-              background: '#ffffff',
-              color: '#0f172a',
-              border: '1px solid #cbd5e1',
-              borderRadius: '10px',
-              fontWeight: 700,
-              fontSize: '14px',
-              textDecoration: 'none',
-              boxShadow: '0 2px 6px rgba(0, 0, 0, 0.04)',
-            }}
-          >
-            📈 Public Track Record
           </Link>
           <Link
             to="/subscription"

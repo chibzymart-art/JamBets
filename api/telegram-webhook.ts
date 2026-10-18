@@ -256,7 +256,6 @@ export default async function handler(req: Request) {
             `• /mid - Mid Confidence (70% - 79%)\n` +
             `• /low - Low Confidence Leans (&lt; 70%)\n` +
             `• /goals - Over 2.5 &amp; Goals Hub\n` +
-            `• /settled - Verified match settlements\n` +
             `• /status - Your subscription status\n` +
             `• /help - Full FAQ &amp; Guide`
           );
@@ -289,7 +288,6 @@ export default async function handler(req: Request) {
           `• /mid - Mid Confidence (70% - 79%)\n` +
           `• /low - Low Confidence value leans\n` +
           `• /goals - Over 2.5 &amp; 1st Half Goals Hub\n` +
-          `• /settled - Live track record\n` +
           `• /status - Subscription details\n` +
           `• /help - Complete FAQs &amp; Command Guide`
         );
@@ -392,7 +390,6 @@ export default async function handler(req: Request) {
         `• /mid - Mid Confidence (70% - 79%)\n` +
         `• /low - Low Confidence value leans\n` +
         `• /goals - Over 2.5, Over 1.5 &amp; BTTS Hub\n` +
-        `• /settled - Live settled results track record\n` +
         `• /status - Check account &amp; VIP subscription status\n` +
         `• /link &lt;CODE&gt; - Connect your Oddsbanta web profile\n` +
         `• /help - Display this FAQ &amp; command list\n\n` +
@@ -405,6 +402,15 @@ export default async function handler(req: Request) {
 
     // 5. ROUTE /settled or /results
     if (commandToken === '/settled' || commandToken === '/results') {
+      // Admin-only: settled results are no longer public (Track Record is an admin feature).
+      const settledUser = await getLinkedUser(chatId);
+      const settledEmail = (settledUser?.email || '').toLowerCase().trim();
+      const settledIsAdmin = !!settledUser && (settledUser.role === 'admin' || ADMIN_EMAILS.includes(settledEmail));
+      if (!settledIsAdmin) {
+        await sendTelegramMessage(chatId, 'This command is not available. Open your dashboard at https://www.oddsbanta.com/dashboard for your picks.');
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      }
+
       const headers = {
         apikey: SUPABASE_SERVICE_ROLE_KEY,
         Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
@@ -440,7 +446,6 @@ export default async function handler(req: Request) {
         const pick = escapeHtml(p.prediction || '');
         reply += `• <b>${home} vs ${away}</b> (${score})\n  Pick: ${pick} → <b>${icon}</b>\n`;
       });
-      reply += `\nTrack record is 100% auditable at <a href="https://www.oddsbanta.com/settlement">oddsbanta.com/settlement</a>`;
 
       await sendTelegramMessage(chatId, reply);
       return new Response(JSON.stringify({ ok: true }), { status: 200 });

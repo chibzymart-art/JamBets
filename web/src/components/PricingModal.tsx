@@ -22,7 +22,7 @@ export const PricingModal: React.FC<PricingModalProps> = ({ isOpen, onClose, onU
             <img src="/logo.svg" alt="Oddsbanta" className="modal-brand-logo-img" style={{ width: 44, height: 44, borderRadius: 10 }} />
             <div>
               <h2 className="modal-title">Oddsbanta Subscriptions</h2>
-              <p className="modal-subtitle">Instant mathematical edge — transparent 0–10 confidence scores and audited track record</p>
+              <p className="modal-subtitle">Instant mathematical edge — transparent 0–10 confidence scores and every pick locked before kickoff</p>
             </div>
           </div>
           <button className="modal-close-btn" onClick={onClose} aria-label="Close modal">

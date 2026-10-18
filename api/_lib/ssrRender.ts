@@ -59,7 +59,7 @@ const META: Record<SsrRoute, RouteMeta> = {
   '/': {
     title: 'Oddsbanta: AI Sports Analytics & Predictions with a 0–10 Confidence Score',
     description:
-      'AI sports predictions and mathematical models rated on a 0–10 confidence score. Settled on a transparent public track record. Oddsbanta is an analytics tool, not a bookmaker.',
+      'AI sports predictions and mathematical models rated on a 0–10 confidence score. Published before kickoff and settled automatically. Oddsbanta is an analytics tool, not a bookmaker.',
     h1: 'AI sports analytics and mathematical predictions with a 0–10 confidence score',
     intro:
       'Oddsbanta is an AI-powered sports analytics and predictive intelligence platform publishing football, tennis and basketball models before kickoff. Oddsbanta is an analytics tool, not a bookmaker.',
@@ -67,7 +67,7 @@ const META: Record<SsrRoute, RouteMeta> = {
   '/about': {
     title: 'About Oddsbanta | AI Sports Predictive Analytics & Quantitative Modeling',
     description:
-      'About Oddsbanta, our AI sports analytics engine, Poisson probability models, and public settlement track record. Oddsbanta is an analytics platform, not a bookmaker.',
+      'About Oddsbanta, our AI sports analytics engine, Poisson probability models, and automated settlement. Oddsbanta is an analytics platform, not a bookmaker.',
     h1: 'About Oddsbanta: AI Sports Analytics & Quantitative Modeling',
     intro:
       'Oddsbanta is an independent sports analytics and quantitative research platform. We build statistical models, expected goals algorithms, and calibrated 0–10 confidence scores.',
@@ -75,7 +75,7 @@ const META: Record<SsrRoute, RouteMeta> = {
   '/dashboard': {
     title: 'Football Predictions Today | Oddsbanta Dashboard',
     description:
-      'Today’s football predictions with a 0–10 confidence score per pick, published before kickoff. See the settled hit rate for every score tier on the track record.',
+      'Today’s football predictions with a 0–10 confidence score per pick, published before kickoff. Every pick is locked before kickoff.',
     h1: 'Football predictions today',
     intro:
       'Main match picks for today’s fixtures, each rated on the 0–10 confidence score. Free picks are open to everyone; premium picks unlock with a plan.',
@@ -95,7 +95,7 @@ const META: Record<SsrRoute, RouteMeta> = {
   '/dashboard/tennis': {
     title: 'Tennis Predictions Today: ATP & WTA | Oddsbanta',
     description:
-      'ATP and WTA tennis match predictions rated on a 0–10 confidence score, published before the first serve and settled on a public track record.',
+      'ATP and WTA tennis match predictions rated on a 0–10 confidence score, published before the first serve and settled automatically after the match.',
     h1: 'Tennis predictions: ATP and WTA',
     intro:
       'Match-winner picks for ATP and WTA events, each with a 0–10 confidence score. Secondary markets are shown inside the dashboard.',
@@ -104,7 +104,7 @@ const META: Record<SsrRoute, RouteMeta> = {
   '/dashboard/basketball': {
     title: 'Basketball Predictions Today | Oddsbanta',
     description:
-      'Basketball predictions rated on a 0–10 confidence score, published before tip-off and settled on a public track record.',
+      'Basketball predictions rated on a 0–10 confidence score, published before tip-off and settled automatically after the match.',
     h1: 'Basketball predictions',
     intro: 'Basketball picks across the leagues we cover, each rated on the 0–10 confidence score.',
     product: 'basketball',
@@ -134,10 +134,10 @@ const META: Record<SsrRoute, RouteMeta> = {
   '/subscription': {
     title: 'Plans & Pricing | Oddsbanta',
     description:
-      'Oddsbanta plans unlock every pick and its 0–10 confidence score across football, tennis and basketball. Check the public track record before you subscribe.',
+      'Oddsbanta plans unlock every pick and its 0–10 confidence score across football, tennis and basketball. Start with a free 3-day trial.',
     h1: 'Plans and pricing',
     intro:
-      'A plan unlocks every pick and its exact confidence score across football, tennis and basketball. Check the public track record before you subscribe.',
+      'A plan unlocks every pick and its exact confidence score across football, tennis and basketball. Start with a free 3-day trial.',
   },
 };
 
@@ -545,7 +545,7 @@ export const SSR_CRITICAL_CSS = `
 `;
 
 function nav(): string {
-  return `<header class="ssr-header"><div class="ssr-nav-inner"><a href="/" class="ssr-brand-logo"><span class="ssr-logo-badge">ODDS</span>BANTA</a><nav aria-label="Main" class="ssr-nav-links"><a href="/" class="ssr-nav-pill">Home</a><a href="/dashboard" class="ssr-nav-pill">Dashboard</a><a href="/track-record" class="ssr-nav-pill">Track record</a><a href="/subscription" class="ssr-nav-pill">Pricing</a></nav><div class="ssr-engine-status"><span class="ssr-live-dot"></span><span>AI Predictive Engine</span></div></div></header>`;
+  return `<header class="ssr-header"><div class="ssr-nav-inner"><a href="/" class="ssr-brand-logo"><span class="ssr-logo-badge">ODDS</span>BANTA</a><nav aria-label="Main" class="ssr-nav-links"><a href="/" class="ssr-nav-pill">Home</a><a href="/dashboard" class="ssr-nav-pill">Dashboard</a><a href="/subscription" class="ssr-nav-pill">Pricing</a></nav><div class="ssr-engine-status"><span class="ssr-live-dot"></span><span>AI Predictive Engine</span></div></div></header>`;
 }
 
 function skeletonPreview(): string {
@@ -564,28 +564,9 @@ export function renderBody(route: SsrRoute, tr: TrackRecord | null, upcoming: Up
     parts.push(sportsList());
   } else if (route === '/') {
     parts.push(sportsList(), scoreExplainer());
-    parts.push(
-      `<section aria-labelledby="tr-h"><h2 id="tr-h">Track record so far</h2>${
-        tr ? summaryList(tr) : '<p>Track record is loading.</p>'
-      }<p><a href="/track-record">See every score tier, wins and losses</a> · <a href="/dashboard">Open the dashboard</a></p></section>`
-    );
-  } else if (route === '/track-record') {
-    if (tr) {
-      parts.push(`<p>${esc(tr.note)}</p>`);
-      parts.push(`<section aria-labelledby="tiers-h"><h2 id="tiers-h">Results by confidence score tier</h2>${tr.products.map(productTable).join('')}</section>`);
-      parts.push(recentList(tr));
-    } else {
-      parts.push('<p>Track record data is temporarily unavailable. Please refresh shortly.</p>');
-    }
-    parts.push(scoreExplainer());
   } else if (route === '/subscription') {
     parts.push(scoreExplainer());
-    if (tr) parts.push(`<section aria-labelledby="tr-h"><h2 id="tr-h">Track record before you buy</h2>${summaryList(tr)}<p><a href="/track-record">Full track record</a></p></section>`);
   } else {
-    if (m.product && tr) {
-      const p = tr.products.find((x) => x.product === m.product);
-      if (p) parts.push(`<section aria-labelledby="tiers-h"><h2 id="tiers-h">Settled results by score tier</h2>${productTable(p)}<p><a href="/track-record">Full track record</a></p></section>`);
-    }
     if (m.needsUpcoming) parts.push(upcomingList(upcoming));
     parts.push(sportsList());
   }
