@@ -141,7 +141,7 @@ class FeedSnapshotEngine:
         now = datetime.now(timezone.utc)
         yesterday_utc = datetime(now.year, now.month, now.day, 0, 0, 0, tzinfo=timezone.utc) - timedelta(days=1)
         min_date = yesterday_utc.isoformat()
-        max_date = (now + timedelta(days=2)).isoformat()
+        max_date = forward_horizon_end_iso()
 
         select_query = (
             "id,fixture_id,prediction,market,probability,confidence_category,secondary_predictions,"
@@ -462,7 +462,7 @@ class FeedSnapshotEngine:
         now = datetime.now(timezone.utc)
         yesterday_utc = datetime(now.year, now.month, now.day, 0, 0, 0, tzinfo=timezone.utc) - timedelta(days=1)
         min_date = yesterday_utc.isoformat()
-        max_date = (now + timedelta(days=2)).isoformat()
+        max_date = forward_horizon_end_iso()
 
         pred_select = (
             "id,fixture_id,market,prediction,probability,confidence_category,secondary_predictions,"
@@ -487,7 +487,7 @@ class FeedSnapshotEngine:
                 "target_kickoff_at": f"gte.{min_date}",
                 "and": f"(target_kickoff_at.lte.{max_date})",
                 "order": "target_kickoff_at.asc",
-                "limit": "500"
+                "limit": "1000"
             }
         )
         leagues_resp = self.client.get(
@@ -628,7 +628,7 @@ class FeedSnapshotEngine:
         now = datetime.now(timezone.utc)
         yesterday_utc = datetime(now.year, now.month, now.day, 0, 0, 0, tzinfo=timezone.utc) - timedelta(days=1)
         min_date = yesterday_utc.isoformat()
-        max_date = (now + timedelta(days=2)).isoformat()
+        max_date = forward_horizon_end_iso()
 
         pred_select = (
             "*,fixture:tennis_fixtures("
@@ -655,7 +655,7 @@ class FeedSnapshotEngine:
                 "target_kickoff_at": f"gte.{min_date}",
                 "and": f"(target_kickoff_at.lte.{max_date})",
                 "order": "target_kickoff_at.asc",
-                "limit": "500"
+                "limit": "1000"
             }
         )
         tourneys_resp = self.client.get(
