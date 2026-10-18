@@ -141,7 +141,7 @@ class FeedSnapshotEngine:
         now = datetime.now(timezone.utc)
         yesterday_utc = datetime(now.year, now.month, now.day, 0, 0, 0, tzinfo=timezone.utc) - timedelta(days=1)
         min_date = yesterday_utc.isoformat()
-        max_date = forward_horizon_end_iso()
+        max_date = forward_horizon_end_iso(FORWARD_HORIZON_DAYS + 1)
 
         select_query = (
             "id,fixture_id,prediction,market,probability,confidence_category,secondary_predictions,"
@@ -462,7 +462,7 @@ class FeedSnapshotEngine:
         now = datetime.now(timezone.utc)
         yesterday_utc = datetime(now.year, now.month, now.day, 0, 0, 0, tzinfo=timezone.utc) - timedelta(days=1)
         min_date = yesterday_utc.isoformat()
-        max_date = forward_horizon_end_iso()
+        max_date = forward_horizon_end_iso(FORWARD_HORIZON_DAYS + 1)
 
         pred_select = (
             "id,fixture_id,market,prediction,probability,confidence_category,secondary_predictions,"
@@ -628,7 +628,7 @@ class FeedSnapshotEngine:
         now = datetime.now(timezone.utc)
         yesterday_utc = datetime(now.year, now.month, now.day, 0, 0, 0, tzinfo=timezone.utc) - timedelta(days=1)
         min_date = yesterday_utc.isoformat()
-        max_date = forward_horizon_end_iso()
+        max_date = forward_horizon_end_iso(FORWARD_HORIZON_DAYS + 1)
 
         pred_select = (
             "*,fixture:tennis_fixtures("
