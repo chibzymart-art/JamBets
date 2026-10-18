@@ -36,6 +36,55 @@ class CornersEngine:
         self.db = db or CloudSupabaseClient()
         self.data_provider = CornersDataProvider(self.db)
 
+    # ------------------------------------------------------------------
+    # Per-fixture idempotency helpers.
+    # DB invariant (see migration 20261018000001): at most ONE published,
+    # non-void corner_predictions row may exist per fixture_id.
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _row_rank(row: Dict[str, Any]):
+        settled = 1 if row.get("settlement_status") in ("won", "lost") else 0
+        return (settled, row.get("created_at") or "", row.get("id") or "")
+
+    def _load_live_rows_by_fixture(self, fixture_ids: List[str]) -> Dict[str, Dict[str, Any]]:
+        """
+        Returns the single authoritative published, non-void row per fixture
+        (settled rows win, then newest). Scoped to the given fixtures, chunked and
+        without any global row cap, so no existing row can be missed.
+        """
+        by_fixture: Dict[str, Dict[str, Any]] = {}
+        for i in range(0, len(fixture_ids), 50):
+            chunk = fixture_ids[i:i + 50]
+            rows = self.db.get("corner_predictions", {
+                "select": "id,fixture_id,target_kickoff_at,settlement_status,market,publication_status,created_at",
+                "fixture_id": f"in.({','.join(chunk)})",
+                "publication_status": "eq.published",
+                "settlement_status": "neq.void",
+                "limit": "1000"
+            })
+            for r in rows:
+                cur = by_fixture.get(r["fixture_id"])
+                if cur is None or self._row_rank(r) > self._row_rank(cur):
+                    by_fixture[r["fixture_id"]] = r
+        return by_fixture
+
+    def _publish_single(self, payload: Dict[str, Any]) -> str:
+        """
+        Insert one prediction; if the DB rejects it because a published row already
+        exists for the fixture (unique violation / race), update that row in place
+        instead of creating a duplicate. Returns 'inserted', 'updated' or 'skipped'.
+        """
+        try:
+            self.db.post("corner_predictions", [payload])
+            return "inserted"
+        except Exception as e:
+            existing = self._load_live_rows_by_fixture([payload["fixture_id"]]).get(payload["fixture_id"])
+            if existing and existing.get("settlement_status") == "pending":
+                self.db.patch("corner_predictions", payload, {"id": f"eq.{existing['id']}"})
+                return "updated"
+            print(f"⚠️ [CornersEngine] Skipped fixture {payload['fixture_id']} (already published/settled): {e}")
+            return "skipped"
+
     def run(self, max_fixtures: int = 500, wipe_all: bool = True) -> Dict[str, Any]:
         print("🚩 [CornersEngine] Launching Dynamic Corners Specialist Engine (7.5 - 9.5)...")
         now = datetime.now(timezone.utc)
@@ -47,36 +96,7 @@ class CornersEngine:
         ds_stats = self.data_provider.load_dynamic_dataset()
         print(f"📈 [CornersEngine] Ingestion complete: {ds_stats}")
 
-        # 2. Reset/Wipe existing corner predictions if requested per user directive
-        if wipe_all:
-            print("🧹 [CornersEngine] Archiving existing pending/void corner predictions for fresh run...")
-            try:
-                self.db.patch("corner_predictions", {
-                    "publication_status": "archived"
-                }, {
-                    "settlement_status": "in.(pending,void)"
-                })
-                print("✨ [CornersEngine] Successfully marked prior active/void corner predictions as archived.")
-            except Exception as e:
-                print(f"⚠️ [CornersEngine] Notice during reset: {e}")
-
-        # 3. Query existing predictions to respect 48-hour lock & settlement status (if any preserved)
-        existing = self.db.get("corner_predictions", {
-            "select": "id,fixture_id,target_kickoff_at,settlement_status,market,publication_status",
-            "limit": "1000"
-        })
-        existing_map = {(p["fixture_id"], p.get("market")): p["id"] for p in existing}
-        existing_pending_map = {p["fixture_id"]: p["id"] for p in existing if p.get("settlement_status") == "pending" and p.get("publication_status") != "archived"}
-        locked_fixture_ids = set()
-        for p in existing:
-            if p.get("publication_status") == "archived":
-                continue
-            if p.get("settlement_status") in ("won", "lost"):
-                locked_fixture_ids.add(p["fixture_id"])
-            elif not wipe_all and p.get("target_kickoff_at") and p["target_kickoff_at"] <= lock_window_iso:
-                locked_fixture_ids.add(p["fixture_id"])
-
-        # 4. Fetch scheduled upcoming fixtures across 4-day window
+        # 2. Fetch scheduled upcoming fixtures across 4-day window
         fixtures = self.db.get("football_fixtures", {
             "status": "in.(scheduled,live,in_progress,halftime)",
             "target_kickoff_at": f"gte.{min_kickoff}",
@@ -84,6 +104,19 @@ class CornersEngine:
             "select": "id,home_team_id,away_team_id,target_kickoff_at,league_id",
             "limit": str(max_fixtures)
         })
+
+        # 3. Query the existing live row per evaluated fixture (scoped, uncapped) to respect
+        #    48-hour lock & settlement status. One published row per fixture is the invariant:
+        #    a re-qualifying fixture is updated IN PLACE, never inserted a second time.
+        existing_by_fixture = self._load_live_rows_by_fixture([f["id"] for f in fixtures])
+        locked_fixture_ids = set()
+        for fid_, p in existing_by_fixture.items():
+            if p.get("settlement_status") in ("won", "lost"):
+                locked_fixture_ids.add(fid_)
+            elif not wipe_all and p.get("target_kickoff_at") and p["target_kickoff_at"] <= lock_window_iso:
+                locked_fixture_ids.add(fid_)
+        seen_fixtures = set()
+        published_fixture_ids = set()
 
         to_insert = []
         updated_count = 0
@@ -96,6 +129,11 @@ class CornersEngine:
         for f in fixtures:
             fid = f["id"]
             lid = f.get("league_id")
+
+            # In-flight dedupe: never evaluate/publish the same fixture twice in one run
+            if fid in seen_fixtures:
+                continue
+            seen_fixtures.add(fid)
 
             hid = f.get("home_team_id")
             aid = f.get("away_team_id")
@@ -181,23 +219,54 @@ class CornersEngine:
                 "settlement_notes": notes
             }
 
-            if fid in existing_pending_map:
-                pred_id = existing_pending_map[fid]
-                self.db.patch("corner_predictions", payload, {"id": f"eq.{pred_id}"})
-                updated_count += 1
-            elif (fid, eval_res["market"]) in existing_map:
-                pred_id = existing_map[(fid, eval_res["market"])]
-                self.db.patch("corner_predictions", payload, {"id": f"eq.{pred_id}"})
+            existing_row = existing_by_fixture.get(fid)
+            if existing_row is not None:
+                # Existing pending published row for this fixture: update in place (market may change)
+                self.db.patch("corner_predictions", payload, {"id": f"eq.{existing_row['id']}"})
                 updated_count += 1
             else:
                 to_insert.append(payload)
+            published_fixture_ids.add(fid)
 
-        # 5. Batch insert fresh high-conviction predictions
+        # 5. Batch insert fresh high-conviction predictions (only fixtures with no live row)
         inserted_count = 0
         for i in range(0, len(to_insert), 50):
             batch = to_insert[i:i+50]
-            res = self.db.post("corner_predictions", batch)
-            inserted_count += len(res) if res else len(batch)
+            try:
+                res = self.db.post("corner_predictions", batch)
+                inserted_count += len(res) if res else len(batch)
+            except Exception as e:
+                # A concurrent run (or stale view) hit the one-published-row-per-fixture guard:
+                # resolve row by row so one conflict never loses or duplicates the rest.
+                print(f"⚠️ [CornersEngine] Batch insert conflict, resolving per row: {e}")
+                for payload in batch:
+                    outcome = self._publish_single(payload)
+                    if outcome == "inserted":
+                        inserted_count += 1
+                    elif outcome == "updated":
+                        updated_count += 1
+
+        # 6. Archive stale pending picks (fixtures that no longer qualify). By id and only
+        #    settlement_status=pending, so settled/void rows (immutable) are never touched.
+        if wipe_all:
+            stale_ids = [
+                p["id"] for fid_, p in existing_by_fixture.items()
+                if fid_ not in published_fixture_ids
+                and fid_ not in locked_fixture_ids
+                and p.get("settlement_status") == "pending"
+            ]
+            for i in range(0, len(stale_ids), 50):
+                try:
+                    self.db.patch("corner_predictions", {
+                        "publication_status": "archived"
+                    }, {
+                        "id": f"in.({','.join(stale_ids[i:i+50])})",
+                        "settlement_status": "eq.pending"
+                    })
+                except Exception as e:
+                    print(f"⚠️ [CornersEngine] Notice during stale-pick archive: {e}")
+            if stale_ids:
+                print(f"🧹 [CornersEngine] Archived {len(stale_ids)} stale pending corner predictions.")
 
         total_published = inserted_count + updated_count
         print(f"✅ [CornersEngine] Completed: {total_published} High-Conviction Corner picks published "

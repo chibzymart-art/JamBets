@@ -37,6 +37,32 @@ def parse_iso_to_lagos_date(iso_str: Optional[str]) -> str:
         return iso_str[:10] if len(iso_str) >= 10 else ""
 
 
+def dedupe_corner_rows(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    In-flight deduplication for corner_predictions rows: exactly ONE row per fixture.
+    Keeps the settled (won/lost) row if any, otherwise the newest row (created_at, id),
+    preserving the incoming order. Also collapses rows repeated by PostgREST pagination
+    ties. Strips the helper-only 'created_at' field so the payload shape is unchanged.
+    """
+    def rank(r: Dict[str, Any]):
+        settled = 1 if r.get("settlement_status") in ("won", "lost") else 0
+        return (settled, r.get("created_at") or "", r.get("id") or "")
+
+    best: Dict[str, Dict[str, Any]] = {}
+    for r in rows or []:
+        fid = r.get("fixture_id") or (r.get("fixture") or {}).get("id") or r.get("id")
+        cur = best.get(fid)
+        if cur is None or rank(r) > rank(cur):
+            best[fid] = r
+    winners = {id(v) for v in best.values()}
+    out = []
+    for r in rows or []:
+        if id(r) in winners:
+            r.pop("created_at", None)
+            out.append(r)
+    return out
+
+
 class FeedSnapshotEngine:
     def __init__(self, url: Optional[str] = None, service_key: Optional[str] = None):
         self.url = url or os.getenv("SUPABASE_URL")
@@ -269,7 +295,7 @@ class FeedSnapshotEngine:
         """Pre-computes feed:corners for market-feed.ts (30-day historical window)."""
         logger.info("Building corners snapshot (30-day historical window)...")
         select_query = (
-            "id,fixture_id,market,predicted_total_corners,probability,corner_tier,target_kickoff_at,"
+            "id,fixture_id,market,predicted_total_corners,probability,corner_tier,target_kickoff_at,created_at,"
             "settlement_status,settled_at,actual_corners,settlement_notes,publication_status,"
             "fixture:football_fixtures!inner("
             "id,canonical_key,target_kickoff_at,status,home_score,away_score,match_minute,period,"
@@ -292,15 +318,15 @@ class FeedSnapshotEngine:
                 "publication_status": "neq.archived",
                 "target_kickoff_at": f"gte.{min_date}",
                 "and": f"(target_kickoff_at.lte.{max_date})",
-                "order": "probability.desc",
+                "order": "probability.desc,id.asc",
             }
         )
 
-        # Filter out cancelled / postponed fixtures
-        corners = [
+        # Filter out cancelled / postponed fixtures, then enforce one prediction per fixture
+        corners = dedupe_corner_rows([
             c for c in (raw_corners or [])
             if (c.get("fixture") or {}).get("status") not in ("cancelled", "postponed")
-        ]
+        ])
 
         leagues_resp = self.client.get(
             "/football_leagues",
@@ -328,15 +354,16 @@ class FeedSnapshotEngine:
         min_30d_str = (now_lagos - timedelta(days=30)).strftime("%Y-%m-%d")
 
         # Fetch minimal fields for corners and goals bounded to past 30 days
-        cr_list = self._fetch_all_rows(
+        cr_list = dedupe_corner_rows(self._fetch_all_rows(
             "/corner_predictions",
             params={
-                "select": "id,target_kickoff_at,settlement_status,publication_status,fixture:football_fixtures!inner(id,status)",
+                "select": "id,fixture_id,created_at,target_kickoff_at,settlement_status,publication_status,fixture:football_fixtures!inner(id,status)",
                 "settlement_status": "neq.void",
                 "publication_status": "neq.archived",
                 "target_kickoff_at": f"gte.{min_30d_str}T00:00:00Z",
+                "order": "id.asc",
             }
-        )
+        ))
         gl_list = self._fetch_all_rows(
             "/goals_predictions",
             params={

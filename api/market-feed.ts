@@ -349,6 +349,30 @@ function normalizePrediction(
   };
 }
 
+// In-flight deduplication for corners: exactly ONE prediction per fixture.
+// Keeps the settled (won/lost) row if any, otherwise the newest (created_at when present,
+// else first seen, i.e. highest probability given upstream ordering). Order is preserved.
+function dedupeCornersByFixture<T extends Record<string, any>>(list: T[]): T[] {
+  const rank = (r: any): [number, string] => [
+    r.settlement_status === 'won' || r.settlement_status === 'lost' ? 1 : 0,
+    String(r.created_at || ''),
+  ];
+  const best = new Map<string, T>();
+  for (const item of list) {
+    const key = String(item.fixture_id ?? item.fixture?.id ?? item.id);
+    const cur = best.get(key);
+    if (!cur) {
+      best.set(key, item);
+      continue;
+    }
+    const [a1, a2] = rank(item);
+    const [b1, b2] = rank(cur);
+    if (a1 > b1 || (a1 === b1 && a2 > b2)) best.set(key, item);
+  }
+  const winners = new Set<T>(best.values());
+  return list.filter((item) => winners.has(item));
+}
+
 async function fetchMarketDataFromUpstream(
   market: MarketType,
   headers: Record<string, string>
@@ -369,7 +393,7 @@ async function fetchMarketDataFromUpstream(
             if (item.fixture?.status === 'cancelled' || item.fixture?.status === 'postponed') return false;
             return true;
           });
-          return filtered.map((item: any) => normalizePrediction(item, 'corners', 'corners'));
+          return dedupeCornersByFixture(filtered).map((item: any) => normalizePrediction(item, 'corners', 'corners'));
         }
       }
     } else if (market === 'goals' || market === 'ht_over_0.5_goals' || market === 'over_2.5_goals') {
@@ -402,9 +426,9 @@ async function fetchMarketDataFromUpstream(
         const glList = glRows[0]?.payload?.predictions;
         if (Array.isArray(crList) && Array.isArray(glList)) {
           const unified: UnifiedMarketPrediction[] = [
-            ...crList
-              .filter((item: any) => item.settlement_status !== 'void' && item.publication_status !== 'archived' && item.fixture?.status !== 'cancelled' && item.fixture?.status !== 'postponed')
-              .map((item: any) => normalizePrediction(item, 'corners')),
+            ...dedupeCornersByFixture(
+              crList.filter((item: any) => item.settlement_status !== 'void' && item.publication_status !== 'archived' && item.fixture?.status !== 'cancelled' && item.fixture?.status !== 'postponed')
+            ).map((item: any) => normalizePrediction(item, 'corners')),
             ...glList
               .filter((item: any) => item.settlement_status !== 'void' && item.publication_status !== 'archived' && item.fixture?.status !== 'cancelled' && item.fixture?.status !== 'postponed')
               .map((item: any) => normalizePrediction(item, 'goals')),
@@ -440,9 +464,10 @@ async function fetchMarketDataFromUpstream(
     ]);
 
     const unified: UnifiedMarketPrediction[] = [
-      ...(Array.isArray(cr) ? cr : [])
-        .filter((item: any) => item.settlement_status !== 'void' && item.publication_status !== 'archived' && item.fixture?.status !== 'cancelled' && item.fixture?.status !== 'postponed')
-        .map((item: any) => normalizePrediction(item, 'corners')),
+      ...dedupeCornersByFixture(
+        (Array.isArray(cr) ? cr : [])
+          .filter((item: any) => item.settlement_status !== 'void' && item.publication_status !== 'archived' && item.fixture?.status !== 'cancelled' && item.fixture?.status !== 'postponed')
+      ).map((item: any) => normalizePrediction(item, 'corners')),
       ...(Array.isArray(gl) ? gl : [])
         .filter((item: any) => item.settlement_status !== 'void' && item.publication_status !== 'archived' && item.fixture?.status !== 'cancelled' && item.fixture?.status !== 'postponed')
         .map((item: any) => normalizePrediction(item, 'goals')),
@@ -498,7 +523,8 @@ async function fetchMarketDataFromUpstream(
     }
     return true;
   });
-  return filteredList.map((item: any) => normalizePrediction(item, category, market));
+  const finalList = configKey === 'corners' ? dedupeCornersByFixture(filteredList) : filteredList;
+  return finalList.map((item: any) => normalizePrediction(item, category, market));
 }
 
 // Computes signal counts across active markets for dynamic badges
@@ -576,7 +602,7 @@ async function computeAllMarketCounts(
           )
         : [];
 
-      const filteredCr = filterByDate(validCr);
+      const filteredCr = filterByDate(dedupeCornersByFixture(validCr));
       const filteredGl = filterByDate(validGl);
 
       const crCount = filteredCr.length;
