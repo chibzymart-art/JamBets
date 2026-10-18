@@ -37,6 +37,17 @@ def parse_iso_to_lagos_date(iso_str: Optional[str]) -> str:
         return iso_str[:10] if len(iso_str) >= 10 else ""
 
 
+# UI date tabs offer Today + 4 forward days; specialist feeds must cover all of them.
+FORWARD_HORIZON_DAYS = 4
+
+
+def forward_horizon_end_iso(days_ahead: int = FORWARD_HORIZON_DAYS) -> str:
+    """UTC ISO timestamp for the end (exclusive) of the Lagos calendar day `days_ahead` from today."""
+    lagos_tz = timezone(timedelta(hours=1))
+    today_lagos = datetime.now(lagos_tz).replace(hour=0, minute=0, second=0, microsecond=0)
+    return (today_lagos + timedelta(days=days_ahead + 1)).astimezone(timezone.utc).isoformat()
+
+
 def dedupe_corner_rows(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
     In-flight deduplication for corner_predictions rows: exactly ONE row per fixture.
@@ -263,7 +274,7 @@ class FeedSnapshotEngine:
 
         now = datetime.now(timezone.utc)
         min_date = (datetime(now.year, now.month, now.day, 0, 0, 0, tzinfo=timezone.utc) - timedelta(days=30)).isoformat()
-        max_date = (now + timedelta(days=2)).isoformat()
+        max_date = forward_horizon_end_iso()
 
         goals_predictions = self._fetch_all_rows(
             "/goals_predictions_paywall",
@@ -308,7 +319,7 @@ class FeedSnapshotEngine:
 
         now = datetime.now(timezone.utc)
         min_date = (datetime(now.year, now.month, now.day, 0, 0, 0, tzinfo=timezone.utc) - timedelta(days=30)).isoformat()
-        max_date = (now + timedelta(days=2)).isoformat()
+        max_date = forward_horizon_end_iso()
 
         raw_corners = self._fetch_all_rows(
             "/corner_predictions",
@@ -353,7 +364,9 @@ class FeedSnapshotEngine:
         yesterday_str = (now_lagos - timedelta(days=1)).strftime("%Y-%m-%d")
         min_30d_str = (now_lagos - timedelta(days=30)).strftime("%Y-%m-%d")
 
-        # Fetch minimal fields for corners and goals bounded to past 30 days
+        # Fetch minimal fields for corners and goals bounded to past 30 days and the 4-day forward horizon
+        # (identical window to the list snapshots so badge counts always equal list totals)
+        max_date = forward_horizon_end_iso()
         cr_list = dedupe_corner_rows(self._fetch_all_rows(
             "/corner_predictions",
             params={
@@ -361,6 +374,7 @@ class FeedSnapshotEngine:
                 "settlement_status": "neq.void",
                 "publication_status": "neq.archived",
                 "target_kickoff_at": f"gte.{min_30d_str}T00:00:00Z",
+                "and": f"(target_kickoff_at.lt.{max_date})",
                 "order": "id.asc",
             }
         ))
@@ -371,6 +385,7 @@ class FeedSnapshotEngine:
                 "settlement_status": "neq.void",
                 "publication_status": "neq.archived",
                 "target_kickoff_at": f"gte.{min_30d_str}T00:00:00Z",
+                "and": f"(target_kickoff_at.lt.{max_date})",
             }
         )
 
@@ -430,6 +445,11 @@ class FeedSnapshotEngine:
         for i in range(1, 31):
             past_d = (now_lagos - timedelta(days=i)).strftime("%Y-%m-%d")
             counts_payload[f"counts_{past_d}"] = compute_for_date(past_d)
+
+        # ...and for each forward day shown in the UI date tabs (+1 .. +4)
+        for i in range(1, FORWARD_HORIZON_DAYS + 1):
+            fut_d = (now_lagos + timedelta(days=i)).strftime("%Y-%m-%d")
+            counts_payload[f"counts_{fut_d}"] = compute_for_date(fut_d)
 
         return counts_payload
 

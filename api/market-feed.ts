@@ -547,7 +547,20 @@ async function computeAllMarketCounts(
           if (dateParam === 'tomorrow' && payload.counts_tomorrow) return payload.counts_tomorrow;
           if (dateParam === 'yesterday' && payload.counts_yesterday) return payload.counts_yesterday;
           if (payload[`counts_${dateParam}`]) return payload[`counts_${dateParam}`];
-          if (payload.counts_all) return payload.counts_all;
+          if (dateParam === 'all' && payload.counts_all) return payload.counts_all;
+          if (dateParam !== 'all') {
+            // Date outside the precomputed window (past 30d .. +4d): no picks exist there.
+            return {
+              general: 0,
+              curated: 0,
+              home_win: 0,
+              away_win: 0,
+              draw: 0,
+              'over_2.5_goals': 0,
+              'ht_over_0.5_goals': 0,
+              corners: 0,
+            } as Record<MarketType, number>;
+          }
         }
       }
     } catch (snapErr) {
