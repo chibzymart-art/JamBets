@@ -321,7 +321,6 @@ export default async function handler(req: Request): Promise<Response> {
     }
 
     const dbKey = process.env.SUPABASE_SERVICE_ROLE_KEY || SUPABASE_SERVICE_ROLE_KEY;
-    const webhookSecret = process.env.BACHS_WEBHOOK_SECRET || BACHS_WEBHOOK_SECRET;
 
     // 4. Anti-Replay Idempotency Verification
     const checkIdempotencyRes = await fetch(
