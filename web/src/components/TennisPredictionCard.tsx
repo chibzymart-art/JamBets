@@ -367,7 +367,7 @@ export const TennisPredictionCard: React.FC<TennisPredictionCardProps> = ({
           <div className="glance-venue-row">
             <span className="glance-venue-icon">📍</span>
             <span className="glance-venue-text">
-              {locationText} • {surfaceMeta.label} • {eloDiffText}
+              {locationText} • {surfaceMeta.label}{isLocked ? '' : ` • ${eloDiffText}`}
             </span>
           </div>
         </div>
@@ -798,7 +798,8 @@ export const TennisPredictionCard: React.FC<TennisPredictionCardProps> = ({
                 )
               )}
 
-              {/* Markov Service Hold Rates & Surface ELO Diagnostics */}
+              {/* Markov Service Hold Rates & Surface ELO Diagnostics (paid only: Elo gap and hold rates point to the pick) */}
+              {!isLocked && (
               <div
                 style={{
                   display: 'grid',
@@ -856,6 +857,7 @@ export const TennisPredictionCard: React.FC<TennisPredictionCardProps> = ({
                   </div>
                 )}
               </div>
+              )}
 
               {/* AI Tactical Intelligence Narrative */}
               {tacticalAnalysis && (
