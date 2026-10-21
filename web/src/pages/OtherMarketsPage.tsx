@@ -41,9 +41,6 @@ const VALID_MARKETS: MarketType[] = [
   'corners',
   'curated',
   'general',
-  'home_win',
-  'away_win',
-  'draw',
 ];
 
 export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
@@ -82,7 +79,7 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
   const resolveInitialMarket = (): MarketType => {
     const urlMarket = searchParams.get('market') as MarketType | null;
     if (urlMarket && VALID_MARKETS.includes(urlMarket)) {
-      if (urlMarket === 'general' || (urlMarket as string) === 'home_win' || (urlMarket as string) === 'away_win' || (urlMarket as string) === 'draw') {
+      if (urlMarket === 'general') {
         return 'over_2.5_goals';
       }
       return urlMarket;
@@ -91,12 +88,12 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
       ? sessionStorage.getItem('other_markets_tab')
       : null) as MarketType | null;
     if (sessionMarket && VALID_MARKETS.includes(sessionMarket)) {
-      if (sessionMarket === 'general' || (sessionMarket as string) === 'home_win' || (sessionMarket as string) === 'away_win' || (sessionMarket as string) === 'draw') {
+      if (sessionMarket === 'general') {
         return 'over_2.5_goals';
       }
       return sessionMarket;
     }
-    if (initialMarket === 'general' || (initialMarket as string) === 'home_win' || (initialMarket as string) === 'away_win' || (initialMarket as string) === 'draw') {
+    if (initialMarket === 'general') {
       return 'over_2.5_goals';
     }
     return initialMarket;
@@ -116,7 +113,7 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
 
   // Synchronize state changes to URL and sessionStorage so page reload preserves current page without resetting
   const handleSelectMarket = useCallback((m: MarketType) => {
-    const safeMarket = (m === 'general' || (m as string) === 'home_win' || (m as string) === 'away_win' || (m as string) === 'draw') ? 'over_2.5_goals' : m;
+    const safeMarket = (m === 'general') ? 'over_2.5_goals' : m;
     setActiveMarket(safeMarket);
     try {
       sessionStorage.setItem('other_markets_tab', safeMarket);
@@ -166,9 +163,6 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
   const [marketCounts, setMarketCounts] = useState<Record<MarketType, number>>({
     general: 0,
     curated: 0,
-    home_win: 0,
-    away_win: 0,
-    draw: 0,
     'over_2.5_goals': 0,
     'ht_over_0.5_goals': 0,
     corners: 0,
