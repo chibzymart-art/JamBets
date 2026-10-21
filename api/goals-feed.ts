@@ -2,6 +2,18 @@ import { checkAdaptiveRateLimit, getClientIp } from './rate-limiter';
 import { verifyEdgeAuth, AuthStatus } from './_lib/jwt-verifier';
 import { EdgeSwrCache, EdgeCacheRegistry } from './_lib/edge-cache';
 import { generateEtag, matchesEtag, create304Response } from './_lib/etag';
+import { toLockedTeaser } from './_lib/teaser';
+
+// Fields a locked goals teaser may carry. Everything else on the row is dropped.
+const GOALS_TEASER_KEYS = [
+  'id',
+  'fixture_id',
+  'fixture',
+  'market',
+  'confidence_tier',
+  'target_kickoff_at',
+  'publication_status',
+] as const;
 
 export const config = {
   runtime: 'edge',
@@ -175,26 +187,32 @@ function applyGoalsPaywallRedaction(preds: any[], authStatus: AuthStatus): any[]
     ? '🔒 Subscribe to Oddsbanta VIP'
     : '🔒 Register to view Oddsbanta AI predictions';
 
+  // Locked teasers are built from an allowlist. Expected goals and the Over 2.5 / first-half rates
+  // point straight at the pick, so they are never sent to locked users.
   return preds.map((p: any) => {
-    return {
-      ...p,
-      is_locked: true,
-      predicted_outcome: lockedPrompt,
-      probability: null,
-      tactical_rationale: null,
-      tactical_tag: null,
-      settlement_status: 'pending',
-      settlement_notes: null,
-      ht_score: null,
-      actual_score: null,
-      metadata: {
+    const teaser = toLockedTeaser(p, {
+      keys: GOALS_TEASER_KEYS,
+      overrides: {
+        is_locked: true,
+        predicted_outcome: lockedPrompt,
+        probability: null,
+        tactical_rationale: null,
+        tactical_tag: null,
+        settlement_status: 'pending',
+        settlement_notes: null,
+        settled_at: null,
+        ht_score: null,
+        actual_score: null,
+      },
+      metaOverrides: {
         locked: true,
         auth_status: authStatus,
         subscription_required: isExpired,
         registration_required: !isExpired,
         trial_expired: isExpired,
       },
-    };
+    });
+    return teaser;
   });
 }
 

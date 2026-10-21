@@ -2,6 +2,21 @@ import { checkAdaptiveRateLimit, getClientIp } from './rate-limiter';
 import { verifyEdgeAccess, hasMultiSportAccess } from './_lib/jwt-verifier';
 import { EdgeSwrCache, EdgeCacheRegistry } from './_lib/edge-cache';
 import { generateEtag, matchesEtag, create304Response } from './_lib/etag';
+import { toLockedTeaser } from './_lib/teaser';
+
+// Fields a locked tennis teaser may carry. Everything else on the row is dropped.
+const TENNIS_TEASER_KEYS = [
+  'id',
+  'fixture_id',
+  'fixture',
+  'market',
+  'target_kickoff_at',
+  'simulations_count',
+  'tier_required',
+  'publication_status',
+] as const;
+// Metadata a locked teaser may carry: match context only, nothing derived from the model.
+const TENNIS_TEASER_META_KEYS = ['surface', 'court_pace_index', 'simulations_count'] as const;
 
 export const config = {
   runtime: 'edge',
@@ -366,25 +381,30 @@ export default async function handler(req: Request): Promise<Response> {
           };
         }
 
-        // For free users & visitors: ALL tennis predictions (including settled) are locked teasers without exposing won/lost
-        return {
-          ...p,
-          prediction: '🔒 BigBang VIP Pick',
-          probability: null,
-          confidence_category: p.confidence_category || 'TOP PICK',
-          fair_odds: null,
-          market_odds: null,
-          settlement_status: 'pending',
-          settlement_notes: null,
-          actual_result: null,
-          secondary_predictions: [],
-          metadata: {
-            ...p.metadata,
-            ai_tactical_analysis: '🔒 ATP & WTA match predictions and Markov chain models are reserved for BigBang VIP members.',
-            markov: undefined,
+        // For free users & visitors: ALL tennis predictions (including settled) are locked teasers without exposing won/lost.
+        // Built from an allowlist: metadata such as tactical_reasoning, elo_delta, hold rates and set-score odds
+        // would let a visitor work out the pick.
+        const teaser = toLockedTeaser(p, {
+          keys: TENNIS_TEASER_KEYS,
+          metaKeys: TENNIS_TEASER_META_KEYS,
+          overrides: {
+            prediction: '🔒 BigBang VIP Pick',
+            probability: null,
+            confidence_category: p.confidence_category || 'TOP PICK',
+            fair_odds: null,
+            market_odds: null,
+            settlement_status: 'pending',
+            settlement_notes: null,
+            actual_result: null,
+            settled_at: null,
+            secondary_predictions: [],
+            is_locked: true,
           },
-          is_locked: true,
-        };
+          metaOverrides: {
+            ai_tactical_analysis: '🔒 ATP & WTA match predictions and Markov chain models are reserved for BigBang VIP members.',
+          },
+        });
+        return teaser;
       });
 
     const sanitizedStats = isPaidOrAdmin ? feedData.stats : {

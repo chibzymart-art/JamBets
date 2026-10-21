@@ -2,6 +2,19 @@ import { checkAdaptiveRateLimit, getClientIp } from './rate-limiter';
 import { verifyEdgeAuth, AuthStatus } from './_lib/jwt-verifier';
 import { EdgeSwrCache, EdgeCacheRegistry } from './_lib/edge-cache';
 import { generateEtag, matchesEtag, create304Response } from './_lib/etag';
+import { toLockedTeaser, MEMBERSHIP_REVEALING_MARKETS } from './_lib/teaser';
+
+// Fields a locked market teaser may carry. Everything else on the row is dropped.
+const MARKET_TEASER_KEYS = [
+  'id',
+  'fixture_id',
+  'market',
+  'market_category',
+  'market_label',
+  'market_icon',
+  'target_kickoff_at',
+  'fixture',
+] as const;
 
 export const config = {
   runtime: 'edge',
@@ -92,6 +105,8 @@ interface MarketFeedResponse {
   auth_status?: AuthStatus;
   is_stale?: boolean;
   cached_at: string;
+  // Set when the market's fixture list is withheld from a locked user; carries the count only.
+  locked_preview?: { market: string; count: number };
 }
 
 // Global SWR Edge Caches: 900s fresh (15 min default) + 3600s stale (1 hour)
@@ -803,58 +818,69 @@ export default async function handler(req: Request) {
     const offset = (pageParam - 1) * limitParam;
     const paginatedRaw = filteredForAudience.slice(offset, offset + limitParam);
 
-    const predictions = paginatedRaw.map((item) => {
-      if (authStatus === 'paid_or_trial') {
-        return {
-          ...item,
-          is_locked: false,
-        };
-      }
+    const isUnlockedAudience = isVipOrAdmin;
+    const isExpired = authStatus === 'expired';
+    const lockedPrompt = isExpired
+      ? '🔒 Subscribe to Oddsbanta VIP'
+      : '🔒 Register to view Oddsbanta AI predictions';
 
-      const isExpired = authStatus === 'expired';
-      const lockedPrompt = isExpired
-        ? '🔒 Subscribe to Oddsbanta VIP'
-        : '🔒 Register to view Oddsbanta AI predictions';
+    // For markets where the row set IS the pick (one table per outcome, or a shortlist), being on the
+    // list reveals the prediction. Locked users get the count only, never the fixtures.
+    const hideMembership = !isUnlockedAudience && MEMBERSHIP_REVEALING_MARKETS.includes(activeMarket);
 
-      return {
-        ...item,
-        is_locked: true,
-        prediction: lockedPrompt,
-        probability: null,
-        display_probability: null,
-        confidence_tier: item.confidence_tier || 'TOP_PICK',
-        confidence_category: item.confidence_category || 'TOP PICK',
-        metrics: {},
-        tactical_rationale: null,
-        tactical_tag: null,
-        settlement_status: 'pending',
-        settlement_notes: null,
-        ht_score: null,
-        actual_score: null,
-        actual_corners: null,
-        metadata: {
-          locked: true,
-          auth_status: authStatus,
-          subscription_required: isExpired,
-          registration_required: !isExpired,
-          trial_expired: isExpired,
-        },
-      };
-    });
+    const predictions = hideMembership
+      ? []
+      : paginatedRaw.map((item) => {
+          if (isUnlockedAudience) {
+            return {
+              ...item,
+              is_locked: false,
+            };
+          }
+
+          return toLockedTeaser(item as Record<string, any>, {
+            keys: MARKET_TEASER_KEYS,
+            overrides: {
+              is_locked: true,
+              prediction: lockedPrompt,
+              probability: null,
+              display_probability: null,
+              confidence_tier: item.confidence_tier || 'TOP_PICK',
+              confidence_category: item.confidence_category || 'TOP PICK',
+              metrics: {},
+              tactical_rationale: null,
+              tactical_tag: null,
+              settlement_status: 'pending',
+              settlement_notes: null,
+              settled_at: null,
+              ht_score: null,
+              actual_score: null,
+              actual_corners: null,
+            },
+            metaOverrides: {
+              locked: true,
+              auth_status: authStatus,
+              subscription_required: isExpired,
+              registration_required: !isExpired,
+              trial_expired: isExpired,
+            },
+          }) as UnifiedMarketPrediction;
+        });
 
     const responsePayload: MarketFeedResponse = {
       success: true,
       market: activeMarket,
       page: pageParam,
       limit: limitParam,
-      total,
-      total_pages: totalPages,
-      has_next: pageParam < totalPages,
-      has_prev: pageParam > 1,
+      total: hideMembership ? 0 : total,
+      total_pages: hideMembership ? 1 : totalPages,
+      has_next: hideMembership ? false : pageParam < totalPages,
+      has_prev: hideMembership ? false : pageParam > 1,
       date_filter: dateParam,
       counts,
-      leagues,
+      leagues: hideMembership ? [] : leagues,
       predictions,
+      ...(hideMembership ? { locked_preview: { market: activeMarket, count: total } } : {}),
       auth_status: authStatus,
       is_stale: isStale,
       cached_at: new Date(marketSwrCache.getEntry(`market:${activeMarket}`)?.cachedAt || Date.now()).toISOString(),
