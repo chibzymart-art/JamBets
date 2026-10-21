@@ -9,6 +9,8 @@
 
 import { supabase } from './supabase';
 import { getCircuitBreaker, SafeStorage, withTimeout } from './circuitBreaker';
+import { getUserTimeZone } from './dateUtils';
+import type { LockedTierCounts } from './confidenceScore';
 import {
   BasketballPrediction,
   BasketballSecondaryPrediction,
@@ -37,6 +39,8 @@ export interface BasketballFeedResponse {
   stats: BasketballStats;
   leagues: BasketballLeague[];
   settlements: BasketballSettlement[];
+  /** Locked users: per-day tier totals (no tier is sent on a locked match). */
+  locked_tier_counts?: LockedTierCounts;
   predictions: BasketballPrediction[];
   cached_at: string;
   error?: string;
@@ -183,6 +187,7 @@ export async function fetchBasketballFeed(
     let rawPredictions: BasketballPrediction[] = [];
     let rawLeagues: BasketballLeague[] = [];
     let rawSettlements: BasketballSettlement[] = [];
+    let rawLockedTierCounts: LockedTierCounts | undefined;
     let usedEdge = false;
 
     // 1. Query Edge CDN Proxy first (shields Supabase from thousands of browser calls)
@@ -193,7 +198,7 @@ export async function fetchBasketballFeed(
         if (session?.access_token) {
           reqHeaders['Authorization'] = `Bearer ${session.access_token}`;
         }
-        const edgeRes = await fetch('/api/basketball-feed', {
+        const edgeRes = await fetch(`/api/basketball-feed?tz=${encodeURIComponent(getUserTimeZone())}`, {
           headers: reqHeaders,
           cache: (forceRefresh || Boolean(session?.access_token) || canViewPredictions) ? 'no-cache' : 'default',
         });
@@ -214,11 +219,13 @@ export async function fetchBasketballFeed(
               rawPredictions = edgeData.predictions;
               rawLeagues = edgeData.leagues || [];
               rawSettlements = edgeData.settlements || [];
+              rawLockedTierCounts = edgeData.locked_tier_counts || undefined;
               usedEdge = true;
               SafeStorage.set('basketball_feed', {
                 predictions: rawPredictions,
                 leagues: rawLeagues,
                 settlements: rawSettlements,
+                locked_tier_counts: rawLockedTierCounts,
               }, 30 * 60 * 1000);
             }
           }
@@ -234,6 +241,7 @@ export async function fetchBasketballFeed(
         predictions: BasketballPrediction[];
         leagues: BasketballLeague[];
         settlements: BasketballSettlement[];
+        locked_tier_counts?: LockedTierCounts;
       }>('basketball_feed');
 
       if (cached) {
@@ -241,6 +249,7 @@ export async function fetchBasketballFeed(
         rawPredictions = cached.predictions || [];
         rawLeagues = cached.leagues || [];
         rawSettlements = cached.settlements || [];
+        rawLockedTierCounts = cached.locked_tier_counts;
         usedEdge = true;
       }
     }
@@ -484,6 +493,7 @@ export async function fetchBasketballFeed(
       },
       leagues: rawLeagues,
       settlements: rawSettlements,
+      ...(rawLockedTierCounts && !isUnlocked ? { locked_tier_counts: rawLockedTierCounts } : {}),
       predictions: finalPredictions,
       cached_at: new Date().toISOString(),
     };

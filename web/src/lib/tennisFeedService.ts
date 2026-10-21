@@ -1,5 +1,7 @@
 import { supabase } from './supabase';
 import { getCircuitBreaker, SafeStorage, withTimeout } from './circuitBreaker';
+import { getUserTimeZone } from './dateUtils';
+import type { LockedTierCounts } from './confidenceScore';
 import {
   TennisPrediction,
   TennisTournament,
@@ -27,6 +29,8 @@ export interface TennisFeedResponse {
   stats: TennisStats;
   tournaments: TennisTournament[];
   settlements: TennisSettlement[];
+  /** Locked users: per-day tier totals (no tier is sent on a locked match). */
+  locked_tier_counts?: LockedTierCounts;
   predictions: TennisPrediction[];
   cached_at: string;
   error?: string;
@@ -171,6 +175,7 @@ export async function fetchTennisFeed(options: FetchTennisFeedOptions = {}): Pro
     let rawPredictions: any[] = [];
     let rawTournaments: TennisTournament[] = [];
     let rawSettlements: any[] = [];
+    let rawLockedTierCounts: LockedTierCounts | undefined;
     let isUnlocked = Boolean(canViewPredictions);
     let usedEdge = false;
 
@@ -183,7 +188,7 @@ export async function fetchTennisFeed(options: FetchTennisFeedOptions = {}): Pro
           reqHeaders['Authorization'] = `Bearer ${session.access_token}`;
         }
 
-        const edgeRes = await fetch('/api/tennis-feed', {
+        const edgeRes = await fetch(`/api/tennis-feed?tz=${encodeURIComponent(getUserTimeZone())}`, {
           headers: reqHeaders,
           cache: (forceRefresh || Boolean(session?.access_token) || canViewPredictions) ? 'no-cache' : 'default',
         });
@@ -203,11 +208,13 @@ export async function fetchTennisFeed(options: FetchTennisFeedOptions = {}): Pro
               rawPredictions = edgeData.predictions;
               rawTournaments = edgeData.tournaments || [];
               rawSettlements = edgeData.settlements || [];
+              rawLockedTierCounts = edgeData.locked_tier_counts || undefined;
               usedEdge = true;
               SafeStorage.set('tennis_feed', {
                 predictions: rawPredictions,
                 tournaments: rawTournaments,
                 settlements: rawSettlements,
+                locked_tier_counts: rawLockedTierCounts,
               }, 30 * 60 * 1000);
             }
           }
@@ -223,6 +230,7 @@ export async function fetchTennisFeed(options: FetchTennisFeedOptions = {}): Pro
         predictions: TennisPrediction[];
         tournaments: TennisTournament[];
         settlements: TennisSettlement[];
+        locked_tier_counts?: LockedTierCounts;
       }>('tennis_feed');
 
       if (cached) {
@@ -230,6 +238,7 @@ export async function fetchTennisFeed(options: FetchTennisFeedOptions = {}): Pro
         rawPredictions = cached.predictions || [];
         rawTournaments = cached.tournaments || [];
         rawSettlements = cached.settlements || [];
+        rawLockedTierCounts = cached.locked_tier_counts;
         usedEdge = true;
       }
     }
@@ -435,6 +444,7 @@ export async function fetchTennisFeed(options: FetchTennisFeedOptions = {}): Pro
           },
       tournaments: rawTournaments,
       settlements: isUnlocked ? (rawSettlements as TennisSettlement[]) : [],
+      ...(rawLockedTierCounts && !isUnlocked ? { locked_tier_counts: rawLockedTierCounts } : {}),
       predictions: finalPredictions,
       cached_at: new Date().toISOString(),
     };
