@@ -637,7 +637,7 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
   const isLocked = !isAdmin && !canViewPredictions;
 
   const effectiveCategory = isLocked
-    ? (prediction.confidence_category && prediction.confidence_category !== 'LOCKED' ? prediction.confidence_category : 'TOP_PICK')
+    ? (prediction.confidence_category || 'LOCKED')
     : (prediction.confidence_category && prediction.confidence_category !== 'LOCKED')
       ? prediction.confidence_category
       : 'MID_CONFIDENCE';

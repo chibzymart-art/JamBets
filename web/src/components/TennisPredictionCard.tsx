@@ -92,7 +92,7 @@ export const TennisPredictionCard: React.FC<TennisPredictionCardProps> = ({
 
   // Confidence tier configuration (matching Football FixtureCard exactly)
   const effectiveCategory = isLocked
-    ? (prediction.confidence_category && prediction.confidence_category !== 'LOCKED' ? prediction.confidence_category : 'TOP PICK')
+    ? (prediction.confidence_category || 'LOCKED')
     : (prediction.confidence_category && prediction.confidence_category !== 'LOCKED' ? prediction.confidence_category : 'MID CONFIDENCE');
   const tierConfig = getTierConfig(effectiveCategory);
   const cleanTierLabel = (tierConfig.label || '').replace(/\s*\([^)]*\)/g, '').trim();

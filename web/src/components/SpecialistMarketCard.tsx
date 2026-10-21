@@ -155,31 +155,6 @@ export const SpecialistMarketCard: React.FC<SpecialistMarketCardProps> = ({
       return null;
     }
 
-    // 4. Match Winner / Draw (Home Win / Away Win / Draw)
-    if (['home_win', 'away_win', 'draw'].includes(prediction.market_category)) {
-      const finalScore =
-        prediction.actual_score ||
-        (fixture?.home_score !== null &&
-        fixture?.away_score !== null &&
-        fixture?.home_score !== undefined &&
-        fixture?.away_score !== undefined
-          ? `${fixture.home_score}-${fixture.away_score}`
-          : null);
-
-      if (finalScore) {
-        const [h, a] = finalScore.split('-').map(Number);
-        let outcomeLabel = 'Draw (X)';
-        if (h > a) outcomeLabel = 'Home Win (1)';
-        else if (a > h) outcomeLabel = 'Away Win (2)';
-
-        return {
-          label: 'Outcome',
-          value: outcomeLabel,
-          detail: `Final: ${finalScore}`,
-        };
-      }
-    }
-
     return null;
   })();
 
@@ -386,67 +361,6 @@ export const SpecialistMarketCard: React.FC<SpecialistMarketCardProps> = ({
 
             {/* Engine-Specific Telemetry Metrics Grid */}
             <div className="engine-telemetry-grid">
-              {(prediction.market_category === 'home_win' || prediction.market_category === 'away_win') && (
-                <>
-                  {prediction.prediction === 'Away Win' || prediction.market === 'away_win' ? (
-                    <>
-                      <div className="telemetry-pill">
-                        <span className="telemetry-label">Road Transition</span>
-                        <span className="telemetry-val">
-                          {metrics.home_venue_advantage || metrics.away_counter_efficiency
-                            ? `+${Math.round((metrics.home_venue_advantage || metrics.away_counter_efficiency) * 100)}% Speed`
-                            : 'High Speed'}
-                        </span>
-                      </div>
-                      <div className="telemetry-pill">
-                        <span className="telemetry-label">Away Clean Sheet</span>
-                        <span className="telemetry-val">
-                          {metrics.home_clean_sheet_prob || metrics.away_clean_sheet_prob
-                            ? `${Math.round((metrics.home_clean_sheet_prob || metrics.away_clean_sheet_prob) * 100)}%`
-                            : 'Solid Box'}
-                        </span>
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <div className="telemetry-pill">
-                        <span className="telemetry-label">Venue Dominance</span>
-                        <span className="telemetry-val">
-                          {metrics.home_venue_advantage
-                            ? `+${Math.round(metrics.home_venue_advantage * 100)}% Fortress`
-                            : 'High Edge'}
-                        </span>
-                      </div>
-                      <div className="telemetry-pill">
-                        <span className="telemetry-label">Home Clean Sheet</span>
-                        <span className="telemetry-val">
-                          {metrics.home_clean_sheet_prob
-                            ? `${Math.round(metrics.home_clean_sheet_prob * 100)}%`
-                            : 'Calibrated'}
-                        </span>
-                      </div>
-                    </>
-                  )}
-                </>
-              )}
-
-              {prediction.market_category === 'draw' && (
-                <>
-                  <div className="telemetry-pill">
-                    <span className="telemetry-label">Tactical Equilibrium</span>
-                    <span className="telemetry-val">
-                      {metrics.tactical_equilibrium_score ? `${(metrics.tactical_equilibrium_score * 100).toFixed(0)}% Parity` : 'Symmetric'}
-                    </span>
-                  </div>
-                  <div className="telemetry-pill">
-                    <span className="telemetry-label">0-0 / 1-1 Density</span>
-                    <span className="telemetry-val">
-                      {metrics.low_scoring_density ? `${(metrics.low_scoring_density * 100).toFixed(0)}% Joint Prob` : 'High Low-xG'}
-                    </span>
-                  </div>
-                </>
-              )}
-
               {prediction.market_category === 'corners' && (
                 <>
                   <div className="telemetry-pill">

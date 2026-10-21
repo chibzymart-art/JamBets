@@ -15,7 +15,7 @@ import { BasketballPredictionCard } from './BasketballPredictionCard';
 import { LeftSidebarAd } from './LeftSidebarAd';
 import { WatchlistSidebar } from './WatchlistSidebar';
 import { FavoritePredictionItem } from './FavoritesDrawer';
-import { getSportTierPriority, getTierHeaderByRank } from '../lib/confidenceScore';
+import { getSportTierPriority, getTierHeaderByRank, lockedTierTotalsForScope } from '../lib/confidenceScore';
 import { useVirtualWindow } from '../hooks';
 import '../basketball.css';
 
@@ -247,8 +247,8 @@ export const BasketballHubView: React.FC<BasketballHubViewProps> = ({
         if (!isSubscriber && (settlementFilter === 'lost' || settlementFilter === 'void')) return false;
       }
 
-      // 5. Tier Filter
-      if (selectedTier !== 'all') {
+      // 5. Tier Filter (unlocked users only)
+      if (isSubscriber && selectedTier !== 'all') {
         const tier = (p.confidence_category || '').toUpperCase().replace(/ /g, '_');
         const target = selectedTier.toUpperCase().replace(/ /g, '_');
         if (target === 'NO_SAFE_BANKER') {
@@ -385,6 +385,19 @@ export const BasketballHubView: React.FC<BasketballHubViewProps> = ({
       }
     }
 
+    // Locked users: open matches carry no tier, so add the Edge API's per-day totals.
+    const lockedTotals = isSubscriber
+      ? undefined
+      : lockedTierTotalsForScope(feedData?.locked_tier_counts, selectedDate, timeZone);
+    const tierCountsWithheld = !isSubscriber && lockedTotals === null;
+    if (lockedTotals) {
+      bangerTotal += lockedTotals.BANGER;
+      topPickTotal += lockedTotals.TOP_PICK;
+      highTotal += lockedTotals.HIGH;
+      midTotal += lockedTotals.MID;
+      noSafeTotal += lockedTotals.NO_SAFE_BANKER;
+    }
+
     const calcWinRate = (w: number, l: number) => {
       const decisive = w + l;
       if (decisive > 0) return String(Math.round((w / decisive) * 100));
@@ -419,8 +432,18 @@ export const BasketballHubView: React.FC<BasketballHubViewProps> = ({
       noSafeWon,
       noSafeLost,
       noSafeWinRate: calcWinRate(noSafeWon, noSafeLost),
+      tierCountsWithheld,
     };
-  }, [dateScopedPredictions, isSubscriber]);
+  }, [dateScopedPredictions, isSubscriber, feedData?.locked_tier_counts, selectedDate, timeZone]);
+
+  // Tier filters need each match's tier, which locked users don't get: send them to the plans page.
+  const chooseTier = (tier: string) => {
+    if (!isSubscriber) {
+      if (onOpenSubscription) onOpenSubscription();
+      return;
+    }
+    setSelectedTier(selectedTier === tier ? 'all' : tier);
+  };
 
   return (
     <div className="bball-page-root">
@@ -621,13 +644,13 @@ export const BasketballHubView: React.FC<BasketballHubViewProps> = ({
               className={`compact-kpi-segment banger-subseg ${selectedTier === 'BANGER' ? 'active-seg' : ''}`}
               onClick={() => {
                 setSettlementFilter('all');
-                setSelectedTier(selectedTier === 'BANGER' ? 'all' : 'BANGER');
+                chooseTier('BANGER');
               }}
               title="Click to filter by 96%+ Bangers"
             >
               <div className="compact-kpi-header">
                 <span className="compact-kpi-title">⭐ Banger</span>
-                <span className="compact-kpi-pill banger-pill">{scorecardStats.bangerTotal}M</span>
+                <span className="compact-kpi-pill banger-pill">{scorecardStats.tierCountsWithheld ? '🔒' : `${scorecardStats.bangerTotal}M`}</span>
               </div>
               <div className="compact-kpi-val-row">
                 <span className="compact-kpi-pct banger-text">{isSubscriber ? `${scorecardStats.bangerWinRate}%` : '🔒 VIP'}</span>
@@ -640,13 +663,13 @@ export const BasketballHubView: React.FC<BasketballHubViewProps> = ({
               className={`compact-kpi-segment toppick-subseg ${selectedTier === 'TOP PICK' ? 'active-seg' : ''}`}
               onClick={() => {
                 setSettlementFilter('all');
-                setSelectedTier(selectedTier === 'TOP PICK' ? 'all' : 'TOP PICK');
+                chooseTier('TOP PICK');
               }}
               title="Click to filter by 90%-95% Top Picks"
             >
               <div className="compact-kpi-header">
                 <span className="compact-kpi-title">👑 Top Pick</span>
-                <span className="compact-kpi-pill toppick-pill">{scorecardStats.topPickTotal}M</span>
+                <span className="compact-kpi-pill toppick-pill">{scorecardStats.tierCountsWithheld ? '🔒' : `${scorecardStats.topPickTotal}M`}</span>
               </div>
               <div className="compact-kpi-val-row">
                 <span className="compact-kpi-pct toppick-text">{isSubscriber ? `${scorecardStats.topPickWinRate}%` : '🔒 VIP'}</span>
@@ -659,13 +682,13 @@ export const BasketballHubView: React.FC<BasketballHubViewProps> = ({
               className={`compact-kpi-segment high-subseg ${selectedTier === 'HIGH CONFIDENCE' ? 'active-seg' : ''}`}
               onClick={() => {
                 setSettlementFilter('all');
-                setSelectedTier(selectedTier === 'HIGH CONFIDENCE' ? 'all' : 'HIGH CONFIDENCE');
+                chooseTier('HIGH CONFIDENCE');
               }}
               title="Click to filter by 83%-89% High Confidence"
             >
               <div className="compact-kpi-header">
                 <span className="compact-kpi-title">⚡ High</span>
-                <span className="compact-kpi-pill high-pill">{scorecardStats.highTotal}M</span>
+                <span className="compact-kpi-pill high-pill">{scorecardStats.tierCountsWithheld ? '🔒' : `${scorecardStats.highTotal}M`}</span>
               </div>
               <div className="compact-kpi-val-row">
                 <span className="compact-kpi-pct high-text">{isSubscriber ? `${scorecardStats.highWinRate}%` : '🔒 VIP'}</span>
@@ -678,13 +701,13 @@ export const BasketballHubView: React.FC<BasketballHubViewProps> = ({
               className={`compact-kpi-segment mid-subseg ${selectedTier === 'MID CONFIDENCE' ? 'active-seg' : ''}`}
               onClick={() => {
                 setSettlementFilter('all');
-                setSelectedTier(selectedTier === 'MID CONFIDENCE' ? 'all' : 'MID CONFIDENCE');
+                chooseTier('MID CONFIDENCE');
               }}
               title="Click to filter by 75%-82% Mid Confidence"
             >
               <div className="compact-kpi-header">
                 <span className="compact-kpi-title">🛡️ Mid</span>
-                <span className="compact-kpi-pill mid-pill">{scorecardStats.midTotal}M</span>
+                <span className="compact-kpi-pill mid-pill">{scorecardStats.tierCountsWithheld ? '🔒' : `${scorecardStats.midTotal}M`}</span>
               </div>
               <div className="compact-kpi-val-row">
                 <span className="compact-kpi-pct mid-text">{isSubscriber ? `${scorecardStats.midWinRate}%` : '🔒 VIP'}</span>
@@ -697,13 +720,13 @@ export const BasketballHubView: React.FC<BasketballHubViewProps> = ({
               className={`compact-kpi-segment nosafe-subseg ${selectedTier === 'NO_SAFE_BANKER' ? 'active-seg' : ''}`}
               onClick={() => {
                 setSettlementFilter('all');
-                setSelectedTier(selectedTier === 'NO_SAFE_BANKER' ? 'all' : 'NO_SAFE_BANKER');
+                chooseTier('NO_SAFE_BANKER');
               }}
               title="Click to filter High Volatility / No Safe Banker predictions"
             >
               <div className="compact-kpi-header">
                 <span className="compact-kpi-title">⚠️ No Safe</span>
-                <span className="compact-kpi-pill nosafe-pill">{scorecardStats.noSafeTotal}M</span>
+                <span className="compact-kpi-pill nosafe-pill">{scorecardStats.tierCountsWithheld ? '🔒' : `${scorecardStats.noSafeTotal}M`}</span>
               </div>
               <div className="compact-kpi-val-row">
                 <span className="compact-kpi-pct nosafe-text">{isSubscriber ? `${scorecardStats.noSafeWinRate}%` : '🔒 VIP'}</span>
