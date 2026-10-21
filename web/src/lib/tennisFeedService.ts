@@ -236,8 +236,9 @@ export async function fetchTennisFeed(options: FetchTennisFeedOptions = {}): Pro
 
     if (!usedEdge) {
       const breaker = getCircuitBreaker('tennis-feed');
-      if (!breaker.canExecute()) {
-        console.warn('[tennisFeedService] Circuit breaker OPEN. Shielding Supabase from direct query.');
+      // Locked users never query the database directly: the Edge API is their only door to prediction data.
+      if (!isUnlocked || !breaker.canExecute()) {
+        if (isUnlocked) console.warn('[tennisFeedService] Circuit breaker OPEN. Shielding Supabase from direct query.');
         rawPredictions = [];
         rawTournaments = [];
         rawSettlements = [];

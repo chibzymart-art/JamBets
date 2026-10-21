@@ -247,8 +247,9 @@ export async function fetchBasketballFeed(
 
     if (!usedEdge) {
       const breaker = getCircuitBreaker('basketball-feed');
-      if (!breaker.canExecute()) {
-        console.warn('[basketballFeedService] Circuit breaker OPEN. Shielding Supabase from direct query.');
+      // Locked users never query the database directly: the Edge API is their only door to prediction data.
+      if (!isUnlocked || !breaker.canExecute()) {
+        if (isUnlocked) console.warn('[basketballFeedService] Circuit breaker OPEN. Shielding Supabase from direct query.');
         rawPredictions = [];
         rawLeagues = [];
         rawSettlements = [];

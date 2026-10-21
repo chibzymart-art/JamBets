@@ -83,6 +83,8 @@ export interface UnifiedMarketFeedResponse {
   predictions: UnifiedMarketPrediction[];
   cached_at?: string;
   error?: string;
+  // Present when the Edge API withholds a market's fixture list from a locked user (count only).
+  locked_preview?: { market: string; count: number };
 }
 
 export interface FetchMarketFeedOptions {
@@ -398,9 +400,10 @@ export async function fetchMarketFeed(
     return { ...sessionCached, is_stale: true };
   }
 
-  // 3. Circuit Breaker Guard: Check if direct Supabase fallback is permitted
+  // 3. Circuit Breaker Guard: Check if direct Supabase fallback is permitted.
+  // Locked users never query the database directly: the Edge API is their only door to prediction data.
   const breaker = getCircuitBreaker('market-feed');
-  if (!breaker.canExecute()) {
+  if (!(isAdmin || canViewPredictions) || !breaker.canExecute()) {
     console.warn('[marketFeedService] Circuit breaker OPEN. Blocking direct Supabase query to prevent connection saturation.');
     const anyMarketFeed = SafeStorage.get<UnifiedMarketFeedResponse>(`${market}:all:1:2000:false:false:false`);
     if (anyMarketFeed) {
