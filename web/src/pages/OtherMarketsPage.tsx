@@ -313,14 +313,18 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
 
   // Synchronize active market count with actual predictions loaded for 100% badge-to-card harmony
   const displayCounts = useMemo(() => {
-    const validCount = predictions.filter(
-      (p) => p.settlement_status !== 'void' && (p as any).publication_status !== 'archived'
-    ).length;
+    // Locked users get no rows for membership markets, only a count: show that count on the badge.
+    const validCount =
+      lockedPreview && lockedPreview.market === activeMarket
+        ? lockedPreview.count
+        : predictions.filter(
+            (p) => p.settlement_status !== 'void' && (p as any).publication_status !== 'archived'
+          ).length;
     return {
       ...marketCounts,
       [activeMarket]: validCount,
     };
-  }, [marketCounts, activeMarket, predictions]);
+  }, [marketCounts, activeMarket, predictions, lockedPreview]);
 
   // Progressive list windowing (60 FPS Mobile Scrolling)
   const {
