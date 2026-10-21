@@ -13,7 +13,7 @@ const kickoff = new Date(Date.now() + 6 * 3600 * 1000).toISOString();
 const fixture = { id: 'f1', status: 'scheduled', target_kickoff_at: kickoff, metadata: { internal: SECRET },
   league: { id: 'l1', code: 'ENG_PL', name: 'Premier League', country: 'England' },
   home_team: { id: 'h', name: 'home' }, away_team: { id: 'a', name: 'away' },
-  player1: { id: 'p1', display_name: 'A' }, player2: { id: 'p2', display_name: 'B' }, tournament: { id: 't1', name: 'T' } };
+  player1: { id: 'p1', display_name: 'A', current_rank: 15, hard_elo: 2040, clay_elo: 2000 }, player2: { id: 'p2', display_name: 'B', current_rank: 100, hard_elo: 1625, clay_elo: 1600 }, tournament: { id: 't1', name: 'T' } };
 
 const tennisRow = { id: 'tp1', fixture_id: 'f1', fixture, market: 'match_winner', prediction: 'A to win', probability: 0.81,
   confidence_category: 'TOP PICK', fair_odds: 1.2, market_odds: 1.3, settlement_status: 'pending', target_kickoff_at: kickoff,
@@ -81,6 +81,7 @@ const fakeJwt = (payload: object) => `x.${Buffer.from(JSON.stringify(payload)).t
   check('tennis visitor: item locked', tvp.is_locked === true && tvp.probability === null);
   check('tennis visitor: no model detail anywhere', !tvs.includes(SECRET) && !tvs.includes('tactical_reasoning') && !tvs.includes('elo_delta') && !tvs.includes('correct_set_scores') && !tvs.includes('hold_rate'), tvs.slice(0, 300));
   check('tennis visitor: keeps surface for the card', tvp.metadata?.surface === 'hard_outdoor');
+  check('tennis visitor: no player Elo (Elo gap reveals the pick)', !/_elo"/.test(tvs) && tvp.fixture?.player1?.display_name === 'A' && tvp.fixture?.player1?.current_rank === 15, JSON.stringify(tvp.fixture?.player1));
 
   // Goals, visitor and trial
   const gv = await call(goals, '/api/goals-feed');
@@ -111,6 +112,7 @@ const fakeJwt = (payload: object) => `x.${Buffer.from(JSON.stringify(payload)).t
   const tvip = await call(tennis, '/api/tennis-feed', vipTok);
   const tvipp = (tvip.body.predictions || [])[0] || {};
   check('tennis VIP: full pick and reasoning delivered', tvipp.is_locked === false && tvipp.prediction === 'A to win' && tvipp.metadata?.tactical_reasoning === SECRET, JSON.stringify({ sub: tvip.body.is_subscriber, pred: tvipp.prediction }));
+  check('tennis VIP: player Elo kept', tvipp.fixture?.player1?.hard_elo === 2040, JSON.stringify(tvipp.fixture?.player1));
 
   // Market, visitor on the general market: only allowlisted fields
   const mg = await call(market, '/api/market-feed?market=general');
