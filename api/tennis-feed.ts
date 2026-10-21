@@ -2,7 +2,15 @@ import { checkAdaptiveRateLimit, getClientIp } from './rate-limiter';
 import { verifyEdgeAccess, hasMultiSportAccess } from './_lib/jwt-verifier';
 import { EdgeSwrCache, EdgeCacheRegistry } from './_lib/edge-cache';
 import { generateEtag, matchesEtag, create304Response } from './_lib/etag';
-import { toLockedTeaser, pickFields } from './_lib/teaser';
+import {
+  toLockedTeaser,
+  pickFields,
+  LOCKED_TIER,
+  normalizeTier,
+  buildLockedTierCounts,
+  resolveTimeZone,
+  byKickoffThenId,
+} from './_lib/teaser';
 
 // Fields a locked tennis teaser may carry. Everything else on the row is dropped.
 const TENNIS_TEASER_KEYS = [
@@ -363,7 +371,7 @@ export default async function handler(req: Request): Promise<Response> {
     const statusFilter = url.searchParams.get('status')?.toLowerCase();
 
     // Redact or preserve based on subscriber status
-    const processedPredictions = feedData.predictions
+    const filteredPredictions = feedData.predictions
       .filter((p) => {
         if (surfaceFilter && surfaceFilter !== 'all') {
           const s = p.fixture?.tournament?.surface?.toLowerCase();
@@ -373,7 +381,8 @@ export default async function handler(req: Request): Promise<Response> {
           const t = p.fixture?.tournament?.tour?.toUpperCase();
           if (t !== tourFilter) return false;
         }
-        if (tierFilter && tierFilter !== 'all') {
+        // Tier filtering is for unlocked users only: for anyone else it would reveal each match's tier.
+        if (isPaidOrAdmin && tierFilter && tierFilter !== 'all') {
           const tier = (p.confidence_category || '').toLowerCase();
           if (tierFilter === 'bangers' && tier !== 'banger') return false;
           if (tierFilter === 'top_picks' && tier !== 'top pick') return false;
@@ -384,7 +393,20 @@ export default async function handler(req: Request): Promise<Response> {
         }
 
         return true;
-      })
+      });
+
+    // Locked users see per-day tier totals, never a tier on a match.
+    const lockedTierCounts = isPaidOrAdmin
+      ? undefined
+      : buildLockedTierCounts(
+          filteredPredictions.map((p) => ({
+            tier: normalizeTier(p.confidence_category, p.market, p.prediction),
+            kickoff: p.target_kickoff_at || p.fixture?.target_kickoff_at,
+          })),
+          resolveTimeZone(url.searchParams.get('tz'))
+        );
+
+    const processedPredictions = (isPaidOrAdmin ? filteredPredictions : [...filteredPredictions].sort(byKickoffThenId))
       .map((p) => {
         if (isPaidOrAdmin) {
           return {
@@ -402,7 +424,7 @@ export default async function handler(req: Request): Promise<Response> {
           overrides: {
             prediction: '🔒 BigBang VIP Pick',
             probability: null,
-            confidence_category: p.confidence_category || 'TOP PICK',
+            confidence_category: LOCKED_TIER,
             fair_odds: null,
             market_odds: null,
             settlement_status: 'pending',
@@ -448,6 +470,7 @@ export default async function handler(req: Request): Promise<Response> {
       tournaments: feedData.tournaments,
       settlements: isPaidOrAdmin ? feedData.settlements : [],
       predictions: processedPredictions,
+      ...(lockedTierCounts ? { locked_tier_counts: lockedTierCounts } : {}),
       cached_at: feedData.cached_at,
       is_stale: isStale,
     });
