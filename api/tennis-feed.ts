@@ -2,7 +2,7 @@ import { checkAdaptiveRateLimit, getClientIp } from './rate-limiter';
 import { verifyEdgeAccess, hasMultiSportAccess } from './_lib/jwt-verifier';
 import { EdgeSwrCache, EdgeCacheRegistry } from './_lib/edge-cache';
 import { generateEtag, matchesEtag, create304Response } from './_lib/etag';
-import { toLockedTeaser } from './_lib/teaser';
+import { toLockedTeaser, pickFields } from './_lib/teaser';
 
 // Fields a locked tennis teaser may carry. Everything else on the row is dropped.
 const TENNIS_TEASER_KEYS = [
@@ -17,6 +17,18 @@ const TENNIS_TEASER_KEYS = [
 ] as const;
 // Metadata a locked teaser may carry: match context only, nothing derived from the model.
 const TENNIS_TEASER_META_KEYS = ['surface', 'court_pace_index', 'simulations_count'] as const;
+// Player fields a locked teaser may carry. Surface Elo ratings are model inputs: the Elo gap
+// next to a confidence tag tells a visitor which player the model picked.
+const TENNIS_TEASER_PLAYER_KEYS = ['id', 'display_name', 'canonical_name', 'country', 'current_rank'] as const;
+
+function lockedTennisFixture(fixture: any): any {
+  if (!fixture || typeof fixture !== 'object') return fixture;
+  const out: Record<string, any> = { ...fixture };
+  for (const side of ['player1', 'player2']) {
+    if (out[side] && typeof out[side] === 'object') out[side] = pickFields(out[side], TENNIS_TEASER_PLAYER_KEYS);
+  }
+  return out;
+}
 
 export const config = {
   runtime: 'edge',
@@ -404,6 +416,7 @@ export default async function handler(req: Request): Promise<Response> {
             ai_tactical_analysis: '🔒 ATP & WTA match predictions and Markov chain models are reserved for BigBang VIP members.',
           },
         });
+        teaser.fixture = lockedTennisFixture(teaser.fixture);
         return teaser;
       });
 
