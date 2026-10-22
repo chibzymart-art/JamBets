@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
+import { tryCaptchaToken, captchaErrorMessage } from '../lib/turnstile';
 
 export const PasswordRecoveryPage: React.FC = () => {
   const navigate = useNavigate();
@@ -74,8 +75,10 @@ export const PasswordRecoveryPage: React.FC = () => {
     setLoading(true);
     try {
       // Supabase Auth sends the branded "Reset your Oddsbanta password" email.
+      const captchaToken = await tryCaptchaToken();
       const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
-        redirectTo: `${window.location.origin}/reset-password`
+        redirectTo: `${window.location.origin}/reset-password`,
+        captchaToken,
       });
 
       if (error) {
@@ -97,7 +100,7 @@ export const PasswordRecoveryPage: React.FC = () => {
       ) {
         setErrorMessage('⚠️ Email rate limit reached. For security, please wait 60 seconds before requesting another link, or check your spam/junk folder for previous emails.');
       } else {
-        setErrorMessage(msg || 'Failed to send recovery email. Please verify your address and try again.');
+        setErrorMessage(captchaErrorMessage(msg) || msg || 'Failed to send recovery email. Please verify your address and try again.');
       }
     } finally {
       setLoading(false);
