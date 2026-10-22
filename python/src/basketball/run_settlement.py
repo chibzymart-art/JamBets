@@ -78,15 +78,19 @@ def run_settlement_cycle(
     pipeline.close()
 
     # 4. Refresh Pre-Computed Basketball Feed Snapshot Cache in Cloud Supabase (Zero-Database Architecture)
-    if not dry_run:
-        try:
-            from python.src.engines.feed_snapshot_engine import FeedSnapshotEngine
-            snap_engine = FeedSnapshotEngine()
-            snap_engine.write_snapshot("feed:basketball", snap_engine.build_basketball_snapshot())
-            snap_engine.notify_edge_invalidation(["basketball"])
-            logger.info("Pre-computed feed:basketball snapshot refreshed and Edge invalidated.")
-        except Exception as exc:
-            logger.warning("Basketball feed snapshot refresh failed (non-fatal): %s", exc)
+    from python.src.engines.snapshot_policy import inline_snapshot_refresh_enabled, skipped_message
+    if inline_snapshot_refresh_enabled():
+        if not dry_run:
+            try:
+                from python.src.engines.feed_snapshot_engine import FeedSnapshotEngine
+                snap_engine = FeedSnapshotEngine()
+                snap_engine.write_snapshot("feed:basketball", snap_engine.build_basketball_snapshot())
+                snap_engine.notify_edge_invalidation(["basketball"])
+                logger.info("Pre-computed feed:basketball snapshot refreshed and Edge invalidated.")
+            except Exception as exc:
+                logger.warning("Basketball feed snapshot refresh failed (non-fatal): %s", exc)
+    else:
+        logger.info(skipped_message())
 
     return summary
 
