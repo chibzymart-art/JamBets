@@ -38,16 +38,20 @@ def run_all(predict: bool = True, settle: bool = True):
         settlement_pipe = SpecialistSettlementPipeline()
         results["settlements"] = settlement_pipe.settle_all()
 
-    print("\n--- Refreshing Specialist Feed Snapshots in cached_feeds ---")
-    try:
-        from python.src.engines.feed_snapshot_engine import FeedSnapshotEngine
-        snap_eng = FeedSnapshotEngine()
-        snap_eng.write_snapshot("feed:corners", snap_eng.build_corners_snapshot())
-        snap_eng.write_snapshot("feed:market:counts", snap_eng.build_market_counts_snapshot())
-        snap_eng.notify_edge_invalidation(["market", "counts", "corners"])
-        print("  [OK] Specialist feed snapshots refreshed successfully and Edge invalidated.")
-    except Exception as exc:
-        print(f"  [WARN] Failed to refresh specialist feed snapshots: {exc}")
+    from python.src.engines.snapshot_policy import inline_snapshot_refresh_enabled, skipped_message
+    if inline_snapshot_refresh_enabled():
+        print("\n--- Refreshing Specialist Feed Snapshots in cached_feeds ---")
+        try:
+            from python.src.engines.feed_snapshot_engine import FeedSnapshotEngine
+            snap_eng = FeedSnapshotEngine()
+            snap_eng.write_snapshot("feed:corners", snap_eng.build_corners_snapshot())
+            snap_eng.write_snapshot("feed:market:counts", snap_eng.build_market_counts_snapshot())
+            snap_eng.notify_edge_invalidation(["market", "counts", "corners"])
+            print("  [OK] Specialist feed snapshots refreshed successfully and Edge invalidated.")
+        except Exception as exc:
+            print(f"  [WARN] Failed to refresh specialist feed snapshots: {exc}")
+    else:
+        print(skipped_message(), flush=True)
 
     print("\n=================================================================")
     print(" ✅ All Specialist Prediction & Settlement Cycles Completed!")

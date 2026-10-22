@@ -198,15 +198,19 @@ def run_basketball_predictions(
     logger.info("Basketball Simulation Pass Completed: %s", summary)
     db.close()
 
-    # Refresh High-Performance Feed Snapshot Cache in Cloud Supabase
-    try:
-        from python.src.engines.feed_snapshot_engine import FeedSnapshotEngine
-        snap_eng = FeedSnapshotEngine()
-        snap_eng.write_snapshot("feed:basketball", snap_eng.build_basketball_snapshot())
-        snap_eng.notify_edge_invalidation(["basketball"])
-        logger.info("Feed snapshot for feed:basketball refreshed in cached_feeds and Edge invalidated.")
-    except Exception as exc:
-        logger.warning("Failed to refresh feed:basketball snapshot: %s", exc)
+    from python.src.engines.snapshot_policy import inline_snapshot_refresh_enabled, skipped_message
+    if inline_snapshot_refresh_enabled():
+        # Refresh High-Performance Feed Snapshot Cache in Cloud Supabase
+        try:
+            from python.src.engines.feed_snapshot_engine import FeedSnapshotEngine
+            snap_eng = FeedSnapshotEngine()
+            snap_eng.write_snapshot("feed:basketball", snap_eng.build_basketball_snapshot())
+            snap_eng.notify_edge_invalidation(["basketball"])
+            logger.info("Feed snapshot for feed:basketball refreshed in cached_feeds and Edge invalidated.")
+        except Exception as exc:
+            logger.warning("Failed to refresh feed:basketball snapshot: %s", exc)
+    else:
+        logger.info(skipped_message())
 
     return summary
 

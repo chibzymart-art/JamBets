@@ -99,15 +99,19 @@ def main():
         print(f" Execution Duration:      {metrics.get('duration_ms', 0)}ms")
         print("==================================================================")
 
-        # Refresh High-Performance Feed Snapshot Cache in Cloud Supabase
-        print("\n[STEP 2] Refreshing Edge Pre-Computed Feed Snapshot Cache in Cloud Supabase...", flush=True)
-        try:
-            from python.src.engines.feed_snapshot_engine import FeedSnapshotEngine
-            snapshot_engine = FeedSnapshotEngine()
-            snap_results = snapshot_engine.sync_all_feeds()
-            print(f"  [OK] Public feed snapshots refreshed in cached_feeds: {snap_results}", flush=True)
-        except Exception as exc:
-            print(f"  [WARN] Feed snapshot cache refresh failed (non-fatal): {exc}", flush=True)
+        from python.src.engines.snapshot_policy import inline_snapshot_refresh_enabled, skipped_message
+        if inline_snapshot_refresh_enabled():
+            # Refresh High-Performance Feed Snapshot Cache in Cloud Supabase
+            print("\n[STEP 2] Refreshing Edge Pre-Computed Feed Snapshot Cache in Cloud Supabase...", flush=True)
+            try:
+                from python.src.engines.feed_snapshot_engine import FeedSnapshotEngine
+                snapshot_engine = FeedSnapshotEngine()
+                snap_results = snapshot_engine.sync_all_feeds()
+                print(f"  [OK] Public feed snapshots refreshed in cached_feeds: {snap_results}", flush=True)
+            except Exception as exc:
+                print(f"  [WARN] Feed snapshot cache refresh failed (non-fatal): {exc}", flush=True)
+        else:
+            print(skipped_message(), flush=True)
 
 
 if __name__ == "__main__":

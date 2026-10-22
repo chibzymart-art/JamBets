@@ -45,6 +45,7 @@ jobs:
 
       - name: Execute Autonomous Tennis Settlement Engine
         env:
+          SNAPSHOTS_BUILT_BY_WORKFLOW: '1'  # snapshots are refreshed once, in the snapshot step below
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}

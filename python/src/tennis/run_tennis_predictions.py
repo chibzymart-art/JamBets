@@ -161,15 +161,19 @@ def run_prediction_cycle(
         db.close()
 
     # Refresh High-Performance Feed Snapshot Cache in Cloud Supabase
-    if summary.get("status") == "success" and not dry_run:
-        try:
-            from python.src.engines.feed_snapshot_engine import FeedSnapshotEngine
-            snap_eng = FeedSnapshotEngine()
-            snap_eng.write_snapshot("feed:tennis", snap_eng.build_tennis_snapshot())
-            snap_eng.notify_edge_invalidation(["tennis"])
-            logger.info("Feed snapshot for feed:tennis refreshed in cached_feeds and Edge invalidated.")
-        except Exception as exc:
-            logger.warning("Failed to refresh feed:tennis snapshot: %s", exc)
+    from python.src.engines.snapshot_policy import inline_snapshot_refresh_enabled, skipped_message
+    if inline_snapshot_refresh_enabled():
+        if summary.get("status") == "success" and not dry_run:
+            try:
+                from python.src.engines.feed_snapshot_engine import FeedSnapshotEngine
+                snap_eng = FeedSnapshotEngine()
+                snap_eng.write_snapshot("feed:tennis", snap_eng.build_tennis_snapshot())
+                snap_eng.notify_edge_invalidation(["tennis"])
+                logger.info("Feed snapshot for feed:tennis refreshed in cached_feeds and Edge invalidated.")
+            except Exception as exc:
+                logger.warning("Failed to refresh feed:tennis snapshot: %s", exc)
+    else:
+        logger.info(skipped_message())
 
     return summary
 
