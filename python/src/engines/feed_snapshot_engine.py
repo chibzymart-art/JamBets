@@ -424,9 +424,6 @@ class FeedSnapshotEngine:
 
             return {
                 "all": len(g_filtered) + len(c_filtered),
-                "home_win": 0,
-                "away_win": 0,
-                "draw": 0,
                 "corners": corners_count,
                 "goals": len(g_filtered),
                 "ht_over_0.5_goals": ht_count,
