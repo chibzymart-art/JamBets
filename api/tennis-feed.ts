@@ -423,6 +423,8 @@ export default async function handler(req: Request): Promise<Response> {
           metaKeys: TENNIS_TEASER_META_KEYS,
           overrides: {
             prediction: '🔒 BigBang VIP Pick',
+            // "No safe banker" picks are stored as their own market; on a locked card that is a tier.
+            market: /no_?safe_?banker/i.test(String(p.market || '')) ? 'match_winner' : p.market,
             probability: null,
             confidence_category: LOCKED_TIER,
             fair_odds: null,
