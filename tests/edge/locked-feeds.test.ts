@@ -5,6 +5,8 @@
 import tennis from '../../api/tennis-feed';
 import goals from '../../api/goals-feed';
 import market from '../../api/market-feed';
+import football from '../../api/predictions-feed';
+import basketball from '../../api/basketball-feed';
 
 const SECRET = 'SECRET_PICK_DETAIL';
 const VIP_MARK = 'VIPTOKEN';
@@ -26,9 +28,16 @@ const goalsRow = { id: 'g1', fixture_id: 'f1', fixture, market: 'over_2.5_goals'
   avg_first_goal_minute: 21, target_kickoff_at: kickoff, settlement_status: 'pending', publication_status: 'published',
   metadata: { reasoning: SECRET } };
 
-const drawRow = { id: 'd1', fixture_id: 'f1', fixture, market: 'draw', prediction: 'Draw', probability: 0.41,
-  confidence_category: 'BANGER', stalemate_tier: 'HIGH', tactical_equilibrium_score: 0.9, low_scoring_density: 0.8,
-  settlement_status: 'pending', publication_status: 'published', target_kickoff_at: kickoff, metadata: { reasoning: SECRET } };
+// Football: four open picks on one day (enough to publish a daily tier total) and one settled pick.
+const footballOpen = [1, 2, 3, 4].map((i) => ({ id: `fp${i}`, fixture_id: 'f1', fixture, prediction: 'Home Win', market: '1X2', probability: 0.97,
+  confidence_category: i < 3 ? 'BANGER' : 'TOP_PICK', secondary_predictions: [{ market: 'btts', prediction: SECRET }], metadata: { reasoning: SECRET },
+  settlement_status: 'pending', settlement_notes: null, target_kickoff_at: kickoff, publication_status: 'published', tier_required: 'standard' }));
+const footballSettled = { id: 'fs1', fixture_id: 'f1', fixture, prediction: 'Over 1.5', market: 'goals', probability: 0.97, confidence_category: 'BANGER',
+  secondary_predictions: [], metadata: {}, settlement_status: 'won', settlement_notes: 'Final: 2-1 (Predicted: Over 1.5)', actual_score: '2-1',
+  target_kickoff_at: new Date(Date.now() - 30 * 3600 * 1000).toISOString(), publication_status: 'published', tier_required: 'standard' };
+const basketballOpen = { id: 'bp1', fixture_id: 'f1', fixture, market: 'moneyline', prediction: 'home ML', probability: 0.9, confidence_category: 'BANGER',
+  settlement_status: 'pending', target_kickoff_at: kickoff, secondary_predictions: [], metadata: { simulation: SECRET } };
+const basketballSettled = { ...basketballOpen, id: 'bs1', settlement_status: 'won', target_kickoff_at: new Date(Date.now() - 30 * 3600 * 1000).toISOString() };
 
 const json = (v: unknown, status = 200) => new Response(JSON.stringify(v), { status, headers: { 'content-type': 'application/json' } });
 
@@ -46,11 +55,12 @@ const json = (v: unknown, status = 200) => new Response(JSON.stringify(v), { sta
   }
   if (url.includes('cached_feeds')) {
     if (url.includes('feed:tennis')) return json([{ payload: { predictions: [tennisRow], tournaments: [], settlements: [], stats: {} }, updated_at: new Date().toISOString() }]);
-    if (url.includes('feed:goals')) return json([{ payload: { predictions: [goalsRow], leagues: [] }, updated_at: new Date().toISOString() }]);
+    if (url.includes('feed:goals')) return json([{ payload: { predictions: [goalsRow], leagues: [{ id: 'l1' }] }, updated_at: new Date().toISOString() }]);
+    if (url.includes('feed:football')) return json([{ payload: { predictions: [...footballOpen, footballSettled], leagues: [] }, updated_at: new Date().toISOString() }]);
+    if (url.includes('feed:basketball')) return json([{ payload: { predictions: [basketballOpen, basketballSettled], leagues: [], settlements: [], stats: {} }, updated_at: new Date().toISOString() }]);
     return json([]);
   }
   if (url.includes('rpc/get_user_session_bootstrap')) return json({ user: null, subscription: null, entitlement: null });
-  if (url.includes('draw_predictions')) return json([drawRow]);
   if (url.includes('goals_predictions')) return json([goalsRow]);
   if (url.includes('/rest/v1/')) return json([]);
   return json({}, 404);
@@ -73,8 +83,11 @@ const check = (name: string, ok: boolean, detail = '') => {
 const fakeJwt = (payload: object) => `x.${Buffer.from(JSON.stringify(payload)).toString('base64url')}.sig`;
 
 (async () => {
-  // Tennis, visitor
-  const tv = await call(tennis, '/api/tennis-feed');
+  const trialTok = () => fakeJwt({ sub: 'u2', role: 'authenticated', exp: Math.floor(Date.now() / 1000) + 3600 });
+  const vipTok = fakeJwt({ sub: 'vip1', role: 'authenticated', exp: Math.floor(Date.now() / 1000) + 3600, mark: VIP_MARK }) + VIP_MARK;
+
+  // ---- Tennis, visitor
+  const tv = await call(tennis, '/api/tennis-feed?tz=Africa/Lagos');
   const tvp = (tv.body.predictions || [])[0] || {};
   const tvs = JSON.stringify(tv.body);
   check('tennis visitor: request ok', tv.status === 200, String(tv.status));
@@ -82,43 +95,71 @@ const fakeJwt = (payload: object) => `x.${Buffer.from(JSON.stringify(payload)).t
   check('tennis visitor: no model detail anywhere', !tvs.includes(SECRET) && !tvs.includes('tactical_reasoning') && !tvs.includes('elo_delta') && !tvs.includes('correct_set_scores') && !tvs.includes('hold_rate'), tvs.slice(0, 300));
   check('tennis visitor: keeps surface for the card', tvp.metadata?.surface === 'hard_outdoor');
   check('tennis visitor: no player Elo (Elo gap reveals the pick)', !/_elo"/.test(tvs) && tvp.fixture?.player1?.display_name === 'A' && tvp.fixture?.player1?.current_rank === 15, JSON.stringify(tvp.fixture?.player1));
+  check('tennis visitor: no tier on the match', tvp.confidence_category === 'LOCKED' && !tvs.includes('TOP PICK'), String(tvp.confidence_category));
+  check('tennis visitor: one-match day tier total withheld', Array.isArray(tv.body.locked_tier_counts?.withheld_dates) && tv.body.locked_tier_counts.withheld_dates.length === 1 && Object.keys(tv.body.locked_tier_counts.by_date).length === 0 && tv.body.locked_tier_counts.upcoming === null, JSON.stringify(tv.body.locked_tier_counts));
+  const tvf = await call(tennis, '/api/tennis-feed?tier=bangers');
+  check('tennis visitor: tier filter ignored (would reveal tiers)', (tvf.body.predictions || []).length === 1, String((tvf.body.predictions || []).length));
 
-  // Goals, visitor and trial
-  const gv = await call(goals, '/api/goals-feed');
-  const gvs = JSON.stringify(gv.body);
-  const gvp = (gv.body.predictions || [])[0] || {};
-  check('goals visitor: request ok', gv.status === 200, String(gv.status));
-  check('goals visitor: item locked', gvp.is_locked === true && gvp.probability === null);
-  check('goals visitor: no xG or Over 2.5 rates', !('xg_combined' in gvp) && !('home_over25_rate' in gvp) && !('ht_goal_frequency' in gvp), JSON.stringify(gvp).slice(0, 300));
-  check('goals visitor: no secret anywhere', !gvs.includes(SECRET), gvs.slice(0, 300));
-  const gt = await call(goals, '/api/goals-feed', fakeJwt({ sub: 'u1', role: 'authenticated', exp: Math.floor(Date.now() / 1000) + 3600 }));
-  const gtp = (gt.body.predictions || [])[0] || {};
-  check('goals trial: full item still delivered', gtp.is_locked !== true && gtp.xg_combined === 3.4, JSON.stringify({is_locked: gtp.is_locked, xg: gtp.xg_combined, auth: gt.body.auth_status}));
-
-  // Market, visitor on a membership market (draw)
-  const mv = await call(market, '/api/market-feed?market=draw');
-  check('market draw visitor: request ok', mv.status === 200, String(mv.status));
-  check('market draw visitor: no fixture list', Array.isArray(mv.body.predictions) && mv.body.predictions.length === 0, JSON.stringify(mv.body.predictions).slice(0, 200));
-  check('market draw visitor: count only', mv.body.locked_preview?.market === 'draw' && typeof mv.body.locked_preview?.count === 'number', JSON.stringify(mv.body.locked_preview));
-  check('market draw visitor: no secret anywhere', !JSON.stringify(mv.body).includes(SECRET));
-  check('market draw visitor: leagues withheld', Array.isArray(mv.body.leagues) && mv.body.leagues.length === 0);
-
-  // Market, trial user on draw: rows delivered
-  const mt = await call(market, '/api/market-feed?market=draw', fakeJwt({ sub: 'u2', role: 'authenticated', exp: Math.floor(Date.now() / 1000) + 3600 }));
-  check('market draw trial: rows delivered unlocked', (mt.body.predictions || []).length > 0 && mt.body.predictions[0].is_locked === false && !mt.body.locked_preview, JSON.stringify(mt.body).slice(0, 300));
-
-  // Tennis, BigBang VIP: full detail still delivered (no over-redaction)
-  const vipTok = fakeJwt({ sub: 'vip1', role: 'authenticated', exp: Math.floor(Date.now() / 1000) + 3600, mark: VIP_MARK }) + VIP_MARK;
+  // ---- Tennis, BigBang VIP: full detail still delivered (no over-redaction)
   const tvip = await call(tennis, '/api/tennis-feed', vipTok);
   const tvipp = (tvip.body.predictions || [])[0] || {};
   check('tennis VIP: full pick and reasoning delivered', tvipp.is_locked === false && tvipp.prediction === 'A to win' && tvipp.metadata?.tactical_reasoning === SECRET, JSON.stringify({ sub: tvip.body.is_subscriber, pred: tvipp.prediction }));
-  check('tennis VIP: player Elo kept', tvipp.fixture?.player1?.hard_elo === 2040, JSON.stringify(tvipp.fixture?.player1));
+  check('tennis VIP: player Elo and tier kept', tvipp.fixture?.player1?.hard_elo === 2040 && tvipp.confidence_category === 'TOP PICK' && !tvip.body.locked_tier_counts, JSON.stringify(tvipp.fixture?.player1));
+  const tvipf = await call(tennis, '/api/tennis-feed?tier=bangers', vipTok);
+  check('tennis VIP: tier filter still works', (tvipf.body.predictions || []).length === 0, String((tvipf.body.predictions || []).length));
 
-  // Market, visitor on the general market: only allowlisted fields
-  const mg = await call(market, '/api/market-feed?market=general');
-  const extra = (mg.body.predictions || []).flatMap((p: any) => Object.keys(p).filter((k) => !MARKET_ALLOWED.has(k)));
-  check('market general visitor: only allowlisted fields', mg.status === 200 && extra.length === 0, extra.join(','));
-  { const b = JSON.stringify(mg.body); const i = b.indexOf(SECRET); check('market general visitor: no secret anywhere', i < 0, b.slice(Math.max(0, i - 160), i + 20)); }
+  // ---- Football, visitor
+  const fv = await call(football, '/api/predictions-feed?tz=Africa/Lagos');
+  const fvs = JSON.stringify(fv.body);
+  const fopen = (fv.body.predictions || []).filter((p: any) => p.id.startsWith('fp'));
+  const fset = (fv.body.predictions || []).find((p: any) => p.id === 'fs1') || {};
+  check('football visitor: request ok', fv.status === 200 && fopen.length === 4, `${fv.status} ${fopen.length}`);
+  check('football visitor: open picks carry no tier', fopen.every((p: any) => p.confidence_category === 'LOCKED' && p.is_locked === true && p.probability === null));
+  check('football visitor: settled pick keeps its tier (track record)', fset.confidence_category === 'BANGER' && fset.settlement_status === 'won', JSON.stringify(fset).slice(0, 200));
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Lagos', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(kickoff));
+  const fc = fv.body.locked_tier_counts || {};
+  check('football visitor: daily tier totals published', fc.time_zone === 'Africa/Lagos' && fc.by_date?.[today]?.BANGER === 2 && fc.by_date?.[today]?.TOP_PICK === 2 && fc.upcoming?.BANGER === 2, JSON.stringify(fc));
+  check('football visitor: no secret anywhere', !fvs.includes(SECRET), fvs.slice(0, 200));
+  const ft = await call(football, '/api/predictions-feed', trialTok());
+  const ftp = (ft.body.predictions || []).find((p: any) => p.id === 'fp1') || {};
+  check('football trial: full pick and tier delivered', ftp.confidence_category === 'BANGER' && ftp.probability === 0.97 && !ft.body.locked_tier_counts, JSON.stringify(ftp).slice(0, 200));
+
+  // ---- Basketball, visitor
+  const bv = await call(basketball, '/api/basketball-feed?tz=Africa/Lagos');
+  const bopen = (bv.body.predictions || []).find((p: any) => p.id === 'bp1') || {};
+  const bset = (bv.body.predictions || []).find((p: any) => p.id === 'bs1') || {};
+  check('basketball visitor: open pick carries no tier', bopen.confidence_category === 'LOCKED' && bopen.is_locked === true, JSON.stringify(bopen).slice(0, 160));
+  check('basketball visitor: settled pick keeps its tier', bset.confidence_category === 'BANGER', String(bset.confidence_category));
+  check('basketball visitor: no secret on open picks', !JSON.stringify(bopen).includes(SECRET), JSON.stringify(bopen).slice(0, 200));
+  check('basketball visitor: tier totals sent (one open match, so withheld)', bv.body.locked_tier_counts?.withheld_dates?.length === 1, JSON.stringify(bv.body.locked_tier_counts));
+
+  // ---- Goals feed: the list itself is the pick, so locked users get a count
+  const gv = await call(goals, '/api/goals-feed');
+  check('goals visitor: request ok', gv.status === 200, String(gv.status));
+  check('goals visitor: no fixture list', Array.isArray(gv.body.predictions) && gv.body.predictions.length === 0 && Array.isArray(gv.body.leagues) && gv.body.leagues.length === 0, JSON.stringify(gv.body).slice(0, 200));
+  check('goals visitor: count only', gv.body.locked_preview?.count === 1 && gv.body.locked_preview?.by_market?.['over_2.5_goals'] === 1, JSON.stringify(gv.body.locked_preview));
+  check('goals visitor: no secret anywhere', !JSON.stringify(gv.body).includes(SECRET));
+  const gt = await call(goals, '/api/goals-feed', trialTok());
+  const gtp = (gt.body.predictions || [])[0] || {};
+  check('goals trial: full item still delivered', gtp.is_locked !== true && gtp.xg_combined === 3.4 && !gt.body.locked_preview, JSON.stringify({is_locked: gtp.is_locked, xg: gtp.xg_combined, auth: gt.body.auth_status}));
+
+  // ---- Market feed
+  for (const m of ['over_2.5_goals', 'general', 'curated', 'corners', 'ht_over_0.5_goals']) {
+    const r = await call(market, `/api/market-feed?market=${m}`);
+    check(`market ${m} visitor: count only, no fixtures`, r.status === 200 && (r.body.predictions || []).length === 0 && r.body.locked_preview?.market === m && (r.body.leagues || []).length === 0 && !JSON.stringify(r.body).includes(SECRET), JSON.stringify(r.body).slice(0, 200));
+  }
+  const mo = await call(market, '/api/market-feed?market=over_2.5_goals');
+  check('market over_2.5 visitor: count matches rows', mo.body.locked_preview?.count === 1, JSON.stringify(mo.body.locked_preview));
+  const mt = await call(market, '/api/market-feed?market=over_2.5_goals', trialTok());
+  check('market over_2.5 trial: rows delivered unlocked', (mt.body.predictions || []).length === 1 && mt.body.predictions[0].is_locked === false && !mt.body.locked_preview, JSON.stringify(mt.body).slice(0, 300));
+  for (const m of ['draw', 'home_win', 'away_win']) {
+    const r = await call(market, `/api/market-feed?market=${m}`);
+    check(`market ${m}: retired (410), never Over 2.5 rows`, r.status === 410 && r.body.error === 'market_retired' && !r.body.predictions, `${r.status} ${JSON.stringify(r.body).slice(0, 120)}`);
+  }
+  const mu = await call(market, '/api/market-feed?market=bogus');
+  check('market unknown: 400', mu.status === 400 && mu.body.error === 'unknown_market', String(mu.status));
+  const mc = await call(market, '/api/market-feed?market=corners');
+  check('market counts: no retired keys', mc.body.counts && !('draw' in mc.body.counts) && !('home_win' in mc.body.counts), JSON.stringify(mc.body.counts));
 
   console.log(failures ? `\n${failures} FAILED` : '\nALL PASSED');
   process.exit(failures ? 1 : 0);
