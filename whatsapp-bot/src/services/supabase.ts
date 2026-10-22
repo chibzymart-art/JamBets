@@ -19,6 +19,9 @@ export interface UserAccessStatus {
   userId?: string;
 }
 
+// Tiers that unlock bot picks. 'free' (every new account) and anything unknown do not.
+const PAID_TIERS = ['standard', 'bigbang', 'pro', 'premium', 'admin', 'vip'];
+
 /**
  * Checks if a given WhatsApp phone number belongs to an active subscriber or admin.
  */
@@ -61,7 +64,7 @@ export async function getWhatsAppUserAccess(phone: string): Promise<UserAccessSt
     if (entitlements && entitlements.length > 0) {
       const ent = entitlements[0];
       const validUntil = ent.valid_until ? new Date(ent.valid_until).getTime() : Infinity;
-      if (validUntil > Date.now() && ['standard', 'bigbang', 'pro', 'premium', 'admin', 'vip'].includes(ent.tier?.toLowerCase())) {
+      if (validUntil > Date.now() && PAID_TIERS.includes(String(ent.tier || '').toLowerCase())) {
         return { isPaid: true, tier: ent.tier.toUpperCase(), email, userId: user.id };
       }
       if (ent.tier === 'admin' || ent.features?.admin === true) {
@@ -70,15 +73,23 @@ export async function getWhatsAppUserAccess(phone: string): Promise<UserAccessSt
     }
 
     // 4. Check Subscriptions table
+    // Only paid tiers count, and only until their period ends: every free account also has an
+    // "active" subscription row with tier 'free'.
     const { data: subscriptions } = await supabase
       .from('subscriptions')
-      .select('tier, status')
+      .select('tier, status, current_period_end')
       .eq('user_id', user.id)
       .eq('status', 'active')
-      .limit(1);
+      .in('tier', PAID_TIERS)
+      .order('created_at', { ascending: false })
+      .limit(5);
 
-    if (subscriptions && subscriptions.length > 0) {
-      return { isPaid: true, tier: subscriptions[0].tier.toUpperCase(), email, userId: user.id };
+    const liveSub = (subscriptions || []).find(
+      (s: any) => PAID_TIERS.includes(String(s.tier || '').toLowerCase())
+        && (!s.current_period_end || new Date(s.current_period_end).getTime() > Date.now())
+    );
+    if (liveSub) {
+      return { isPaid: true, tier: String(liveSub.tier).toUpperCase(), email, userId: user.id };
     }
 
     return { isPaid: false, tier: 'Free', email, userId: user.id };

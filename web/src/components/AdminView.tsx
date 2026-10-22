@@ -1392,10 +1392,12 @@ export const AdminView: React.FC<AdminViewProps> = ({
 
       // Dispatch Oddsbanta Subscription Confirmation email via Resend
       const targetUser = usersList.find((u: any) => u.id === userId);
-      if (targetUser?.email && (targetTier === 'standard' || targetTier === 'bigbang')) {
+      const { data: adminSession } = await supabase.auth.getSession();
+      const adminToken = adminSession?.session?.access_token;
+      if (adminToken && targetUser?.email && (targetTier === 'standard' || targetTier === 'bigbang')) {
         fetch('/api/send-subscription-email', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
           body: JSON.stringify({
             email: targetUser.email,
             name: targetUser.display_name || targetUser.email.split('@')[0],

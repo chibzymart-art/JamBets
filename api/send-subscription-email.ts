@@ -1,3 +1,5 @@
+import { emailCorsHeaders, jsonError, verifyEmailCaller } from './_lib/email-guard';
+
 export const config = {
   runtime: 'edge',
 };
@@ -284,12 +286,7 @@ Thank you for choosing Oddsbanta!
 }
 
 export default async function handler(req: Request): Promise<Response> {
-  const headers = {
-    'Content-Type': 'application/json; charset=utf-8',
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-  };
+  const headers = emailCorsHeaders(req);
 
   if (req.method === 'OPTIONS') {
     return new Response(null, { status: 204, headers });
@@ -301,6 +298,11 @@ export default async function handler(req: Request): Promise<Response> {
       headers,
     });
   }
+
+  // Only an admin (Admin panel) or an internal service-role caller may send subscription mail.
+  const caller = await verifyEmailCaller(req);
+  if (!caller) return jsonError(401, 'Sign in required', headers);
+  if (!caller.isAdmin) return jsonError(403, 'Admins only', headers);
 
   try {
     let payload: SendSubscriptionEmailPayload;
@@ -377,7 +379,7 @@ export default async function handler(req: Request): Promise<Response> {
       );
     }
 
-    console.log(`[SUBSCRIPTION-EMAIL] Successfully sent subscription email to ${cleanEmail}, ID: ${resendData?.id}`);
+    console.log(`[SUBSCRIPTION-EMAIL] Sent subscription email, ID: ${resendData?.id}`);
     return new Response(
       JSON.stringify({
         success: true,

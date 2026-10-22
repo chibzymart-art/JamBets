@@ -174,8 +174,8 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
     setPasswordError(null);
     setPasswordSuccess(null);
 
-    if (newPassword.length < 6) {
-      setPasswordError('New password must be at least 6 characters long.');
+    if (newPassword.length < 8) {
+      setPasswordError('New password must be at least 8 characters long.');
       return;
     }
     if (newPassword !== confirmPassword) {
@@ -579,8 +579,8 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
                   id="settings-new-password"
                   type="password"
                   required
-                  minLength={6}
-                  placeholder="Min 6 characters"
+                  minLength={8}
+                  placeholder="Min 8 characters"
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
                   autoComplete="new-password"
@@ -594,7 +594,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
                   id="settings-confirm-password"
                   type="password"
                   required
-                  minLength={6}
+                  minLength={8}
                   placeholder="Re-enter password"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
