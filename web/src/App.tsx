@@ -746,7 +746,7 @@ export default function App() {
           probability: isLocked ? 0 : item.probability,
           confidence_category: (item.confidence_category && item.confidence_category !== 'LOCKED')
             ? item.confidence_category
-            : (isLocked ? 'TOP_PICK' : 'MID_CONFIDENCE'),
+            : (isLocked ? 'LOCKED' : 'MID_CONFIDENCE'), // locked cards carry no tier (Edge API withholds it)
           secondary_predictions: item.secondary_predictions || [],
           metadata: itemMeta,
           settlement_status: item.settlement_status,
@@ -1104,7 +1104,7 @@ export default function App() {
             probability: isLocked ? 0 : item.probability,
             confidence_category: (item.confidence_category && item.confidence_category !== 'LOCKED')
               ? item.confidence_category
-              : (isLocked ? 'TOP_PICK' : 'MID_CONFIDENCE'),
+              : (isLocked ? 'LOCKED' : 'MID_CONFIDENCE'), // locked cards carry no tier (Edge API withholds it)
             secondary_predictions: item.secondary_predictions || [],
             metadata: itemMeta,
             settlement_status: item.settlement_status,
@@ -2619,12 +2619,12 @@ export default function App() {
                       <div className="market-nav-titles">
                         <span className="market-nav-title-text">Other Markets</span>
                         <span className="market-nav-sub-text">
-                          Goals, 1X2 Specialist, Corners & Draw Hunter
+                          Over 2.5 Goals, 1H Blitz & Corners
                         </span>
                       </div>
                     </div>
                     <span className="market-nav-count-pill specialist-pill">
-                      5 Specialist Models
+                      3 Specialist Models
                     </span>
                   </div>
                 </div>
