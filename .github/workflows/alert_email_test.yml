@@ -1,0 +1,46 @@
+name: Alert Email Test (manual)
+
+# Sends one test message through the same Gmail SMTP path the engines use for failure alerts.
+# Run it after changing ALERT_EMAIL_SENDER / ALERT_EMAIL_PASSWORD / ALERT_EMAIL_RECIPIENTS.
+# Manual only: it never runs on a schedule and touches no data.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  send-test-alert:
+    name: Send test alert email
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Send test alert
+        env:
+          ALERT_EMAIL_SENDER: ${{ secrets.ALERT_EMAIL_SENDER }}
+          ALERT_EMAIL_PASSWORD: ${{ secrets.ALERT_EMAIL_PASSWORD }}
+          ALERT_EMAIL_RECIPIENTS: ${{ secrets.ALERT_EMAIL_RECIPIENTS }}
+        run: |
+          python - <<'PY'
+          import sys
+          from python.src.alerts.email_notifier import send_email_alert, _build_html_wrapper, get_recipients
+          run_url = "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          content = (
+              "<p>This is a test of the Oddsbanta engine failure alerts. Nothing has failed.</p>"
+              f"<p>If you can read this, alert emails are working. Run: <a href='{run_url}'>{run_url}</a></p>"
+          )
+          ok = send_email_alert(
+              subject="Test alert (nothing has failed)",
+              html_body=_build_html_wrapper("Alert Email Test", "#10b981", "TEST", content),
+              plain_body=f"Test of the Oddsbanta failure alerts. Nothing has failed. Run: {run_url}",
+          )
+          print(f"Recipients configured: {len(get_recipients())}")
+          sys.exit(0 if ok else 1)
+          PY
