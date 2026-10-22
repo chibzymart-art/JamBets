@@ -59,6 +59,11 @@ const json = (v: unknown, status = 200) => new Response(JSON.stringify(v), { sta
     if (url.includes('feed:tennis')) return json([{ payload: { predictions: [tennisRow, tennisSkipRow], tournaments: [], settlements: [], stats: {} }, updated_at: new Date().toISOString() }]);
     if (url.includes('feed:goals')) return json([{ payload: { predictions: [goalsRow], leagues: [{ id: 'l1' }] }, updated_at: new Date().toISOString() }]);
     if (url.includes('feed:football')) return json([{ payload: { predictions: [...footballOpen, footballSettled], leagues: [] }, updated_at: new Date().toISOString() }]);
+    if (url.includes('feed:market:counts')) {
+      // Old snapshot shape: still carries the retired 1X2 keys with zero values.
+      const c = { general: 1, curated: 2, 'over_2.5_goals': 1, 'ht_over_0.5_goals': 0, corners: 1, home_win: 0, away_win: 0, draw: 0 };
+      return json([{ payload: { cached_at: new Date().toISOString(), counts_all: c, counts_today: c }, updated_at: new Date().toISOString() }]);
+    }
     if (url.includes('feed:basketball')) return json([{ payload: { predictions: [basketballOpen, basketballSettled], leagues: [], settlements: [], stats: {} }, updated_at: new Date().toISOString() }]);
     return json([]);
   }
@@ -163,7 +168,7 @@ const fakeJwt = (payload: object) => `x.${Buffer.from(JSON.stringify(payload)).t
   const mu = await call(market, '/api/market-feed?market=bogus');
   check('market unknown: 400', mu.status === 400 && mu.body.error === 'unknown_market', String(mu.status));
   const mc = await call(market, '/api/market-feed?market=corners');
-  check('market counts: no retired keys', mc.body.counts && !('draw' in mc.body.counts) && !('home_win' in mc.body.counts), JSON.stringify(mc.body.counts));
+  check('market counts: no retired keys (even from an old snapshot)', mc.body.counts && mc.body.counts.corners === 1 && !('draw' in mc.body.counts) && !('home_win' in mc.body.counts) && !('away_win' in mc.body.counts), JSON.stringify(mc.body.counts));
 
   console.log(failures ? `\n${failures} FAILED` : '\nALL PASSED');
   process.exit(failures ? 1 : 0);
