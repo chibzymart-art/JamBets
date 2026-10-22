@@ -12,7 +12,6 @@ export const config = {
     'chibzymart@gmail.com',
     'whizzchibz@gmail.com',
     'chibuezec.amuchie@gmail.com',
-    'chibuezeamuchie@gmail.com',
     'nnamdiamuchie@gmail.com'
   ],
   authDir: process.env.AUTH_DIR || path.resolve(__dirname, '../auth_info'),
