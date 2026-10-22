@@ -402,14 +402,18 @@ def run():
             }
         )
     # 8. Refresh High-Performance Feed Snapshot Cache (Zero-Database Architecture)
-    print("\n[STEP 8] Refreshing Edge Pre-Computed Feed Snapshot Cache in Cloud Supabase...", flush=True)
-    try:
-        from python.src.engines.feed_snapshot_engine import FeedSnapshotEngine
-        snapshot_engine = FeedSnapshotEngine()
-        snap_results = snapshot_engine.sync_all_feeds()
-        print(f"  [OK] Public feed snapshots refreshed in cached_feeds: {snap_results}", flush=True)
-    except Exception as exc:
-        print(f"  [WARN] Feed snapshot cache refresh failed (non-fatal): {exc}", flush=True)
+    from python.src.engines.snapshot_policy import inline_snapshot_refresh_enabled, skipped_message
+    if inline_snapshot_refresh_enabled():
+        print("\n[STEP 8] Refreshing Edge Pre-Computed Feed Snapshot Cache in Cloud Supabase...", flush=True)
+        try:
+            from python.src.engines.feed_snapshot_engine import FeedSnapshotEngine
+            snapshot_engine = FeedSnapshotEngine()
+            snap_results = snapshot_engine.sync_all_feeds()
+            print(f"  [OK] Public feed snapshots refreshed in cached_feeds: {snap_results}", flush=True)
+        except Exception as exc:
+            print(f"  [WARN] Feed snapshot cache refresh failed (non-fatal): {exc}", flush=True)
+    else:
+        print(skipped_message(), flush=True)
 
     print("==================================================================")
 
