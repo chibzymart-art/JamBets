@@ -150,12 +150,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         // Send branded welcome email via Resend on registration (non-blocking)
         const userEmail = authData?.user?.email || authData?.session?.user?.email;
         const userName = authData?.user?.user_metadata?.full_name || authData?.user?.user_metadata?.display_name || userEmail?.split('@')[0];
-        if (mode === 'register' && userEmail) {
+        const accessToken = authData?.session?.access_token;
+        if (mode === 'register' && userEmail && accessToken) {
           fetch('/api/send-welcome-email', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
             body: JSON.stringify({
-              email: userEmail,
               name: userName || 'Member',
             }),
           }).catch((e) => console.warn('[WELCOME-EMAIL] Google registration welcome dispatch warning:', e));
@@ -322,8 +322,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       return;
     }
 
-    if (password.length < 6) {
-      setErrorMessage('Password must be at least 6 characters long.');
+    if (password.length < 8) {
+      setErrorMessage('Password must be at least 8 characters long.');
       return;
     }
 
@@ -362,15 +362,20 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         throw error;
       }
 
-      if (data?.user) {
+      if (data?.user && !data.session) {
+        // Email confirmation is on: Supabase has sent the confirm link. No session until it is clicked.
+        // (Supabase also returns this shape, with no error, when the address is already registered.)
+        setQueueNotice(null);
+        setSuccessMessage('Check your inbox to confirm your email, then sign in.');
+        setMode('signin');
+        setPassword('');
+      } else if (data?.user && data.session) {
         // Send branded welcome email via Resend (fire-and-forget, non-blocking)
-        const userEmail = email.trim();
-        const userName = displayName.trim() || userEmail.split('@')[0];
+        const userName = displayName.trim() || email.trim().split('@')[0];
         fetch('/api/send-welcome-email', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${data.session.access_token}` },
           body: JSON.stringify({
-            email: userEmail,
             name: userName,
           }),
         }).catch((err) => {
@@ -413,24 +418,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     setLoading(true);
 
     try {
-      // 1. Dispatch custom Oddsbanta password change mailer via Resend
-      const apiRes = await fetch('/api/send-password-reset-email', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: email.trim(),
-          type: 'reset_request',
-          redirectTo: `${window.location.origin}/reset-password`,
-        }),
-      }).catch(() => null);
-
-      if (apiRes && apiRes.ok) {
-        setQueueNotice(null);
-        setSuccessMessage('Password reset link sent! Check your inbox (and spam folder) for instructions.');
-        return;
-      }
-
-      // 2. Resilient fallback to Supabase built-in auth mailer
+      // Supabase Auth sends the branded "Reset your Oddsbanta password" email.
       const { error } = await executeAuthWithRetry(async () => {
         const res = await supabase.auth.resetPasswordForEmail(email.trim(), {
           redirectTo: `${window.location.origin}/reset-password`
@@ -815,12 +803,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               </div>
 
               <div className="form-group">
-                <label htmlFor="register-password" className="form-label">Password (min 6 chars)</label>
+                <label htmlFor="register-password" className="form-label">Password (min 8 chars)</label>
                 <input
                   id="register-password"
                   type="password"
                   required
-                  minLength={6}
+                  minLength={8}
                   placeholder="••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
