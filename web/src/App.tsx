@@ -30,6 +30,7 @@ import { useTrialStatus, useVirtualWindow } from './hooks';
 import { LandingPage } from './pages/Landing';
 import { SubscriptionPage } from './pages/Subscription';
 import { PasswordRecoveryPage } from './pages/PasswordRecovery';
+import { AuthConfirmPage } from './pages/AuthConfirm';
 import { AboutPage } from './pages/AboutPage';
 import { OtherMarketsPage } from './pages/OtherMarketsPage';
 import { WatchlistSidebar } from './components/WatchlistSidebar';
@@ -373,11 +374,14 @@ export default function App() {
     });
 
     // Password Recovery Interceptor:
-    // If user arrived with a Supabase recovery token in URL hash (#access_token=...&type=recovery),
-    // immediately route them to the dedicated /reset-password page rather than leaving them on the homepage.
-    if (window.location.hash && (window.location.hash.includes('type=recovery') || window.location.hash.includes('access_token=')) && window.location.pathname !== '/reset-password') {
+    // Only a recovery link (#...&type=recovery) goes to /reset-password. Sign-up confirmations, magic
+    // links and email changes also arrive with #access_token=..., and must not land on the reset form.
+    const hashType = new URLSearchParams(window.location.hash.replace(/^#/, '')).get('type');
+    if (hashType === 'recovery' && window.location.pathname !== '/reset-password') {
       navigate('/reset-password' + window.location.hash);
     }
+    // Other link types stay put so supabase-js can read the session from the hash; the SIGNED_IN
+    // handler below then moves the user from '/' to '/dashboard'.
 
     const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (!isMounted) return;
@@ -2372,6 +2376,7 @@ export default function App() {
           />
 
           {/* ROUTE 2: PASSWORD RECOVERY PAGE */}
+          <Route path="/auth/confirm" element={<AuthConfirmPage />} />
           <Route path="/reset-password" element={<PasswordRecoveryPage />} />
           <Route path="/forgot-password" element={<PasswordRecoveryPage />} />
 
