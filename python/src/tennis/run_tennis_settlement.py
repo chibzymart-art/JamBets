@@ -141,16 +141,20 @@ def main():
         print("==================================================================")
 
         # Refresh High-Performance Feed Snapshot Cache in Cloud Supabase
-        if not args.dry_run:
-            print("\n[STEP 2] Refreshing Tennis Feed Snapshot Cache in Cloud Supabase...", flush=True)
-            try:
-                from python.src.engines.feed_snapshot_engine import FeedSnapshotEngine
-                snap_eng = FeedSnapshotEngine()
-                snap_eng.write_snapshot("feed:tennis", snap_eng.build_tennis_snapshot())
-                snap_eng.notify_edge_invalidation(["tennis"])
-                print("  [OK] Tennis feed snapshot refreshed in cached_feeds and Edge invalidated.", flush=True)
-            except Exception as exc:
-                print(f"  [WARN] Tennis snapshot refresh failed (non-fatal): {exc}", flush=True)
+        from python.src.engines.snapshot_policy import inline_snapshot_refresh_enabled, skipped_message
+        if inline_snapshot_refresh_enabled():
+            if not args.dry_run:
+                print("\n[STEP 2] Refreshing Tennis Feed Snapshot Cache in Cloud Supabase...", flush=True)
+                try:
+                    from python.src.engines.feed_snapshot_engine import FeedSnapshotEngine
+                    snap_eng = FeedSnapshotEngine()
+                    snap_eng.write_snapshot("feed:tennis", snap_eng.build_tennis_snapshot())
+                    snap_eng.notify_edge_invalidation(["tennis"])
+                    print("  [OK] Tennis feed snapshot refreshed in cached_feeds and Edge invalidated.", flush=True)
+                except Exception as exc:
+                    print(f"  [WARN] Tennis snapshot refresh failed (non-fatal): {exc}", flush=True)
+        else:
+            print(skipped_message(), flush=True)
 
 
 if __name__ == "__main__":
