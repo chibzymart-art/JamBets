@@ -796,14 +796,66 @@ class FeedSnapshotEngine:
             return False
 
 
+# Single feeds the CLI can build: name -> (cached_feeds key, builder method, edge invalidation tags).
+# Same keys, builders and tags as the single-feed branches below.
+FEED_TARGETS = {
+    "football": ("feed:football:today", "build_football_today_snapshot", ["football"]),
+    "goals": ("feed:goals", "build_goals_snapshot", ["goals"]),
+    "corners": ("feed:corners", "build_corners_snapshot", ["market", "corners"]),
+    "counts": ("feed:market:counts", "build_market_counts_snapshot", ["counts", "market"]),
+    "basketball": ("feed:basketball", "build_basketball_snapshot", ["basketball"]),
+    "tennis": ("feed:tennis", "build_tennis_snapshot", ["tennis"]),
+}
+
+
+def parse_feed_arg(value: str) -> str:
+    """Accepts 'all', one feed name, or a comma-separated list of feed names."""
+    names = [v.strip() for v in value.split(",") if v.strip()]
+    if not names:
+        raise ValueError("no feed given")
+    if names == ["all"]:
+        return "all"
+    unknown = [n for n in names if n not in FEED_TARGETS]
+    if unknown:
+        raise ValueError(f"unknown feed(s): {', '.join(unknown)}")
+    return ",".join(names)
+
+
+def sync_feed_list(engine: "FeedSnapshotEngine", names: List[str]) -> Dict[str, bool]:
+    """Builds each listed feed independently, like sync_all_feeds: one failure does not stop the rest."""
+    results: Dict[str, bool] = {}
+    for name in names:
+        key, builder, tags = FEED_TARGETS[name]
+        try:
+            results[key] = engine.write_snapshot(key, getattr(engine, builder)())
+            engine.notify_edge_invalidation(tags)
+        except Exception as e:
+            logger.error(f"Error building {key}: {e}")
+            results[key] = False
+    logger.info(f"Feed list snapshot pre-computation complete: {results}")
+    return results
+
+
 if __name__ == "__main__":
     import argparse
+
+    def _feed_type(value: str) -> str:
+        try:
+            return parse_feed_arg(value)
+        except ValueError as exc:
+            raise argparse.ArgumentTypeError(str(exc))
+
     parser = argparse.ArgumentParser(description="Oddsbanta Feed Snapshot Pre-computation Engine")
-    parser.add_argument("--feed", type=str, choices=["football", "goals", "corners", "counts", "basketball", "tennis", "all"], default="all")
+    parser.add_argument(
+        "--feed", type=_feed_type, default="all",
+        help="all, or one of football, goals, corners, counts, basketball, tennis, or a comma-separated list of them",
+    )
     args = parser.parse_args()
 
     engine = FeedSnapshotEngine()
-    if args.feed == "all":
+    if "," in args.feed:
+        sync_feed_list(engine, args.feed.split(","))
+    elif args.feed == "all":
         engine.sync_all_feeds()
     elif args.feed == "football":
         engine.write_snapshot("feed:football:today", engine.build_football_today_snapshot())
