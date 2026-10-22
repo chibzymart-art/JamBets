@@ -122,7 +122,9 @@ class FeedSnapshotEngine:
             resp = self.client.post(
                 "/cached_feeds",
                 json=row,
-                headers={"Prefer": "return=representation,resolution=merge-duplicates"},
+                # return=minimal: the reply is never read, so don't have Supabase send the whole
+                # snapshot (1 to 1.6 MB) back on every write. The upsert itself is unchanged.
+                headers={"Prefer": "return=minimal,resolution=merge-duplicates"},
                 params={"on_conflict": "key"}
             )
             resp.raise_for_status()
