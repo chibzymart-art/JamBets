@@ -517,6 +517,16 @@ async function fetchMarketDataFromUpstream(
   return finalList.map((item: any) => normalizePrediction(item, category, market));
 }
 
+// Snapshots written before the 1X2 markets were retired still carry zero-valued home_win, away_win
+// and draw keys. Strip them so no client ever sees a retired market.
+function withoutRetired(counts: Record<string, number>): Record<MarketType, number> {
+  const clean: Record<string, number> = {};
+  for (const [key, value] of Object.entries(counts || {})) {
+    if (!RETIRED_MARKETS.includes(key)) clean[key] = value;
+  }
+  return clean as Record<MarketType, number>;
+}
+
 // Computes signal counts across active markets for dynamic badges
 async function computeAllMarketCounts(
   headers: Record<string, string>,
@@ -533,11 +543,11 @@ async function computeAllMarketCounts(
         const rows = await snapRes.json();
         const payload = rows[0]?.payload;
         if (payload) {
-          if (dateParam === 'today' && payload.counts_today) return payload.counts_today;
-          if (dateParam === 'tomorrow' && payload.counts_tomorrow) return payload.counts_tomorrow;
-          if (dateParam === 'yesterday' && payload.counts_yesterday) return payload.counts_yesterday;
-          if (payload[`counts_${dateParam}`]) return payload[`counts_${dateParam}`];
-          if (dateParam === 'all' && payload.counts_all) return payload.counts_all;
+          if (dateParam === 'today' && payload.counts_today) return withoutRetired(payload.counts_today);
+          if (dateParam === 'tomorrow' && payload.counts_tomorrow) return withoutRetired(payload.counts_tomorrow);
+          if (dateParam === 'yesterday' && payload.counts_yesterday) return withoutRetired(payload.counts_yesterday);
+          if (payload[`counts_${dateParam}`]) return withoutRetired(payload[`counts_${dateParam}`]);
+          if (dateParam === 'all' && payload.counts_all) return withoutRetired(payload.counts_all);
           if (dateParam !== 'all') {
             // Date outside the precomputed window (past 30d .. +4d): no picks exist there.
             return {

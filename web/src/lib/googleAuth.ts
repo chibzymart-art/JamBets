@@ -1,3 +1,4 @@
+import { tryCaptchaToken } from './turnstile';
 import { supabase } from './supabase';
 
 export const GOOGLE_CLIENT_ID =
@@ -94,10 +95,12 @@ export async function handleGoogleCredentialResponse(response: { credential: str
   }
 
   try {
+    const captchaToken = await tryCaptchaToken();
     const { data, error } = await supabase.auth.signInWithIdToken({
       provider: 'google',
       token: response.credential,
       ...(currentRawNonce ? { nonce: currentRawNonce } : {}),
+      ...(captchaToken ? { options: { captchaToken } } : {}),
     });
 
     if (error) {

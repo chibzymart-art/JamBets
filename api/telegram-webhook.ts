@@ -12,7 +12,6 @@ const ADMIN_EMAILS = [
   'chibzymart@gmail.com',
   'whizzchibz@gmail.com',
   'chibuezec.amuchie@gmail.com',
-  'chibuezeamuchie@gmail.com',
   'nnamdiamuchie@gmail.com'
 ];
 

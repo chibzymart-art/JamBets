@@ -7,6 +7,7 @@ import {
   onGoogleAuthError,
   triggerOAuthFallback
 } from '../lib/googleAuth';
+import { tryCaptchaToken, captchaErrorMessage } from '../lib/turnstile';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -253,9 +254,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
     try {
       const { data, error } = await executeAuthWithRetry(async () => {
+        const captchaToken = await tryCaptchaToken();
         const res = await supabase.auth.signInWithPassword({
           email: email.trim(),
-          password
+          password,
+          options: { captchaToken },
         });
         if (res.error) {
           throw res.error;
@@ -292,7 +295,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       console.error('Sign-in error:', err);
       setQueueNotice(null);
       const msg = err.message || '';
-      if (msg.toLowerCase().includes('rate limit') || msg.toLowerCase().includes('too many requests')) {
+      if (captchaErrorMessage(msg)) {
+        setErrorMessage(captchaErrorMessage(msg));
+      } else if (/email not confirmed/i.test(msg)) {
+        setErrorMessage('Please confirm your email first: open the link we sent you, then sign in.');
+      } else if (msg.toLowerCase().includes('rate limit') || msg.toLowerCase().includes('too many requests')) {
         setErrorMessage('Server is receiving unusually high traffic. Please wait a moment and try again.');
       } else {
         setErrorMessage(msg || 'Invalid email or password. Please check your credentials.');
@@ -332,10 +339,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     try {
       const { data, error } = await executeAuthWithRetry(async () => {
         // Send verified disclaimers in user metadata to trigger the server-side database validation
+        const captchaToken = await tryCaptchaToken();
         const res = await supabase.auth.signUp({
           email: email.trim(),
           password,
           options: {
+            captchaToken,
             data: {
               display_name: displayName.trim() || email.split('@')[0],
               disclaimer_age_accepted: true,
@@ -396,7 +405,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       if (msg.toLowerCase().includes('rate limit') || msg.toLowerCase().includes('too many requests')) {
         setErrorMessage('Server is receiving unusually high registration volume. Please wait a few seconds and try again.');
       } else {
-        setErrorMessage(msg || 'Registration failed. Please check your inputs.');
+        setErrorMessage(captchaErrorMessage(msg) || msg || 'Registration failed. Please check your inputs.');
       }
     } finally {
       setLoading(false);
@@ -420,8 +429,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     try {
       // Supabase Auth sends the branded "Reset your Oddsbanta password" email.
       const { error } = await executeAuthWithRetry(async () => {
+        const captchaToken = await tryCaptchaToken();
         const res = await supabase.auth.resetPasswordForEmail(email.trim(), {
-          redirectTo: `${window.location.origin}/reset-password`
+          redirectTo: `${window.location.origin}/reset-password`,
+          captchaToken,
         });
         if (res.error) {
           throw res.error;
@@ -454,7 +465,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       ) {
         setErrorMessage('⚠️ Email rate limit reached. For security, please wait 60 seconds before requesting another reset link, or check your spam/junk folder for previous emails.');
       } else {
-        setErrorMessage(msg || 'Failed to send reset link. Please check the email and try again.');
+        setErrorMessage(captchaErrorMessage(msg) || msg || 'Failed to send reset link. Please check the email and try again.');
       }
     } finally {
       setLoading(false);
