@@ -65,6 +65,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
   }, [effectiveProfile?.display_name]);
 
   // Security / Password state
+  const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [passwordLoading, setPasswordLoading] = useState(false);
@@ -169,6 +170,11 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
     navigate('/subscription');
   };
 
+  // Accounts made with Google only have no password to confirm; they set one through the reset flow.
+  const authProviders: string[] = currentUser?.app_metadata?.providers
+    || (currentUser?.app_metadata?.provider ? [currentUser.app_metadata.provider] : []);
+  const hasEmailPassword = authProviders.length === 0 || authProviders.includes('email');
+
   const handleUpdatePassword = async (e: React.FormEvent) => {
     e.preventDefault();
     setPasswordError(null);
@@ -178,6 +184,10 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
       setPasswordError('New password must be at least 8 characters long.');
       return;
     }
+    if (hasEmailPassword && !currentPassword) {
+      setPasswordError('Enter your current password to confirm it is you.');
+      return;
+    }
     if (newPassword !== confirmPassword) {
       setPasswordError('Passwords do not match. Please verify your input.');
       return;
@@ -185,19 +195,29 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
 
     setPasswordLoading(true);
     try {
+      // Supabase checks current_password on the server ("require current password" setting).
       const { error } = await supabase.auth.updateUser({
-        password: newPassword
+        password: newPassword,
+        ...(hasEmailPassword ? { current_password: currentPassword } : {}),
       });
 
       if (error) throw error;
 
       setPasswordSuccess('Password updated successfully!');
+      setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
       setTimeout(() => setPasswordSuccess(null), 4000);
     } catch (err: any) {
       console.error('Password update error:', err);
-      setPasswordError(err.message || 'Failed to update password.');
+      const msg = String(err?.message || '');
+      if (/current password|invalid credentials|incorrect/i.test(msg)) {
+        setPasswordError('Your current password is not correct.');
+      } else if (/reauthentication|recently|nonce/i.test(msg)) {
+        setPasswordError('For security, sign out and sign in again, then change your password.');
+      } else {
+        setPasswordError(msg || 'Failed to update password.');
+      }
     } finally {
       setPasswordLoading(false);
     }
@@ -572,6 +592,26 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
           )}
 
           <form onSubmit={handleUpdatePassword} className="security-password-form">
+            {hasEmailPassword ? (
+              <div className="form-group">
+                <label htmlFor="settings-current-password" className="form-label">Current Password</label>
+                <input
+                  id="settings-current-password"
+                  type="password"
+                  required
+                  placeholder="Your current password"
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  autoComplete="current-password"
+                  className="form-input"
+                />
+              </div>
+            ) : (
+              <p className="form-hint">
+                You signed in with Google, so there is no password to confirm. To add one, use
+                {' '}<a href="/reset-password">Forgot password</a>{' '}with this email address.
+              </p>
+            )}
             <div className="security-form-row">
               <div className="form-group">
                 <label htmlFor="settings-new-password" className="form-label">New Password</label>
@@ -608,7 +648,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
               <button
                 type="submit"
                 id="btn-update-password"
-                disabled={passwordLoading || !newPassword || !confirmPassword}
+                disabled={passwordLoading || !newPassword || !confirmPassword || (hasEmailPassword && !currentPassword) || !hasEmailPassword}
                 className="btn-update-password"
               >
                 {passwordLoading ? 'Updating Password...' : 'Update Password'}
