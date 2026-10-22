@@ -267,8 +267,23 @@ Oddsbanta is an educational & analytical football modeling platform. 18+ only.
 © 2026 Oddsbanta. All rights reserved.`;
 }
 
-// Per-instance memory of accounts already welcomed (best effort; the 24h window is the real limit).
+// Per-instance memory of accounts already welcomed. The durable marker is app_metadata.welcome_sent_at.
 const welcomeSent = new Set<string>();
+
+async function markWelcomeSent(userId: string): Promise<void> {
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+  const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || 'https://vepcoopomlfjageijsew.supabase.co';
+  if (!serviceKey) return;
+  try {
+    await fetch(`${supabaseUrl}/auth/v1/admin/users/${encodeURIComponent(userId)}`, {
+      method: 'PUT',
+      headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ app_metadata: { welcome_sent_at: new Date().toISOString() } }),
+    });
+  } catch {
+    console.warn('[WELCOME-EMAIL] could not record welcome_sent_at');
+  }
+}
 
 export default async function handler(req: Request): Promise<Response> {
   const headers = emailCorsHeaders(req);
@@ -310,7 +325,8 @@ export default async function handler(req: Request): Promise<Response> {
       if (!Number.isFinite(createdMs) || Date.now() - createdMs > 24 * 60 * 60 * 1000) {
         return jsonError(409, 'Welcome email already sent for this account', headers);
       }
-      if (welcomeSent.has(caller.userId || '')) {
+      // Durable once-only marker (server-controlled app_metadata), plus a per-instance guard.
+      if (caller.appMetadata?.welcome_sent_at || welcomeSent.has(caller.userId || '')) {
         return jsonError(409, 'Welcome email already sent for this account', headers);
       }
       welcomeSent.add(caller.userId || '');
@@ -371,6 +387,10 @@ export default async function handler(req: Request): Promise<Response> {
     }
 
     console.log(`[WELCOME-EMAIL] Sent welcome email, Resend ID: ${resendData?.id}`);
+
+    if (caller.kind === 'user' && caller.userId) {
+      await markWelcomeSent(caller.userId);
+    }
     return new Response(
       JSON.stringify({
         success: true,
