@@ -416,7 +416,8 @@ export async function fetchBasketballFeed(
         ...p,
         prediction: isSettled ? (p.prediction || 'VIP Pick') : '🔒 BigBang VIP Pick',
         probability: isSettled ? p.probability : null,
-        confidence_category: (p.confidence_category === 'BANGER' ? 'BANGER' : 'TOP PICK') as BasketballConfidenceTier,
+        // Open picks carry no tier for locked users (the Edge API withholds it); settled ones keep theirs.
+        confidence_category: (isSettled ? (p.confidence_category || 'TOP PICK') : 'LOCKED') as BasketballConfidenceTier,
         settlement_status: p.settlement_status || 'pending',
         settlement_notes: p.settlement_notes || null,
         actual_result: p.actual_result || null,
