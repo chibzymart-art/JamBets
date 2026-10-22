@@ -2,6 +2,7 @@ import { checkAdaptiveRateLimit, getClientIp } from './rate-limiter';
 import { verifyEdgeAccess, hasMultiSportAccess } from './_lib/jwt-verifier';
 import { EdgeSwrCache, EdgeCacheRegistry } from './_lib/edge-cache';
 import { generateEtag, matchesEtag, create304Response } from './_lib/etag';
+import { LOCKED_TIER, normalizeTier, buildLockedTierCounts, resolveTimeZone, byKickoffThenId, withoutFixtureMetadata } from './_lib/teaser';
 
 export const config = {
   runtime: 'edge',
@@ -206,7 +207,9 @@ function applyBasketballPaywallRedaction(preds: any[]): any[] {
       ...p,
       is_locked: !isSettled,
       probability: isSettled ? p.probability : null,
-      confidence_category: p.confidence_category || 'TOP PICK',
+      fixture: isSettled ? p.fixture : withoutFixtureMetadata(p.fixture),
+      // Settled picks keep their tier (track record). Open picks never show one: it gives the pick away.
+      confidence_category: isSettled ? (p.confidence_category || 'TOP PICK') : LOCKED_TIER,
       prediction: isSettled ? (p.prediction || 'VIP Pick') : '🔒 BigBang VIP Pick',
       settlement_status: p.settlement_status || 'pending',
       settlement_notes: p.settlement_notes || null,
@@ -419,7 +422,20 @@ export default async function handler(req: Request): Promise<Response> {
   try {
     const { data: rawFeed, isStale } = await basketballSwrCache.getOrFetch('basketball:raw', fetchBasketballFromUpstream, computeBasketballTtl);
 
-    const sanitizedPredictions = !isPaidOrAdmin ? applyBasketballPaywallRedaction(rawFeed.predictions) : rawFeed.predictions;
+    const sanitizedPredictions = !isPaidOrAdmin
+      ? applyBasketballPaywallRedaction(rawFeed.predictions).sort(byKickoffThenId)
+      : rawFeed.predictions;
+    const lockedTierCounts = !isPaidOrAdmin && !isBot
+      ? buildLockedTierCounts(
+          (rawFeed.predictions || [])
+            .filter((p: any) => !['won', 'lost', 'void'].includes(p.settlement_status))
+            .map((p: any) => ({
+              tier: normalizeTier(p.confidence_category, p.market, p.prediction),
+              kickoff: p.target_kickoff_at || p.fixture?.target_kickoff_at,
+            })),
+          resolveTimeZone(url.searchParams.get('tz'))
+        )
+      : undefined;
     const dataToServe = {
       ...rawFeed,
       predictions: isBot ? applyBasketballScraperBlinding(sanitizedPredictions) : sanitizedPredictions,
@@ -429,6 +445,7 @@ export default async function handler(req: Request): Promise<Response> {
         settled_lost: isPaidOrAdmin ? rawFeed.stats.settled_lost : 0,
         settled_void: isPaidOrAdmin ? rawFeed.stats.settled_void : 0,
       },
+      ...(lockedTierCounts ? { locked_tier_counts: lockedTierCounts } : {}),
       is_stale: isStale,
     };
 

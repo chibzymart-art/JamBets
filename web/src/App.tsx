@@ -47,11 +47,13 @@ import { TennisHubView } from './components/TennisHubView';
 import './basketball.css';
 import { BasketballHubView } from './components/BasketballHubView';
 import { seoForPath, DASHBOARD_PATHS } from './lib/routeMeta';
-import { getFootballTierPriority, getTierHeaderByRank } from './lib/confidenceScore';
+import { getFootballTierPriority, getTierHeaderByRank, lockedTierTotalsForScope } from './lib/confidenceScore';
+import type { LockedTierCounts } from './lib/confidenceScore';
 
 function getFixtureRankAndProb(fId: string, map: Map<string, FootballPrediction[]>): { rank: number; prob: number } {
   const preds = map.get(fId) || [];
-  let bestRank = 7;
+  // Start above every rank so locked fixtures (rank 8) get their own "VIP picks" group.
+  let bestRank = preds.length > 0 ? Number.POSITIVE_INFINITY : 7;
   let bestProb = 0;
   for (const p of preds) {
     const rank = getFootballTierPriority(p.confidence_category, undefined, p.probability);
@@ -63,7 +65,7 @@ function getFixtureRankAndProb(fId: string, map: Map<string, FootballPrediction[
       bestProb = pProb;
     }
   }
-  return { rank: bestRank, prob: bestProb };
+  return { rank: Number.isFinite(bestRank) ? bestRank : 7, prob: bestProb };
 }
 
 export default function App() {
@@ -157,6 +159,8 @@ export default function App() {
   // Multi-Filters
   const [selectedLeague, setSelectedLeague] = useState<string>('all');
   const [selectedTier, setSelectedTier] = useState<string>('all');
+  // Locked users: per-day tier totals from the Edge API (open matches carry no tier).
+  const [footballLockedTierCounts, setFootballLockedTierCounts] = useState<LockedTierCounts | undefined>(undefined);
   const [settlementFilter, setSettlementFilter] = useState<'all' | 'pending' | 'won' | 'lost' | 'void'>('all');
   const [scoreStatusFilter, setScoreStatusFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -527,7 +531,7 @@ export default function App() {
             reqHeaders['Authorization'] = `Bearer ${session.access_token}`;
           }
 
-          let edgeRes = await fetch('/api/predictions-feed', {
+          let edgeRes = await fetch(`/api/predictions-feed?tz=${encodeURIComponent(getUserTimeZone())}`, {
             headers: reqHeaders,
             cache: (session?.access_token || canViewNow()) ? 'no-cache' : 'default'
           });
@@ -567,7 +571,12 @@ export default function App() {
                 rawPredRecords = edgeData.predictions;
                 returnedLeagues = edgeData.leagues || [];
                 usedEdgeCache = true;
-                SafeStorage.set(footballCacheKey(), { predictions: rawPredRecords, leagues: returnedLeagues }, 30 * 60 * 1000);
+                setFootballLockedTierCounts(edgeData.locked_tier_counts || undefined);
+                SafeStorage.set(
+                  footballCacheKey(),
+                  { predictions: rawPredRecords, leagues: returnedLeagues, locked_tier_counts: edgeData.locked_tier_counts },
+                  30 * 60 * 1000
+                );
               }
             }
           }
@@ -578,11 +587,12 @@ export default function App() {
 
       if (!usedEdgeCache) {
         // Check resilient persistent cache before hitting database
-        const cached = SafeStorage.get<{ predictions: any[]; leagues: LeagueRecord[] }>(footballCacheKey());
+        const cached = SafeStorage.get<{ predictions: any[]; leagues: LeagueRecord[]; locked_tier_counts?: LockedTierCounts }>(footballCacheKey());
         if (cached && cached.predictions && cached.predictions.length > 0) {
           console.warn('[App] Serving persistent session cache to shield Supabase');
           rawPredRecords = cached.predictions;
           returnedLeagues = cached.leagues || [];
+          setFootballLockedTierCounts(cached.locked_tier_counts);
           usedEdgeCache = true;
         }
       }
@@ -737,7 +747,7 @@ export default function App() {
           probability: isLocked ? 0 : item.probability,
           confidence_category: (item.confidence_category && item.confidence_category !== 'LOCKED')
             ? item.confidence_category
-            : (isLocked ? 'TOP_PICK' : 'MID_CONFIDENCE'),
+            : (isLocked ? 'LOCKED' : 'MID_CONFIDENCE'), // locked cards carry no tier (Edge API withholds it)
           secondary_predictions: item.secondary_predictions || [],
           metadata: itemMeta,
           settlement_status: item.settlement_status,
@@ -1095,7 +1105,7 @@ export default function App() {
             probability: isLocked ? 0 : item.probability,
             confidence_category: (item.confidence_category && item.confidence_category !== 'LOCKED')
               ? item.confidence_category
-              : (isLocked ? 'TOP_PICK' : 'MID_CONFIDENCE'),
+              : (isLocked ? 'LOCKED' : 'MID_CONFIDENCE'), // locked cards carry no tier (Edge API withholds it)
             secondary_predictions: item.secondary_predictions || [],
             metadata: itemMeta,
             settlement_status: item.settlement_status,
@@ -1403,6 +1413,27 @@ export default function App() {
       }
     });
 
+    // Locked users: open matches carry no tier, so add the Edge API's per-day totals.
+    const isLockedViewer = !isAdmin && !canViewPredictions;
+    const lockedTotals = isLockedViewer
+      ? lockedTierTotalsForScope(footballLockedTierCounts, selectedDate, timeZone)
+      : undefined;
+    const tierCountsWithheld = isLockedViewer && lockedTotals === null;
+    if (lockedTotals) {
+      bangerTotal += lockedTotals.BANGER;
+      bangerPending += lockedTotals.BANGER;
+      topPickTotal += lockedTotals.TOP_PICK;
+      topPickPending += lockedTotals.TOP_PICK;
+      highTotal += lockedTotals.HIGH;
+      highPending += lockedTotals.HIGH;
+      midTotal += lockedTotals.MID;
+      midPending += lockedTotals.MID;
+      lowTotal += lockedTotals.LOW;
+      lowPending += lockedTotals.LOW;
+      antiLossTotal += lockedTotals.NO_SAFE_BANKER;
+      antiLossPending += lockedTotals.NO_SAFE_BANKER;
+    }
+
     const allDecided = allWon + allLost;
     const allWinRate = allDecided > 0 ? Math.round((allWon / allDecided) * 100) : 0;
 
@@ -1492,9 +1523,19 @@ export default function App() {
       antiLossDecided,
       antiLossWinRate,
       liveCount,
-      settledMatchesCount
+      settledMatchesCount,
+      tierCountsWithheld,
     };
-  }, [fixtures, predictions, predsByFixture, canViewPredictions, isAdmin, selectedDate, timeZone, dynamicDateTabs.todayIso]);
+  }, [fixtures, predictions, predsByFixture, canViewPredictions, isAdmin, selectedDate, timeZone, dynamicDateTabs.todayIso, footballLockedTierCounts]);
+
+  // Tier filters need each match's tier, which locked users don't get: send them to the plans page.
+  const chooseTier = (tier: string) => {
+    if (!isAdmin && !canViewPredictions) {
+      navigate('/subscription');
+      return;
+    }
+    setSelectedTier(selectedTier === tier ? 'all' : tier);
+  };
 
   // Dynamic Tier-specific activity and settlement stats wired to Card 2
   const activeTierStats = useMemo(() => {
@@ -1641,8 +1682,8 @@ export default function App() {
         if (scoreStatusFilter === 'scheduled' && (isLive || isFinished)) return false;
       }
 
-      // Tier filter
-      if (selectedTier !== 'all') {
+      // Tier filter (unlocked users only; locked users are sent to the plans page instead)
+      if ((isAdmin || canViewPredictions) && selectedTier !== 'all') {
         const hasTier = signals.some((s) => {
           const sCat = (s.confidence_category || '').toUpperCase().replace(/ /g, '_');
           if (selectedTier === 'BANGER') return sCat === 'BANGER';
@@ -2579,12 +2620,12 @@ export default function App() {
                       <div className="market-nav-titles">
                         <span className="market-nav-title-text">Other Markets</span>
                         <span className="market-nav-sub-text">
-                          Goals, 1X2 Specialist, Corners & Draw Hunter
+                          Over 2.5 Goals, 1H Blitz & Corners
                         </span>
                       </div>
                     </div>
                     <span className="market-nav-count-pill specialist-pill">
-                      5 Specialist Models
+                      3 Specialist Models
                     </span>
                   </div>
                 </div>
@@ -2838,12 +2879,12 @@ export default function App() {
               <div className="compact-kpi-grouped-tab">
                 <div
                   className={`compact-kpi-subsegment banger-subseg ${selectedTier === 'BANGER' ? 'active-seg' : ''}`}
-                  onClick={() => setSelectedTier(selectedTier === 'BANGER' ? 'all' : 'BANGER')}
+                  onClick={() => chooseTier('BANGER')}
                   title="Click to filter by 96%+ Bangers"
                 >
                   <div className="compact-kpi-header">
                     <span className="compact-kpi-title">⭐ Banger</span>
-                    <span className="compact-kpi-pill banger-pill">{scorecardStats.bangerTotal}M</span>
+                    <span className="compact-kpi-pill banger-pill">{scorecardStats.tierCountsWithheld ? '🔒' : `${scorecardStats.bangerTotal}M`}</span>
                   </div>
                   <div className="compact-kpi-val-row">
                     <span className="compact-kpi-pct banger-text">{trialState.canViewFootballSettlements ? `${scorecardStats.bangerWinRate}%` : '🔒'}</span>
@@ -2855,12 +2896,12 @@ export default function App() {
 
                 <div
                   className={`compact-kpi-subsegment toppick-subseg ${selectedTier === 'TOP PICK' ? 'active-seg' : ''}`}
-                  onClick={() => setSelectedTier(selectedTier === 'TOP PICK' ? 'all' : 'TOP PICK')}
+                  onClick={() => chooseTier('TOP PICK')}
                   title="Click to filter by 90%-95% Top Picks"
                 >
                   <div className="compact-kpi-header">
                     <span className="compact-kpi-title">👑 Top Pick</span>
-                    <span className="compact-kpi-pill toppick-pill">{scorecardStats.topPickTotal}M</span>
+                    <span className="compact-kpi-pill toppick-pill">{scorecardStats.tierCountsWithheld ? '🔒' : `${scorecardStats.topPickTotal}M`}</span>
                   </div>
                   <div className="compact-kpi-val-row">
                     <span className="compact-kpi-pct toppick-text">{trialState.canViewFootballSettlements ? `${scorecardStats.topPickWinRate}%` : '🔒'}</span>
@@ -2873,12 +2914,12 @@ export default function App() {
               <div className="compact-kpi-grouped-tab">
                 <div
                   className={`compact-kpi-subsegment high-subseg ${selectedTier === 'HIGH' ? 'active-seg' : ''}`}
-                  onClick={() => setSelectedTier(selectedTier === 'HIGH' ? 'all' : 'HIGH')}
+                  onClick={() => chooseTier('HIGH')}
                   title="Click to filter by 83%-89% High Confidence"
                 >
                   <div className="compact-kpi-header">
                     <span className="compact-kpi-title">🟢 High</span>
-                    <span className="compact-kpi-pill high-pill">{scorecardStats.highTotal}M</span>
+                    <span className="compact-kpi-pill high-pill">{scorecardStats.tierCountsWithheld ? '🔒' : `${scorecardStats.highTotal}M`}</span>
                   </div>
                   <div className="compact-kpi-val-row">
                     <span className="compact-kpi-pct high-text">{trialState.canViewFootballSettlements ? `${scorecardStats.highWinRate}%` : '🔒'}</span>
@@ -2890,12 +2931,12 @@ export default function App() {
 
                 <div
                   className={`compact-kpi-subsegment mid-subseg ${selectedTier === 'MID' ? 'active-seg' : ''}`}
-                  onClick={() => setSelectedTier(selectedTier === 'MID' ? 'all' : 'MID')}
+                  onClick={() => chooseTier('MID')}
                   title="Click to filter by 75%-82% Mid Confidence"
                 >
                   <div className="compact-kpi-header">
                     <span className="compact-kpi-title">🔵 Mid</span>
-                    <span className="compact-kpi-pill mid-pill">{scorecardStats.midTotal}M</span>
+                    <span className="compact-kpi-pill mid-pill">{scorecardStats.tierCountsWithheld ? '🔒' : `${scorecardStats.midTotal}M`}</span>
                   </div>
                   <div className="compact-kpi-val-row">
                     <span className="compact-kpi-pct mid-text">{trialState.canViewFootballSettlements ? `${scorecardStats.midWinRate}%` : '🔒'}</span>
@@ -2908,12 +2949,12 @@ export default function App() {
               <div className="compact-kpi-grouped-tab">
                 <div
                   className={`compact-kpi-subsegment low-subseg ${selectedTier === 'LOW' ? 'active-seg' : ''}`}
-                  onClick={() => setSelectedTier(selectedTier === 'LOW' ? 'all' : 'LOW')}
+                  onClick={() => chooseTier('LOW')}
                   title="Click to filter by 65%-74% Low Confidence"
                 >
                   <div className="compact-kpi-header">
                     <span className="compact-kpi-title">🟡 Low</span>
-                    <span className="compact-kpi-pill low-pill">{scorecardStats.lowTotal}M</span>
+                    <span className="compact-kpi-pill low-pill">{scorecardStats.tierCountsWithheld ? '🔒' : `${scorecardStats.lowTotal}M`}</span>
                   </div>
                   <div className="compact-kpi-val-row">
                     <span className="compact-kpi-pct low-text">{trialState.canViewFootballSettlements ? `${scorecardStats.lowWinRate}%` : '🔒'}</span>
@@ -2925,12 +2966,12 @@ export default function App() {
 
                 <div
                   className={`compact-kpi-subsegment antiloss-subseg ${selectedTier === 'NO_SAFE_BANKER' ? 'active-seg' : ''}`}
-                  onClick={() => setSelectedTier(selectedTier === 'NO_SAFE_BANKER' ? 'all' : 'NO_SAFE_BANKER')}
+                  onClick={() => chooseTier('NO_SAFE_BANKER')}
                   title="Click to filter by Anti-Loss (No Safe Banker)"
                 >
                   <div className="compact-kpi-header">
                     <span className="compact-kpi-title">🛡️ Anti Loss</span>
-                    <span className="compact-kpi-pill antiloss-pill">{scorecardStats.antiLossTotal}M</span>
+                    <span className="compact-kpi-pill antiloss-pill">{scorecardStats.tierCountsWithheld ? '🔒' : `${scorecardStats.antiLossTotal}M`}</span>
                   </div>
                   <div className="compact-kpi-val-row">
                     <span className="compact-kpi-pct antiloss-text">{trialState.canViewFootballSettlements ? `${scorecardStats.antiLossWinRate}%` : '🔒'}</span>

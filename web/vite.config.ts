@@ -25,18 +25,19 @@ function localApiDevPlugin(): Plugin {
     configureServer(server) {
       server.middlewares.use(async (req, res, next) => {
         const reqPath = req.url?.split('?')[0] || '';
+        // Local dev runs the SAME Edge handlers that production serves (root api/), never a copy.
         const apiModules: Record<string, string> = {
-          '/api/predictions-feed': './api/predictions-feed.ts',
-          '/api/basketball-feed': './api/basketball-feed.ts',
-          '/api/goals-feed': './api/goals-feed.ts',
-          '/api/tennis-feed': './api/tennis-feed.ts',
-          '/api/market-feed': './api/market-feed.ts',
-          '/api/send-welcome-email': './api/send-welcome-email.ts',
-          '/api/send-subscription-email': './api/send-subscription-email.ts',
-          '/api/send-password-reset-email': './api/send-password-reset-email.ts',
-          '/api/checkout/bachs': './api/checkout/bachs.ts',
-          '/api/webhooks/bachs': './api/webhooks/bachs.ts',
-          '/api/billing/portal': './api/billing/portal.ts',
+          '/api/predictions-feed': '../api/predictions-feed.ts',
+          '/api/basketball-feed': '../api/basketball-feed.ts',
+          '/api/goals-feed': '../api/goals-feed.ts',
+          '/api/tennis-feed': '../api/tennis-feed.ts',
+          '/api/market-feed': '../api/market-feed.ts',
+          '/api/send-welcome-email': '../api/send-welcome-email.ts',
+          '/api/send-subscription-email': '../api/send-subscription-email.ts',
+          '/api/send-password-reset-email': '../api/send-password-reset-email.ts',
+          '/api/checkout/bachs': '../api/checkout/bachs.ts',
+          '/api/webhooks/bachs': '../api/webhooks/bachs.ts',
+          '/api/billing/portal': '../api/billing/portal.ts',
         };
         if (apiModules[reqPath]) {
           try {

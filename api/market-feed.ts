@@ -2,6 +2,19 @@ import { checkAdaptiveRateLimit, getClientIp } from './rate-limiter';
 import { verifyEdgeAuth, AuthStatus } from './_lib/jwt-verifier';
 import { EdgeSwrCache, EdgeCacheRegistry } from './_lib/edge-cache';
 import { generateEtag, matchesEtag, create304Response } from './_lib/etag';
+import { toLockedTeaser, MEMBERSHIP_REVEALING_MARKETS, RETIRED_MARKETS, LOCKED_TIER } from './_lib/teaser';
+
+// Fields a locked market teaser may carry. Everything else on the row is dropped.
+const MARKET_TEASER_KEYS = [
+  'id',
+  'fixture_id',
+  'market',
+  'market_category',
+  'market_label',
+  'market_icon',
+  'target_kickoff_at',
+  'fixture',
+] as const;
 
 export const config = {
   runtime: 'edge',
@@ -16,9 +29,6 @@ const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 export type MarketType =
   | 'general'
   | 'curated'
-  | 'home_win'
-  | 'away_win'
-  | 'draw'
   | 'over_2.5_goals'
   | 'ht_over_0.5_goals'
   | 'corners';
@@ -27,7 +37,7 @@ export interface UnifiedMarketPrediction {
   id: string;
   fixture_id: string;
   market: string;
-  market_category: 'home_win' | 'away_win' | 'draw' | 'goals' | 'corners';
+  market_category: 'goals' | 'corners';
   market_label: string;
   market_icon: string;
   prediction: string;
@@ -92,6 +102,8 @@ interface MarketFeedResponse {
   auth_status?: AuthStatus;
   is_stale?: boolean;
   cached_at: string;
+  // Set when the market's fixture list is withheld from a locked user; carries the count only.
+  locked_preview?: { market: string; count: number };
 }
 
 // Global SWR Edge Caches: 900s fresh (15 min default) + 3600s stale (1 hour)
@@ -168,7 +180,7 @@ function formatClubName(name?: string | null): string {
 
 function computeTacticalAnalysis(
   raw: any,
-  marketCategory: 'home_win' | 'away_win' | 'draw' | 'goals' | 'corners',
+  marketCategory: 'goals' | 'corners',
   forcedMarketType?: MarketType
 ): { tag: string; rationale: string } {
   const meta = raw.metadata || {};
@@ -231,7 +243,7 @@ function computeTacticalAnalysis(
 // Normalizes an engine raw record into the UnifiedMarketPrediction format
 function normalizePrediction(
   raw: any,
-  marketCategory: 'home_win' | 'away_win' | 'draw' | 'goals' | 'corners',
+  marketCategory: 'goals' | 'corners',
   forcedMarketType?: MarketType
 ): UnifiedMarketPrediction {
   const prob = typeof raw.probability === 'number' ? raw.probability : null;
@@ -244,29 +256,7 @@ function normalizePrediction(
   let confidenceTier = raw.dominance_tier || raw.counter_tier || raw.stalemate_tier || raw.corner_tier || raw.confidence_tier || 'TOP_PICK';
   let metrics: Record<string, any> = {};
 
-  if (marketCategory === 'home_win' || marketCategory === 'away_win') {
-    market = 'home_win';
-    marketLabel = 'Home & Away (1X2)';
-    marketIcon = '⚔️';
-    predictionTitle = raw.prediction ? (raw.prediction.includes('Away') ? 'Away Win (2)' : 'Home Win (1)') : 'Home Win (1)';
-    metrics = {
-      home_venue_advantage: raw.home_venue_advantage,
-      home_clean_sheet_prob: raw.home_clean_sheet_prob,
-      away_counter_efficiency: raw.away_counter_efficiency,
-      away_clean_sheet_prob: raw.away_clean_sheet_prob,
-      xg_home: raw.xg_home,
-      xg_away: raw.xg_away,
-    };
-  } else if (marketCategory === 'draw') {
-    market = 'draw';
-    marketLabel = 'Draw Hunter';
-    marketIcon = '⚖️';
-    predictionTitle = 'Draw (X)';
-    metrics = {
-      tactical_equilibrium_score: raw.tactical_equilibrium_score,
-      low_scoring_density: raw.low_scoring_density,
-    };
-  } else if (marketCategory === 'corners') {
+  if (marketCategory === 'corners') {
     market = 'corners';
     marketLabel = 'Corners Specialist';
     marketIcon = '🚩';
@@ -553,9 +543,6 @@ async function computeAllMarketCounts(
             return {
               general: 0,
               curated: 0,
-              home_win: 0,
-              away_win: 0,
-              draw: 0,
               'over_2.5_goals': 0,
               'ht_over_0.5_goals': 0,
               corners: 0,
@@ -630,9 +617,6 @@ async function computeAllMarketCounts(
       const counts: Record<MarketType, number> = {
         general: Math.min(20, o25Count),
         curated: Math.min(20, o25Count + crCount),
-        home_win: 0,
-        away_win: 0,
-        draw: 0,
         'over_2.5_goals': o25Count,
         'ht_over_0.5_goals': ht05Count,
         corners: crCount,
@@ -642,9 +626,6 @@ async function computeAllMarketCounts(
       return {
         general: 0,
         curated: 0,
-        home_win: 0,
-        away_win: 0,
-        draw: 0,
         'over_2.5_goals': 0,
         'ht_over_0.5_goals': 0,
         corners: 0,
@@ -692,14 +673,33 @@ export default async function handler(req: Request) {
   const validMarkets: MarketType[] = [
     'general',
     'curated',
-    'home_win',
-    'away_win',
-    'draw',
     'over_2.5_goals',
     'ht_over_0.5_goals',
     'corners',
   ];
-  const activeMarket = validMarkets.includes(marketParam) ? marketParam : 'general';
+  // Retired or unknown markets get an explicit error. They used to fall through to Over 2.5 Goals rows.
+  if (!validMarkets.includes(marketParam)) {
+    const retired = RETIRED_MARKETS.includes(marketParam);
+    return new Response(
+      JSON.stringify({
+        success: false,
+        error: retired ? 'market_retired' : 'unknown_market',
+        message: retired
+          ? `The ${marketParam} market has been retired.`
+          : `Unknown market. Use one of: ${validMarkets.join(', ')}.`,
+      }),
+      {
+        status: retired ? 410 : 400,
+        headers: {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'public, max-age=300, s-maxage=3600',
+          'Access-Control-Allow-Origin': getCorsOrigin(req),
+          'Vary': 'Origin',
+        },
+      }
+    );
+  }
+  const activeMarket = marketParam;
 
   const userAuthToken = req.headers.get('Authorization');
   const rawToken = userAuthToken?.startsWith('Bearer ') ? userAuthToken.slice(7).trim() : userAuthToken?.trim() || null;
@@ -803,58 +803,69 @@ export default async function handler(req: Request) {
     const offset = (pageParam - 1) * limitParam;
     const paginatedRaw = filteredForAudience.slice(offset, offset + limitParam);
 
-    const predictions = paginatedRaw.map((item) => {
-      if (authStatus === 'paid_or_trial') {
-        return {
-          ...item,
-          is_locked: false,
-        };
-      }
+    const isUnlockedAudience = isVipOrAdmin;
+    const isExpired = authStatus === 'expired';
+    const lockedPrompt = isExpired
+      ? '🔒 Subscribe to Oddsbanta VIP'
+      : '🔒 Register to view Oddsbanta AI predictions';
 
-      const isExpired = authStatus === 'expired';
-      const lockedPrompt = isExpired
-        ? '🔒 Subscribe to Oddsbanta VIP'
-        : '🔒 Register to view Oddsbanta AI predictions';
+    // For markets where the row set IS the pick (one table per outcome, or a shortlist), being on the
+    // list reveals the prediction. Locked users get the count only, never the fixtures.
+    const hideMembership = !isUnlockedAudience && MEMBERSHIP_REVEALING_MARKETS.includes(activeMarket);
 
-      return {
-        ...item,
-        is_locked: true,
-        prediction: lockedPrompt,
-        probability: null,
-        display_probability: null,
-        confidence_tier: item.confidence_tier || 'TOP_PICK',
-        confidence_category: item.confidence_category || 'TOP PICK',
-        metrics: {},
-        tactical_rationale: null,
-        tactical_tag: null,
-        settlement_status: 'pending',
-        settlement_notes: null,
-        ht_score: null,
-        actual_score: null,
-        actual_corners: null,
-        metadata: {
-          locked: true,
-          auth_status: authStatus,
-          subscription_required: isExpired,
-          registration_required: !isExpired,
-          trial_expired: isExpired,
-        },
-      };
-    });
+    const predictions = hideMembership
+      ? []
+      : paginatedRaw.map((item) => {
+          if (isUnlockedAudience) {
+            return {
+              ...item,
+              is_locked: false,
+            };
+          }
+
+          return toLockedTeaser(item as Record<string, any>, {
+            keys: MARKET_TEASER_KEYS,
+            overrides: {
+              is_locked: true,
+              prediction: lockedPrompt,
+              probability: null,
+              display_probability: null,
+              confidence_tier: LOCKED_TIER,
+              confidence_category: LOCKED_TIER,
+              metrics: {},
+              tactical_rationale: null,
+              tactical_tag: null,
+              settlement_status: 'pending',
+              settlement_notes: null,
+              settled_at: null,
+              ht_score: null,
+              actual_score: null,
+              actual_corners: null,
+            },
+            metaOverrides: {
+              locked: true,
+              auth_status: authStatus,
+              subscription_required: isExpired,
+              registration_required: !isExpired,
+              trial_expired: isExpired,
+            },
+          }) as UnifiedMarketPrediction;
+        });
 
     const responsePayload: MarketFeedResponse = {
       success: true,
       market: activeMarket,
       page: pageParam,
       limit: limitParam,
-      total,
-      total_pages: totalPages,
-      has_next: pageParam < totalPages,
-      has_prev: pageParam > 1,
+      total: hideMembership ? 0 : total,
+      total_pages: hideMembership ? 1 : totalPages,
+      has_next: hideMembership ? false : pageParam < totalPages,
+      has_prev: hideMembership ? false : pageParam > 1,
       date_filter: dateParam,
       counts,
-      leagues,
+      leagues: hideMembership ? [] : leagues,
       predictions,
+      ...(hideMembership ? { locked_preview: { market: activeMarket, count: total } } : {}),
       auth_status: authStatus,
       is_stale: isStale,
       cached_at: new Date(marketSwrCache.getEntry(`market:${activeMarket}`)?.cachedAt || Date.now()).toISOString(),

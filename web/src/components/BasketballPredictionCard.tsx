@@ -64,7 +64,7 @@ export const BasketballPredictionCard: React.FC<BasketballPredictionCardProps> =
 
   // Confidence Tier Configuration
   const effectiveCategory = isLocked
-    ? (prediction.confidence_category && prediction.confidence_category !== 'LOCKED' ? prediction.confidence_category : 'TOP PICK')
+    ? (prediction.confidence_category || 'LOCKED')
     : (prediction.confidence_category && prediction.confidence_category !== 'LOCKED' ? prediction.confidence_category : 'MID CONFIDENCE');
   const tierConfig = getTierConfig(effectiveCategory);
   const cleanTierLabel = (tierConfig.label || '').replace(/\s*\([^)]*\)/g, '').trim();

@@ -6,9 +6,6 @@ import { getCircuitBreaker, SafeStorage, withTimeout } from './circuitBreaker';
 export type MarketType =
   | 'general'
   | 'curated'
-  | 'home_win'
-  | 'away_win'
-  | 'draw'
   | 'over_2.5_goals'
   | 'ht_over_0.5_goals'
   | 'corners';
@@ -17,7 +14,7 @@ export interface UnifiedMarketPrediction {
   id: string;
   fixture_id: string;
   market: string;
-  market_category: 'home_win' | 'away_win' | 'draw' | 'goals' | 'corners';
+  market_category: 'goals' | 'corners';
   market_label: string;
   market_icon: string;
   prediction: string;
@@ -83,6 +80,8 @@ export interface UnifiedMarketFeedResponse {
   predictions: UnifiedMarketPrediction[];
   cached_at?: string;
   error?: string;
+  // Present when the Edge API withholds a market's fixture list from a locked user (count only).
+  locked_preview?: { market: string; count: number };
 }
 
 export interface FetchMarketFeedOptions {
@@ -116,7 +115,7 @@ const SELECTS: Record<string, { table: string; select: string }> = {
 
 function computeTacticalAnalysis(
   raw: any,
-  marketCategory: 'home_win' | 'away_win' | 'draw' | 'goals' | 'corners',
+  marketCategory: 'goals' | 'corners',
   forcedMarketType?: MarketType
 ): { tag: string; rationale: string } {
   const meta = raw.metadata || {};
@@ -178,7 +177,7 @@ function computeTacticalAnalysis(
 
 function normalizePrediction(
   raw: any,
-  marketCategory: 'home_win' | 'away_win' | 'draw' | 'goals' | 'corners',
+  marketCategory: 'goals' | 'corners',
   forcedMarketType?: MarketType
 ): UnifiedMarketPrediction {
   const prob = typeof raw.probability === 'number' ? raw.probability : null;
@@ -188,16 +187,7 @@ function normalizePrediction(
   let marketLabel = 'Specialist Market';
   let marketIcon = '⚡';
 
-  if (marketCategory === 'home_win') {
-    marketLabel = 'Home & Away (1X2)';
-    marketIcon = '⚔️';
-  } else if (marketCategory === 'away_win') {
-    marketLabel = 'Home & Away (1X2)';
-    marketIcon = '⚔️';
-  } else if (marketCategory === 'draw') {
-    marketLabel = 'Draw Hunter (Skellam)';
-    marketIcon = '⚖️';
-  } else if (marketCategory === 'corners') {
+  if (marketCategory === 'corners') {
     marketLabel = 'Corners Specialist';
     marketIcon = '🚩';
   } else if (marketCategory === 'goals') {
@@ -398,9 +388,10 @@ export async function fetchMarketFeed(
     return { ...sessionCached, is_stale: true };
   }
 
-  // 3. Circuit Breaker Guard: Check if direct Supabase fallback is permitted
+  // 3. Circuit Breaker Guard: Check if direct Supabase fallback is permitted.
+  // Locked users never query the database directly: the Edge API is their only door to prediction data.
   const breaker = getCircuitBreaker('market-feed');
-  if (!breaker.canExecute()) {
+  if (!(isAdmin || canViewPredictions) || !breaker.canExecute()) {
     console.warn('[marketFeedService] Circuit breaker OPEN. Blocking direct Supabase query to prevent connection saturation.');
     const anyMarketFeed = SafeStorage.get<UnifiedMarketFeedResponse>(`${market}:all:1:2000:false:false:false`);
     if (anyMarketFeed) {
@@ -419,9 +410,6 @@ export async function fetchMarketFeed(
       counts: {
         general: 0,
         curated: 0,
-        home_win: 0,
-        away_win: 0,
-        draw: 0,
         'over_2.5_goals': 0,
         'ht_over_0.5_goals': 0,
         corners: 0,
@@ -511,9 +499,6 @@ export async function fetchMarketFeed(
     const counts: Record<MarketType, number> = {
       general: 0,
       curated: 0,
-      home_win: 0,
-      away_win: 0,
-      draw: 0,
       'over_2.5_goals': filterByDate(allOver25).length,
       'ht_over_0.5_goals': filterByDate(allHt05).length,
       corners: filterByDate(allCr).length,
@@ -596,9 +581,6 @@ export async function fetchMarketFeed(
       counts: {
         general: 0,
         curated: 0,
-        home_win: 0,
-        away_win: 0,
-        draw: 0,
         'over_2.5_goals': 0,
         'ht_over_0.5_goals': 0,
         corners: 0,

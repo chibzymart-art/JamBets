@@ -2,6 +2,41 @@ import { checkAdaptiveRateLimit, getClientIp } from './rate-limiter';
 import { verifyEdgeAccess, hasMultiSportAccess } from './_lib/jwt-verifier';
 import { EdgeSwrCache, EdgeCacheRegistry } from './_lib/edge-cache';
 import { generateEtag, matchesEtag, create304Response } from './_lib/etag';
+import {
+  toLockedTeaser,
+  pickFields,
+  LOCKED_TIER,
+  normalizeTier,
+  buildLockedTierCounts,
+  resolveTimeZone,
+  byKickoffThenId,
+} from './_lib/teaser';
+
+// Fields a locked tennis teaser may carry. Everything else on the row is dropped.
+const TENNIS_TEASER_KEYS = [
+  'id',
+  'fixture_id',
+  'fixture',
+  'market',
+  'target_kickoff_at',
+  'simulations_count',
+  'tier_required',
+  'publication_status',
+] as const;
+// Metadata a locked teaser may carry: match context only, nothing derived from the model.
+const TENNIS_TEASER_META_KEYS = ['surface', 'court_pace_index', 'simulations_count'] as const;
+// Player fields a locked teaser may carry. Surface Elo ratings are model inputs: the Elo gap
+// next to a confidence tag tells a visitor which player the model picked.
+const TENNIS_TEASER_PLAYER_KEYS = ['id', 'display_name', 'canonical_name', 'country', 'current_rank'] as const;
+
+function lockedTennisFixture(fixture: any): any {
+  if (!fixture || typeof fixture !== 'object') return fixture;
+  const out: Record<string, any> = { ...fixture };
+  for (const side of ['player1', 'player2']) {
+    if (out[side] && typeof out[side] === 'object') out[side] = pickFields(out[side], TENNIS_TEASER_PLAYER_KEYS);
+  }
+  return out;
+}
 
 export const config = {
   runtime: 'edge',
@@ -336,7 +371,7 @@ export default async function handler(req: Request): Promise<Response> {
     const statusFilter = url.searchParams.get('status')?.toLowerCase();
 
     // Redact or preserve based on subscriber status
-    const processedPredictions = feedData.predictions
+    const filteredPredictions = feedData.predictions
       .filter((p) => {
         if (surfaceFilter && surfaceFilter !== 'all') {
           const s = p.fixture?.tournament?.surface?.toLowerCase();
@@ -346,7 +381,8 @@ export default async function handler(req: Request): Promise<Response> {
           const t = p.fixture?.tournament?.tour?.toUpperCase();
           if (t !== tourFilter) return false;
         }
-        if (tierFilter && tierFilter !== 'all') {
+        // Tier filtering is for unlocked users only: for anyone else it would reveal each match's tier.
+        if (isPaidOrAdmin && tierFilter && tierFilter !== 'all') {
           const tier = (p.confidence_category || '').toLowerCase();
           if (tierFilter === 'bangers' && tier !== 'banger') return false;
           if (tierFilter === 'top_picks' && tier !== 'top pick') return false;
@@ -357,7 +393,20 @@ export default async function handler(req: Request): Promise<Response> {
         }
 
         return true;
-      })
+      });
+
+    // Locked users see per-day tier totals, never a tier on a match.
+    const lockedTierCounts = isPaidOrAdmin
+      ? undefined
+      : buildLockedTierCounts(
+          filteredPredictions.map((p) => ({
+            tier: normalizeTier(p.confidence_category, p.market, p.prediction),
+            kickoff: p.target_kickoff_at || p.fixture?.target_kickoff_at,
+          })),
+          resolveTimeZone(url.searchParams.get('tz'))
+        );
+
+    const processedPredictions = (isPaidOrAdmin ? filteredPredictions : [...filteredPredictions].sort(byKickoffThenId))
       .map((p) => {
         if (isPaidOrAdmin) {
           return {
@@ -366,25 +415,33 @@ export default async function handler(req: Request): Promise<Response> {
           };
         }
 
-        // For free users & visitors: ALL tennis predictions (including settled) are locked teasers without exposing won/lost
-        return {
-          ...p,
-          prediction: '🔒 BigBang VIP Pick',
-          probability: null,
-          confidence_category: p.confidence_category || 'TOP PICK',
-          fair_odds: null,
-          market_odds: null,
-          settlement_status: 'pending',
-          settlement_notes: null,
-          actual_result: null,
-          secondary_predictions: [],
-          metadata: {
-            ...p.metadata,
-            ai_tactical_analysis: '🔒 ATP & WTA match predictions and Markov chain models are reserved for BigBang VIP members.',
-            markov: undefined,
+        // For free users & visitors: ALL tennis predictions (including settled) are locked teasers without exposing won/lost.
+        // Built from an allowlist: metadata such as tactical_reasoning, elo_delta, hold rates and set-score odds
+        // would let a visitor work out the pick.
+        const teaser = toLockedTeaser(p, {
+          keys: TENNIS_TEASER_KEYS,
+          metaKeys: TENNIS_TEASER_META_KEYS,
+          overrides: {
+            prediction: '🔒 BigBang VIP Pick',
+            // "No safe banker" picks are stored as their own market; on a locked card that is a tier.
+            market: /no_?safe_?banker/i.test(String(p.market || '')) ? 'match_winner' : p.market,
+            probability: null,
+            confidence_category: LOCKED_TIER,
+            fair_odds: null,
+            market_odds: null,
+            settlement_status: 'pending',
+            settlement_notes: null,
+            actual_result: null,
+            settled_at: null,
+            secondary_predictions: [],
+            is_locked: true,
           },
-          is_locked: true,
-        };
+          metaOverrides: {
+            ai_tactical_analysis: '🔒 ATP & WTA match predictions and Markov chain models are reserved for BigBang VIP members.',
+          },
+        });
+        teaser.fixture = lockedTennisFixture(teaser.fixture);
+        return teaser;
       });
 
     const sanitizedStats = isPaidOrAdmin ? feedData.stats : {
@@ -415,6 +472,7 @@ export default async function handler(req: Request): Promise<Response> {
       tournaments: feedData.tournaments,
       settlements: isPaidOrAdmin ? feedData.settlements : [],
       predictions: processedPredictions,
+      ...(lockedTierCounts ? { locked_tier_counts: lockedTierCounts } : {}),
       cached_at: feedData.cached_at,
       is_stale: isStale,
     });

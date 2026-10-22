@@ -3,6 +3,7 @@ import { verifyEdgeAuth, AuthStatus } from './_lib/jwt-verifier';
 import { EdgeSwrCache, EdgeCacheRegistry } from './_lib/edge-cache';
 import { generateEtag, matchesEtag, create304Response } from './_lib/etag';
 
+
 export const config = {
   runtime: 'edge',
 };
@@ -162,42 +163,6 @@ export function applyGoalsScraperBlinding(preds: any[]): any[] {
     }));
 }
 
-function applyGoalsPaywallRedaction(preds: any[], authStatus: AuthStatus): any[] {
-  if (authStatus === 'paid_or_trial') {
-    return preds.map((p: any) => ({
-      ...p,
-      is_locked: false,
-    }));
-  }
-
-  const isExpired = authStatus === 'expired';
-  const lockedPrompt = isExpired
-    ? '🔒 Subscribe to Oddsbanta VIP'
-    : '🔒 Register to view Oddsbanta AI predictions';
-
-  return preds.map((p: any) => {
-    return {
-      ...p,
-      is_locked: true,
-      predicted_outcome: lockedPrompt,
-      probability: null,
-      tactical_rationale: null,
-      tactical_tag: null,
-      settlement_status: 'pending',
-      settlement_notes: null,
-      ht_score: null,
-      actual_score: null,
-      metadata: {
-        locked: true,
-        auth_status: authStatus,
-        subscription_required: isExpired,
-        registration_required: !isExpired,
-        trial_expired: isExpired,
-      },
-    };
-  });
-}
-
 export default async function handler(req: Request) {
   if (req.method === 'OPTIONS') {
     const corsOrigin = getCorsOrigin(req);
@@ -271,15 +236,31 @@ export default async function handler(req: Request) {
   try {
     const { data: feedData, isStale } = await goalsSwrCache.getOrFetch('goals:raw', fetchGoalsFromUpstream, computeGoalsTtl);
 
+    // Every goals row is a published Over pick, so the list of fixtures is itself the prediction.
+    // Locked users get counts only (same rule as market-feed membership markets).
+    const isLockedAudience = !isBot && !isVipOrAdmin;
     const preds = isBot
       ? applyGoalsScraperBlinding(feedData.predictions)
-      : !isVipOrAdmin
-      ? applyGoalsPaywallRedaction(feedData.predictions, authStatus)
+      : isLockedAudience
+      ? []
       : feedData.predictions;
+
+    const lockedPreview = isLockedAudience
+      ? (() => {
+          const all = Array.isArray(feedData.predictions) ? feedData.predictions : [];
+          const byMarket: Record<string, number> = {};
+          for (const p of all) {
+            const m = String(p?.market || 'goals');
+            byMarket[m] = (byMarket[m] || 0) + 1;
+          }
+          return { count: all.length, by_market: byMarket };
+        })()
+      : undefined;
 
     const payload = {
       ...feedData,
       predictions: preds,
+      ...(isLockedAudience ? { leagues: [], locked_preview: lockedPreview } : {}),
       is_scraper_blinded: isBot,
       auth_status: authStatus,
       is_stale: isStale,

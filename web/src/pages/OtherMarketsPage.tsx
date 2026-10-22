@@ -41,9 +41,6 @@ const VALID_MARKETS: MarketType[] = [
   'corners',
   'curated',
   'general',
-  'home_win',
-  'away_win',
-  'draw',
 ];
 
 export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
@@ -82,7 +79,7 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
   const resolveInitialMarket = (): MarketType => {
     const urlMarket = searchParams.get('market') as MarketType | null;
     if (urlMarket && VALID_MARKETS.includes(urlMarket)) {
-      if (urlMarket === 'general' || (urlMarket as string) === 'home_win' || (urlMarket as string) === 'away_win' || (urlMarket as string) === 'draw') {
+      if (urlMarket === 'general') {
         return 'over_2.5_goals';
       }
       return urlMarket;
@@ -91,12 +88,12 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
       ? sessionStorage.getItem('other_markets_tab')
       : null) as MarketType | null;
     if (sessionMarket && VALID_MARKETS.includes(sessionMarket)) {
-      if (sessionMarket === 'general' || (sessionMarket as string) === 'home_win' || (sessionMarket as string) === 'away_win' || (sessionMarket as string) === 'draw') {
+      if (sessionMarket === 'general') {
         return 'over_2.5_goals';
       }
       return sessionMarket;
     }
-    if (initialMarket === 'general' || (initialMarket as string) === 'home_win' || (initialMarket as string) === 'away_win' || (initialMarket as string) === 'draw') {
+    if (initialMarket === 'general') {
       return 'over_2.5_goals';
     }
     return initialMarket;
@@ -116,7 +113,7 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
 
   // Synchronize state changes to URL and sessionStorage so page reload preserves current page without resetting
   const handleSelectMarket = useCallback((m: MarketType) => {
-    const safeMarket = (m === 'general' || (m as string) === 'home_win' || (m as string) === 'away_win' || (m as string) === 'draw') ? 'over_2.5_goals' : m;
+    const safeMarket = (m === 'general') ? 'over_2.5_goals' : m;
     setActiveMarket(safeMarket);
     try {
       sessionStorage.setItem('other_markets_tab', safeMarket);
@@ -166,15 +163,14 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
   const [marketCounts, setMarketCounts] = useState<Record<MarketType, number>>({
     general: 0,
     curated: 0,
-    home_win: 0,
-    away_win: 0,
-    draw: 0,
     'over_2.5_goals': 0,
     'ht_over_0.5_goals': 0,
     corners: 0,
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Set when the Edge API withholds this market's fixture list from a locked user (count only).
+  const [lockedPreview, setLockedPreview] = useState<{ market: string; count: number } | null>(null);
 
   // Determine paid user status (Standard + BigBang VIP + Admin have full access to Football)
   const isPaidUser = useMemo(() => {
@@ -213,6 +209,7 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
       if (!isLatest()) return;
       if (res.success) {
         setPredictions(res.predictions || []);
+        setLockedPreview(res.locked_preview || null);
         if (res.counts) setMarketCounts(res.counts);
       } else {
         setError(res.error || 'Failed to fetch market predictions');
@@ -310,14 +307,18 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
 
   // Synchronize active market count with actual predictions loaded for 100% badge-to-card harmony
   const displayCounts = useMemo(() => {
-    const validCount = predictions.filter(
-      (p) => p.settlement_status !== 'void' && (p as any).publication_status !== 'archived'
-    ).length;
+    // Locked users get no rows for membership markets, only a count: show that count on the badge.
+    const validCount =
+      lockedPreview && lockedPreview.market === activeMarket
+        ? lockedPreview.count
+        : predictions.filter(
+            (p) => p.settlement_status !== 'void' && (p as any).publication_status !== 'archived'
+          ).length;
     return {
       ...marketCounts,
       [activeMarket]: validCount,
     };
-  }, [marketCounts, activeMarket, predictions]);
+  }, [marketCounts, activeMarket, predictions, lockedPreview]);
 
   // Progressive list windowing (60 FPS Mobile Scrolling)
   const {
@@ -667,7 +668,40 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
           )
         )}
 
-        {filteredPredictions.length === 0 ? (
+        {!isPaidUser && lockedPreview ? (
+          <div
+            className="market-locked-preview-card"
+            style={{ textAlign: 'center', padding: '36px 20px', background: '#fff', borderRadius: 14, border: '1px solid #e2e8f0' }}
+          >
+            <div style={{ fontSize: 32, marginBottom: 8 }}>🔒</div>
+            <h3 style={{ margin: '6px 0 6px', fontWeight: 800 }}>
+              {lockedPreview.count > 0
+                ? `${lockedPreview.count} ${lockedPreview.count === 1 ? 'signal' : 'signals'} in this market`
+                : 'Signals in this market are for members'}
+            </h3>
+            <p style={{ color: '#64748b', fontSize: '0.9rem', margin: '0 auto 16px', maxWidth: 460, lineHeight: 1.5 }}>
+              {isTrialExpired
+                ? 'The matches and picks in this market are reserved for Oddsbanta members. Upgrade to see them.'
+                : 'Create a free account to see the matches and picks in this market during your 3-day free trial.'}
+            </p>
+            <button
+              type="button"
+              onClick={() => (isTrialExpired ? onOpenSubscription() : onOpenAuth('register'))}
+              style={{
+                background: 'linear-gradient(135deg, #059669 0%, #047857 100%)',
+                color: '#ffffff',
+                border: 'none',
+                borderRadius: 10,
+                padding: '12px 24px',
+                fontSize: 14,
+                fontWeight: 800,
+                cursor: 'pointer',
+              }}
+            >
+              {isTrialExpired ? '👑 Upgrade to Oddsbanta VIP →' : '🎁 Register for 3 Days Free VIP →'}
+            </button>
+          </div>
+        ) : filteredPredictions.length === 0 ? (
           <div className="goals-empty-state" style={{ textAlign: 'center', padding: '40px 20px', background: '#fff', borderRadius: 14, border: '1px solid #e2e8f0' }}>
             <span className="empty-icon" style={{ fontSize: '2rem' }}>⚽</span>
             <h3 style={{ margin: '10px 0 6px', fontWeight: 800 }}>No Signals in this Market</h3>

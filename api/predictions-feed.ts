@@ -3,6 +3,7 @@ import { checkAdaptiveRateLimit, getClientIp } from './rate-limiter';
 import { verifyEdgeAuth, AuthStatus } from './_lib/jwt-verifier';
 import { EdgeSwrCache, EdgeCacheRegistry } from './_lib/edge-cache';
 import { generateEtag, matchesEtag, create304Response } from './_lib/etag';
+import { LOCKED_TIER, normalizeTier, buildLockedTierCounts, resolveTimeZone, byKickoffThenId, withoutFixtureMetadata } from './_lib/teaser';
 
 export const config = {
   runtime: 'edge',
@@ -112,6 +113,10 @@ export function applyScraperBlinding(predictions: any[]): any[] {
 // 3. Expired Trial / Non-Paying Users:
 //    - Blinded from active predictions ('🔒 Subscribe to Oddsbanta VIP')
 //    - Blinded from settlements (cannot view won or lost games for free)
+function isSettledPick(p: any): boolean {
+  return ['won', 'lost', 'void', 'voided', 'half_won', 'half_lost'].includes(String(p?.settlement_status || '').toLowerCase());
+}
+
 export function applyPaywallRedaction(predictions: any[], authStatus: AuthStatus): any[] {
   if (authStatus === 'paid_or_trial') {
     return predictions;
@@ -124,7 +129,10 @@ export function applyPaywallRedaction(predictions: any[], authStatus: AuthStatus
       is_locked: true,
       probability: null,
       market: null,
-      confidence_category: p.confidence_category || 'TOP_PICK',
+      fixture: withoutFixtureMetadata(p.fixture),
+      // No tier on an open locked card: next to the fixture it gives the pick away. Settled cards keep
+      // theirs so the per-tier track record stays visible.
+      confidence_category: isSettledPick(p) ? (p.confidence_category || 'TOP_PICK') : LOCKED_TIER,
       prediction: '🔒 Subscribe to Oddsbanta VIP',
       publication_status: p.publication_status || 'published',
       secondary_predictions: [],
@@ -139,7 +147,8 @@ export function applyPaywallRedaction(predictions: any[], authStatus: AuthStatus
     is_locked: true,
     probability: null,
     market: null,
-    confidence_category: p.confidence_category || 'TOP_PICK',
+    fixture: withoutFixtureMetadata(p.fixture),
+    confidence_category: isSettledPick(p) ? (p.confidence_category || 'TOP_PICK') : LOCKED_TIER,
     prediction: '🔒 Register to view Oddsbanta AI predictions',
     publication_status: p.publication_status || 'published',
     secondary_predictions: [],
@@ -367,7 +376,20 @@ export default async function handler(req: Request) {
           }
         : {
             ...rawFeed,
-            predictions: applyPaywallRedaction(rawFeed.predictions, authStatus),
+            predictions: authStatus === 'paid_or_trial'
+              ? rawFeed.predictions
+              : applyPaywallRedaction(rawFeed.predictions, authStatus).sort(byKickoffThenId),
+            ...(authStatus === 'paid_or_trial'
+              ? {}
+              : {
+                  locked_tier_counts: buildLockedTierCounts(
+                    (rawFeed.predictions || []).filter((p: any) => !isSettledPick(p)).map((p: any) => ({
+                      tier: normalizeTier(p.confidence_category, p.market, p.prediction),
+                      kickoff: p.target_kickoff_at || p.fixture?.target_kickoff_at,
+                    })),
+                    resolveTimeZone(url.searchParams.get('tz'))
+                  ),
+                }),
             auth_status: authStatus,
             is_stale: isStale,
           }),

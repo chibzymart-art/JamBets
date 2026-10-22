@@ -134,6 +134,8 @@ export function getFootballTierPriority(
 ): number {
   const norm = `${category || ''} ${tier || ''}`.toUpperCase().replace(/[\s-]+/g, '_');
 
+  // Locked cards carry no tier (the Edge API withholds it); they sit in their own group.
+  if (norm.includes('LOCKED')) return LOCKED_TIER_RANK;
   if (norm.includes('BANGER')) return 1;
   if (norm.includes('TOP_PICK') || norm.includes('TOPPICK') || norm.includes('TOP')) return 2;
   if (
@@ -174,6 +176,37 @@ export function getFootballTierPriority(
 
 export const getSportTierPriority = getFootballTierPriority;
 
+/** Group rank for locked cards, after every real tier. */
+export const LOCKED_TIER_RANK = 8;
+
+export type LockedTierKey = 'BANGER' | 'TOP_PICK' | 'HIGH' | 'MID' | 'LOW' | 'NO_SAFE_BANKER' | 'OTHER';
+
+/** Per-day tier totals the Edge API sends to locked users in place of per-match tiers. */
+export interface LockedTierCounts {
+  time_zone: string;
+  by_date: Record<string, Record<LockedTierKey, number>>;
+  withheld_dates: string[];
+  upcoming: Record<LockedTierKey, number> | null;
+}
+
+/**
+ * Tier totals for locked matches in the selected date tab.
+ * undefined = nothing to add; null = withheld (too few matches that day, or a different time zone):
+ * show a lock instead of a number.
+ */
+export function lockedTierTotalsForScope(
+  counts: LockedTierCounts | null | undefined,
+  selectedDate: string,
+  timeZone: string
+): Record<LockedTierKey, number> | null | undefined {
+  if (!counts) return undefined;
+  if (counts.time_zone !== timeZone) return null;
+  if (selectedDate === 'all') return counts.upcoming;
+  if (counts.by_date[selectedDate]) return counts.by_date[selectedDate];
+  if (counts.withheld_dates.includes(selectedDate)) return null;
+  return undefined;
+}
+
 export interface TierHeaderConfig {
   icon: string;
   label: string;
@@ -196,6 +229,8 @@ export function getTierHeaderByRank(rank: number, sport: 'football' | 'tennis' |
       return { icon: '🟡', label: 'LOW CONFIDENCE (65%–74%)', badgeClass: 'tier-low-conf', textColor: '#ca8a04', borderColor: '#eab308' };
     case 6:
       return { icon: '🛡️', label: 'ANTI-LOSS (NO SAFE BANKER)', badgeClass: 'tier-no-banker', textColor: '#64748b', borderColor: '#cbd5e1' };
+    case LOCKED_TIER_RANK:
+      return { icon: '🔒', label: 'VIP PICKS (UNLOCK TO SEE CONFIDENCE)', badgeClass: 'tier-locked', textColor: '#7c3aed', borderColor: '#c4b5fd' };
     default: {
       const icon = sport === 'tennis' ? '🎾' : sport === 'basketball' ? '🏀' : '⚽';
       return { icon, label: 'OTHER PREDICTIONS', badgeClass: 'tier-mid-conf', textColor: '#64748b', borderColor: '#cbd5e1' };

@@ -77,7 +77,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
 
   // Gen-Z Engine Trigger & Automation State
   const [engineTaskStatus, setEngineTaskStatus] = useState<{
-    type: 'prediction' | 'settlement' | 'goals_prediction' | 'goals_settlement' | 'goals' | 'home_win' | 'away_win' | 'draw' | 'corners' | 'corners_settlement' | 'all_specialists' | 'tennis_engine' | 'tennis_settlement' | 'basketball_engine' | 'basketball_settlement' | null;
+    type: 'prediction' | 'settlement' | 'goals_prediction' | 'goals_settlement' | 'goals' | 'corners' | 'corners_settlement' | 'all_specialists' | 'tennis_engine' | 'tennis_settlement' | 'basketball_engine' | 'basketball_settlement' | null;
     status: 'idle' | 'pending' | 'running' | 'completed' | 'failed';
     message?: string;
   }>({ type: null, status: 'idle' });
@@ -383,28 +383,18 @@ export const AdminView: React.FC<AdminViewProps> = ({
     setBroadcastLoading(true);
     setActionError(null);
     try {
-      const { data, error } = await supabase
-        .from('football_predictions')
-        .select(`
-          id,
-          prediction,
-          market,
-          probability,
-          confidence_category,
-          target_kickoff_at,
-          fixture:football_fixtures!inner(
-            home_team:football_teams!football_fixtures_home_team_id_fkey(name),
-            away_team:football_teams!football_fixtures_away_team_id_fkey(name),
-            league:football_leagues!inner(code,name)
-          )
-        `)
-        .eq('publication_status', 'published')
-        .eq('settlement_status', 'pending')
-        .order('target_kickoff_at', { ascending: true })
-        .limit(10);
+      // Admin-only RPC (no direct table read from the browser).
+      const { data, error } = await supabase.rpc('admin_broadcast_picks', { p_limit: 10 });
 
       if (error) throw error;
-      const preds = (data || []) as any[];
+      const preds = ((data || []) as any[]).map((p: any) => ({
+        ...p,
+        fixture: {
+          home_team: { name: p.home_team },
+          away_team: { name: p.away_team },
+          league: { code: p.league_code, name: p.league_name },
+        },
+      }));
 
       const todayStr = new Date().toLocaleDateString('en-GB', {
         day: 'numeric',
@@ -760,24 +750,19 @@ export const AdminView: React.FC<AdminViewProps> = ({
         }
       ];
 
+      // One admin-only RPC returns the counts for every engine (no table or paywall view reads from the browser).
+      const { data: telemetry, error: telemetryErr } = await supabase.rpc('admin_engine_telemetry');
+      if (telemetryErr) throw telemetryErr;
+      const counts = (telemetry || {}) as Record<string, { total: number; pending: number; won: number; lost: number }>;
+
       const results = await Promise.all(
         enginesConfig.map(async (eng) => {
           try {
-            let res = await supabase
-              .from(eng.table)
-              .select('settlement_status');
-
-            if ((res.error || !res.data || res.data.length === 0) && eng.paywallTable) {
-              res = await supabase
-                .from(eng.paywallTable)
-                .select('settlement_status');
-            }
-
-            const data = (res.data || []) as any[];
-            const total = data.length;
-            const pending = data.filter((d: any) => d.settlement_status === 'pending').length;
-            const won = data.filter((d: any) => d.settlement_status === 'won').length;
-            const lost = data.filter((d: any) => d.settlement_status === 'lost').length;
+            const c = counts[eng.id] || { total: 0, pending: 0, won: 0, lost: 0 };
+            const total = Number(c.total) || 0;
+            const pending = Number(c.pending) || 0;
+            const won = Number(c.won) || 0;
+            const lost = Number(c.lost) || 0;
             const evaluated = won + lost;
             const winRateNum = evaluated > 0 ? (won / evaluated) * 100 : 0;
             const winRate = evaluated > 0 ? `${winRateNum.toFixed(1)}%` : 'Evaluating';
@@ -1929,9 +1914,6 @@ export const AdminView: React.FC<AdminViewProps> = ({
             const isCooking = (
               (engine.id === 'core' && engineTaskStatus.type === 'prediction') ||
               (engine.id === 'goals' && engineTaskStatus.type === 'goals_prediction') ||
-              (engine.id === 'home_win' && engineTaskStatus.type === 'home_win') ||
-              (engine.id === 'away_win' && engineTaskStatus.type === 'away_win') ||
-              (engine.id === 'draw' && engineTaskStatus.type === 'draw') ||
               (engine.id === 'corners' && engineTaskStatus.type === 'corners') ||
               (engine.id === 'tennis' && engineTaskStatus.type === 'tennis_engine') ||
               (engine.id === 'basketball' && engineTaskStatus.type === 'basketball_engine') ||
@@ -1949,10 +1931,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
                 className="specialist-engine-card"
                 style={{
                   borderTop: `3px solid ${
-                    engine.id === 'home_win' ? '#10b981'
-                    : engine.id === 'away_win' ? '#e11d48'
-                    : engine.id === 'draw' ? '#eab308'
-                    : engine.id === 'corners' ? '#06b6d4'
+                    engine.id === 'corners' ? '#06b6d4'
                     : engine.id === 'goals' ? '#f97316'
                     : engine.id === 'tennis' ? '#10b981'
                     : engine.id === 'basketball' ? '#f59e0b'
