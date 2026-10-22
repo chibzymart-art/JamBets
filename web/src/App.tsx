@@ -407,6 +407,20 @@ export default function App() {
         if (event === 'SIGNED_IN' && window.location.pathname === '/') {
           navigate('/dashboard');
         }
+        // Welcome email for new accounts on their first sign-in (with Confirm email on, sign-up itself
+        // has no session). The server only sends once per account (app_metadata.welcome_sent_at).
+        if (event === 'SIGNED_IN' && session.access_token && !session.user.app_metadata?.welcome_sent_at) {
+          const createdMs = new Date(session.user.created_at).getTime();
+          if (Number.isFinite(createdMs) && Date.now() - createdMs < 24 * 60 * 60 * 1000) {
+            fetch('/api/send-welcome-email', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+              body: JSON.stringify({
+                name: session.user.user_metadata?.display_name || session.user.user_metadata?.full_name || '',
+              }),
+            }).catch(() => null);
+          }
+        }
       } else {
         setCurrentUser(null);
         setProfile(null);

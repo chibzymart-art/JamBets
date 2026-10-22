@@ -39,6 +39,7 @@ export interface EmailCaller {
   userId?: string;
   email?: string;
   createdAt?: string;
+  appMetadata?: Record<string, unknown>;
   isAdmin: boolean;
 }
 
@@ -77,7 +78,7 @@ export async function verifyEmailCaller(req: Request): Promise<EmailCaller | nul
       if (rpc && rpc.ok) isAdmin = (await rpc.json().catch(() => false)) === true;
     }
 
-    return { kind: 'user', userId: user.id, email, createdAt: user.created_at, isAdmin };
+    return { kind: 'user', userId: user.id, email, createdAt: user.created_at, appMetadata: user.app_metadata || {}, isAdmin };
   } catch (err) {
     console.error('[EMAIL-GUARD] caller verification failed');
     return null;
