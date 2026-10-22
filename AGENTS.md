@@ -119,9 +119,9 @@ Access levels (`api/_lib/jwt-verifier.ts`): `visitor` < `expired` < `trial` < `s
 
 ## 6. Rules for agents (read all)
 
-1. **Only the root `api/` folder is real.** Production serves the ROOT `api/`, and since Phase 1 the
-   local dev plugin in `web/vite.config.ts` loads the same root files. `web/api/` is an old, different
-   version kept only until it is deleted: never edit it and never copy from it.
+1. **Only the root `api/` folder is real.** Production serves the ROOT `api/`, and the local dev plugin
+   in `web/vite.config.ts` loads the same root files. The old `web/api/` copy was deleted in Phase 1:
+   do not recreate it.
 2. **Pushing to `main` deploys production.** There is no staging branch. Run the build before pushing:
    `cd web && npm run build` (runs `tsc && vite build && rename-shell`). A TypeScript error breaks deploys.
 3. **Schema changes: the live database is the truth, not the files.** As of 21 Oct 2026 there is no
@@ -137,7 +137,11 @@ Access levels (`api/_lib/jwt-verifier.ts`): `visitor` < `expired` < `trial` < `s
    trial, standard, VIP and admin. Locked items are built with `toLockedTeaser()` from `api/_lib/teaser.ts`
    using an explicit field allowlist: never spread a raw row (`...p`) or its `metadata` into a locked
    response. Markets whose row set is the pick (`MEMBERSHIP_REVEALING_MARKETS`) return a count only to
-   locked users. Run `node tests/edge/run.mjs` after touching any feed. The browser must never query
+   locked users (every market-feed market, and the whole goals feed). Open locked matches carry
+   `confidence_category: 'LOCKED'`, never a real tier: a tier next to the fixture gives the pick away.
+   Hubs show per-day tier totals from `locked_tier_counts` instead (days with fewer than 3 matches are
+   withheld). Tier filters are for unlocked users only. Locked lists are ordered by kickoff, never by
+   confidence. Run `node tests/edge/run.mjs` after touching any feed. The browser must never query
    prediction tables or views directly for a locked user.
 6. **No verified data = no settlement.** Settlement must use verified results from sources; never infer or invent a result.
 7. **Keep sports isolated.** No cross-sport FKs, no shared tables beyond users/subscriptions/entitlements/cached_feeds.
@@ -149,7 +153,20 @@ Access levels (`api/_lib/jwt-verifier.ts`): `visitor` < `expired` < `trial` < `s
     Snapshot cutoffs use a 4-day forward horizon plus a 1-day timezone buffer; keep that if you touch cutoffs.
 11. **Edge cache invalidation.** `api/invalidate-cache.ts` requires `ODDSBANTA_INVALIDATION_SECRET`/`CRON_SECRET`
     (neither is set on Vercel, so it falls back to the service role key).
-12. **Commit style** in this repo: conventional commits, e.g. `fix(paywall): ...`, `feat(basketball-ui): ...`.
+12. **Admin reads go through admin-only functions.** The Admin panel calls `admin_*` RPCs
+    (`admin_engine_telemetry`, `admin_broadcast_picks`, `admin_get_users`, ...) that check
+    `public.is_admin()` first, run `SECURITY DEFINER` with `set search_path = ''`, and have EXECUTE revoked
+    from `public, anon`. Never add a browser read of a prediction table or paywall view for the Admin panel.
+13. **Security Advisor gate.** Before closing any phase that touched the database, rerun the Supabase
+    Security Advisor (Advisors, Security, Rerun linter). Errors must be 0. Accepted warnings as of
+    22 Oct 2026: "Public Can Execute SECURITY DEFINER" for `is_admin`, `is_football_entitled`,
+    `is_multisport_entitled`, `is_paid_subscriber` (RLS policies call them) and "Signed-In Users Can Execute
+    SECURITY DEFINER" for the `admin_*`, `get_platform_analytics`, `get_system_health` functions (each
+    checks for an admin). Anything new must be fixed, not added to this list.
+14. **Retired markets.** Home Win, Away Win and Draw (1X2 specialist markets) are retired. The market feed
+    answers them with 410. Their old tables are closed to the Data API and can be dropped with
+    `supabase/scripts/drop_retired_1x2_markets.sql` (permanent, owner's call).
+15. **Commit style** in this repo: conventional commits, e.g. `fix(paywall): ...`, `feat(basketball-ui): ...`.
 
 ## 7. Common commands
 
@@ -182,10 +199,10 @@ Manual workflow runs: GitHub > Actions > pick workflow > Run workflow (inputs in
 
 ## 8. Known issues (as of 21 Oct 2026, verify before relying on them)
 
-1. **Tennis paywall leak (live).** `api/tennis-feed.ts` redacts the pick but spreads `...p.metadata` to
-   visitors, so `tactical_reasoning` (names the favourite), `elo_delta`, hold rates and `correct_set_scores`
-   are public. (The `tennis_predictions_paywall` view does redact metadata for unfinished matches.)
-   Other paywall views and both bots leak in different ways: see the Oddsbanta security audit and fix plan document.
+1. **Paywall leaks in the API (fixed on branch `phase1-paywall-teasers`, live once merged).** Before
+   the fix, tennis sent reasoning, Elo and set-score odds to visitors, the goals and market feeds listed the
+   picked fixtures, and every feed showed each match's tier. The database side (Phase 0: public read on
+   `corner_predictions`, anon grants on base tables, bots) is still open: see the security audit document.
 2. **Basketball totals use a fake line.** `python/src/basketball/prediction_engine.py` (around line 187)
    falls back to 222.0 (NBA) / 162.0 (others) when `market_total` is NULL, which is about 99.8% of fixtures.
    The Oct 13 audit measured these totals at about 50% (coin flip). Moneyline "bangers" average about 1.09 odds, negative ROI.
