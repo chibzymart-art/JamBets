@@ -52,7 +52,8 @@ import type { LockedTierCounts } from './lib/confidenceScore';
 
 function getFixtureRankAndProb(fId: string, map: Map<string, FootballPrediction[]>): { rank: number; prob: number } {
   const preds = map.get(fId) || [];
-  let bestRank = 7;
+  // Start above every rank so locked fixtures (rank 8) get their own "VIP picks" group.
+  let bestRank = preds.length > 0 ? Number.POSITIVE_INFINITY : 7;
   let bestProb = 0;
   for (const p of preds) {
     const rank = getFootballTierPriority(p.confidence_category, undefined, p.probability);
@@ -64,7 +65,7 @@ function getFixtureRankAndProb(fId: string, map: Map<string, FootballPrediction[
       bestProb = pProb;
     }
   }
-  return { rank: bestRank, prob: bestProb };
+  return { rank: Number.isFinite(bestRank) ? bestRank : 7, prob: bestProb };
 }
 
 export default function App() {
