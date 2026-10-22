@@ -357,11 +357,16 @@ export default async function handler(req: Request): Promise<Response> {
     const html = generateWelcomeEmailHtml(cleanName, cleanEmail);
     const text = generateWelcomeEmailText(cleanName, cleanEmail);
 
+    // Two sign-in events a moment apart can reach different edge instances before welcome_sent_at is
+    // written. Resend's idempotency key makes the second send a no-op, so each account gets one welcome.
+    const idempotencyKey = `welcome/${caller.kind === 'user' && caller.userId ? caller.userId : cleanEmail}`;
+
     const resendRes = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${resendApiKey}`,
         'Content-Type': 'application/json',
+        'Idempotency-Key': idempotencyKey,
       },
       body: JSON.stringify({
         from: primaryFrom,
