@@ -415,7 +415,14 @@ export default function App() {
         // has no session). The server only sends once per account (app_metadata.welcome_sent_at).
         if (event === 'SIGNED_IN' && session.access_token && !session.user.app_metadata?.welcome_sent_at) {
           const createdMs = new Date(session.user.created_at).getTime();
-          if (Number.isFinite(createdMs) && Date.now() - createdMs < 24 * 60 * 60 * 1000) {
+          // Supabase can emit SIGNED_IN more than once (link callback, tab refocus): ask only once per tab.
+          let alreadyAsked = false;
+          try {
+            const key = `ob_welcome_req_${session.user.id}`;
+            alreadyAsked = sessionStorage.getItem(key) === '1';
+            sessionStorage.setItem(key, '1');
+          } catch { /* storage blocked: the server-side guards still apply */ }
+          if (!alreadyAsked && Number.isFinite(createdMs) && Date.now() - createdMs < 24 * 60 * 60 * 1000) {
             fetch('/api/send-welcome-email', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
