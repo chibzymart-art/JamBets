@@ -73,25 +73,7 @@ export const PasswordRecoveryPage: React.FC = () => {
 
     setLoading(true);
     try {
-      // 1. Dispatch custom Oddsbanta password change mailer via Resend
-      const apiRes = await fetch('/api/send-password-reset-email', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: cleanEmail,
-          type: 'reset_request',
-          redirectTo: `${window.location.origin}/reset-password`,
-        }),
-      }).catch(() => null);
-
-      if (apiRes && apiRes.ok) {
-        setSuccessMessage(
-          'Password recovery email has been sent! Please check your inbox and spam folder for instructions to change your password.'
-        );
-        return;
-      }
-
-      // 2. Resilient fallback to Supabase built-in auth mailer
+      // Supabase Auth sends the branded "Reset your Oddsbanta password" email.
       const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
         redirectTo: `${window.location.origin}/reset-password`
       });
@@ -128,8 +110,8 @@ export const PasswordRecoveryPage: React.FC = () => {
     setErrorMessage(null);
     setSuccessMessage(null);
 
-    if (newPassword.length < 6) {
-      setErrorMessage('New password must be at least 6 characters long.');
+    if (newPassword.length < 8) {
+      setErrorMessage('New password must be at least 8 characters long.');
       return;
     }
 
@@ -150,15 +132,12 @@ export const PasswordRecoveryPage: React.FC = () => {
 
       // Notify user of password change confirmation via Resend
       const { data: sessionData } = await supabase.auth.getSession();
-      const userEmail = sessionData?.session?.user?.email;
-      if (userEmail) {
+      const accessToken = sessionData?.session?.access_token;
+      if (accessToken) {
         fetch('/api/send-password-reset-email', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            email: userEmail,
-            type: 'changed_notice',
-          }),
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+          body: JSON.stringify({ type: 'changed_notice' }),
         }).catch(() => null);
       }
 
@@ -188,7 +167,7 @@ export const PasswordRecoveryPage: React.FC = () => {
           </h1>
           <p className="recovery-subtitle">
             {isResettingPassword
-              ? 'Choose a strong, secure password with at least 6 characters.'
+              ? 'Choose a strong, secure password with at least 8 characters.'
               : 'Enter your registered email and we will send you a secure link to reset your account credentials.'}
           </p>
         </div>
@@ -259,7 +238,7 @@ export const PasswordRecoveryPage: React.FC = () => {
                   id="new-password"
                   type={showPassword ? 'text' : 'password'}
                   className="auth-input"
-                  placeholder="At least 6 characters"
+                  placeholder="At least 8 characters"
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
                   required
