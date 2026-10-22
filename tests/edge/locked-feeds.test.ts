@@ -23,6 +23,8 @@ const tennisRow = { id: 'tp1', fixture_id: 'f1', fixture, market: 'match_winner'
   publication_status: 'published', metadata: { surface: 'hard_outdoor', court_pace_index: 37.5, tactical_reasoning: SECRET,
   elo_delta: 458, p1_hold_rate: 0.78, correct_set_scores: { '2-0': 0.56 }, markov: { x: SECRET } } };
 
+const tennisSkipRow = { ...tennisRow, id: 'tp2', market: 'NO_SAFE_BANKER', prediction: 'SKIP', confidence_category: 'NO_SAFE_BANKER' };
+
 const goalsRow = { id: 'g1', fixture_id: 'f1', fixture, market: 'over_2.5_goals', predicted_outcome: 'Over 2.5', probability: 0.77,
   confidence_tier: 'BANGER', xg_combined: 3.4, home_over25_rate: 71, away_over25_rate: 66, h2h_over25_rate: 80, ht_goal_frequency: 79,
   avg_first_goal_minute: 21, target_kickoff_at: kickoff, settlement_status: 'pending', publication_status: 'published',
@@ -54,7 +56,7 @@ const json = (v: unknown, status = 200) => new Response(JSON.stringify(v), { sta
     return json({ user: { role: 'bigbang' }, subscription: { tier: 'bigbang', status: 'active', current_period_end: null }, entitlement: null });
   }
   if (url.includes('cached_feeds')) {
-    if (url.includes('feed:tennis')) return json([{ payload: { predictions: [tennisRow], tournaments: [], settlements: [], stats: {} }, updated_at: new Date().toISOString() }]);
+    if (url.includes('feed:tennis')) return json([{ payload: { predictions: [tennisRow, tennisSkipRow], tournaments: [], settlements: [], stats: {} }, updated_at: new Date().toISOString() }]);
     if (url.includes('feed:goals')) return json([{ payload: { predictions: [goalsRow], leagues: [{ id: 'l1' }] }, updated_at: new Date().toISOString() }]);
     if (url.includes('feed:football')) return json([{ payload: { predictions: [...footballOpen, footballSettled], leagues: [] }, updated_at: new Date().toISOString() }]);
     if (url.includes('feed:basketball')) return json([{ payload: { predictions: [basketballOpen, basketballSettled], leagues: [], settlements: [], stats: {} }, updated_at: new Date().toISOString() }]);
@@ -88,7 +90,8 @@ const fakeJwt = (payload: object) => `x.${Buffer.from(JSON.stringify(payload)).t
 
   // ---- Tennis, visitor
   const tv = await call(tennis, '/api/tennis-feed?tz=Africa/Lagos');
-  const tvp = (tv.body.predictions || [])[0] || {};
+  const tvp = (tv.body.predictions || []).find((p: any) => p.id === 'tp1') || {};
+  const tvskip = (tv.body.predictions || []).find((p: any) => p.id === 'tp2') || {};
   const tvs = JSON.stringify(tv.body);
   check('tennis visitor: request ok', tv.status === 200, String(tv.status));
   check('tennis visitor: item locked', tvp.is_locked === true && tvp.probability === null);
@@ -96,13 +99,14 @@ const fakeJwt = (payload: object) => `x.${Buffer.from(JSON.stringify(payload)).t
   check('tennis visitor: keeps surface for the card', tvp.metadata?.surface === 'hard_outdoor');
   check('tennis visitor: no player Elo (Elo gap reveals the pick)', !/_elo"/.test(tvs) && tvp.fixture?.player1?.display_name === 'A' && tvp.fixture?.player1?.current_rank === 15, JSON.stringify(tvp.fixture?.player1));
   check('tennis visitor: no tier on the match', tvp.confidence_category === 'LOCKED' && !tvs.includes('TOP PICK'), String(tvp.confidence_category));
-  check('tennis visitor: one-match day tier total withheld', Array.isArray(tv.body.locked_tier_counts?.withheld_dates) && tv.body.locked_tier_counts.withheld_dates.length === 1 && Object.keys(tv.body.locked_tier_counts.by_date).length === 0 && tv.body.locked_tier_counts.upcoming === null, JSON.stringify(tv.body.locked_tier_counts));
+  check('tennis visitor: no-safe-banker pick not revealed by its market', tvskip.market === 'match_winner' && tvskip.confidence_category === 'LOCKED' && !/NO_SAFE|SKIP/i.test(JSON.stringify(tvskip)), JSON.stringify({ m: tvskip.market, c: tvskip.confidence_category }));
+  check('tennis visitor: small day tier total withheld', Array.isArray(tv.body.locked_tier_counts?.withheld_dates) && tv.body.locked_tier_counts.withheld_dates.length === 1 && Object.keys(tv.body.locked_tier_counts.by_date).length === 0 && tv.body.locked_tier_counts.upcoming === null, JSON.stringify(tv.body.locked_tier_counts));
   const tvf = await call(tennis, '/api/tennis-feed?tier=bangers');
-  check('tennis visitor: tier filter ignored (would reveal tiers)', (tvf.body.predictions || []).length === 1, String((tvf.body.predictions || []).length));
+  check('tennis visitor: tier filter ignored (would reveal tiers)', (tvf.body.predictions || []).length === 2, String((tvf.body.predictions || []).length));
 
   // ---- Tennis, BigBang VIP: full detail still delivered (no over-redaction)
   const tvip = await call(tennis, '/api/tennis-feed', vipTok);
-  const tvipp = (tvip.body.predictions || [])[0] || {};
+  const tvipp = (tvip.body.predictions || []).find((p: any) => p.id === 'tp1') || {};
   check('tennis VIP: full pick and reasoning delivered', tvipp.is_locked === false && tvipp.prediction === 'A to win' && tvipp.metadata?.tactical_reasoning === SECRET, JSON.stringify({ sub: tvip.body.is_subscriber, pred: tvipp.prediction }));
   check('tennis VIP: player Elo and tier kept', tvipp.fixture?.player1?.hard_elo === 2040 && tvipp.confidence_category === 'TOP PICK' && !tvip.body.locked_tier_counts, JSON.stringify(tvipp.fixture?.player1));
   const tvipf = await call(tennis, '/api/tennis-feed?tier=bangers', vipTok);
