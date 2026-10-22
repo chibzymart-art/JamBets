@@ -22,6 +22,12 @@ export const PasswordRecoveryPage: React.FC = () => {
     const tokenHash = searchParams.get('token_hash');
     const authType = searchParams.get('type') || 'recovery';
 
+    if (tokenHash && authType !== 'recovery') {
+      // Not a reset link: let the general confirm page handle it.
+      navigate(`/auth/confirm${window.location.search}`, { replace: true });
+      return;
+    }
+
     if (tokenHash) {
       setLoading(true);
       supabase.auth.verifyOtp({
@@ -43,8 +49,9 @@ export const PasswordRecoveryPage: React.FC = () => {
     }
 
     // 2. Check if the URL has recovery tokens in hash (direct or legacy Supabase callback)
+    // Only a recovery session may open the new password form (not a sign-up or magic-link session).
     const hash = window.location.hash;
-    if (hash && (hash.includes('type=recovery') || hash.includes('access_token='))) {
+    if (new URLSearchParams(hash.replace(/^#/, '')).get('type') === 'recovery') {
       setIsResettingPassword(true);
     }
 
