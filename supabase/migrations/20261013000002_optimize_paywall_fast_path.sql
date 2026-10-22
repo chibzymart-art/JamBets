@@ -29,15 +29,14 @@ BEGIN
         'chibzymart@gmail.com',
         'whizzchibz@gmail.com',
         'chibuezec.amuchie@gmail.com',
-        'chibuezeamuchie@gmail.com',
         'nnamdiamuchie@gmail.com'
     ) THEN
         RETURN true;
     END IF;
 
-    -- Check 4: JWT user_metadata or app_metadata role = 'admin'
-    IF (auth.jwt() -> 'user_metadata' ->> 'role') = 'admin' OR
-       (auth.jwt() -> 'app_metadata' ->> 'role') = 'admin' THEN
+    -- Check 4: server-controlled app_metadata role = 'admin'.
+    -- (user_metadata is writable by the user, so it must never grant admin. Fixed 22 Oct 2026.)
+    IF (auth.jwt() -> 'app_metadata' ->> 'role') = 'admin' THEN
         RETURN true;
     END IF;
 

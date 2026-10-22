@@ -142,7 +142,10 @@ BEGIN
 
     RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+
+-- Trigger function only: nobody calls it through the API.
+REVOKE ALL ON FUNCTION public.handle_new_user_email_enrollment() FROM public, anon, authenticated;
 
 -- Attach trigger to public.users if table exists
 DO $$
@@ -162,26 +165,33 @@ ALTER TABLE public.email_campaigns ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.email_queue ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.email_provider_quotas ENABLE ROW LEVEL SECURITY;
 
--- Allow public / unauthenticated users to read campaign subjects or unsubscribe with valid token
-DROP POLICY IF EXISTS "Public can view active campaigns" ON public.email_campaigns;
-CREATE POLICY "Public can view active campaigns"
-    ON public.email_campaigns FOR SELECT
-    USING (is_active = true);
+-- Policies (defused 22 Oct 2026, audit AZT-03; this migration has not been applied to the live
+-- database). The original versions let anyone read and write email_queue and email_provider_quotas
+-- (FOR ALL ... USING (true) with no role), let anyone read campaigns, and let users rewrite their own
+-- subscriber row. The service role bypasses row level security, so the email engine needs no policy.
 
+-- Campaigns: admins only.
+DROP POLICY IF EXISTS "Public can view active campaigns" ON public.email_campaigns;
+DROP POLICY IF EXISTS email_campaigns_admin_read ON public.email_campaigns;
+CREATE POLICY email_campaigns_admin_read
+    ON public.email_campaigns FOR SELECT TO authenticated
+    USING (public.is_admin());
+
+-- Subscribers: a signed-in user may read their own row only. Changes (unsubscribe, preferences)
+-- go through the service role.
 DROP POLICY IF EXISTS "Users can view and update own subscriber profile" ON public.email_subscribers;
-CREATE POLICY "Users can view and update own subscriber profile"
-    ON public.email_subscribers FOR ALL
+DROP POLICY IF EXISTS email_subscribers_own_read ON public.email_subscribers;
+CREATE POLICY email_subscribers_own_read
+    ON public.email_subscribers FOR SELECT TO authenticated
     USING (auth.uid() = user_id);
 
--- Service role has full permissions over queue and quotas
+-- Queue and quotas: no policy at all, so only the service role can touch them.
 DROP POLICY IF EXISTS "Service role manages email queue" ON public.email_queue;
-CREATE POLICY "Service role manages email queue"
-    ON public.email_queue FOR ALL
-    USING (true)
-    WITH CHECK (true);
-
 DROP POLICY IF EXISTS "Service role manages quotas" ON public.email_provider_quotas;
-CREATE POLICY "Service role manages quotas"
-    ON public.email_provider_quotas FOR ALL
-    USING (true)
-    WITH CHECK (true);
+
+REVOKE ALL ON public.email_queue FROM anon, authenticated;
+REVOKE ALL ON public.email_provider_quotas FROM anon, authenticated;
+REVOKE ALL ON public.email_campaigns FROM anon;
+REVOKE ALL ON public.email_subscribers FROM anon;
+REVOKE INSERT, UPDATE, DELETE ON public.email_subscribers FROM authenticated;
+REVOKE INSERT, UPDATE, DELETE ON public.email_campaigns FROM authenticated;
