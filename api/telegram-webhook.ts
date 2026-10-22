@@ -103,6 +103,9 @@ async function getLinkedUser(chatId: number): Promise<any | null> {
   return Array.isArray(data) && data.length > 0 ? data[0] : null;
 }
 
+// Tiers that unlock bot picks. 'free' (every new account) and anything unknown do not.
+const PAID_TIERS = ['standard', 'bigbang', 'pro', 'premium', 'admin', 'vip'];
+
 async function isUserPaidOrAdmin(user: any): Promise<{ isPaid: boolean; tier: string }> {
   if (!user) return { isPaid: false, tier: 'unlinked' };
   const email = (user.email || '').toLowerCase().trim();
@@ -127,7 +130,7 @@ async function isUserPaidOrAdmin(user: any): Promise<{ isPaid: boolean; tier: st
     if (Array.isArray(entData) && entData.length > 0) {
       const ent = entData[0];
       const validUntil = ent.valid_until ? new Date(ent.valid_until).getTime() : Infinity;
-      if (validUntil > Date.now() && ['standard', 'bigbang', 'pro', 'premium', 'admin', 'vip'].includes(ent.tier)) {
+      if (validUntil > Date.now() && PAID_TIERS.includes(String(ent.tier || '').toLowerCase())) {
         return { isPaid: true, tier: ent.tier.toUpperCase() };
       }
       if (ent.tier === 'admin' || (ent.features && ent.features.admin === true)) {
@@ -136,15 +139,20 @@ async function isUserPaidOrAdmin(user: any): Promise<{ isPaid: boolean; tier: st
     }
   }
 
-  // 3. Check active subscriptions
+  // 3. Check active subscriptions. Only paid tiers count, and only until their period ends:
+  //    every free account also has an "active" subscription row with tier 'free'.
   const subRes = await fetch(
-    `${SUPABASE_URL}/rest/v1/subscriptions?user_id=eq.${user.id}&status=eq.active&select=tier&order=created_at.desc&limit=1`,
+    `${SUPABASE_URL}/rest/v1/subscriptions?user_id=eq.${user.id}&status=eq.active&tier=in.(${PAID_TIERS.join(',')})&select=tier,current_period_end&order=created_at.desc&limit=5`,
     { headers }
   );
   if (subRes.ok) {
     const subData = await subRes.json();
-    if (Array.isArray(subData) && subData.length > 0) {
-      return { isPaid: true, tier: subData[0].tier.toUpperCase() };
+    const live = Array.isArray(subData)
+      ? subData.find((s: any) => PAID_TIERS.includes(String(s.tier || '').toLowerCase())
+          && (!s.current_period_end || new Date(s.current_period_end).getTime() > Date.now()))
+      : null;
+    if (live) {
+      return { isPaid: true, tier: String(live.tier).toUpperCase() };
     }
   }
 

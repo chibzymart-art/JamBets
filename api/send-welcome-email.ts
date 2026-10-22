@@ -1,3 +1,5 @@
+import { emailCorsHeaders, jsonError, verifyEmailCaller } from './_lib/email-guard';
+
 export const config = {
   runtime: 'edge',
 };
@@ -265,14 +267,11 @@ Oddsbanta is an educational & analytical football modeling platform. 18+ only.
 © 2026 Oddsbanta. All rights reserved.`;
 }
 
+// Per-instance memory of accounts already welcomed (best effort; the 24h window is the real limit).
+const welcomeSent = new Set<string>();
+
 export default async function handler(req: Request): Promise<Response> {
-  // CORS Headers for API calls
-  const headers = {
-    'Content-Type': 'application/json; charset=utf-8',
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-  };
+  const headers = emailCorsHeaders(req);
 
   if (req.method === 'OPTIONS') {
     return new Response(null, { status: 204, headers });
@@ -296,15 +295,30 @@ export default async function handler(req: Request): Promise<Response> {
       });
     }
 
-    const { email, name } = payload;
-    if (!email || typeof email !== 'string' || !email.includes('@')) {
-      return new Response(JSON.stringify({ success: false, error: 'Valid email is required' }), {
-        status: 400,
-        headers,
-      });
+    // The welcome email only ever goes to the signed-in caller's own verified address, and only for
+    // an account created in the last 24 hours. The body's email field is ignored for users.
+    const caller = await verifyEmailCaller(req);
+    if (!caller) return jsonError(401, 'Sign in required', headers);
+
+    const { name } = payload;
+    let cleanEmail = '';
+    if (caller.kind === 'service') {
+      cleanEmail = typeof payload.email === 'string' ? payload.email.trim().toLowerCase() : '';
+    } else {
+      cleanEmail = caller.email || '';
+      const createdMs = caller.createdAt ? new Date(caller.createdAt).getTime() : 0;
+      if (!Number.isFinite(createdMs) || Date.now() - createdMs > 24 * 60 * 60 * 1000) {
+        return jsonError(409, 'Welcome email already sent for this account', headers);
+      }
+      if (welcomeSent.has(caller.userId || '')) {
+        return jsonError(409, 'Welcome email already sent for this account', headers);
+      }
+      welcomeSent.add(caller.userId || '');
+    }
+    if (!cleanEmail || !cleanEmail.includes('@')) {
+      return jsonError(400, 'Valid email is required', headers);
     }
 
-    const cleanEmail = email.trim().toLowerCase();
     const cleanName = typeof name === 'string' ? name.trim() : cleanEmail.split('@')[0];
 
     const resendApiKey = process.env.RESEND_API_KEY;
@@ -356,7 +370,7 @@ export default async function handler(req: Request): Promise<Response> {
       );
     }
 
-    console.log(`[WELCOME-EMAIL] Successfully sent welcome email to ${cleanEmail}, Resend ID: ${resendData?.id}`);
+    console.log(`[WELCOME-EMAIL] Sent welcome email, Resend ID: ${resendData?.id}`);
     return new Response(
       JSON.stringify({
         success: true,

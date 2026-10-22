@@ -1,9 +1,11 @@
+import { emailCorsHeaders, jsonError, verifyEmailCaller } from './_lib/email-guard';
+
 export const config = {
   runtime: 'edge',
 };
 
 interface SendPasswordResetPayload {
-  email: string;
+  email?: string;
   type?: 'reset_request' | 'changed_notice';
   redirectTo?: string;
 }
@@ -204,12 +206,7 @@ export function generatePasswordChangedNoticeHtml(userEmail: string): string {
 }
 
 export default async function handler(req: Request): Promise<Response> {
-  const headers = {
-    'Content-Type': 'application/json; charset=utf-8',
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-  };
+  const headers = emailCorsHeaders(req);
 
   if (req.method === 'OPTIONS') {
     return new Response(null, { status: 204, headers });
@@ -233,93 +230,30 @@ export default async function handler(req: Request): Promise<Response> {
       });
     }
 
-    const { email, type = 'reset_request', redirectTo } = payload;
-    if (!email || typeof email !== 'string' || !email.includes('@')) {
-      return new Response(JSON.stringify({ success: false, error: 'Valid email is required' }), {
-        status: 400,
-        headers,
-      });
+    // Reset links are sent by Supabase Auth itself (supabase.auth.resetPasswordForEmail, branded
+    // "Reset password" template). This endpoint used to mint recovery links for any address with the
+    // service role key and no caller check, so it now only sends the "password changed" notice, to
+    // the signed-in caller's own verified address.
+    const { type = 'changed_notice' } = payload;
+    if (type !== 'changed_notice') {
+      return jsonError(410, 'Password reset emails are sent by Supabase Auth', headers);
     }
 
-    const cleanEmail = email.trim().toLowerCase();
+    const caller = await verifyEmailCaller(req);
+    if (!caller || caller.kind !== 'user' || !caller.email) {
+      return jsonError(401, 'Sign in required', headers);
+    }
+    const cleanEmail = caller.email;
+
     const resendApiKey = process.env.RESEND_API_KEY;
     if (!resendApiKey) {
       console.error('[PASSWORD-EMAIL] RESEND_API_KEY is not configured');
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error: 'Email service credentials not configured',
-        }),
-        { status: 500, headers }
-      );
+      return jsonError(500, 'Email service credentials not configured', headers);
     }
 
-    // Exact subject requested by user
-    const subject = 'Password change';
-
-    let html: string;
-    let text: string;
-
-    if (type === 'changed_notice') {
-      html = generatePasswordChangedNoticeHtml(cleanEmail);
-      text = `Password change\n\nYour Oddsbanta password was successfully updated.\nIf you did not perform this change, contact support immediately.`;
-    } else {
-      // Generate recovery link via Supabase Admin API
-      const supabaseUrl = process.env.SUPABASE_URL || 'https://vepcoopomlfjageijsew.supabase.co';
-      const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-      if (!serviceRoleKey) {
-        return new Response(
-          JSON.stringify({ success: false, error: 'Supabase service role key not configured' }),
-          { status: 500, headers }
-        );
-      }
-
-      const targetRedirect = redirectTo || 'https://www.oddsbanta.com/reset-password';
-      const linkRes = await fetch(`${supabaseUrl}/auth/v1/admin/generate_link`, {
-        method: 'POST',
-        headers: {
-          apikey: serviceRoleKey,
-          Authorization: `Bearer ${serviceRoleKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          type: 'recovery',
-          email: cleanEmail,
-          redirect_to: targetRedirect,
-        }),
-      });
-
-      if (!linkRes.ok) {
-        const linkErr = await linkRes.json().catch(() => ({}));
-        console.error('[PASSWORD-EMAIL] Failed to generate recovery link:', linkErr);
-        return new Response(
-          JSON.stringify({
-            success: false,
-            error: linkErr?.message || 'Failed to generate recovery link for email',
-          }),
-          { status: linkRes.status, headers }
-        );
-      }
-
-      const linkData = await linkRes.json();
-      const tokenHash = linkData?.hashed_token;
-
-      // 100% Branded Oddsbanta link: Never expose raw Supabase project URL or old Vercel deployment
-      const brandedLink = tokenHash
-        ? `https://www.oddsbanta.com/reset-password?token_hash=${encodeURIComponent(tokenHash)}&type=recovery`
-        : linkData?.action_link;
-
-      if (!brandedLink) {
-        return new Response(
-          JSON.stringify({ success: false, error: 'Recovery link missing in Supabase response' }),
-          { status: 500, headers }
-        );
-      }
-
-      html = generatePasswordResetEmailHtml(brandedLink, cleanEmail);
-      text = `Password change\n\nClick the link below to set a new password for your Oddsbanta account:\n${brandedLink}\n\nIf you did not request this, you can safely ignore this email.`;
-    }
+    const subject = 'Your Oddsbanta password was changed';
+    const html = generatePasswordChangedNoticeHtml(cleanEmail);
+    const text = `Your Oddsbanta password was changed.\nIf you did not make this change, reset your password at https://www.oddsbanta.com/reset-password and contact support.`;
 
     const primaryFrom = (process.env.RESEND_FROM_EMAIL && !process.env.RESEND_FROM_EMAIL.includes('resend.dev'))
       ? process.env.RESEND_FROM_EMAIL
@@ -354,7 +288,7 @@ export default async function handler(req: Request): Promise<Response> {
       );
     }
 
-    console.log(`[PASSWORD-EMAIL] Successfully sent password email to ${cleanEmail}, ID: ${resendData?.id}`);
+    console.log(`[PASSWORD-EMAIL] Sent password-changed notice, ID: ${resendData?.id}`);
     return new Response(
       JSON.stringify({
         success: true,
