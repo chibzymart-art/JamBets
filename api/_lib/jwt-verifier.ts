@@ -47,7 +47,6 @@ export const ADMIN_EMAILS = new Set([
   'chibzymart@gmail.com',
   'whizzchibz@gmail.com',
   'chibuezec.amuchie@gmail.com',
-  'chibuezeamuchie@gmail.com',
   'nnamdiamuchie@gmail.com',
 ]);
 
