@@ -313,7 +313,18 @@ export const BasketballHubView: React.FC<BasketballHubViewProps> = ({
 
     // Arranged strictly by Tier Priority: Bangers first, Top pick, High, Mid, Low, Anti-loss
     // No longer arranged by kickoff time.
+    // "All Dates": today and upcoming first, then past days newest first; tier order inside each day group.
+    const todayIsoForSort = getDateDetailsByOffset(0, timeZone).iso;
+    const dayOf = (p: any) => getFixtureWatDate(p.target_kickoff_at || p.fixture?.target_kickoff_at, timeZone) || '';
     return [...list].sort((a, b) => {
+      if (selectedDate === 'all') {
+        const da = dayOf(a);
+        const db = dayOf(b);
+        const ca = !da || da >= todayIsoForSort;
+        const cb = !db || db >= todayIsoForSort;
+        if (ca !== cb) return ca ? -1 : 1;
+        if (!ca && da !== db) return da < db ? 1 : -1;
+      }
       const rankA = getSportTierPriority(a.confidence_category, undefined, a.probability);
       const rankB = getSportTierPriority(b.confidence_category, undefined, b.probability);
       if (rankA !== rankB) return rankA - rankB;
@@ -331,7 +342,7 @@ export const BasketballHubView: React.FC<BasketballHubViewProps> = ({
 
       return (a.id || '').localeCompare(b.id || '');
     });
-  }, [allPredictions, selectedDate, selectedLeague, selectedMarket, settlementFilter, selectedTier, isSubscriber]);
+  }, [allPredictions, selectedDate, selectedLeague, selectedMarket, settlementFilter, selectedTier, isSubscriber, timeZone]);
 
   // Progressive list windowing (60 FPS Mobile Scrolling)
   const {
