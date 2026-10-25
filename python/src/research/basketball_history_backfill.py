@@ -36,8 +36,10 @@ logger = logging.getLogger("basketball.history_backfill")
 
 
 def earliest_stored_kickoff(db: BasketballDbClient) -> Optional[datetime]:
+    """Earliest fixture the live engine stored (backfilled rows excluded, so later runs keep the same boundary)."""
     rows = db.client.get("/basketball_fixtures", params={
-        "select": "target_kickoff_at", "order": "target_kickoff_at.asc", "limit": "1"}).json()
+        "select": "target_kickoff_at", "metadata->>backfill": "is.null",
+        "order": "target_kickoff_at.asc", "limit": "1"}).json()
     if not rows:
         return None
     return datetime.fromisoformat(rows[0]["target_kickoff_at"].replace("Z", "+00:00"))
