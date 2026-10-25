@@ -2,7 +2,7 @@
  * Oddsbanta — Autonomous Basketball Predictions & 250,000 Monte Carlo Hub
  * Phase 5: Master Basketball Hub View Component
  */
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { fetchBasketballFeed, BasketballFeedResponse, fetchBasketballHistoryDay } from '../lib/basketballFeedService';
 import { BasketballMarket, BasketballPrediction } from '../types/basketball';
 import {
@@ -81,29 +81,46 @@ export const BasketballHubView: React.FC<BasketballHubViewProps> = ({
     loadFeed(false);
   }, [isSubscriber]);
 
-  // Past days: the live feed starts at yesterday, so any earlier (or yesterday's full local) day is
-  // loaded on demand from the feed's ?date= endpoint and merged in.
+  // Past days: the live feed starts at yesterday, so earlier days (and yesterday's full local day)
+  // are loaded on demand from the feed's ?date= endpoint and merged in. "All Dates" loads the last
+  // {HISTORY_DAYS} days, newest first, a few at a time, so the list fills in as days arrive.
+  const HISTORY_DAYS = 30;
   const [historyByDate, setHistoryByDate] = useState<Record<string, BasketballPrediction[]>>({});
   const [historyLoading, setHistoryLoading] = useState<boolean>(false);
+  const requestedDays = useRef<Set<string>>(new Set());
   useEffect(() => {
     const todayIsoLocal = getDateDetailsByOffset(0, timeZone).iso;
-    if (selectedDate === 'all' || selectedDate >= todayIsoLocal || historyByDate[selectedDate]) return;
-    let cancelled = false;
-    setHistoryLoading(true);
-    fetchBasketballHistoryDay(selectedDate, isSubscriber)
-      .then((list) => {
-        if (!cancelled) setHistoryByDate((prev) => ({ ...prev, [selectedDate]: list }));
-      })
-      .finally(() => {
-        if (!cancelled) setHistoryLoading(false);
-      });
-    return () => {
-      cancelled = true;
+    let wanted: string[] = [];
+    if (selectedDate === 'all') {
+      wanted = Array.from({ length: HISTORY_DAYS }, (_, i) => getDateDetailsByOffset(-(i + 1), timeZone).iso);
+    } else if (selectedDate < todayIsoLocal) {
+      wanted = [selectedDate];
+    }
+    const missing = wanted.filter((d) => !requestedDays.current.has(d));
+    if (missing.length === 0) return;
+    missing.forEach((d) => requestedDays.current.add(d));
+    const single = selectedDate !== 'all';
+    if (single) setHistoryLoading(true);
+    let next = 0;
+    const worker = async () => {
+      while (next < missing.length) {
+        const d = missing[next++];
+        const list = await fetchBasketballHistoryDay(d, isSubscriber);
+        if (list === null) {
+          requestedDays.current.delete(d); // failed: allow a retry next time
+          continue;
+        }
+        setHistoryByDate((prev) => ({ ...prev, [d]: list }));
+      }
     };
+    Promise.all(Array.from({ length: Math.min(4, missing.length) }, worker)).finally(() => {
+      if (single) setHistoryLoading(false);
+    });
   }, [selectedDate, isSubscriber, timeZone]);
   useEffect(() => {
+    requestedDays.current = new Set();
     setHistoryByDate({});
-  }, [isSubscriber]);
+  }, [isSubscriber, timeZone]);
 
   const allPredictions = useMemo(() => {
     const base = feedData?.predictions || [];
@@ -152,20 +169,15 @@ export const BasketballHubView: React.FC<BasketballHubViewProps> = ({
       count: fixtureCountByDate.get(pd.iso) || 0,
     }));
 
-    // Count fixtures for current date and future dates (strictly no past dates)
-    let currentAndFutureCount = 0;
-    allPredictions.forEach((p) => {
-      const kickoff = p.target_kickoff_at || p.fixture?.target_kickoff_at;
-      const d = getFixtureWatDate(kickoff, timeZone);
-      if (!d || d >= today.iso) currentAndFutureCount++;
-    });
+    // "All Dates" covers the last 30 days plus today and upcoming
+    const allDatesCount = allPredictions.length;
 
     return {
       all: {
         id: 'all',
         label: 'All Dates',
-        subLabel: 'Current & Future',
-        count: currentAndFutureCount,
+        subLabel: 'Past 30 Days & Upcoming',
+        count: allDatesCount,
       },
       yesterday: {
         ...yesterday,
@@ -213,11 +225,7 @@ export const BasketballHubView: React.FC<BasketballHubViewProps> = ({
     const baseList = allPredictions;
 
     if (selectedDate === 'all') {
-      return baseList.filter((p) => {
-        const kickoff = p.target_kickoff_at || p.fixture?.target_kickoff_at;
-        const d = getFixtureWatDate(kickoff, timeZone);
-        return !d || d >= dynamicDateTabs.todayIso;
-      });
+      return baseList;
     }
     return baseList.filter((p) => {
       const kickoff = p.target_kickoff_at || p.fixture?.target_kickoff_at;
