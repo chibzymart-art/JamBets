@@ -32,6 +32,9 @@ from .scraper.livescore_tennis import LiveScoreTennisScraper
 
 logger = logging.getLogger("tennis.settlement")
 
+PENDING_REVISIT_HOURS = 14 * 24   # pending predictions are re-checked for 14 days
+STALE_LIVE_HOURS = 72             # "live" this long after the start means no result is coming
+
 
 class TennisSettlementEngine:
     """
@@ -326,6 +329,9 @@ class TennisSettlementEngine:
         }
 
         now_utc = datetime.now(timezone.utc)
+        # Pending predictions are revisited for at least 14 days. A 48h window left any match that was
+        # not resolved in time (dropped scheduled runs, a walkover read as "live") pending forever.
+        lookback_hours = max(int(lookback_hours), PENDING_REVISIT_HOURS)
         min_kickoff = (now_utc - timedelta(hours=lookback_hours)).isoformat()
         max_kickoff = (now_utc + timedelta(minutes=lookahead_minutes)).isoformat()
 
@@ -525,6 +531,36 @@ class TennisSettlementEngine:
             stats["matched"] += 1
             aligned = TennisFixtureMatcher.align_scores(fix, matched_comp)
             comp_status = aligned["status"]
+
+            ko_dt_m = TennisFixtureMatcher._parse_dt(item.get("target_kickoff_at") or fix.get("target_kickoff_at"))
+            age_h = (now_utc - ko_dt_m).total_seconds() / 3600.0 if ko_dt_m else 0.0
+
+            # Cancelled / postponed in the feed: record it, void once the 36h window has passed.
+            # A match still "live" 72h after its start has no result coming: same treatment.
+            if comp_status in ("cancelled", "postponed") or (comp_status == "live" and age_h > STALE_LIVE_HOURS):
+                new_status = comp_status if comp_status != "live" else "cancelled"
+                if not dry_run:
+                    try:
+                        self.db.update_fixture_score(fixture_id, {"status": new_status})
+                    except Exception as e:
+                        logger.warning("Failed to update %s fixture %s: %s", new_status, fixture_id, e)
+                if age_h > 36:
+                    note = (f"Match {comp_status} in the results feed" if comp_status != "live"
+                            else f"No final result {STALE_LIVE_HOURS}h after start") + ". Voided per ATP/WTA betting rules."
+                    if not dry_run:
+                        try:
+                            self.db.settle_prediction(prediction_id=pred_id, fixture_id=fixture_id, status="void",
+                                                      notes=note, p1_sets=0, p2_sets=0, total_games=0,
+                                                      actual_result="Match Unplayed / Cancelled")
+                        except Exception as e:
+                            logger.error("Failed to void %s prediction %s: %s", comp_status, pred_id, e)
+                            continue
+                    stats["settled"] += 1
+                    stats["void"] += 1
+                    logger.info("Voided prediction %s: %s", pred_id, note)
+                else:
+                    stats["unsettled_pending"] += 1
+                continue
 
             # Handle LIVE match in-play state
             if comp_status == "live":
