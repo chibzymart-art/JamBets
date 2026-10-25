@@ -50,20 +50,24 @@ class BasketballMonteCarloSimulator:
         pace: float = 99.5,
         market_spread: Optional[float] = None,
         market_total: Optional[float] = None,
-        num_simulations: Optional[int] = None
+        num_simulations: Optional[int] = None,
+        sigma_override: Optional[float] = None,
+        rho_override: Optional[float] = None,
     ) -> BasketballSimDistribution:
         """
         Executes N Monte Carlo game simulations.
+        sigma_override / rho_override (used by ratings v2) set the per-team score spread and the
+        home/away correlation from measured model error. Left as None, behaviour is unchanged.
         """
         n = num_simulations or self.default_sims
         t0 = time.time()
 
         # Variance is proportional to game pace: sigma ≈ 1.25 * sqrt(pace)
-        sigma = 1.25 * np.sqrt(max(60.0, pace))
+        sigma = float(sigma_override) if sigma_override else 1.25 * np.sqrt(max(60.0, pace))
         var = sigma ** 2
 
         # Positive correlation between home and away scoring environments (pace correlation)
-        rho = 0.20
+        rho = float(rho_override) if rho_override is not None else 0.20
         cov_val = rho * var
 
         mu = np.array([home_mean, away_mean])

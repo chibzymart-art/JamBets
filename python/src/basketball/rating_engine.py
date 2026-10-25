@@ -325,10 +325,14 @@ class BasketballRatingEngine:
             params={
                 "select": "*",
                 "status": "eq.finished",
-                "order": "target_kickoff_at.asc",
+                # Newest 1000, replayed oldest-first below. Ascending + limit kept only the OLDEST 1000,
+                # so once there were more than 1000 finished games the latest results were never learned.
+                "order": "target_kickoff_at.desc",
                 "limit": "1000",
             }
         ).json()
+        if isinstance(fixtures, list):
+            fixtures = list(reversed(fixtures))
 
         if not fixtures:
             # Also check for fixtures where home_score is not null
