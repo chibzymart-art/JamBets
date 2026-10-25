@@ -19,6 +19,39 @@ from python.src.basketball.identity import normalize_team_name, generate_canonic
 logger = logging.getLogger("basketball.scraper.livescore")
 
 
+def livescore_status(eps, epr=None) -> str:
+    """
+    Canonical status from a LiveScore basketball event.
+    Epr (progress): 0 not started, 1 in play, 2 finished, 3 cancelled/abandoned, 4 postponed.
+    Eps is only used to refine Epr, or when Epr is missing.
+    """
+    e = str(eps or "NS").strip().upper().rstrip(".")
+    try:
+        p = int(epr) if epr is not None and str(epr).strip() != "" else None
+    except (TypeError, ValueError):
+        p = None
+    if e.startswith("CANC") or e.startswith("ABAN") or e.startswith("ABD"):
+        return "cancelled"
+    if e.startswith("POSTP") or e.startswith("SUSP") or e.startswith("DEL"):
+        return "postponed" if p != 2 else "finished"
+    if p == 2:
+        return "finished"
+    if p == 1:
+        return "live"
+    if p == 3:
+        return "cancelled"
+    if p == 4:
+        return "postponed"
+    if p == 0:
+        return "scheduled"
+    # No progress code: fall back to the status text
+    if e in ("FT", "AOT", "AET", "FINAL", "ENDED"):
+        return "finished"
+    if e in ("1Q", "2Q", "HT", "3Q", "4Q", "OT", "1H", "2H"):
+        return "live"
+    return "scheduled"
+
+
 class LivescoreBasketballScraper:
     """
     Scrapes LiveScore public basketball API for international and European leagues.
@@ -137,18 +170,10 @@ class LivescoreBasketballScraper:
 
                     canonical_key = generate_canonical_key(league_code, home_team, away_team, kickoff_dt)
 
-                    # Status mapping
+                    # Status mapping (Epr is LiveScore's progress code; Eps alone is ambiguous:
+                    # a finished overtime game stays "OT" forever, and postponed is "Postp.")
                     eps = ev.get("Eps", "NS")
-                    if eps in ("FT", "AOT"):
-                        status = "finished"
-                    elif eps in ("1Q", "2Q", "HT", "3Q", "4Q", "OT"):
-                        status = "live"
-                    elif eps == "Postp":
-                        status = "postponed"
-                    elif eps == "Canc":
-                        status = "cancelled"
-                    else:
-                        status = "scheduled"
+                    status = livescore_status(eps, ev.get("Epr"))
 
                     # Scores
                     tr1 = ev.get("Tr1")
@@ -181,7 +206,7 @@ class LivescoreBasketballScraper:
                             "home": home_quarters,
                             "away": away_quarters,
                         },
-                        "current_period": "Final" if status == "finished" else eps,
+                        "current_period": ("OT" if str(eps).upper().startswith("OT") or str(eps).upper() == "AOT" else "Final") if status == "finished" else eps,
                         "time_remaining": None,
                         "market_spread": None,
                         "market_total": None,

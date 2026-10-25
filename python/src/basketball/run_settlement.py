@@ -58,6 +58,15 @@ def run_settlement_cycle(
         except Exception as e:
             logger.warning("Scoreboard refresh encountered a non-fatal error: %s", e)
 
+    # 1b. Stale fixtures: anything still scheduled/live hours after tip-off is looked up again on its own
+    #     date and given its final status, so no pick is left pending forever.
+    try:
+        from python.src.basketball.reconcile import reconcile_stale_fixtures
+        rec = reconcile_stale_fixtures(db, pipeline, dry_run=dry_run)
+        logger.info("Stale fixture reconcile complete: %s", rec)
+    except Exception as e:
+        logger.warning("Stale fixture reconcile encountered a non-fatal error: %s", e)
+
     # 2. Settle pending predictions
     logger.info("Executing settlement evaluation (lookback: %d hours, dry_run: %s)...", lookback_hours, dry_run)
     summary = engine.settle_pending_predictions(
