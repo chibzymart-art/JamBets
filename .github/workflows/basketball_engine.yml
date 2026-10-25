@@ -64,6 +64,7 @@ jobs:
       - name: Execute 250,000 Monte Carlo Basketball Prediction Engine
         env:
           SNAPSHOTS_BUILT_BY_WORKFLOW: '1'  # snapshots are refreshed once, in the snapshot step below
+          BASKETBALL_MODEL: 'v2'  # calibrated ratings v2; falls back to v1 automatically if v2 cannot run
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
