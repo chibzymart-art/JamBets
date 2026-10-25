@@ -147,6 +147,70 @@ const SETTLE_SELECT = `
  * Fetch Tennis predictions, active tournaments, and settlements directly from Cloud Supabase.
  * Cloud Supabase is the EXCLUSIVE source of truth (zero edge proxy, zero hardcoded fallbacks).
  */
+// Paywall shaping for one prediction (same rules for the live feed and past days).
+function gateTennisPrediction(p: TennisPrediction, isUnlocked: boolean): TennisPrediction {
+  if (isUnlocked) {
+    return {
+      ...p,
+      is_locked: false,
+    };
+  }
+
+  // All tennis predictions (including settled) are locked for non-VIP visitors as BigBang VIP conversion teasers
+  return {
+    ...p,
+    prediction: '🔒 BigBang VIP Pick',
+    probability: null,
+    fair_odds: null,
+    market_odds: null,
+    settlement_status: 'pending',
+    settlement_notes: null,
+    actual_result: null,
+    secondary_predictions: [],
+    metadata: {
+      ...p.metadata,
+      ai_tactical_analysis:
+        '🔒 Tennis match predictions and Markov chain models are reserved for BigBang VIP members.',
+      markov: undefined,
+    },
+    is_locked: true,
+  } as TennisPrediction;
+}
+
+const historyDayCache = new Map<string, { data: TennisPrediction[]; timestamp: number }>();
+const HISTORY_CLIENT_TTL_MS = 10 * 60 * 1000;
+
+/**
+ * Predictions for one past day (the live feed only holds yesterday onward).
+ * Goes through the Edge API only; returns [] on any failure.
+ */
+export async function fetchTennisHistoryDay(date: string, canViewPredictions = false): Promise<TennisPrediction[]> {
+  if (typeof window === 'undefined' || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return [];
+  const tz = getUserTimeZone();
+  const key = `${date}_${tz}_${canViewPredictions ? 'vip' : 'free'}`;
+  const hit = historyDayCache.get(key);
+  if (hit && Date.now() - hit.timestamp < HISTORY_CLIENT_TTL_MS) return hit.data;
+  try {
+    const session = (await supabase.auth.getSession()).data.session;
+    const reqHeaders: Record<string, string> = { Accept: 'application/json' };
+    if (session?.access_token) reqHeaders['Authorization'] = `Bearer ${session.access_token}`;
+    // Signed-in requests use their own URL so a shared CDN copy made for visitors is never served to them.
+    const authPart = session?.access_token ? '&auth=1' : '';
+    const res = await fetch(`/api/tennis-feed?date=${encodeURIComponent(date)}&tz=${encodeURIComponent(tz)}${authPart}`, {
+      headers: reqHeaders,
+    });
+    if (!res.ok) return [];
+    const body = await res.json();
+    if (!body?.success || !Array.isArray(body.predictions)) return [];
+    const unlocked = Boolean(canViewPredictions || body.is_subscriber);
+    const list = (body.predictions as TennisPrediction[]).map((p) => gateTennisPrediction(p, unlocked));
+    historyDayCache.set(key, { data: list, timestamp: Date.now() });
+    return list;
+  } catch {
+    return [];
+  }
+}
+
 export async function fetchTennisFeed(options: FetchTennisFeedOptions = {}): Promise<TennisFeedResponse> {
   const {
     surface = 'all',
@@ -355,34 +419,7 @@ export async function fetchTennisFeed(options: FetchTennisFeedOptions = {}): Pro
     });
 
     // 4. Map predictions and enforce proper paywall gating
-    const finalPredictions: TennisPrediction[] = filteredPredictions.map((p) => {
-      if (isUnlocked) {
-        return {
-          ...p,
-          is_locked: false,
-        };
-      }
-
-      // All tennis predictions (including settled) are locked for non-VIP visitors as BigBang VIP conversion teasers
-      return {
-        ...p,
-        prediction: '🔒 BigBang VIP Pick',
-        probability: null,
-        fair_odds: null,
-        market_odds: null,
-        settlement_status: 'pending',
-        settlement_notes: null,
-        actual_result: null,
-        secondary_predictions: [],
-        metadata: {
-          ...p.metadata,
-          ai_tactical_analysis:
-            '🔒 Tennis match predictions and Markov chain models are reserved for BigBang VIP members.',
-          markov: undefined,
-        },
-        is_locked: true,
-      };
-    });
+    const finalPredictions: TennisPrediction[] = filteredPredictions.map((p) => gateTennisPrediction(p, isUnlocked));
 
     // 5. Authentic Scorecard & Telemetry Stats (Strictly Cloud Supabase Derived — Zero Fallbacks)
     let bangers = 0;
@@ -488,5 +525,6 @@ export async function fetchTennisFeed(options: FetchTennisFeedOptions = {}): Pro
 
 export function clearTennisFeedCache() {
   clientMemoryCache.clear();
+  historyDayCache.clear();
   clientInflightPromises.clear();
 }

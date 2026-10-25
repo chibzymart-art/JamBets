@@ -3,8 +3,8 @@
  * Phase 5: Master Basketball Hub View Component
  */
 import React, { useState, useEffect, useMemo } from 'react';
-import { fetchBasketballFeed, BasketballFeedResponse } from '../lib/basketballFeedService';
-import { BasketballMarket } from '../types/basketball';
+import { fetchBasketballFeed, BasketballFeedResponse, fetchBasketballHistoryDay } from '../lib/basketballFeedService';
+import { BasketballMarket, BasketballPrediction } from '../types/basketball';
 import {
   getDateDetailsByOffset,
   getPastDatesList,
@@ -81,7 +81,37 @@ export const BasketballHubView: React.FC<BasketballHubViewProps> = ({
     loadFeed(false);
   }, [isSubscriber]);
 
-  const allPredictions = feedData?.predictions || [];
+  // Past days: the live feed starts at yesterday, so any earlier (or yesterday's full local) day is
+  // loaded on demand from the feed's ?date= endpoint and merged in.
+  const [historyByDate, setHistoryByDate] = useState<Record<string, BasketballPrediction[]>>({});
+  const [historyLoading, setHistoryLoading] = useState<boolean>(false);
+  useEffect(() => {
+    const todayIsoLocal = getDateDetailsByOffset(0, timeZone).iso;
+    if (selectedDate === 'all' || selectedDate >= todayIsoLocal || historyByDate[selectedDate]) return;
+    let cancelled = false;
+    setHistoryLoading(true);
+    fetchBasketballHistoryDay(selectedDate, isSubscriber)
+      .then((list) => {
+        if (!cancelled) setHistoryByDate((prev) => ({ ...prev, [selectedDate]: list }));
+      })
+      .finally(() => {
+        if (!cancelled) setHistoryLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedDate, isSubscriber, timeZone]);
+  useEffect(() => {
+    setHistoryByDate({});
+  }, [isSubscriber]);
+
+  const allPredictions = useMemo(() => {
+    const base = feedData?.predictions || [];
+    const extra = Object.values(historyByDate).flat();
+    if (extra.length === 0) return base;
+    const seen = new Set(base.map((p) => p.id));
+    return [...base, ...extra.filter((p) => !seen.has(p.id) && (seen.add(p.id), true))];
+  }, [feedData, historyByDate]);
 
   // Format today's date dynamically in visitor's local timezone matching football & tennis scorecard
   const watDateStr = useMemo(() => {
@@ -822,7 +852,7 @@ export const BasketballHubView: React.FC<BasketballHubViewProps> = ({
           )}
 
           {/* 5. PREDICTIONS FEED / CARDS LIST */}
-          {loading ? (
+          {loading || historyLoading ? (
             <div style={{ padding: '60px 0', textAlign: 'center', color: '#64748b' }}>
               <div className="bball-hero-icon-ring" style={{ margin: '0 auto 16px', animation: 'bounce 1s infinite' }}>
                 🏀

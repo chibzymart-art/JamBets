@@ -156,6 +156,92 @@ const SETTLE_SELECT = `
   created_at
 `;
 
+// Paywall shaping for one prediction (same rules for the live feed and past days).
+function gateBasketballPrediction(p: BasketballPrediction, isUnlocked: boolean): BasketballPrediction {
+  let parsedSec: BasketballSecondaryPrediction[] = [];
+  if (Array.isArray(p.secondary_predictions)) {
+    parsedSec = p.secondary_predictions;
+  } else if (typeof p.secondary_predictions === 'string') {
+    try {
+      parsedSec = JSON.parse(p.secondary_predictions);
+    } catch {
+      parsedSec = [];
+    }
+  }
+
+  if (isUnlocked) {
+    return {
+      ...p,
+      secondary_predictions: parsedSec,
+      is_locked: false,
+    };
+  }
+
+  // For free visitors, keep settled predictions transparent so historical track record is verified,
+  // while masking pre-game unplayed predictions as BigBang VIP teasers.
+  const isSettled = p.settlement_status === 'won' || p.settlement_status === 'lost' || p.settlement_status === 'void';
+  return {
+    ...p,
+    prediction: isSettled ? (p.prediction || 'VIP Pick') : '🔒 BigBang VIP Pick',
+    probability: isSettled ? p.probability : null,
+    // Open picks carry no tier for locked users (the Edge API withholds it); settled ones keep theirs.
+    confidence_category: (isSettled ? (p.confidence_category || 'TOP PICK') : 'LOCKED') as BasketballConfidenceTier,
+    settlement_status: p.settlement_status || 'pending',
+    settlement_notes: p.settlement_notes || null,
+    actual_result: p.actual_result || null,
+    settled_at: p.settled_at || null,
+    simulated_home_score: isSettled ? p.simulated_home_score : null,
+    simulated_away_score: isSettled ? p.simulated_away_score : null,
+    edge_percentage: isSettled ? p.edge_percentage : null,
+    fair_odds: isSettled ? p.fair_odds : null,
+    market_odds: isSettled ? p.market_odds : null,
+    secondary_predictions: isSettled ? parsedSec : [],
+    metadata: isSettled
+      ? p.metadata
+      : {
+          ...p.metadata,
+          ai_tactical_analysis:
+            '🔒 Basketball predictions and 250,000 Monte Carlo simulations are reserved for BigBang VIP members.',
+          simulation: undefined,
+        },
+    is_locked: !isSettled,
+  };
+}
+
+const historyDayCache = new Map<string, { data: BasketballPrediction[]; timestamp: number }>();
+const HISTORY_CLIENT_TTL_MS = 10 * 60 * 1000;
+
+/**
+ * Predictions for one past day (the live feed only holds yesterday onward).
+ * Goes through the Edge API only; returns [] on any failure, never sample data.
+ */
+export async function fetchBasketballHistoryDay(date: string, canViewPredictions = false): Promise<BasketballPrediction[]> {
+  if (typeof window === 'undefined' || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return [];
+  const tz = getUserTimeZone();
+  const key = `${date}_${tz}_${canViewPredictions ? 'vip' : 'free'}`;
+  const hit = historyDayCache.get(key);
+  if (hit && Date.now() - hit.timestamp < HISTORY_CLIENT_TTL_MS) return hit.data;
+  try {
+    const session = (await supabase.auth.getSession()).data.session;
+    const reqHeaders: Record<string, string> = { Accept: 'application/json' };
+    if (session?.access_token) reqHeaders['Authorization'] = `Bearer ${session.access_token}`;
+    // Signed-in requests use their own URL so a shared CDN copy made for visitors is never served to them.
+    const authPart = session?.access_token ? '&auth=1' : '';
+    const res = await fetch(`/api/basketball-feed?date=${encodeURIComponent(date)}&tz=${encodeURIComponent(tz)}${authPart}`, {
+      headers: reqHeaders,
+    });
+    if (!res.ok) return [];
+    const body = await res.json();
+    if (!body?.success || !Array.isArray(body.predictions)) return [];
+    const unlocked = Boolean(canViewPredictions || body.is_subscriber);
+    const list = (body.predictions as BasketballPrediction[]).map((p) => gateBasketballPrediction(p, unlocked));
+    historyDayCache.set(key, { data: list, timestamp: Date.now() });
+    return list;
+  } catch {
+    return [];
+  }
+}
+
 export async function fetchBasketballFeed(
   options: FetchBasketballFeedOptions = {}
 ): Promise<BasketballFeedResponse> {
@@ -310,13 +396,9 @@ export async function fetchBasketballFeed(
       }
     }
 
-    // Fallback: If remote table is currently unpopulated, use high-fidelity verified sample models
-    if (!rawPredictions || rawPredictions.length === 0) {
-      rawPredictions = generateRealisticSamplePredictions();
-      if (!rawLeagues || rawLeagues.length === 0) {
-        rawLeagues = generateSampleLeagues();
-      }
-    }
+    // No data means no data: never show invented sample predictions or results.
+    rawPredictions = rawPredictions || [];
+    rawLeagues = rawLeagues || [];
 
     // 1b. Cleanse & Deduplicate predictions (Filter TBD placeholders and collapse duplicate match entries)
     const validPredictions = rawPredictions.filter((p) => {
@@ -389,56 +471,7 @@ export async function fetchBasketballFeed(
     });
 
     // 3. Map predictions and enforce proper paywall gating
-    const finalPredictions: BasketballPrediction[] = filteredPredictions.map((p) => {
-      let parsedSec: BasketballSecondaryPrediction[] = [];
-      if (Array.isArray(p.secondary_predictions)) {
-        parsedSec = p.secondary_predictions;
-      } else if (typeof p.secondary_predictions === 'string') {
-        try {
-          parsedSec = JSON.parse(p.secondary_predictions);
-        } catch {
-          parsedSec = [];
-        }
-      }
-
-      if (isUnlocked) {
-        return {
-          ...p,
-          secondary_predictions: parsedSec,
-          is_locked: false,
-        };
-      }
-
-      // For free visitors, keep settled predictions transparent so historical track record is verified,
-      // while masking pre-game unplayed predictions as BigBang VIP teasers.
-      const isSettled = p.settlement_status === 'won' || p.settlement_status === 'lost' || p.settlement_status === 'void';
-      return {
-        ...p,
-        prediction: isSettled ? (p.prediction || 'VIP Pick') : '🔒 BigBang VIP Pick',
-        probability: isSettled ? p.probability : null,
-        // Open picks carry no tier for locked users (the Edge API withholds it); settled ones keep theirs.
-        confidence_category: (isSettled ? (p.confidence_category || 'TOP PICK') : 'LOCKED') as BasketballConfidenceTier,
-        settlement_status: p.settlement_status || 'pending',
-        settlement_notes: p.settlement_notes || null,
-        actual_result: p.actual_result || null,
-        settled_at: p.settled_at || null,
-        simulated_home_score: isSettled ? p.simulated_home_score : null,
-        simulated_away_score: isSettled ? p.simulated_away_score : null,
-        edge_percentage: isSettled ? p.edge_percentage : null,
-        fair_odds: isSettled ? p.fair_odds : null,
-        market_odds: isSettled ? p.market_odds : null,
-        secondary_predictions: isSettled ? parsedSec : [],
-        metadata: isSettled
-          ? p.metadata
-          : {
-              ...p.metadata,
-              ai_tactical_analysis:
-                '🔒 Basketball predictions and 250,000 Monte Carlo simulations are reserved for BigBang VIP members.',
-              simulation: undefined,
-            },
-        is_locked: !isSettled,
-      };
-    });
+    const finalPredictions: BasketballPrediction[] = filteredPredictions.map((p) => gateBasketballPrediction(p, isUnlocked));
 
     // 4. Calculate Scorecard & Telemetry Stats (Single source of truth, avoiding double-counting)
     let bangers = 0;
@@ -475,7 +508,7 @@ export async function fetchBasketballFeed(
     }
 
     const decisive = settledWon + settledLost;
-    const winRate = decisive > 0 ? Math.round((settledWon / decisive) * 100) : (settledWon > 0 ? 100 : 85);
+    const winRate = decisive > 0 ? Math.round((settledWon / decisive) * 100) : (settledWon > 0 ? 100 : 0);
 
     const response: BasketballFeedResponse = {
       success: true,
@@ -503,27 +536,26 @@ export async function fetchBasketballFeed(
     return response;
   } catch (err: any) {
     console.error('Direct Cloud Supabase basketball fetch error:', err);
-    const fallbackPredictions = generateRealisticSamplePredictions();
     return {
-      success: true, // Graceful UX fallback
+      success: false,
       is_subscriber: Boolean(canViewPredictions),
       stats: {
-        total_matches: fallbackPredictions.length,
-        bangers_count: 2,
-        top_picks_count: 2,
-        high_confidence_count: 1,
-        leagues_count: 4,
-        settled_count: 1,
-        settled_won: 1,
+        total_matches: 0,
+        bangers_count: 0,
+        top_picks_count: 0,
+        high_confidence_count: 0,
+        leagues_count: 0,
+        settled_count: 0,
+        settled_won: 0,
         settled_lost: 0,
         settled_void: 0,
-        win_rate: 100,
+        win_rate: 0,
       },
-      leagues: generateSampleLeagues(),
+      leagues: [],
       settlements: [],
-      predictions: fallbackPredictions,
+      predictions: [],
       cached_at: new Date().toISOString(),
-      error: err.message,
+      error: err.message || 'Failed to load basketball predictions',
     };
   } finally {
     clientInflightPromises.delete(cacheKey);
@@ -539,480 +571,6 @@ export async function fetchBasketballFeed(
 
 export function clearBasketballFeedCache() {
   clientMemoryCache.clear();
+  historyDayCache.clear();
   clientInflightPromises.clear();
-}
-
-// ------------------------------------------------------------------
-// High-Fidelity Realistic Sample Data (Guarantees WOW factor if DB is empty)
-// ------------------------------------------------------------------
-function generateSampleLeagues(): BasketballLeague[] {
-  return [
-    { id: 'l-nba', code: 'NBA', name: 'NBA', country: 'USA', quarter_minutes: 12, periods_count: 4, default_pace: 99.5, is_active: true },
-    { id: 'l-euro', code: 'EUROLEAGUE', name: 'EuroLeague', country: 'Europe', quarter_minutes: 10, periods_count: 4, default_pace: 71.0, is_active: true },
-    { id: 'l-ncaa', code: 'NCAA_M', name: 'NCAA Division I Men', country: 'USA', quarter_minutes: 20, periods_count: 2, default_pace: 68.5, is_active: true },
-    { id: 'l-acb', code: 'ESP_ACB', name: 'Liga Endesa (ACB)', country: 'Spain', quarter_minutes: 10, periods_count: 4, default_pace: 72.5, is_active: true },
-  ];
-}
-
-function generateRealisticSamplePredictions(): BasketballPrediction[] {
-  const now = new Date();
-  const dToday = new Date(now.getTime() + 4 * 3600 * 1000).toISOString();
-  const dTonight = new Date(now.getTime() + 8 * 3600 * 1000).toISOString();
-  const dTomorrow = new Date(now.getTime() + 28 * 3600 * 1000).toISOString();
-  const dPast = new Date(now.getTime() - 24 * 3600 * 1000).toISOString();
-
-  return [
-    // 1. NBA BANGER: Boston Celtics vs New York Knicks
-    {
-      id: 'bball-pred-01',
-      fixture_id: 'fix-bos-nyk',
-      market: 'point_spread',
-      prediction: 'Boston Celtics -6.5 Points',
-      probability: 0.785,
-      confidence_category: 'BANGER',
-      simulations_count: 250000,
-      simulated_home_score: 118.2,
-      simulated_away_score: 106.8,
-      edge_percentage: 12.8,
-      fair_odds: 1.27,
-      market_odds: 1.91,
-      tier_required: 'standard',
-      publication_status: 'published',
-      target_kickoff_at: dToday,
-      settlement_status: 'pending',
-      metadata: {
-        simulation: {
-          simulations_count: 250000,
-          expected_pace: 100.2,
-          home_projected_possessions: 100.1,
-          away_projected_possessions: 100.3,
-          home_adjusted_ortg: 118.0,
-          away_adjusted_ortg: 106.5,
-          fatigue_adjustment_home: 0.0,
-          fatigue_adjustment_away: -2.8,
-          altitude_hca_bonus: 0.0,
-          simulated_spread_cover_prob: 0.785,
-          simulated_total_over_prob: 0.534,
-          simulated_moneyline_prob: 0.862,
-          distribution: {
-            margin_p10: 2.0,
-            margin_p50: 11.4,
-            margin_p90: 20.8,
-            total_p10: 212.0,
-            total_p50: 225.0,
-            total_p90: 238.0,
-          }
-        },
-        four_factors_differential: {
-          efg_diff: 0.048,
-          tov_diff: -0.024,
-          orb_diff: 0.035,
-          ftr_diff: 0.012,
-        },
-        ai_tactical_analysis:
-          'Dean Oliver Four Factors advantage is heavily skewed toward Boston (+4.8% eFG%). New York is playing on zero days rest (Back-to-Back schedule fatigue -2.8 pts). Boston perimeter spacing forces high turnover variance on fatigued perimeter rotations.',
-      },
-      secondary_predictions: [
-        { market: 'moneyline', pick: 'Boston Celtics to win', probability: 0.862, tier: 'BANGER' },
-        { market: 'game_total_over_under', pick: 'Over 224.5 Total Points', probability: 0.534, tier: 'MID CONFIDENCE' },
-      ],
-      fixture: {
-        id: 'fix-bos-nyk',
-        canonical_key: 'nba_2026_bos_nyk',
-        league_id: 'l-nba',
-        home_team_id: 'team-bos',
-        away_team_id: 'team-nyk',
-        target_kickoff_at: dToday,
-        status: 'scheduled',
-        home_score: 0,
-        away_score: 0,
-        period_scores: { home: [], away: [] },
-        market_spread: -6.5,
-        market_total: 224.5,
-        home_moneyline_odds: 1.34,
-        away_moneyline_odds: 3.45,
-        home_rest_days: 2,
-        away_rest_days: 0,
-        is_home_b2b: false,
-        is_away_b2b: true,
-        league: {
-          id: 'l-nba',
-          code: 'NBA',
-          name: 'NBA',
-          country: 'USA',
-          quarter_minutes: 12,
-          periods_count: 4,
-          default_pace: 99.5,
-          is_active: true,
-        },
-        home_team: {
-          id: 'team-bos',
-          canonical_name: 'Boston Celtics',
-          short_name: 'Celtics',
-          league_id: 'l-nba',
-          city: 'Boston',
-          state: 'MA',
-          arena_name: 'TD Garden',
-          altitude_ft: 20,
-          offensive_rating: 118.5,
-          defensive_rating: 108.2,
-          net_rating: +10.3,
-          pace: 100.4,
-          four_factors: { efg_pct: 0.565, tov_pct: 0.118, orb_pct: 0.285, ftr: 0.235 },
-          logo_url: 'https://a.espncdn.com/i/teamlogos/nba/500/bos.png',
-        },
-        away_team: {
-          id: 'team-nyk',
-          canonical_name: 'New York Knicks',
-          short_name: 'Knicks',
-          league_id: 'l-nba',
-          city: 'New York',
-          state: 'NY',
-          arena_name: 'Madison Square Garden',
-          altitude_ft: 33,
-          offensive_rating: 114.2,
-          defensive_rating: 111.8,
-          net_rating: +2.4,
-          pace: 97.2,
-          four_factors: { efg_pct: 0.528, tov_pct: 0.134, orb_pct: 0.312, ftr: 0.228 },
-          logo_url: 'https://a.espncdn.com/i/teamlogos/nba/500/ny.png',
-        },
-      },
-    },
-
-    // 2. NBA ALTITUDE FORTRESS: Denver Nuggets vs Golden State Warriors
-    {
-      id: 'bball-pred-02',
-      fixture_id: 'fix-den-gsw',
-      market: 'game_total_over_under',
-      prediction: 'Over 231.5 Total Points',
-      probability: 0.724,
-      confidence_category: 'BANGER',
-      simulations_count: 250000,
-      simulated_home_score: 122.4,
-      simulated_away_score: 115.1,
-      edge_percentage: 9.6,
-      fair_odds: 1.38,
-      market_odds: 1.95,
-      tier_required: 'standard',
-      publication_status: 'published',
-      target_kickoff_at: dTonight,
-      settlement_status: 'pending',
-      metadata: {
-        simulation: {
-          simulations_count: 250000,
-          expected_pace: 102.8,
-          home_projected_possessions: 102.6,
-          away_projected_possessions: 103.0,
-          home_adjusted_ortg: 119.2,
-          away_adjusted_ortg: 111.8,
-          fatigue_adjustment_home: 0.0,
-          fatigue_adjustment_away: 0.0,
-          altitude_hca_bonus: 4.15,
-          simulated_spread_cover_prob: 0.692,
-          simulated_total_over_prob: 0.724,
-          simulated_moneyline_prob: 0.778,
-          distribution: {
-            margin_p10: 1.0,
-            margin_p50: 7.3,
-            margin_p90: 16.5,
-            total_p10: 221.0,
-            total_p50: 237.5,
-            total_p90: 254.0,
-          }
-        },
-        four_factors_differential: {
-          efg_diff: 0.038,
-          tov_diff: -0.015,
-          orb_diff: 0.042,
-          ftr_diff: 0.025,
-        },
-        ai_tactical_analysis:
-          'Ball Arena mile-high altitude (+4.15 HCA bonus) combines with extreme pace synergy (102.8 expected possessions). Warriors fast-break tempo combined with Jokic playmaking leads to massive 72.4% probability of exceeding the 231.5 total points barrier.',
-      },
-      secondary_predictions: [
-        { market: 'point_spread', pick: 'Denver Nuggets -5.5 Points', probability: 0.692, tier: 'TOP PICK' },
-        { market: 'moneyline', pick: 'Denver Nuggets to win', probability: 0.778, tier: 'BANGER' },
-      ],
-      fixture: {
-        id: 'fix-den-gsw',
-        canonical_key: 'nba_2026_den_gsw',
-        league_id: 'l-nba',
-        home_team_id: 'team-den',
-        away_team_id: 'team-gsw',
-        target_kickoff_at: dTonight,
-        status: 'scheduled',
-        home_score: 0,
-        away_score: 0,
-        period_scores: { home: [], away: [] },
-        market_spread: -5.5,
-        market_total: 231.5,
-        home_moneyline_odds: 1.48,
-        away_moneyline_odds: 2.80,
-        home_rest_days: 1,
-        away_rest_days: 1,
-        is_home_b2b: false,
-        is_away_b2b: false,
-        league: {
-          id: 'l-nba',
-          code: 'NBA',
-          name: 'NBA',
-          country: 'USA',
-          quarter_minutes: 12,
-          periods_count: 4,
-          default_pace: 99.5,
-          is_active: true,
-        },
-        home_team: {
-          id: 'team-den',
-          canonical_name: 'Denver Nuggets',
-          short_name: 'Nuggets',
-          league_id: 'l-nba',
-          city: 'Denver',
-          state: 'CO',
-          arena_name: 'Ball Arena',
-          altitude_ft: 5280,
-          offensive_rating: 119.8,
-          defensive_rating: 112.5,
-          net_rating: +7.3,
-          pace: 101.2,
-          four_factors: { efg_pct: 0.572, tov_pct: 0.119, orb_pct: 0.305, ftr: 0.245 },
-          logo_url: 'https://a.espncdn.com/i/teamlogos/nba/500/den.png',
-        },
-        away_team: {
-          id: 'team-gsw',
-          canonical_name: 'Golden State Warriors',
-          short_name: 'Warriors',
-          league_id: 'l-nba',
-          city: 'San Francisco',
-          state: 'CA',
-          arena_name: 'Chase Center',
-          altitude_ft: 15,
-          offensive_rating: 115.4,
-          defensive_rating: 112.8,
-          net_rating: +2.6,
-          pace: 102.5,
-          four_factors: { efg_pct: 0.548, tov_pct: 0.138, orb_pct: 0.265, ftr: 0.210 },
-          logo_url: 'https://a.espncdn.com/i/teamlogos/nba/500/gs.png',
-        },
-      },
-    },
-
-    // 3. EUROLEAGUE TOP PICK: Real Madrid vs Panathinaikos
-    {
-      id: 'bball-pred-03',
-      fixture_id: 'fix-mad-pan',
-      market: 'moneyline',
-      prediction: 'Real Madrid to win',
-      probability: 0.705,
-      confidence_category: 'TOP PICK',
-      simulations_count: 250000,
-      simulated_home_score: 86.4,
-      simulated_away_score: 79.8,
-      edge_percentage: 8.2,
-      fair_odds: 1.42,
-      market_odds: 1.68,
-      tier_required: 'standard',
-      publication_status: 'published',
-      target_kickoff_at: dTomorrow,
-      settlement_status: 'pending',
-      metadata: {
-        simulation: {
-          simulations_count: 250000,
-          expected_pace: 71.8,
-          home_projected_possessions: 71.6,
-          away_projected_possessions: 72.0,
-          home_adjusted_ortg: 120.5,
-          away_adjusted_ortg: 111.2,
-          fatigue_adjustment_home: 0.0,
-          fatigue_adjustment_away: 0.0,
-          altitude_hca_bonus: 0.0,
-          simulated_spread_cover_prob: 0.655,
-          simulated_total_over_prob: 0.512,
-          simulated_moneyline_prob: 0.705,
-        },
-        four_factors_differential: {
-          efg_diff: 0.041,
-          tov_diff: -0.018,
-          orb_diff: 0.022,
-          ftr_diff: 0.030,
-        },
-        ai_tactical_analysis:
-          'WiZink Center defensive fortress. Real Madrid controls defensive rebound rate (78.5% DRB) shutting down Panathinaikos second-chance scoring opportunities. Quarter lengths of 10 minutes reward disciplined half-court efficiency.',
-      },
-      secondary_predictions: [
-        { market: 'point_spread', pick: 'Real Madrid -4.5 Points', probability: 0.655, tier: 'TOP PICK' },
-      ],
-      fixture: {
-        id: 'fix-mad-pan',
-        canonical_key: 'euro_2026_mad_pan',
-        league_id: 'l-euro',
-        home_team_id: 'team-mad',
-        away_team_id: 'team-pan',
-        target_kickoff_at: dTomorrow,
-        status: 'scheduled',
-        home_score: 0,
-        away_score: 0,
-        period_scores: { home: [], away: [] },
-        market_spread: -4.5,
-        market_total: 165.5,
-        home_moneyline_odds: 1.68,
-        away_moneyline_odds: 2.25,
-        home_rest_days: 3,
-        away_rest_days: 2,
-        is_home_b2b: false,
-        is_away_b2b: false,
-        league: {
-          id: 'l-euro',
-          code: 'EUROLEAGUE',
-          name: 'EuroLeague',
-          country: 'Europe',
-          quarter_minutes: 10,
-          periods_count: 4,
-          default_pace: 71.0,
-          is_active: true,
-        },
-        home_team: {
-          id: 'team-mad',
-          canonical_name: 'Real Madrid',
-          short_name: 'Real Madrid',
-          league_id: 'l-euro',
-          city: 'Madrid',
-          arena_name: 'WiZink Center',
-          altitude_ft: 2188,
-          offensive_rating: 121.2,
-          defensive_rating: 109.4,
-          net_rating: +11.8,
-          pace: 72.4,
-          four_factors: { efg_pct: 0.582, tov_pct: 0.120, orb_pct: 0.315, ftr: 0.260 },
-          logo_url: 'https://a.espncdn.com/combiner/i?img=/i/teamlogos/euro/500/228.png',
-        },
-        away_team: {
-          id: 'team-pan',
-          canonical_name: 'Panathinaikos',
-          short_name: 'Panathinaikos',
-          league_id: 'l-euro',
-          city: 'Athens',
-          arena_name: 'OAKA Altion',
-          altitude_ft: 490,
-          offensive_rating: 114.8,
-          defensive_rating: 111.0,
-          net_rating: +3.8,
-          pace: 70.8,
-          four_factors: { efg_pct: 0.540, tov_pct: 0.138, orb_pct: 0.285, ftr: 0.230 },
-          logo_url: 'https://a.espncdn.com/combiner/i?img=/i/teamlogos/euro/500/223.png',
-        },
-      },
-    },
-
-    // 4. VERIFIED SETTLED WON PREDICTION
-    {
-      id: 'bball-pred-04',
-      fixture_id: 'fix-mil-mia',
-      market: 'point_spread',
-      prediction: 'Milwaukee Bucks -4.5 Points',
-      probability: 0.762,
-      confidence_category: 'BANGER',
-      simulations_count: 250000,
-      simulated_home_score: 119.5,
-      simulated_away_score: 109.0,
-      edge_percentage: 11.2,
-      fair_odds: 1.31,
-      market_odds: 1.90,
-      tier_required: 'standard',
-      publication_status: 'published',
-      target_kickoff_at: dPast,
-      settlement_status: 'won',
-      settlement_notes: 'Spread covered by +6.5 pts (+11 margin with -4.5 line).',
-      actual_result: 'Milwaukee Bucks 115 - 104 Miami Heat (Total: 219)',
-      settled_at: dPast,
-      metadata: {
-        simulation: {
-          simulations_count: 250000,
-          expected_pace: 99.8,
-          home_projected_possessions: 99.5,
-          away_projected_possessions: 100.1,
-          home_adjusted_ortg: 119.5,
-          away_adjusted_ortg: 109.0,
-          fatigue_adjustment_home: 0.0,
-          fatigue_adjustment_away: 0.0,
-          altitude_hca_bonus: 0.0,
-          simulated_spread_cover_prob: 0.762,
-        },
-        four_factors_differential: {
-          efg_diff: 0.045,
-          tov_diff: -0.020,
-          orb_diff: 0.038,
-          ftr_diff: 0.015,
-        },
-        ai_tactical_analysis:
-          'Paint penetration and free throw rate advantage confirmed pre-match simulation expectations.',
-      },
-      secondary_predictions: [
-        { market: 'moneyline', pick: 'Milwaukee Bucks to win', probability: 0.840, tier: 'BANGER' },
-      ],
-      fixture: {
-        id: 'fix-mil-mia',
-        canonical_key: 'nba_2026_mil_mia',
-        league_id: 'l-nba',
-        home_team_id: 'team-mil',
-        away_team_id: 'team-mia',
-        target_kickoff_at: dPast,
-        status: 'finished',
-        home_score: 115,
-        away_score: 104,
-        period_scores: { home: [32, 28, 26, 29], away: [24, 25, 27, 28] },
-        market_spread: -4.5,
-        market_total: 218.5,
-        home_moneyline_odds: 1.45,
-        away_moneyline_odds: 2.85,
-        home_rest_days: 2,
-        away_rest_days: 1,
-        is_home_b2b: false,
-        is_away_b2b: false,
-        league: {
-          id: 'l-nba',
-          code: 'NBA',
-          name: 'NBA',
-          country: 'USA',
-          quarter_minutes: 12,
-          periods_count: 4,
-          default_pace: 99.5,
-          is_active: true,
-        },
-        home_team: {
-          id: 'team-mil',
-          canonical_name: 'Milwaukee Bucks',
-          short_name: 'Bucks',
-          league_id: 'l-nba',
-          city: 'Milwaukee',
-          state: 'WI',
-          arena_name: 'Fiserv Forum',
-          altitude_ft: 617,
-          offensive_rating: 118.0,
-          defensive_rating: 111.0,
-          net_rating: +7.0,
-          pace: 100.8,
-          four_factors: { efg_pct: 0.562, tov_pct: 0.125, orb_pct: 0.280, ftr: 0.250 },
-          logo_url: 'https://a.espncdn.com/i/teamlogos/nba/500/mil.png',
-        },
-        away_team: {
-          id: 'team-mia',
-          canonical_name: 'Miami Heat',
-          short_name: 'Heat',
-          league_id: 'l-nba',
-          city: 'Miami',
-          state: 'FL',
-          arena_name: 'Kaseya Center',
-          altitude_ft: 6,
-          offensive_rating: 112.5,
-          defensive_rating: 110.8,
-          net_rating: +1.7,
-          pace: 97.4,
-          four_factors: { efg_pct: 0.525, tov_pct: 0.132, orb_pct: 0.245, ftr: 0.220 },
-          logo_url: 'https://a.espncdn.com/i/teamlogos/nba/500/mia.png',
-        },
-      },
-    },
-  ];
 }

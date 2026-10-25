@@ -11,6 +11,15 @@ import {
   resolveTimeZone,
   byKickoffThenId,
 } from './_lib/teaser';
+import {
+  parseHistoryDate,
+  localDayWindow,
+  isClosedDay,
+  HISTORY_FRESH_MS,
+  HISTORY_STALE_MS,
+  HISTORY_PUBLIC_CACHE,
+  HISTORY_CDN_CACHE,
+} from './_lib/history-day';
 
 // Fields a locked tennis teaser may carry. Everything else on the row is dropped.
 const TENNIS_TEASER_KEYS = [
@@ -72,6 +81,10 @@ interface TennisFeedData {
 const tennisSwrCache = new EdgeSwrCache<TennisFeedData>(900 * 1000, 3600 * 1000);
 EdgeCacheRegistry.register('tennis', tennisSwrCache);
 
+// Past days (?date=YYYY-MM-DD): one local day read straight from the tables, cached for hours.
+const tennisDayCache = new EdgeSwrCache<TennisFeedData>(HISTORY_FRESH_MS, HISTORY_STALE_MS);
+EdgeCacheRegistry.register('tennis-day', tennisDayCache);
+
 // Adaptive Dynamic TTL for Live Scores and Instant Settlement Invalidation (Sub-Phase 2.4)
 function computeTennisTtl(data: TennisFeedData): number {
   const hasLive = (data.predictions || []).some((p: any) => {
@@ -132,6 +145,27 @@ async function fetchTennisDataFromUpstream(rawToken?: string | null): Promise<Te
   }
 
   // 2. Fallback Path: 3-Table Join on tennis_predictions + fixtures + tournaments
+  const now = new Date();
+  return fetchTennisRange(
+    headers,
+    new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString(),
+    new Date(now.getTime() + 5 * 24 * 60 * 60 * 1000).toISOString(),
+    'lte'
+  );
+}
+
+function serviceHeaders(): Record<string, string> {
+  const key = SUPABASE_SERVICE_ROLE_KEY || SUPABASE_ANON_KEY;
+  return { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${key}`, Accept: 'application/json' };
+}
+
+// Predictions with kickoff from minIso up to maxIso (inclusive for the fallback, exclusive for a day).
+async function fetchTennisRange(
+  headers: Record<string, string>,
+  minIso: string,
+  maxIso: string,
+  maxOp: 'lt' | 'lte' = 'lt'
+): Promise<TennisFeedData> {
   const predSelect = encodeURIComponent(
     '*,fixture:tennis_fixtures(id,canonical_key,round,best_of_sets,target_kickoff_at,status,score_p1_sets,score_p2_sets,set_scores,current_game_score,server_indicator,tournament:tennis_tournaments(id,name,tour,category,surface,court_pace_index),player1:tennis_players!tennis_fixtures_player1_id_fkey(id,display_name,canonical_name,country,current_rank,hard_elo,clay_elo,grass_elo,indoor_elo),player2:tennis_players!tennis_fixtures_player2_id_fkey(id,display_name,canonical_name,country,current_rank,hard_elo,clay_elo,grass_elo,indoor_elo))'
   );
@@ -140,13 +174,9 @@ async function fetchTennisDataFromUpstream(rawToken?: string | null): Promise<Te
     '*,fixture:tennis_fixtures(id,canonical_key,round,status,score_p1_sets,score_p2_sets,set_scores,tournament:tennis_tournaments(name,tour,surface,court_pace_index),player1:tennis_players!tennis_fixtures_player1_id_fkey(display_name),player2:tennis_players!tennis_fixtures_player2_id_fkey(display_name))'
   );
 
-  const now = new Date();
-  const minDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
-  const maxDate = new Date(now.getTime() + 5 * 24 * 60 * 60 * 1000).toISOString();
-
   const [predsRes, tourneysRes, settleRes] = await Promise.all([
     fetch(
-      `${SUPABASE_URL}/rest/v1/tennis_predictions?select=${predSelect}&target_kickoff_at=gte.${minDate}&target_kickoff_at=lte.${maxDate}&order=target_kickoff_at.asc&limit=1000`,
+      `${SUPABASE_URL}/rest/v1/tennis_predictions?select=${predSelect}&target_kickoff_at=gte.${encodeURIComponent(minIso)}&target_kickoff_at=${maxOp}.${encodeURIComponent(maxIso)}&order=target_kickoff_at.asc&limit=1000`,
       { headers }
     ),
     fetch(
@@ -309,18 +339,28 @@ export default async function handler(req: Request): Promise<Response> {
   const isPaidOrAdmin = isBot ? false : await checkIsPaidOrAdmin(rawToken);
 
   const url = new URL(req.url);
+  const historyDate = parseHistoryDate(url.searchParams.get('date'));
+  const dayWindow = historyDate ? localDayWindow(historyDate, resolveTimeZone(url.searchParams.get('tz'))) : null;
+  const closedDay = dayWindow ? isClosedDay(dayWindow.endMs) : false;
   const forceRefresh = (isInternalService || isPaidOrAdmin) &&
     (url.searchParams.get('refresh') === 'true' || req.headers.get('x-force-refresh') === 'true');
   if (forceRefresh) {
-    tennisSwrCache.invalidate('tennis:raw');
+    if (dayWindow) tennisDayCache.invalidate(`day:${dayWindow.start}`);
+    else tennisSwrCache.invalidate('tennis:raw');
   }
 
   try {
-    const { data: feedData, isStale } = await tennisSwrCache.getOrFetch(
-      'tennis:raw',
-      () => fetchTennisDataFromUpstream(SUPABASE_SERVICE_ROLE_KEY || null),
-      computeTennisTtl
-    );
+    const { data: feedData, isStale } = dayWindow
+      ? await tennisDayCache.getOrFetch(
+          `day:${dayWindow.start}`,
+          () => fetchTennisRange(serviceHeaders(), dayWindow.start, dayWindow.end, 'lt'),
+          (d) => (closedDay ? HISTORY_FRESH_MS : computeTennisTtl(d))
+        )
+      : await tennisSwrCache.getOrFetch(
+          'tennis:raw',
+          () => fetchTennisDataFromUpstream(SUPABASE_SERVICE_ROLE_KEY || null),
+          computeTennisTtl
+        );
 
     if (isBot) {
       const wonOnly = feedData.predictions
@@ -464,6 +504,11 @@ export default async function handler(req: Request): Promise<Response> {
       'X-RateLimit-Limit': String(rateLimit.limit),
       'X-RateLimit-Remaining': String(rateLimit.remaining),
     };
+    if (closedDay && !isPaidOrAdmin) {
+      responseHeaders['Cache-Control'] = HISTORY_PUBLIC_CACHE;
+      responseHeaders['CDN-Cache-Control'] = HISTORY_CDN_CACHE;
+      responseHeaders['Vercel-CDN-Cache-Control'] = HISTORY_CDN_CACHE;
+    }
 
     const bodyStr = JSON.stringify({
       success: true,
@@ -473,6 +518,7 @@ export default async function handler(req: Request): Promise<Response> {
       settlements: isPaidOrAdmin ? feedData.settlements : [],
       predictions: processedPredictions,
       ...(lockedTierCounts ? { locked_tier_counts: lockedTierCounts } : {}),
+      ...(historyDate ? { history_date: historyDate } : {}),
       cached_at: feedData.cached_at,
       is_stale: isStale,
     });

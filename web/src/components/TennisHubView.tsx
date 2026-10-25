@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { fetchTennisFeed, TennisFeedResponse } from '../lib/tennisFeedService';
+import { fetchTennisFeed, TennisFeedResponse, fetchTennisHistoryDay } from '../lib/tennisFeedService';
+import type { TennisPrediction } from '../types/tennis';
 import {
   getDateDetailsByOffset,
   getPastDatesList,
@@ -92,7 +93,37 @@ export const TennisHubView: React.FC<TennisHubViewProps> = ({
   }, [isSubscriber]);
 
   // Dynamic filter options & predictions list
-  const allPredictions = feedData?.predictions || [];
+  // Past days: the live feed starts at yesterday, so any earlier (or yesterday's full local) day is
+  // loaded on demand from the feed's ?date= endpoint and merged in.
+  const [historyByDate, setHistoryByDate] = useState<Record<string, TennisPrediction[]>>({});
+  const [historyLoading, setHistoryLoading] = useState<boolean>(false);
+  useEffect(() => {
+    const todayIsoLocal = getDateDetailsByOffset(0, timeZone).iso;
+    if (selectedDate === 'all' || selectedDate >= todayIsoLocal || historyByDate[selectedDate]) return;
+    let cancelled = false;
+    setHistoryLoading(true);
+    fetchTennisHistoryDay(selectedDate, isSubscriber)
+      .then((list) => {
+        if (!cancelled) setHistoryByDate((prev) => ({ ...prev, [selectedDate]: list }));
+      })
+      .finally(() => {
+        if (!cancelled) setHistoryLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedDate, isSubscriber, timeZone]);
+  useEffect(() => {
+    setHistoryByDate({});
+  }, [isSubscriber]);
+
+  const allPredictions = useMemo(() => {
+    const base = feedData?.predictions || [];
+    const extra = Object.values(historyByDate).flat();
+    if (extra.length === 0) return base;
+    const seen = new Set(base.map((p) => p.id));
+    return [...base, ...extra.filter((p) => !seen.has(p.id) && (seen.add(p.id), true))];
+  }, [feedData, historyByDate]);
 
   // Dynamic relative calendar dates in visitor's local timezone
   const dynamicDateTabs = useMemo(() => {
@@ -903,7 +934,7 @@ export const TennisHubView: React.FC<TennisHubViewProps> = ({
 
           {/* PREDICTIONS FIXTURES LIST */}
           <div style={{ marginTop: 14 }}>
-            {loading && !feedData ? (
+            {(loading && !feedData) || historyLoading ? (
               <div
                 style={{
                   padding: 40,

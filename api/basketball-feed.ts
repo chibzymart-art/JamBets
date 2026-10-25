@@ -3,6 +3,15 @@ import { verifyEdgeAccess, hasMultiSportAccess } from './_lib/jwt-verifier';
 import { EdgeSwrCache, EdgeCacheRegistry } from './_lib/edge-cache';
 import { generateEtag, matchesEtag, create304Response } from './_lib/etag';
 import { LOCKED_TIER, normalizeTier, buildLockedTierCounts, resolveTimeZone, byKickoffThenId, withoutFixtureMetadata } from './_lib/teaser';
+import {
+  parseHistoryDate,
+  localDayWindow,
+  isClosedDay,
+  HISTORY_FRESH_MS,
+  HISTORY_STALE_MS,
+  HISTORY_PUBLIC_CACHE,
+  HISTORY_CDN_CACHE,
+} from './_lib/history-day';
 
 export const config = {
   runtime: 'edge',
@@ -37,6 +46,10 @@ interface BasketballFeedData {
 // Global SWR Edge Cache: 900s fresh (15 min default) + 3600s stale (1 hour)
 const basketballSwrCache = new EdgeSwrCache<BasketballFeedData>(900 * 1000, 3600 * 1000);
 EdgeCacheRegistry.register('basketball', basketballSwrCache);
+
+// Past days (?date=YYYY-MM-DD): one local day read straight from the tables, cached for hours.
+const basketballDayCache = new EdgeSwrCache<BasketballFeedData>(HISTORY_FRESH_MS, HISTORY_STALE_MS);
+EdgeCacheRegistry.register('basketball-day', basketballDayCache);
 
 // Adaptive Dynamic TTL for Live Scores and Instant Settlement Invalidation (Sub-Phase 2.4)
 function computeBasketballTtl(data: BasketballFeedData): number {
@@ -258,6 +271,18 @@ async function fetchBasketballFromUpstream(): Promise<BasketballFeedData> {
   }
 
   // 2. Fallback Path: 3-Table Join on basketball_predictions + fixtures + leagues
+  const now = new Date();
+  return fetchBasketballRange(new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString());
+}
+
+// Predictions with kickoff in [minIso, maxIso), joined and pruned exactly like the snapshot rows.
+async function fetchBasketballRange(minIso: string, maxIso?: string): Promise<BasketballFeedData> {
+  const authKey = SUPABASE_SERVICE_ROLE_KEY || SUPABASE_ANON_KEY;
+  const headers = {
+    apikey: authKey,
+    Authorization: `Bearer ${authKey}`,
+    Accept: 'application/json',
+  };
   const predTable = 'basketball_predictions';
 
   const predSelect = encodeURIComponent(
@@ -268,12 +293,12 @@ async function fetchBasketballFromUpstream(): Promise<BasketballFeedData> {
     `id,prediction_id,fixture_id,status,final_home_score,final_away_score,score_margin,total_points,notes,settled_at`
   );
 
-  const now = new Date();
-  const minDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const rangeFilter = `target_kickoff_at=gte.${encodeURIComponent(minIso)}` +
+    (maxIso ? `&target_kickoff_at=lt.${encodeURIComponent(maxIso)}` : '');
 
   const [predsRes, leaguesRes, settleRes] = await Promise.all([
     fetch(
-      `${SUPABASE_URL}/rest/v1/${predTable}?select=${predSelect}&target_kickoff_at=gte.${minDate}&order=target_kickoff_at.asc&limit=1000`,
+      `${SUPABASE_URL}/rest/v1/${predTable}?select=${predSelect}&${rangeFilter}&order=target_kickoff_at.asc&limit=1000`,
       { headers }
     ),
     fetch(
@@ -413,14 +438,29 @@ export default async function handler(req: Request): Promise<Response> {
   };
 
   const url = new URL(req.url);
+  const historyDate = parseHistoryDate(url.searchParams.get('date'));
+  const dayWindow = historyDate ? localDayWindow(historyDate, resolveTimeZone(url.searchParams.get('tz'))) : null;
+  const closedDay = dayWindow ? isClosedDay(dayWindow.endMs) : false;
+  if (closedDay && !isPaidOrAdmin) {
+    responseHeaders['Cache-Control'] = HISTORY_PUBLIC_CACHE;
+    responseHeaders['CDN-Cache-Control'] = HISTORY_CDN_CACHE;
+    responseHeaders['Vercel-CDN-Cache-Control'] = HISTORY_CDN_CACHE;
+  }
   const forceRefresh = (isInternalService || isPaidOrAdmin) &&
     (url.searchParams.get('refresh') === 'true' || req.headers.get('x-force-refresh') === 'true');
   if (forceRefresh) {
-    basketballSwrCache.invalidate('basketball:raw');
+    if (dayWindow) basketballDayCache.invalidate(`day:${dayWindow.start}`);
+    else basketballSwrCache.invalidate('basketball:raw');
   }
 
   try {
-    const { data: rawFeed, isStale } = await basketballSwrCache.getOrFetch('basketball:raw', fetchBasketballFromUpstream, computeBasketballTtl);
+    const { data: rawFeed, isStale } = dayWindow
+      ? await basketballDayCache.getOrFetch(
+          `day:${dayWindow.start}`,
+          () => fetchBasketballRange(dayWindow.start, dayWindow.end),
+          (d) => (closedDay ? HISTORY_FRESH_MS : computeBasketballTtl(d))
+        )
+      : await basketballSwrCache.getOrFetch('basketball:raw', fetchBasketballFromUpstream, computeBasketballTtl);
 
     const sanitizedPredictions = !isPaidOrAdmin
       ? applyBasketballPaywallRedaction(rawFeed.predictions).sort(byKickoffThenId)
@@ -446,6 +486,7 @@ export default async function handler(req: Request): Promise<Response> {
         settled_void: isPaidOrAdmin ? rawFeed.stats.settled_void : 0,
       },
       ...(lockedTierCounts ? { locked_tier_counts: lockedTierCounts } : {}),
+      ...(historyDate ? { history_date: historyDate } : {}),
       is_stale: isStale,
     };
 

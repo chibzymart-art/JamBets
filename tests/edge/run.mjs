@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 const here = dirname(fileURLToPath(import.meta.url));
-for (const name of ['locked-feeds', 'email-endpoints', 'telegram-bot']) {
+for (const name of ['locked-feeds', 'email-endpoints', 'telegram-bot', 'history-day']) {
   const out = join(mkdtempSync(join(tmpdir(), 'edge-test-')), `${name}.mjs`);
   await build({ entryPoints: [join(here, `${name}.test.ts`)], bundle: true, platform: 'node', format: 'esm', outfile: out, logLevel: 'error' });
   execFileSync(process.execPath, [out], { stdio: 'inherit' });
