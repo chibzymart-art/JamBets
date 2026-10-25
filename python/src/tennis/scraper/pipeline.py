@@ -26,6 +26,11 @@ from .livescore_tennis import LiveScoreTennisScraper
 logger = logging.getLogger("tennis.pipeline")
 
 
+# How far along a match is. A later source may only move a fixture forward (scheduled -> live -> result),
+# so a finished, walkover, retired, cancelled or postponed result is never overwritten by "scheduled".
+_STATUS_RANK = {"scheduled": 0, "live": 1, "postponed": 2, "cancelled": 2, "retired": 3, "walkover": 3, "finished": 3}
+
+
 class TennisIngestionPipeline:
     """
     End-to-end multi-source ingestion pipeline from live feeds to isolated Supabase database.
@@ -256,7 +261,7 @@ class TennisIngestionPipeline:
                         # Existing fixture from ESPN: update live score or status if LiveScore is newer
                         idx = seen_fingerprints[fp]
                         existing = collected_fixtures[idx]
-                        if lf.get("status") in ("live", "finished", "retired", "walkover") and existing.get("status") == "scheduled":
+                        if _STATUS_RANK.get(lf.get("status"), 0) > _STATUS_RANK.get(existing.get("status"), 0):
                             existing["status"] = lf["status"]
                             existing["score_p1_sets"] = lf.get("score_p1_sets", existing.get("score_p1_sets", 0))
                             existing["score_p2_sets"] = lf.get("score_p2_sets", existing.get("score_p2_sets", 0))

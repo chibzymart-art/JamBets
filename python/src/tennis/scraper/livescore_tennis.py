@@ -136,9 +136,9 @@ class LiveScoreTennisScraper(BaseTennisScraper):
 
                 # 3. Status Mapping & Retirements / Walkovers
                 eps = (ev.get("Eps") or "NS").strip()
-                status = self._map_status(eps)
-                was_retired = "ret" in eps.lower()
-                was_walkover = "w/o" in eps.lower() or "wo" in eps.lower()
+                status = self._map_status(eps, ev.get("Epr"))
+                was_retired = status == "retired"
+                was_walkover = status == "walkover"
 
                 # 4. Strict Temporal Filtering
                 if min_kickoff is not None:
@@ -352,24 +352,39 @@ class LiveScoreTennisScraper(BaseTennisScraper):
         return datetime.now(timezone.utc)
 
     @staticmethod
-    def _map_status(eps: str) -> str:
+    def _map_status(eps: str, epr=None) -> str:
         """
-        Maps LiveScore Eps match status to standard canonical status.
+        Maps a LiveScore tennis event to a canonical status.
+        Epr (progress): 0 not started, 1 in play, 2 finished, 3 cancelled, 4 postponed.
+        Eps refines a finished match into retired / walkover. LiveScore writes these with dots
+        ("Ret.", "W.O.", "Canc.", "Postp."), so dots are removed before matching.
         """
-        e = eps.upper()
-        if e in ("NS", "NOT STARTED"):
-            return "scheduled"
-        if e in ("FT", "AOT", "AFTER OT"):
-            return "finished"
-        if "RET" in e:
+        e = (eps or "NS").upper().replace(".", "").replace("/", "").strip()
+        try:
+            p = int(epr) if epr is not None and str(epr).strip() != "" else None
+        except (TypeError, ValueError):
+            p = None
+        if e.startswith("RET"):
             return "retired"
-        if "W/O" in e or "WO" in e:
+        if e in ("WO", "WALKOVER"):
             return "walkover"
-        if "POSTP" in e:
-            return "postponed"
-        if "CANC" in e:
+        if e.startswith("CANC") or e.startswith("ABAN"):
             return "cancelled"
-        # In-play statuses
+        if e.startswith("POSTP") or e.startswith("SUSP"):
+            return "postponed"
+        if p == 2:
+            return "finished"
+        if p == 1:
+            return "live"
+        if p == 3:
+            return "cancelled"
+        if p == 4:
+            return "postponed"
+        if p == 0 or e in ("NS", "NOT STARTED"):
+            return "scheduled"
+        if e in ("FT", "AOT", "AFTER OT", "FINAL"):
+            return "finished"
+        # No progress code and an unknown text: in play
         return "live"
 
     def close(self):
