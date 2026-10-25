@@ -6,6 +6,7 @@ Fetches upcoming scheduled basketball fixtures, runs the 250,000 Monte Carlo pas
 and persists calibrated predictions to public.basketball_predictions.
 """
 
+import os
 import sys
 import logging
 import argparse
@@ -24,6 +25,10 @@ logging.basicConfig(
     handlers=[logging.StreamHandler(sys.stdout)]
 )
 logger = logging.getLogger("basketball.run_predictions")
+
+# Settled predictions are the public track record (settlements cascade-delete with them), so they are
+# kept. The purge below only removes rows older than this, i.e. effectively never.
+TRACK_RECORD_RETENTION_DAYS = 3650
 
 
 def run_basketball_predictions(
@@ -57,7 +62,7 @@ def run_basketball_predictions(
         logger.info("Wiped %d existing basketball predictions from database", wiped)
     elif purge_stale:
         # Retention Policy: Only purge predictions older than 30 days (preserves full historical track record)
-        stale_wiped = db.purge_stale_predictions(retention_days=30)
+        stale_wiped = db.purge_stale_predictions(retention_days=TRACK_RECORD_RETENTION_DAYS)
         if stale_wiped:
             logger.info("Purged %d archived basketball predictions (>30 days old)", stale_wiped)
 
@@ -68,6 +73,18 @@ def run_basketball_predictions(
     total_evaluated = 0
     total_saved = 0
     tier_counts = {}
+
+    # Ratings v2 (BASKETBALL_MODEL=v2). If it cannot be built, this run uses v1 so predictions still land.
+    v2_model = None
+    if os.getenv("BASKETBALL_MODEL", "").strip().lower() == "v2":
+        try:
+            from python.src.basketball import v2_engine
+            history = v2_engine.load_history(db)
+            v2_model = v2_engine.build_model(history, carryover=float(os.getenv("BASKETBALL_V2_CARRYOVER", "1.0")))
+            logger.info("Ratings v2 active: %d finished games replayed, %d teams rated", len(history), len(v2_model.teams))
+        except Exception as e:
+            v2_model = None
+            logger.warning("Ratings v2 unavailable, using v1 for this run: %s", e)
 
     for fix in fixtures:
         try:
@@ -126,8 +143,17 @@ def run_basketball_predictions(
 
             target_dt = datetime.fromisoformat(fix["target_kickoff_at"].replace("Z", "+00:00"))
 
-            # Run 250k Monte Carlo Simulation
-            pred = engine.generate_prediction(
+            pred = None
+            if v2_model is not None:
+                try:
+                    pred = v2_engine.predict_fixture(v2_model, fix, engine.simulator, num_sims)
+                except Exception as e:
+                    logger.warning("Ratings v2 failed for fixture %s, using v1: %s", fix_id, e)
+                    pred = None
+
+            # Run 250k Monte Carlo Simulation (v1)
+            if pred is None:
+              pred = engine.generate_prediction(
                 fixture_id=fix_id,
                 league_code=league_code,
                 home_team_name=home_name,
