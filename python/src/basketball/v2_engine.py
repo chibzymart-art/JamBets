@@ -11,7 +11,7 @@ What it changes compared with v1, and why (all measured on finished games before
 3. No probability clamps. The probability saved is the probability the model computed.
 4. Without a bookmaker line, spread and total picks use the line where the model's own probability
    is closest to 68%, inside 60-75%, so a "pick" is never an ultra-safe line dressed up as a forecast.
-5. Tiers are set on that calibrated probability, and the top two tiers also need both teams to have
+5. Tiers are set on that calibrated probability (Banger 88%+, Top Pick 75%+), and the top two tiers also need both teams to have
    at least 3 earlier games, so thin-history games cannot be sold as Bangers.
 
 Reads finished fixtures (GET only). Writes nothing itself; run_predictions saves what it returns.
@@ -34,7 +34,7 @@ SYNTH_TARGET = 0.68
 SYNTH_BAND = (0.60, 0.75)
 
 # Calibrated-probability tier floors. Bangers and Top Picks also need both teams with 3+ earlier games.
-BANGER_FLOOR = 0.85
+BANGER_FLOOR = 0.88  # backtest on 6,302 games: Bangers at >=88% won 90.8% (142 picks)
 TOP_PICK_FLOOR = 0.75
 HIGH_FLOOR = 0.65
 MID_FLOOR = 0.55

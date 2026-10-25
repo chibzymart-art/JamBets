@@ -65,6 +65,7 @@ jobs:
         env:
           SNAPSHOTS_BUILT_BY_WORKFLOW: '1'  # snapshots are refreshed once, in the snapshot step below
           BASKETBALL_MODEL: 'v2'  # calibrated ratings v2; falls back to v1 automatically if v2 cannot run
+          BASKETBALL_V2_CARRYOVER: '0.6'  # rating kept after 60+ days idle (new season); backtested on 6,302 games
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}

@@ -213,10 +213,10 @@ const HISTORY_CLIENT_TTL_MS = 10 * 60 * 1000;
 
 /**
  * Predictions for one past day (the live feed only holds yesterday onward).
- * Goes through the Edge API only; returns [] on any failure, never sample data.
+ * Goes through the Edge API only; returns null on any failure (never sample data).
  */
-export async function fetchBasketballHistoryDay(date: string, canViewPredictions = false): Promise<BasketballPrediction[]> {
-  if (typeof window === 'undefined' || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return [];
+export async function fetchBasketballHistoryDay(date: string, canViewPredictions = false): Promise<BasketballPrediction[] | null> {
+  if (typeof window === 'undefined' || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
   const tz = getUserTimeZone();
   const key = `${date}_${tz}_${canViewPredictions ? 'vip' : 'free'}`;
   const hit = historyDayCache.get(key);
@@ -230,15 +230,15 @@ export async function fetchBasketballHistoryDay(date: string, canViewPredictions
     const res = await fetch(`/api/basketball-feed?date=${encodeURIComponent(date)}&tz=${encodeURIComponent(tz)}${authPart}`, {
       headers: reqHeaders,
     });
-    if (!res.ok) return [];
+    if (!res.ok) return null;
     const body = await res.json();
-    if (!body?.success || !Array.isArray(body.predictions)) return [];
+    if (!body?.success || !Array.isArray(body.predictions)) return null;
     const unlocked = Boolean(canViewPredictions || body.is_subscriber);
     const list = (body.predictions as BasketballPrediction[]).map((p) => gateBasketballPrediction(p, unlocked));
     historyDayCache.set(key, { data: list, timestamp: Date.now() });
     return list;
   } catch {
-    return [];
+    return null;
   }
 }
 

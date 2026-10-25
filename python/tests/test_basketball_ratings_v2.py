@@ -157,6 +157,8 @@ class V2EngineTests(unittest.TestCase):
         self.assertEqual(self.v2.tier_for(0.95, 0), T.HIGH_CONFIDENCE)
         self.assertEqual(self.v2.tier_for(0.95, 3), T.BANGER)
         self.assertEqual(self.v2.tier_for(0.80, 5), T.TOP_PICK)
+        self.assertEqual(self.v2.tier_for(0.86, 5), T.TOP_PICK)   # below the 88% Banger floor
+        self.assertEqual(self.v2.tier_for(0.88, 5), T.BANGER)
         self.assertEqual(self.v2.tier_for(0.70, 5), T.HIGH_CONFIDENCE)
 
     def test_prediction_probability_is_unclamped_and_consistent(self):
@@ -193,6 +195,24 @@ class V2EngineTests(unittest.TestCase):
         for k, (n, won, st) in buckets.items():
             if n >= 150:
                 self.assertAlmostEqual(won / n, st / n, delta=0.06, msg=f"band {k}")
+
+
+class SeasonCarryoverTests(unittest.TestCase):
+    def test_idle_team_is_shrunk_once(self):
+        m = PointsRatingModel(carryover=0.6)
+        g1 = [Game(f"2026-01-{d:02d}T12:00:00+00:00", "L", 10, "a", "b", 100, 70) for d in range(1, 11)]
+        m.replay(g1)
+        off_before = m.teams["a"].off
+        p = m.predict(Game("2026-05-01T12:00:00+00:00", "L", 10, "a", "b", 0, 0))
+        self.assertAlmostEqual(m.teams["a"].off, off_before * 0.6, places=6)
+        self.assertEqual(p.home_prior_games, 3)
+
+    def test_no_shrink_without_gap(self):
+        m = PointsRatingModel(carryover=0.6)
+        m.replay([Game(f"2026-01-{d:02d}T12:00:00+00:00", "L", 10, "a", "b", 100, 70) for d in range(1, 11)])
+        before = m.teams["a"].off
+        m.predict(Game("2026-01-20T12:00:00+00:00", "L", 10, "a", "b", 0, 0))
+        self.assertEqual(m.teams["a"].off, before)
 
 
 class BackfillFilterTests(unittest.TestCase):
