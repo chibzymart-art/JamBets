@@ -16,7 +16,7 @@ What it does, for fixtures still scheduled/live more than 3 hours after tip-off,
 3. Same game finished / cancelled / postponed in the feed: writes that result to the row.
 4. Same event id now under a different key that has not finished (moved to another day): marks the
    old row postponed, with metadata.rescheduled_to, so its pick voids after the usual 48h.
-5. Nothing found 7 days after tip-off: marks the row postponed with metadata.unresolved = true, so the
+5. Still no result 48h after tip-off: marks the row postponed with metadata.unresolved = true, so the
    pick voids instead of staying pending forever.
 Only the stale rows are updated, and only their status/score fields and metadata.
 """
@@ -31,7 +31,7 @@ logger = logging.getLogger("basketball.reconcile")
 
 MIN_AGE_HOURS = 3
 MAX_AGE_DAYS = 21
-GIVE_UP_DAYS = 7
+GIVE_UP_DAYS = 2  # no result 48h after tip-off: the feed will not publish one (same window as postponed)
 FINAL_STATES = ("finished", "cancelled", "postponed")
 
 
