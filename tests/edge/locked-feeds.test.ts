@@ -138,9 +138,10 @@ const fakeJwt = (payload: object) => `x.${Buffer.from(JSON.stringify(payload)).t
   const bopen = (bv.body.predictions || []).find((p: any) => p.id === 'bp1') || {};
   const bset = (bv.body.predictions || []).find((p: any) => p.id === 'bs1') || {};
   check('basketball visitor: open pick carries no tier', bopen.confidence_category === 'LOCKED' && bopen.is_locked === true, JSON.stringify(bopen).slice(0, 160));
-  check('basketball visitor: settled pick keeps its tier', bset.confidence_category === 'BANGER', String(bset.confidence_category));
+  check('basketball visitor: settled pick is locked too (track record is admin-only)', bset.confidence_category === 'LOCKED' && bset.is_locked === true && bset.probability === null && bset.settlement_status === 'pending', JSON.stringify(bset).slice(0, 160));
+  check('basketball visitor: no secret on settled picks', !JSON.stringify(bset).includes(SECRET), JSON.stringify(bset).slice(0, 200));
   check('basketball visitor: no secret on open picks', !JSON.stringify(bopen).includes(SECRET), JSON.stringify(bopen).slice(0, 200));
-  check('basketball visitor: tier totals sent (one open match, so withheld)', bv.body.locked_tier_counts?.withheld_dates?.length === 1, JSON.stringify(bv.body.locked_tier_counts));
+  check('basketball visitor: tier totals sent (one match on each day, so both withheld)', bv.body.locked_tier_counts?.withheld_dates?.length === 2, JSON.stringify(bv.body.locked_tier_counts));
 
   // ---- Goals feed: the list itself is the pick, so locked users get a count
   const gv = await call(goals, '/api/goals-feed');

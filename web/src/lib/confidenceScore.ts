@@ -215,7 +215,22 @@ export interface TierHeaderConfig {
   borderColor: string;
 }
 
+// Basketball tiers come from the calibrated ratings v2 floors (python/src/basketball/v2_engine.py).
+const BASKETBALL_TIER_LABELS: Record<number, string> = {
+  1: 'BANGERS (88%+)',
+  2: 'TOP PICKS (75%–87%)',
+  3: 'HIGH CONFIDENCE (65%–74%)',
+  4: 'MID CONFIDENCE (55%–64%)',
+  5: 'LOW CONFIDENCE (50%–54%)',
+};
+
 export function getTierHeaderByRank(rank: number, sport: 'football' | 'tennis' | 'basketball' = 'football'): TierHeaderConfig {
+  const header = tierHeaderByRank(rank, sport);
+  const basketballLabel = sport === 'basketball' ? BASKETBALL_TIER_LABELS[rank] : undefined;
+  return basketballLabel ? { ...header, label: basketballLabel } : header;
+}
+
+function tierHeaderByRank(rank: number, sport: 'football' | 'tennis' | 'basketball'): TierHeaderConfig {
   switch (rank) {
     case 1:
       return { icon: '🔥', label: 'BANGERS (96%+)', badgeClass: 'tier-banger', textColor: '#ea580c', borderColor: '#f97316' };
