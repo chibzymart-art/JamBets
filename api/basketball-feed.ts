@@ -2,7 +2,7 @@ import { checkAdaptiveRateLimit, getClientIp } from './rate-limiter';
 import { verifyEdgeAccess, hasMultiSportAccess } from './_lib/jwt-verifier';
 import { EdgeSwrCache, EdgeCacheRegistry } from './_lib/edge-cache';
 import { generateEtag, matchesEtag, create304Response } from './_lib/etag';
-import { LOCKED_TIER, normalizeTier, buildLockedTierCounts, resolveTimeZone, byKickoffThenId, withoutFixtureMetadata } from './_lib/teaser';
+import { LOCKED_TIER, normalizeTier, buildLockedTierCounts, resolveTimeZone, byKickoffThenId, withoutFixtureMetadata, toLockedTeaser } from './_lib/teaser';
 import {
   parseHistoryDate,
   localDayWindow,
@@ -209,37 +209,49 @@ export function applyBasketballScraperBlinding(predictionsOrData: any): any {
   };
 }
 
+// Fields a locked basketball teaser may carry. Everything else on the row is dropped.
+const BASKETBALL_TEASER_KEYS = [
+  'id',
+  'fixture_id',
+  'fixture',
+  'market',
+  'target_kickoff_at',
+  'simulations_count',
+  'tier_required',
+  'publication_status',
+] as const;
+
 // Multi-Sport VIP Paywall Redaction for Basketball:
-// For unauthenticated / free visitors:
-// - Future and pending predictions are masked with teaser markers and locked confidence picks
-// - Historical settled predictions (won, lost, void) retain their true settlement_status, settled_at, and actual_result so track records are transparent and verified
+// For unauthenticated / free visitors, every prediction (upcoming, pending and settled) is a locked
+// teaser, the same as tennis. Track Record is admin-only, so a settled pick keeps neither its pick,
+// its tier nor its won/lost result.
 function applyBasketballPaywallRedaction(preds: any[]): any[] {
   return preds.map((p: any) => {
-    const isSettled = p.settlement_status === 'won' || p.settlement_status === 'lost' || p.settlement_status === 'void';
-    return {
-      ...p,
-      is_locked: !isSettled,
-      probability: isSettled ? p.probability : null,
-      fixture: isSettled ? p.fixture : withoutFixtureMetadata(p.fixture),
-      // Settled picks keep their tier (track record). Open picks never show one: it gives the pick away.
-      confidence_category: isSettled ? (p.confidence_category || 'TOP PICK') : LOCKED_TIER,
-      prediction: isSettled ? (p.prediction || 'VIP Pick') : '🔒 BigBang VIP Pick',
-      settlement_status: p.settlement_status || 'pending',
-      settlement_notes: p.settlement_notes || null,
-      actual_result: p.actual_result || null,
-      settled_at: p.settled_at || null,
-      simulated_home_score: isSettled ? p.simulated_home_score : null,
-      simulated_away_score: isSettled ? p.simulated_away_score : null,
-      edge_percentage: isSettled ? p.edge_percentage : null,
-      fair_odds: isSettled ? p.fair_odds : null,
-      market_odds: isSettled ? p.market_odds : null,
-      secondary_predictions: isSettled ? (p.secondary_predictions || []) : [],
-      metadata: isSettled ? p.metadata : {
+    const teaser = toLockedTeaser(p, {
+      keys: BASKETBALL_TEASER_KEYS,
+      overrides: {
+        is_locked: true,
+        prediction: '🔒 BigBang VIP Pick',
+        probability: null,
+        confidence_category: LOCKED_TIER,
+        settlement_status: 'pending',
+        settlement_notes: null,
+        actual_result: null,
+        settled_at: null,
+        simulated_home_score: null,
+        simulated_away_score: null,
+        edge_percentage: null,
+        fair_odds: null,
+        market_odds: null,
+        secondary_predictions: [],
+      },
+      metaOverrides: {
         ai_tactical_analysis: '🔒 Basketball predictions and 250,000 Monte Carlo simulations are reserved for BigBang VIP members.',
         simulation: null,
         secondary_locked: true,
       },
-    };
+    });
+    return teaser;
   });
 }
 
@@ -468,7 +480,6 @@ export default async function handler(req: Request): Promise<Response> {
     const lockedTierCounts = !isPaidOrAdmin && !isBot
       ? buildLockedTierCounts(
           (rawFeed.predictions || [])
-            .filter((p: any) => !['won', 'lost', 'void'].includes(p.settlement_status))
             .map((p: any) => ({
               tier: normalizeTier(p.confidence_category, p.market, p.prediction),
               kickoff: p.target_kickoff_at || p.fixture?.target_kickoff_at,
@@ -478,12 +489,17 @@ export default async function handler(req: Request): Promise<Response> {
       : undefined;
     const dataToServe = {
       ...rawFeed,
-      predictions: isBot ? applyBasketballScraperBlinding(sanitizedPredictions) : sanitizedPredictions,
-      stats: {
+      // Bots keep their won-picks proof page (unchanged, same as tennis).
+      predictions: isBot ? applyBasketballScraperBlinding(rawFeed.predictions || []) : sanitizedPredictions,
+      settlements: isPaidOrAdmin || isBot ? rawFeed.settlements : [],
+      stats: isPaidOrAdmin || isBot ? { ...rawFeed.stats, total_matches: sanitizedPredictions.length } : {
         ...rawFeed.stats,
         total_matches: sanitizedPredictions.length,
-        settled_lost: isPaidOrAdmin ? rawFeed.stats.settled_lost : 0,
-        settled_void: isPaidOrAdmin ? rawFeed.stats.settled_void : 0,
+        settled_count: 0,
+        settled_won: 0,
+        settled_lost: 0,
+        settled_void: 0,
+        win_rate: 0,
       },
       ...(lockedTierCounts ? { locked_tier_counts: lockedTierCounts } : {}),
       ...(historyDate ? { history_date: historyDate } : {}),

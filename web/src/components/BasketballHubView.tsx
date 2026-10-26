@@ -695,7 +695,7 @@ export const BasketballHubView: React.FC<BasketballHubViewProps> = ({
                 setSettlementFilter('all');
                 chooseTier('BANGER');
               }}
-              title="Click to filter by 96%+ Bangers"
+              title="Click to filter by 88%+ Bangers"
             >
               <div className="compact-kpi-header">
                 <span className="compact-kpi-title">⭐ Banger</span>

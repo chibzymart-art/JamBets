@@ -66,7 +66,9 @@ const check = (name: string, ok: boolean, detail = '') => {
   const bq = seen.find((u) => u.includes('/rest/v1/basketball_predictions')) || '';
   check('basketball day: ok', b.status === 200 && b.body.success === true, String(b.status));
   check('basketball day: queries that day only', bq.includes(`gte.${encodeURIComponent(bw.start)}`) && bq.includes(`lt.${encodeURIComponent(bw.end)}`), bq.slice(0, 400));
-  check('basketball day: settled pick shown with its tier (track record)', b.body.predictions?.[0]?.id === 'bh1' && b.body.predictions[0].confidence_category === 'BANGER');
+  const bp = b.body.predictions?.[0] || {};
+  check('basketball day: visitor sees a locked teaser for a settled pick', bp.id === 'bh1' && bp.is_locked === true && bp.confidence_category === 'LOCKED' && bp.probability === null && bp.settlement_status === 'pending' && !String(bp.prediction).includes('Win'), JSON.stringify(bp).slice(0, 200));
+  check('basketball day: no settlements or win record for a visitor', Array.isArray(b.body.settlements) && b.body.settlements.length === 0 && b.body.stats?.settled_won === 0, JSON.stringify(b.body.stats));
   check('basketball day: long CDN cache for a closed day', (b.headers.get('CDN-Cache-Control') || '').includes('s-maxage=21600'), String(b.headers.get('CDN-Cache-Control')));
   check('basketball day: tagged', b.body.history_date === dayIso);
 
