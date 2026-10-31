@@ -9,6 +9,7 @@ import {
 } from '../lib/googleAuth';
 import { tryCaptchaToken, captchaErrorMessage } from '../lib/turnstile';
 import { getEasyEasyClickId } from '../lib/easyeasy';
+import { suggestEmailFix } from '../lib/emailTypo';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -100,7 +101,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
-  
+  // Mistyped email domain hint (gmsil.com -> gmail.com). Shown once per address; never blocks sign-up.
+  const emailSuggestion = suggestEmailFix(email);
+  const [typoWarnedFor, setTypoWarnedFor] = useState<string | null>(null);
+
   // Mandatory Legal & Regulatory Disclaimers (Phase 8 Section 15)
   const [ageAccepted, setAgeAccepted] = useState(false);
   const [financialAccepted, setFinancialAccepted] = useState(false);
@@ -332,6 +336,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
     if (password.length < 8) {
       setErrorMessage('Password must be at least 8 characters long.');
+      return;
+    }
+
+    // First submit with a likely typo: ask once. Submitting again keeps the address as typed.
+    if (emailSuggestion && typoWarnedFor !== email.trim().toLowerCase()) {
+      setTypoWarnedFor(email.trim().toLowerCase());
+      setErrorMessage(`Please check your email. Did you mean ${emailSuggestion}? Tap the suggestion, or press Agree & Create Account again to keep it.`);
       return;
     }
 
@@ -813,7 +824,25 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   onChange={(e) => setEmail(e.target.value)}
                   autoComplete="email"
                   className="form-input"
+                  aria-describedby={emailSuggestion ? 'register-email-suggestion' : undefined}
                 />
+                {emailSuggestion && (
+                  <p id="register-email-suggestion" role="status" style={{ margin: '6px 0 0', fontSize: 13 }}>
+                    Did you mean{' '}
+                    <button
+                      type="button"
+                      id="btn-email-suggestion"
+                      className="auth-forgot-link"
+                      onClick={() => {
+                        setEmail(emailSuggestion);
+                        setErrorMessage(null);
+                      }}
+                    >
+                      {emailSuggestion}
+                    </button>
+                    ?
+                  </p>
+                )}
               </div>
 
               <div className="form-group">
