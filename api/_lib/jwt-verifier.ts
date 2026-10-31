@@ -314,9 +314,11 @@ export async function verifyEdgeAccess(authToken: string | null): Promise<Access
         level = maxLevel(level, await resolveDbLevel(authUser.id, rawToken));
       }
 
-      // 8. 3-Day Free Trial: first 72h after verified account creation (works with or without DB rows)
-      if (LEVEL_RANK[level] < LEVEL_RANK.trial && authUser.created_at) {
-        const createdMs = new Date(authUser.created_at).getTime();
+      // 8. 3-Day Free Trial: first 72h after the email was confirmed (Google sign-ins arrive confirmed).
+      //    Same start as public.is_football_entitled(). Works with or without DB rows.
+      const trialStart = authUser.email_confirmed_at || authUser.created_at;
+      if (LEVEL_RANK[level] < LEVEL_RANK.trial && trialStart) {
+        const createdMs = new Date(trialStart).getTime();
         if (Number.isFinite(createdMs) && Date.now() - createdMs < TRIAL_DURATION_MS) {
           level = 'trial';
         }

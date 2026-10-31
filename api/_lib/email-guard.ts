@@ -39,6 +39,8 @@ export interface EmailCaller {
   userId?: string;
   email?: string;
   createdAt?: string;
+  /** When the email was confirmed (Google sign-ins: at creation). Undefined if never confirmed. */
+  confirmedAt?: string;
   appMetadata?: Record<string, unknown>;
   isAdmin: boolean;
 }
@@ -78,7 +80,7 @@ export async function verifyEmailCaller(req: Request): Promise<EmailCaller | nul
       if (rpc && rpc.ok) isAdmin = (await rpc.json().catch(() => false)) === true;
     }
 
-    return { kind: 'user', userId: user.id, email, createdAt: user.created_at, appMetadata: user.app_metadata || {}, isAdmin };
+    return { kind: 'user', userId: user.id, email, createdAt: user.created_at, confirmedAt: user.email_confirmed_at || undefined, appMetadata: user.app_metadata || {}, isAdmin };
   } catch (err) {
     console.error('[EMAIL-GUARD] caller verification failed');
     return null;
