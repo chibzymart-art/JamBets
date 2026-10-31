@@ -1,0 +1,31 @@
+name: Refresh Disposable Email Domains
+
+# Monthly: adds new throwaway-email domains to public.disposable_email_domains, which the
+# "Before User Created" auth hook uses to refuse temporary inboxes at sign-up.
+# Adds only; never deletes. Needs migration 20261031000002_signup_email_checks.sql applied.
+
+on:
+  schedule:
+    - cron: '0 4 1 * *'   # 04:00 UTC on the 1st of each month
+  workflow_dispatch:
+
+jobs:
+  refresh:
+    name: Refresh blocklist
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Refresh disposable domains
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: python scripts/refresh_disposable_domains.py
