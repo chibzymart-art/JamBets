@@ -415,7 +415,7 @@ export default function App() {
         // Welcome email for new accounts on their first sign-in (with Confirm email on, sign-up itself
         // has no session). The server only sends once per account (app_metadata.welcome_sent_at).
         if (event === 'SIGNED_IN' && session.access_token && !session.user.app_metadata?.welcome_sent_at) {
-          const createdMs = new Date(session.user.created_at).getTime();
+          const createdMs = new Date(session.user.email_confirmed_at || session.user.created_at).getTime();
           // Supabase can emit SIGNED_IN more than once (link callback, tab refocus): ask only once per tab.
           let alreadyAsked = false;
           try {

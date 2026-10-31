@@ -176,13 +176,14 @@ export function useTrialStatus(
     }
 
     // 4. 3-Day Free Trial Evaluation
-    // Source of truth = verified auth account creation (identical to the Edge verifier).
+    // Source of truth = email confirmation time on the auth account (identical to the Edge verifier and
+    // public.is_football_entitled()); Google sign-ins are confirmed at creation.
     // `profile.created_at` is intentionally NOT used first: when the profile row cannot be loaded the
     // app injects a fallback profile stamped with "now", which would otherwise restart the trial forever.
     let validUntilIso: string | null = null;
     let validUntilMs = 0;
 
-    const createdAt = currentUser.created_at || profile?.created_at;
+    const createdAt = currentUser.email_confirmed_at || currentUser.created_at || profile?.created_at;
     if (createdAt) {
       const createdMs = new Date(createdAt).getTime();
       if (Number.isFinite(createdMs)) {

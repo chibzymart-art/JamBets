@@ -311,7 +311,7 @@ export default async function handler(req: Request): Promise<Response> {
     }
 
     // The welcome email only ever goes to the signed-in caller's own verified address, and only for
-    // an account created in the last 24 hours. The body's email field is ignored for users.
+    // an account confirmed in the last 24 hours. The body's email field is ignored for users.
     const caller = await verifyEmailCaller(req);
     if (!caller) return jsonError(401, 'Sign in required', headers);
 
@@ -321,7 +321,9 @@ export default async function handler(req: Request): Promise<Response> {
       cleanEmail = typeof payload.email === 'string' ? payload.email.trim().toLowerCase() : '';
     } else {
       cleanEmail = caller.email || '';
-      const createdMs = caller.createdAt ? new Date(caller.createdAt).getTime() : 0;
+      // Confirmation time, so someone who confirms days after signing up still gets their welcome.
+      const startedAt = caller.confirmedAt || caller.createdAt;
+      const createdMs = startedAt ? new Date(startedAt).getTime() : 0;
       if (!Number.isFinite(createdMs) || Date.now() - createdMs > 24 * 60 * 60 * 1000) {
         return jsonError(409, 'Welcome email already sent for this account', headers);
       }

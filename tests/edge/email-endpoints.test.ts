@@ -18,7 +18,8 @@ const json = (v: unknown, status = 200) => new Response(JSON.stringify(v), { sta
   const auth = String(init?.headers?.Authorization || init?.headers?.authorization || '');
   if (url.includes('/auth/v1/user')) {
     if (auth.includes('NEW')) return json({ id: 'u-new', email: 'new@example.com', created_at: new Date().toISOString(), app_metadata: {} });
-    if (auth.includes('OLD')) return json({ id: 'u-old', email: 'old@example.com', created_at: new Date(Date.now() - 90 * 864e5).toISOString(), app_metadata: {} });
+    if (auth.includes('OLD')) return json({ id: 'u-old', email: 'old@example.com', created_at: new Date(Date.now() - 90 * 864e5).toISOString(), email_confirmed_at: new Date(Date.now() - 90 * 864e5).toISOString(), app_metadata: {} });
+    if (auth.includes('LATE')) return json({ id: 'u-late', email: 'late@example.com', created_at: new Date(Date.now() - 5 * 864e5).toISOString(), email_confirmed_at: new Date().toISOString(), app_metadata: {} });
     if (auth.includes('SENT')) return json({ id: 'u-sent', email: 'sent@example.com', created_at: new Date().toISOString(), app_metadata: { welcome_sent_at: '2026-10-22T00:00:00Z' } });
     if (auth.includes('ADMIN')) return json({ id: 'u-adm', email: 'staff@example.com', created_at: new Date(Date.now() - 90 * 864e5).toISOString(), app_metadata: {} });
     return json({ msg: 'invalid' }, 401);
@@ -59,6 +60,7 @@ check('welcome: marks the account (welcome_sent_at)', marked.includes('u-new'));
 check('welcome: account already marked -> 409', (await post(welcome, {}, tok('SENT'))).status === 409);
 check('welcome: second send for same account -> 409', (await post(welcome, {}, tok('NEW'))).status === 409);
 check('welcome: old account -> 409', (await post(welcome, {}, tok('OLD'))).status === 409);
+check('welcome: signed up 5 days ago, confirmed today -> 200', (await post(welcome, {}, tok('LATE'))).status === 200);
 
 // Subscription
 check('subscription: no token -> 401', (await post(subscription, { email: 'a@example.com' })).status === 401);
