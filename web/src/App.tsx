@@ -412,6 +412,8 @@ export default function App() {
         if (event === 'SIGNED_IN' && window.location.pathname === '/') {
           navigate('/dashboard');
         }
+        // EasyEasy promoter attribution: reports a new account once, only when it came from a promoter link.
+        if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') reportEasyEasySignup(session.user);
         // Welcome email for new accounts on their first sign-in (with Confirm email on, sign-up itself
         // has no session). The server only sends once per account (app_metadata.welcome_sent_at).
         if (event === 'SIGNED_IN' && session.access_token && !session.user.app_metadata?.welcome_sent_at) {
@@ -424,8 +426,6 @@ export default function App() {
             sessionStorage.setItem(key, '1');
           } catch { /* storage blocked: the server-side guards still apply */ }
           if (!alreadyAsked && Number.isFinite(createdMs) && Date.now() - createdMs < 24 * 60 * 60 * 1000) {
-            // EasyEasy promoter attribution: a new, verified account (only sent when a promoter click id exists).
-            reportEasyEasySignup(session.user.id, session.user.user_metadata?.ee_click_id);
             fetch('/api/send-welcome-email', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
