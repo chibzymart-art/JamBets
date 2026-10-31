@@ -24,6 +24,7 @@ import { BotHubModal } from './components/BotHubModal';
 import { CookieConsentBanner } from './components/CookieConsentBanner';
 import { AdBannerSlot } from './components/AdBannerSlot';
 import { initAttributionTracker } from './lib/attribution';
+import { reportEasyEasySignup } from './lib/easyeasy';
 import { updatePageSeo } from './lib/seo';
 import { useGeoCurrency } from './lib/geoCurrency';
 import { useTrialStatus, useVirtualWindow } from './hooks';
@@ -423,6 +424,8 @@ export default function App() {
             sessionStorage.setItem(key, '1');
           } catch { /* storage blocked: the server-side guards still apply */ }
           if (!alreadyAsked && Number.isFinite(createdMs) && Date.now() - createdMs < 24 * 60 * 60 * 1000) {
+            // EasyEasy promoter attribution: a new, verified account (only sent when a promoter click id exists).
+            reportEasyEasySignup(session.user.id, session.user.user_metadata?.ee_click_id);
             fetch('/api/send-welcome-email', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
