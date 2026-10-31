@@ -8,6 +8,7 @@ import {
   triggerOAuthFallback
 } from '../lib/googleAuth';
 import { tryCaptchaToken, captchaErrorMessage } from '../lib/turnstile';
+import { getEasyEasyClickId } from '../lib/easyeasy';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -351,7 +352,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               disclaimer_financial_accepted: true,
               disclaimer_version: 'v1.0',
               status: 'active',
-              is_deleted: false
+              is_deleted: false,
+              // Promoter click id (EasyEasy), only when the visitor came from a promoter link
+              ...(getEasyEasyClickId() ? { ee_click_id: getEasyEasyClickId() } : {})
             }
           }
         });

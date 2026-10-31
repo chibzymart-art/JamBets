@@ -417,6 +417,12 @@
       }
     </style>
 
+    <!-- EasyEasy promoter attribution (https://api.easyeasy.ng). Loads async so it can never delay the page.
+         It only stores something when a promoter link carries ee_click_id / subid; conversions are sent from
+         src/lib/easyeasy.ts. data-optional-third-party keeps a blocked/failed load from triggering the
+         deploy auto-reload below. -->
+    <script src="https://api.easyeasy.ng/static/ee-pixel.js" async data-optional-third-party="easyeasy"></script>
+
     <!-- Auto-recovery listener: refreshes page once if a script or chunk fails due to an in-flight deployment rollout -->
     <script>
       (function() {
@@ -425,7 +431,8 @@
           var isChunkErr = msg.indexOf('Failed to fetch dynamically imported module') !== -1 ||
                            msg.indexOf('error loading dynamically imported module') !== -1 ||
                            msg.indexOf('Importing a module script failed') !== -1;
-          var isScriptTagErr = e && e.target && e.target.tagName === 'SCRIPT';
+          var isScriptTagErr = e && e.target && e.target.tagName === 'SCRIPT' &&
+                               !(e.target.hasAttribute && e.target.hasAttribute('data-optional-third-party'));
           if (isChunkErr || isScriptTagErr) {
             var retryKey = 'oddsbanta_deploy_reload_' + (e.target && e.target.src ? e.target.src : 'chunk');
             if (!sessionStorage.getItem(retryKey)) {
