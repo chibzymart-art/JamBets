@@ -2,6 +2,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 import { TrackRecordPage } from '../pages/TrackRecord';
 import { SystemHealthStatus, AuditRecord, UserProfile, LeagueRecord, PaymentRecord } from '../types';
+import { effectivePlan } from '../lib/effectivePlan';
 import {
   getAdBanners,
   addAdBanner,
@@ -1429,9 +1430,10 @@ export const AdminView: React.FC<AdminViewProps> = ({
     const newStatus = isCurrentlyDisabled ? 'active' : 'disabled';
 
     if (isCurrentlyDisabled) {
-      const isExpiredOrFree = user.role === 'free' || !user.subscription || user.subscription?.status === 'expired';
+      const plan = effectivePlan(user.role, user.subscription, user.entitlement);
+      const isExpiredOrFree = plan === 'free';
       const allocDays = isExpiredOrFree ? 30 : null;
-      const targetRole = isExpiredOrFree ? 'standard' : user.role;
+      const targetRole = isExpiredOrFree ? 'standard' : plan;
       const confirmMsg = isExpiredOrFree
         ? `Re-activate platform access for ${user.email} and allocate 30-day Standard access?`
         : `Re-activate platform access for ${user.email}?`;
@@ -1549,8 +1551,8 @@ export const AdminView: React.FC<AdminViewProps> = ({
       const matchesRole = 
         userRoleFilter === 'all' ? true :
         userRoleFilter === 'disabled' ? (u.is_deleted === true || u.status === 'disabled') :
-        userRoleFilter === 'paid' ? (u.role === 'standard' || u.role === 'bigbang') :
-        u.role === userRoleFilter;
+        userRoleFilter === 'paid' ? ['standard', 'bigbang'].includes(effectivePlan(u.role, u.subscription, u.entitlement)) :
+        effectivePlan(u.role, u.subscription, u.entitlement) === userRoleFilter;
 
       return matchesSearch && matchesRole;
     });
@@ -1562,7 +1564,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
     const totalRevenueNgn = succeededPayments.reduce((acc, p) => {
       return acc + (p.amount_cents ? p.amount_cents / 100 : 0);
     }, 0);
-    const payingUsersCount = usersList.filter(u => u.role === 'standard' || u.role === 'bigbang').length;
+    const payingUsersCount = usersList.filter(u => ['standard', 'bigbang'].includes(effectivePlan(u.role, u.subscription, u.entitlement))).length;
     return {
       totalRevenueNgn,
       succeededCount: succeededPayments.length,
@@ -3492,7 +3494,8 @@ export const AdminView: React.FC<AdminViewProps> = ({
                     const isDeactivated = u.is_deleted === true || u.status === 'disabled';
                     const subEnd = u.subscription?.current_period_end || u.entitlement?.valid_until;
                     const isExpired = subEnd ? new Date(subEnd).getTime() < Date.now() : false;
-                    const isFree = u.role === 'free';
+                    const plan = effectivePlan(u.role, u.subscription, u.entitlement);
+                    const isFree = plan === 'free';
                     const daysLeft = isFree
                       ? 0
                       : subEnd && !isExpired
@@ -3510,11 +3513,11 @@ export const AdminView: React.FC<AdminViewProps> = ({
                         </td>
                         <td>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-                            <span className={`role-badge role-${u.role}`}>
-                              {u.role === 'standard' ? '⭐ Standard (₦5k)' : u.role === 'bigbang' ? '💥 BigBang VIP' : u.role === 'admin' ? '🛡 Admin' : 'Free Access'}
+                            <span className={`role-badge role-${plan}`}>
+                              {plan === 'standard' ? '⭐ Standard (₦5k)' : plan === 'bigbang' ? '💥 BigBang VIP' : plan === 'admin' ? '🛡 Admin' : 'Free Access'}
                             </span>
                             <select
-                              value={roleChangeUserId === u.id ? newRole : u.role}
+                              value={roleChangeUserId === u.id ? newRole : plan}
                               onChange={(e) => {
                                 const role = e.target.value as any;
                                 setRoleChangeUserId(u.id);
@@ -3542,7 +3545,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
                                 ? `⚠️ Expired (${new Date(subEnd!).toLocaleDateString()})`
                                 : subEnd
                                 ? `Valid until ${new Date(subEnd).toLocaleDateString()} (${daysLeft}d left)`
-                                : u.role === 'admin'
+                                : plan === 'admin'
                                 ? '🛡 Admin Lifetime'
                                 : 'Lifetime / None'}
                             </span>
@@ -3553,7 +3556,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
                                 style={{ padding: '2px 6px', fontSize: '0.7rem' }}
                                 disabled={actionLoading === u.id}
                                 onClick={() => {
-                                  const targetRole = u.role === 'free' ? 'bigbang' : u.role;
+                                  const targetRole = plan === 'free' ? 'bigbang' : plan;
                                   handleAllocateTier(u.id, targetRole, 'active', 30, 'Admin +30 Days extension', true);
                                 }}
                                 title="Grant 30 days active access"
@@ -3566,7 +3569,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
                                 style={{ padding: '2px 6px', fontSize: '0.7rem' }}
                                 disabled={actionLoading === u.id}
                                 onClick={() => {
-                                  const targetRole = u.role === 'free' ? 'bigbang' : u.role;
+                                  const targetRole = plan === 'free' ? 'bigbang' : plan;
                                   handleAllocateTier(u.id, targetRole, 'active', 60, 'Admin +60 Days extension', true);
                                 }}
                                 title="Grant 60 days active access"
@@ -3579,7 +3582,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
                                 style={{ padding: '2px 6px', fontSize: '0.7rem' }}
                                 disabled={actionLoading === u.id}
                                 onClick={() => {
-                                  const targetRole = u.role === 'free' ? 'bigbang' : u.role;
+                                  const targetRole = plan === 'free' ? 'bigbang' : plan;
                                   handleAllocateTier(u.id, targetRole, 'active', 90, 'Admin +90 Days extension', true);
                                 }}
                                 title="Grant 90 days active access"
@@ -3592,7 +3595,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
                                 style={{ padding: '2px 6px', fontSize: '0.7rem' }}
                                 disabled={actionLoading === u.id}
                                 onClick={() => {
-                                  const targetRole = u.role === 'free' ? 'bigbang' : u.role;
+                                  const targetRole = plan === 'free' ? 'bigbang' : plan;
                                   handleAllocateTier(u.id, targetRole, 'active', null, 'Admin Lifetime access', false);
                                 }}
                                 title="Grant permanent / lifetime access"

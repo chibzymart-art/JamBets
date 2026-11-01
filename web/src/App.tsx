@@ -28,6 +28,7 @@ import { reportEasyEasySignup } from './lib/easyeasy';
 import { updatePageSeo } from './lib/seo';
 import { useGeoCurrency } from './lib/geoCurrency';
 import { useTrialStatus, useVirtualWindow } from './hooks';
+import { effectivePlan } from './lib/effectivePlan';
 import { LandingPage } from './pages/Landing';
 import { SubscriptionPage } from './pages/Subscription';
 import { PasswordRecoveryPage } from './pages/PasswordRecovery';
@@ -466,6 +467,8 @@ export default function App() {
 
   // Oddsbanta 3-Day Free Trial & Paywall State Hook
   const trialState = useTrialStatus(currentUser, profile, subscription, entitlement);
+  // Paid plan from role, subscription or entitlement (payments never write users.role)
+  const userPlan = profile ? effectivePlan(profile.role, subscription, entitlement) : undefined;
 
   // Permissions: Football (3-Day Free Trial + Standard + BigBang VIP + Admin)
   const canViewFootball = trialState.canViewFootballPredictions;
@@ -1895,11 +1898,11 @@ export default function App() {
                         <div className="hamburger-user-email">
                           {currentUser.email}
                         </div>
-                        <span className={`hamburger-role-badge role-${profile?.role || 'free'}`}>
+                        <span className={`hamburger-role-badge role-${userPlan || 'free'}`}>
                           {trialState.isAdmin
                             ? '🛡 Sigma Admin'
                             : trialState.isPaidVip
-                            ? profile?.role === 'bigbang'
+                            ? userPlan === 'bigbang'
                               ? '💥 BigBang VIP'
                               : '⭐ Oddsbanta VIP'
                             : trialState.isPaidStandard
@@ -2376,7 +2379,7 @@ export default function App() {
                   setIsAuthModalOpen(true);
                 }}
                 currentUser={currentUser}
-                userRole={profile?.role}
+                userRole={userPlan}
                 canViewMultiSport={canViewMultiSport}
                 onOpenFaq={() => setIsFaqModalOpen(true)}
                 onOpenPricing={() => navigate('/subscription')}
@@ -2408,7 +2411,7 @@ export default function App() {
             element={
               <SubscriptionPage
                 currentUser={currentUser}
-                userRole={profile?.role}
+                userRole={userPlan}
                 subscription={subscription}
                 onRefreshUser={() => {
                   if (currentUser?.id) fetchUserData(currentUser.id);
@@ -2447,7 +2450,7 @@ export default function App() {
             element={
               <OtherMarketsPage
                 currentUser={currentUser}
-                userRole={profile?.role}
+                userRole={userPlan}
                 isAdmin={isAdmin}
                 canViewPredictions={canViewSpecialistMarkets}
                 isVisitor={trialState.isVisitor}
@@ -2473,7 +2476,7 @@ export default function App() {
               <div id="fixtures-view-section" style={{ paddingTop: '8px' }}>
                 <TennisHubView
                   currentUser={currentUser}
-                  userRole={profile?.role}
+                  userRole={userPlan}
                   isAdmin={isAdmin}
                   canViewPredictions={canViewMultiSport}
                   favoriteItems={favoriteItems}
@@ -2501,7 +2504,7 @@ export default function App() {
               <div id="fixtures-view-section" style={{ paddingTop: '8px' }}>
                 <BasketballHubView
                   currentUser={currentUser}
-                  userRole={profile?.role}
+                  userRole={userPlan}
                   isAdmin={isAdmin}
                   canViewPredictions={canViewMultiSport}
                   favoriteItems={favoriteItems}
@@ -3521,7 +3524,7 @@ export default function App() {
           navigate(targetPredictionsPath);
           window.scrollTo({ top: 0, behavior: 'smooth' });
         }}
-        userRole={isAdmin ? 'admin' : profile?.role}
+        userRole={isAdmin ? 'admin' : userPlan}
         currentUser={currentUser}
       />
 

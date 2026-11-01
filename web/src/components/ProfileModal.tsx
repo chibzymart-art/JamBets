@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase';
 import { UserProfile, UserSubscription, UserEntitlement } from '../types';
 import { useGeoCurrency } from '../lib/geoCurrency';
 import { getUserTimeZone, getTimeZoneAbbreviation } from '../lib/dateUtils';
+import { effectivePlan } from '../lib/effectivePlan';
 
 interface ProfileModalProps {
   isOpen: boolean;
@@ -162,7 +163,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
   };
 
   if (!isOpen) return null;
-  const currentTier = (effectiveProfile.role || subscription?.tier || 'free').toLowerCase();
+  const currentTier: string = effectivePlan(effectiveProfile.role, subscription, entitlement);
 
   const handleTierChange = (targetTier: 'free' | 'standard' | 'bigbang') => {
     if (targetTier === currentTier) return;

@@ -111,6 +111,36 @@ function toIsoTimestamp(val: any): string {
   return new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
 }
 
+// A failed database write must fail the webhook (500) so Bachs retries it,
+// instead of acknowledging a payment that never granted the plan.
+class WebhookWriteError extends Error {}
+
+async function dbWrite(url: string, dbKey: string, method: string, body: unknown, prefer?: string): Promise<Response> {
+  const headers: Record<string, string> = {
+    apikey: dbKey,
+    Authorization: `Bearer ${dbKey}`,
+    'Content-Type': 'application/json',
+  };
+  if (prefer) headers.Prefer = prefer;
+  const res = await fetch(url, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
+  if (!res.ok) {
+    throw new WebhookWriteError(`${method} ${url.split('?')[0]} failed: ${res.status} ${await res.text()}`);
+  }
+  return res;
+}
+
+// Upserts on user_id, so a user without a subscriptions/entitlements row yet still gets the plan
+// (a PATCH would silently match zero rows).
+async function upsertByUser(table: 'subscriptions' | 'entitlements', dbKey: string, row: Record<string, unknown>) {
+  await dbWrite(
+    `${SUPABASE_URL}/rest/v1/${table}?on_conflict=user_id`,
+    dbKey,
+    'POST',
+    row,
+    'resolution=merge-duplicates,return=minimal'
+  );
+}
+
 // Optional Email Dispatcher for New Subscriptions
 async function sendWelcomeEmail(email: string, name: string, tier: string, validUntil?: string, currency?: string) {
   if (!RESEND_API_KEY || !email) return;
@@ -150,8 +180,10 @@ async function sendWelcomeEmail(email: string, name: string, tier: string, valid
   }
 }
 
-// Handler for One-Time Collections / Checkouts (e.g. NGN Bank Transfer / Local Cards)
-async function handleOneTimePaymentFulfillment(event: any, dbKey: string) {
+// Handler for paid checkouts and collections (NGN 30-day passes and USD monthly subscriptions).
+// Bachs sends checkout.completed and collection.succeeded for the same charge about 40 ms apart;
+// the payments row (unique bachs_payment_id) is claimed first so only one of them grants the plan.
+async function handlePaymentFulfillment(event: any, dbKey: string) {
   const data = event.data || {};
   const metadata = data.metadata || {};
   let userId = metadata.user_id;
@@ -172,61 +204,90 @@ async function handleOneTimePaymentFulfillment(event: any, dbKey: string) {
   }
 
   if (!userId) {
-    console.error('[BACHS-WEBHOOK] Could not associate collection/checkout with user:', data);
+    console.error('[BACHS-WEBHOOK] Could not associate collection/checkout with user:', event.id);
     return;
   }
 
   const currency = (data.currency || metadata.currency || 'NGN').toUpperCase();
   const prodId = data.product_cart?.[0]?.product_id || data.product_id;
   const tier = metadata.tier || (prodId === BACHS_PROD_BIGBANG_NGN || prodId === BACHS_PROD_BIGBANG ? 'bigbang' : 'standard');
-
-  // Calculate 30-Day Period: Extend from current valid_until if active in future, otherwise from now
-  let baseTime = Date.now();
-  try {
-    const existingSubRes = await fetch(
-      `${SUPABASE_URL}/rest/v1/subscriptions?user_id=eq.${userId}&select=current_period_end&limit=1`,
-      { headers: { apikey: dbKey, Authorization: `Bearer ${dbKey}` } }
-    );
-    if (existingSubRes.ok) {
-      const existingRows = await existingSubRes.json();
-      if (existingRows?.[0]?.current_period_end) {
-        const existingEndMs = new Date(existingRows[0].current_period_end).getTime();
-        if (existingEndMs > baseTime) {
-          baseTime = existingEndMs;
-        }
-      }
-    }
-  } catch (e) {
-    console.warn('[BACHS-WEBHOOK] Warning checking existing period end:', e);
-  }
-
-  const periodEnd = new Date(baseTime + 30 * 24 * 60 * 60 * 1000).toISOString();
+  const subId: string | undefined = data.subscription?.subscription_id || data.subscription?.id || data.subscription_id;
+  const isRecurring = !!subId || data.mode === 'subscription' || metadata.cycle === 'monthly_subscription';
   const custId = data.customer?.customer_id || data.customer?.id;
   const paymentId = data.charge_id || data.charge?.id || data.checkout_id || event.id;
 
-  // Update public.subscriptions
-  const subPatchRes = await fetch(`${SUPABASE_URL}/rest/v1/subscriptions?user_id=eq.${userId}`, {
-    method: 'PATCH',
-    headers: { apikey: dbKey, Authorization: `Bearer ${dbKey}`, 'Content-Type': 'application/json' },
+  // Only the checkout event carries the Bachs subscription id. Store it whichever event wins
+  // the claim below, so renewals and cancellations can find this user.
+  // A PATCH only links an existing row; it never creates an open-ended active one.
+  if (subId) {
+    await dbWrite(`${SUPABASE_URL}/rest/v1/subscriptions?user_id=eq.${userId}`, dbKey, 'PATCH', {
+      bachs_subscription_id: subId,
+      cancel_at_period_end: false,
+      updated_at: new Date().toISOString(),
+    });
+  }
+
+  // Claim this charge. A duplicate means the twin event already granted the plan.
+  const defaultAmount = currency === 'NGN' ? (tier === 'bigbang' ? 10000 : 5000) : (tier === 'bigbang' ? 10 : 5);
+  const parsedAmount = parseFloat(data.amount) || defaultAmount;
+  const planName = tier === 'bigbang'
+    ? (isRecurring ? 'BigBang VIP All-Access' : 'BigBang VIP All-Access (30-Day Pass)')
+    : (isRecurring ? 'Standard Football VIP' : 'Standard Football VIP (30-Day Pass)');
+  const claimRes = await fetch(`${SUPABASE_URL}/rest/v1/payments`, {
+    method: 'POST',
+    headers: { apikey: dbKey, Authorization: `Bearer ${dbKey}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
     body: JSON.stringify({
+      user_id: userId,
+      amount: parsedAmount,
+      currency: currency,
+      status: 'succeeded',
+      bachs_payment_id: paymentId,
+      provider: 'bachs',
+      plan_name: planName,
+      customer_email: customerEmail,
+    }),
+  });
+  if (claimRes.status === 409) {
+    console.log(`[BACHS-WEBHOOK] Charge ${paymentId} already fulfilled. Skipping duplicate grant.`);
+    return;
+  }
+  if (!claimRes.ok) {
+    throw new WebhookWriteError(`payments insert failed: ${claimRes.status} ${await claimRes.text()}`);
+  }
+
+  try {
+    // 30-day period: extend from the current end if it is still running at this tier or higher
+    let baseTime = Date.now();
+    const existingSubRes = await fetch(
+      `${SUPABASE_URL}/rest/v1/subscriptions?user_id=eq.${userId}&select=current_period_end,tier,status&limit=1`,
+      { headers: { apikey: dbKey, Authorization: `Bearer ${dbKey}` } }
+    );
+    if (existingSubRes.ok) {
+      const existing = (await existingSubRes.json())?.[0];
+      const carriesOver = existing?.status === 'active' && (existing.tier === tier || existing.tier === 'bigbang');
+      if (carriesOver && existing.current_period_end) {
+        const existingEndMs = new Date(existing.current_period_end).getTime();
+        if (existingEndMs > baseTime) baseTime = existingEndMs;
+      }
+    }
+    const periodEnd = new Date(baseTime + 30 * 24 * 60 * 60 * 1000).toISOString();
+    const now = new Date().toISOString();
+
+    const subRow: Record<string, unknown> = {
+      user_id: userId,
       tier,
       status: 'active',
       current_period_end: periodEnd,
       bachs_customer_id: custId,
-      bachs_product_id: prodId,
-      cancel_at_period_end: true,
-      updated_at: new Date().toISOString(),
-    }),
-  });
-  if (!subPatchRes.ok) {
-    console.error('[BACHS-WEBHOOK] Subscriptions PATCH failed for collection:', subPatchRes.status, await subPatchRes.text());
-  }
+      cancel_at_period_end: !isRecurring,
+      updated_at: now,
+    };
+    if (prodId) subRow.bachs_product_id = prodId;
+    if (subId) subRow.bachs_subscription_id = subId;
+    await upsertByUser('subscriptions', dbKey, subRow);
 
-  // Update public.entitlements
-  await fetch(`${SUPABASE_URL}/rest/v1/entitlements?user_id=eq.${userId}`, {
-    method: 'PATCH',
-    headers: { apikey: dbKey, Authorization: `Bearer ${dbKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
+    await upsertByUser('entitlements', dbKey, {
+      user_id: userId,
       tier,
       valid_until: periodEnd,
       features: {
@@ -234,47 +295,19 @@ async function handleOneTimePaymentFulfillment(event: any, dbKey: string) {
         simulations: tier === 'bigbang',
         vip: true,
       },
-      updated_at: new Date().toISOString(),
-    }),
-  });
+      updated_at: now,
+    });
 
-  // Deduplicate and record payment in public.payments
-  if (paymentId) {
-    const checkPaymentRes = await fetch(
-      `${SUPABASE_URL}/rest/v1/payments?bachs_payment_id=eq.${encodeURIComponent(paymentId)}&select=id&limit=1`,
-      { headers: { apikey: dbKey, Authorization: `Bearer ${dbKey}` } }
-    );
-    let alreadyLogged = false;
-    if (checkPaymentRes.ok) {
-      const existingPayments = await checkPaymentRes.json();
-      if (existingPayments && existingPayments.length > 0) {
-        alreadyLogged = true;
-      }
+    if (customerEmail) {
+      await sendWelcomeEmail(customerEmail, customerName, tier, periodEnd, isRecurring ? 'USD' : currency);
     }
-
-    if (!alreadyLogged) {
-      const defaultAmount = currency === 'NGN' ? (tier === 'bigbang' ? 10000 : 5000) : (tier === 'bigbang' ? 10 : 5);
-      const parsedAmount = parseFloat(data.amount) || defaultAmount;
-      await fetch(`${SUPABASE_URL}/rest/v1/payments`, {
-        method: 'POST',
-        headers: { apikey: dbKey, Authorization: `Bearer ${dbKey}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          user_id: userId,
-          amount: parsedAmount,
-          currency: currency,
-          status: 'succeeded',
-          bachs_payment_id: paymentId,
-          provider: 'bachs',
-          plan_name: tier === 'bigbang' ? 'BigBang VIP All-Access (30-Day Pass)' : 'Standard Football VIP (30-Day Pass)',
-          customer_email: customerEmail,
-        }),
-      });
-
-      // Dispatch Welcome Email
-      if (customerEmail) {
-        await sendWelcomeEmail(customerEmail, customerName, tier, periodEnd, currency);
-      }
-    }
+  } catch (err) {
+    // Release the claim so the retry from Bachs can grant the plan
+    await fetch(`${SUPABASE_URL}/rest/v1/payments?bachs_payment_id=eq.${encodeURIComponent(paymentId)}`, {
+      method: 'DELETE',
+      headers: { apikey: dbKey, Authorization: `Bearer ${dbKey}` },
+    }).catch(() => undefined);
+    throw err;
   }
 }
 
@@ -359,264 +392,271 @@ export default async function handler(req: Request): Promise<Response> {
 
     console.log(`[BACHS-WEBHOOK] Processing event ${eventType} (${eventId})`);
 
-    // 5. Handle State Transitions
-    switch (eventType) {
-      case 'customer.subscription.created':
-      case 'subscription.created':
-      case 'subscription.activated': {
-        const sub = event.data;
-        let userId = sub.metadata?.user_id;
+    // 5. Handle State Transitions (the log entry is released if processing fails, so the retry runs)
+    try {
+      switch (eventType) {
+        case 'customer.subscription.created':
+        case 'subscription.created':
+        case 'subscription.activated': {
+          const sub = event.data;
+          let userId = sub.metadata?.user_id;
 
-        // Fallback: If metadata didn't carry user_id, resolve by email
-        if (!userId && sub.customer?.email) {
-          const userRes = await fetch(
-            `${SUPABASE_URL}/rest/v1/users?email=eq.${encodeURIComponent(sub.customer.email)}&select=id&limit=1`,
-            { headers: { apikey: dbKey, Authorization: `Bearer ${dbKey}` } }
-          );
-          if (userRes.ok) {
-            const userData = await userRes.json();
-            if (userData && userData[0]?.id) userId = userData[0].id;
-          }
-        }
-
-        if (!userId) {
-          console.error('[BACHS-WEBHOOK] Could not associate subscription with user:', sub);
-          break;
-        }
-
-        const tier =
-          sub.metadata?.tier ||
-          (sub.product_id === BACHS_PROD_BIGBANG || sub.product?.id === BACHS_PROD_BIGBANG
-            ? 'bigbang'
-            : 'standard');
-
-        const periodStart = sub.current_period_start || new Date().toISOString();
-        const periodEnd = toIsoTimestamp(sub.current_period_end);
-        const subId = sub.id || sub.subscription_id;
-        const custId = sub.customer?.customer_id || sub.customer?.id;
-        const prodId = sub.product_id || sub.product?.id;
-
-        // Update public.subscriptions
-        const subPatchRes = await fetch(`${SUPABASE_URL}/rest/v1/subscriptions?user_id=eq.${userId}`, {
-          method: 'PATCH',
-          headers: { apikey: dbKey, Authorization: `Bearer ${dbKey}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            tier,
-            status: 'active',
-            current_period_end: periodEnd,
-            bachs_subscription_id: subId,
-            bachs_customer_id: custId,
-            bachs_product_id: prodId,
-            cancel_at_period_end: false,
-            updated_at: new Date().toISOString(),
-          }),
-        });
-        if (!subPatchRes.ok) {
-          console.error('[BACHS-WEBHOOK] Subscriptions PATCH failed:', subPatchRes.status, await subPatchRes.text());
-        }
-
-        // Update public.entitlements
-        await fetch(`${SUPABASE_URL}/rest/v1/entitlements?user_id=eq.${userId}`, {
-          method: 'PATCH',
-          headers: { apikey: dbKey, Authorization: `Bearer ${dbKey}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            tier,
-            valid_until: periodEnd,
-            features: {
-              football_predictions: true,
-              simulations: tier === 'bigbang',
-              vip: true,
-            },
-            updated_at: new Date().toISOString(),
-          }),
-        });
-
-        // Record successful payment in public.payments
-        await fetch(`${SUPABASE_URL}/rest/v1/payments`, {
-          method: 'POST',
-          headers: { apikey: dbKey, Authorization: `Bearer ${dbKey}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            user_id: userId,
-            amount: parseFloat(sub.amount || '5.00'),
-            currency: sub.currency || 'USD',
-            status: 'succeeded',
-            bachs_payment_id: subId,
-            provider: 'bachs',
-            plan_name: tier === 'bigbang' ? 'BigBang VIP All-Access' : 'Standard Football VIP',
-            customer_email: sub.customer?.email,
-          }),
-        });
-
-        // Dispatch Welcome Email
-        if (sub.customer?.email) {
-          await sendWelcomeEmail(sub.customer.email, sub.customer.name, tier, periodEnd);
-        }
-        break;
-      }
-
-      case 'invoice.paid': {
-        const inv = event.data;
-        const subId = inv.subscription_id || inv.subscription?.id;
-
-        if (subId) {
-          // Find subscription owner
-          const subRes = await fetch(
-            `${SUPABASE_URL}/rest/v1/subscriptions?bachs_subscription_id=eq.${encodeURIComponent(subId)}&select=user_id,tier&limit=1`,
-            { headers: { apikey: dbKey, Authorization: `Bearer ${dbKey}` } }
-          );
-          if (subRes.ok) {
-            const subRows = await subRes.json();
-            if (subRows && subRows[0]) {
-              const { user_id, tier } = subRows[0];
-              const newEnd = toIsoTimestamp(inv.period_end || inv.lines?.[0]?.period_end);
-
-              // Extend Subscription
-              await fetch(`${SUPABASE_URL}/rest/v1/subscriptions?user_id=eq.${user_id}`, {
-                method: 'PATCH',
-                headers: { apikey: dbKey, Authorization: `Bearer ${dbKey}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  status: 'active',
-                  current_period_end: newEnd,
-                  updated_at: new Date().toISOString(),
-                }),
-              });
-
-              // Extend Entitlement
-              await fetch(`${SUPABASE_URL}/rest/v1/entitlements?user_id=eq.${user_id}`, {
-                method: 'PATCH',
-                headers: { apikey: dbKey, Authorization: `Bearer ${dbKey}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  valid_until: newEnd,
-                  updated_at: new Date().toISOString(),
-                }),
-              });
-
-              // Log Payment
-              await fetch(`${SUPABASE_URL}/rest/v1/payments`, {
-                method: 'POST',
-                headers: { apikey: dbKey, Authorization: `Bearer ${dbKey}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  user_id,
-                  amount: parseFloat(inv.amount_paid || inv.amount || '5.00'),
-                  currency: inv.currency || 'USD',
-                  status: 'succeeded',
-                  bachs_payment_id: inv.id,
-                  provider: 'bachs',
-                  plan_name: tier === 'bigbang' ? 'BigBang VIP All-Access' : 'Standard Football VIP',
-                  customer_email: inv.customer?.email,
-                }),
-              });
+          // Fallback: If metadata didn't carry user_id, resolve by email
+          if (!userId && sub.customer?.email) {
+            const userRes = await fetch(
+              `${SUPABASE_URL}/rest/v1/users?email=eq.${encodeURIComponent(sub.customer.email)}&select=id&limit=1`,
+              { headers: { apikey: dbKey, Authorization: `Bearer ${dbKey}` } }
+            );
+            if (userRes.ok) {
+              const userData = await userRes.json();
+              if (userData && userData[0]?.id) userId = userData[0].id;
             }
           }
-        }
-        break;
-      }
 
-      case 'customer.subscription.updated':
-      case 'subscription.updated': {
-        const sub = event.data;
-        const subId = sub.id || sub.subscription_id;
-
-        if (subId) {
-          const updatePayload: Record<string, any> = {
-            status: sub.status,
-            updated_at: new Date().toISOString(),
-          };
-          if (typeof sub.cancel_at_period_end === 'boolean') {
-            updatePayload.cancel_at_period_end = sub.cancel_at_period_end;
-          }
-          if (sub.current_period_end) {
-            updatePayload.current_period_end = toIsoTimestamp(sub.current_period_end);
+          if (!userId) {
+            console.error('[BACHS-WEBHOOK] Could not associate subscription with user:', sub);
+            break;
           }
 
-          await fetch(`${SUPABASE_URL}/rest/v1/subscriptions?bachs_subscription_id=eq.${encodeURIComponent(subId)}`, {
-            method: 'PATCH',
-            headers: { apikey: dbKey, Authorization: `Bearer ${dbKey}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify(updatePayload),
-          });
-        }
-        break;
-      }
+          const tier =
+            sub.metadata?.tier ||
+            (sub.product_id === BACHS_PROD_BIGBANG || sub.product?.id === BACHS_PROD_BIGBANG
+              ? 'bigbang'
+              : 'standard');
 
-      case 'customer.subscription.deleted':
-      case 'subscription.canceled':
-      case 'subscription.deleted': {
-        const sub = event.data;
-        const subId = sub.id || sub.subscription_id;
+          const periodStart = sub.current_period_start || new Date().toISOString();
+          const periodEnd = toIsoTimestamp(sub.current_period_end);
+          const subId = sub.id || sub.subscription_id;
+          const custId = sub.customer?.customer_id || sub.customer?.id;
+          const prodId = sub.product_id || sub.product?.id;
 
-        if (subId) {
-          const subRes = await fetch(
-            `${SUPABASE_URL}/rest/v1/subscriptions?bachs_subscription_id=eq.${encodeURIComponent(subId)}&select=user_id&limit=1`,
-            { headers: { apikey: dbKey, Authorization: `Bearer ${dbKey}` } }
-          );
-          if (subRes.ok) {
-            const subRows = await subRes.json();
-            if (subRows && subRows[0]) {
-              const { user_id } = subRows[0];
-
-              // Revert subscription to cancelled / free
-              await fetch(`${SUPABASE_URL}/rest/v1/subscriptions?user_id=eq.${user_id}`, {
-                method: 'PATCH',
-                headers: { apikey: dbKey, Authorization: `Bearer ${dbKey}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  tier: 'free',
-                  status: 'cancelled',
-                  updated_at: new Date().toISOString(),
-                }),
-              });
-
-              // Revert entitlements
-              await fetch(`${SUPABASE_URL}/rest/v1/entitlements?user_id=eq.${user_id}`, {
-                method: 'PATCH',
-                headers: { apikey: dbKey, Authorization: `Bearer ${dbKey}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  tier: 'free',
-                  features: { football_predictions: false, simulations: false, vip: false },
-                  updated_at: new Date().toISOString(),
-                }),
-              });
-            }
-          }
-        }
-        break;
-      }
-
-      case 'invoice.payment_failed': {
-        const inv = event.data;
-        const subId = inv.subscription_id;
-        if (subId) {
-          await fetch(`${SUPABASE_URL}/rest/v1/subscriptions?bachs_subscription_id=eq.${encodeURIComponent(subId)}`, {
+          // Update public.subscriptions
+          const subPatchRes = await fetch(`${SUPABASE_URL}/rest/v1/subscriptions?user_id=eq.${userId}`, {
             method: 'PATCH',
             headers: { apikey: dbKey, Authorization: `Bearer ${dbKey}`, 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              status: 'past_due',
+              tier,
+              status: 'active',
+              current_period_end: periodEnd,
+              bachs_subscription_id: subId,
+              bachs_customer_id: custId,
+              bachs_product_id: prodId,
+              cancel_at_period_end: false,
               updated_at: new Date().toISOString(),
             }),
           });
-        }
-        break;
-      }
+          if (!subPatchRes.ok) {
+            console.error('[BACHS-WEBHOOK] Subscriptions PATCH failed:', subPatchRes.status, await subPatchRes.text());
+          }
 
-      case 'collection.succeeded': {
-        const status = (event.data?.status || '').toLowerCase();
-        if (status === 'succeeded') {
-          await handleOneTimePaymentFulfillment(event, dbKey);
-        }
-        break;
-      }
+          // Update public.entitlements
+          await fetch(`${SUPABASE_URL}/rest/v1/entitlements?user_id=eq.${userId}`, {
+            method: 'PATCH',
+            headers: { apikey: dbKey, Authorization: `Bearer ${dbKey}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              tier,
+              valid_until: periodEnd,
+              features: {
+                football_predictions: true,
+                simulations: tier === 'bigbang',
+                vip: true,
+              },
+              updated_at: new Date().toISOString(),
+            }),
+          });
 
-      case 'checkout.completed': {
-        const mode = event.data?.mode;
-        const paymentStatus = (event.data?.payment_status || '').toLowerCase();
-        if (mode === 'payment' && (paymentStatus === 'paid' || paymentStatus === 'succeeded')) {
-          await handleOneTimePaymentFulfillment(event, dbKey);
-        }
-        break;
-      }
+          // Record successful payment in public.payments
+          await fetch(`${SUPABASE_URL}/rest/v1/payments`, {
+            method: 'POST',
+            headers: { apikey: dbKey, Authorization: `Bearer ${dbKey}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              user_id: userId,
+              amount: parseFloat(sub.amount || '5.00'),
+              currency: sub.currency || 'USD',
+              status: 'succeeded',
+              bachs_payment_id: subId,
+              provider: 'bachs',
+              plan_name: tier === 'bigbang' ? 'BigBang VIP All-Access' : 'Standard Football VIP',
+              customer_email: sub.customer?.email,
+            }),
+          });
 
-      default:
-        console.log(`[BACHS-WEBHOOK] Unhandled event type: ${eventType}`);
-        break;
+          // Dispatch Welcome Email
+          if (sub.customer?.email) {
+            await sendWelcomeEmail(sub.customer.email, sub.customer.name, tier, periodEnd);
+          }
+          break;
+        }
+
+        case 'invoice.paid': {
+          const inv = event.data;
+          const subId = inv.subscription_id || inv.subscription?.id;
+
+          if (subId) {
+            // Find subscription owner
+            const subRes = await fetch(
+              `${SUPABASE_URL}/rest/v1/subscriptions?bachs_subscription_id=eq.${encodeURIComponent(subId)}&select=user_id,tier&limit=1`,
+              { headers: { apikey: dbKey, Authorization: `Bearer ${dbKey}` } }
+            );
+            if (subRes.ok) {
+              const subRows = await subRes.json();
+              if (subRows && subRows[0]) {
+                const { user_id, tier } = subRows[0];
+                const newEnd = toIsoTimestamp(inv.period_end || inv.lines?.[0]?.period_end);
+
+                // Extend Subscription
+                await fetch(`${SUPABASE_URL}/rest/v1/subscriptions?user_id=eq.${user_id}`, {
+                  method: 'PATCH',
+                  headers: { apikey: dbKey, Authorization: `Bearer ${dbKey}`, 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    status: 'active',
+                    current_period_end: newEnd,
+                    updated_at: new Date().toISOString(),
+                  }),
+                });
+
+                // Extend Entitlement
+                await fetch(`${SUPABASE_URL}/rest/v1/entitlements?user_id=eq.${user_id}`, {
+                  method: 'PATCH',
+                  headers: { apikey: dbKey, Authorization: `Bearer ${dbKey}`, 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    valid_until: newEnd,
+                    updated_at: new Date().toISOString(),
+                  }),
+                });
+
+                // Log Payment
+                await fetch(`${SUPABASE_URL}/rest/v1/payments`, {
+                  method: 'POST',
+                  headers: { apikey: dbKey, Authorization: `Bearer ${dbKey}`, 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    user_id,
+                    amount: parseFloat(inv.amount_paid || inv.amount || '5.00'),
+                    currency: inv.currency || 'USD',
+                    status: 'succeeded',
+                    bachs_payment_id: inv.id,
+                    provider: 'bachs',
+                    plan_name: tier === 'bigbang' ? 'BigBang VIP All-Access' : 'Standard Football VIP',
+                    customer_email: inv.customer?.email,
+                  }),
+                });
+              }
+            }
+          }
+          break;
+        }
+
+        case 'customer.subscription.updated':
+        case 'subscription.updated': {
+          const sub = event.data;
+          const subId = sub.id || sub.subscription_id;
+
+          if (subId) {
+            const updatePayload: Record<string, any> = {
+              status: sub.status,
+              updated_at: new Date().toISOString(),
+            };
+            if (typeof sub.cancel_at_period_end === 'boolean') {
+              updatePayload.cancel_at_period_end = sub.cancel_at_period_end;
+            }
+            if (sub.current_period_end) {
+              updatePayload.current_period_end = toIsoTimestamp(sub.current_period_end);
+            }
+
+            await fetch(`${SUPABASE_URL}/rest/v1/subscriptions?bachs_subscription_id=eq.${encodeURIComponent(subId)}`, {
+              method: 'PATCH',
+              headers: { apikey: dbKey, Authorization: `Bearer ${dbKey}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify(updatePayload),
+            });
+          }
+          break;
+        }
+
+        case 'customer.subscription.deleted':
+        case 'subscription.canceled':
+        case 'subscription.deleted': {
+          const sub = event.data;
+          const subId = sub.id || sub.subscription_id;
+
+          if (subId) {
+            const subRes = await fetch(
+              `${SUPABASE_URL}/rest/v1/subscriptions?bachs_subscription_id=eq.${encodeURIComponent(subId)}&select=user_id&limit=1`,
+              { headers: { apikey: dbKey, Authorization: `Bearer ${dbKey}` } }
+            );
+            if (subRes.ok) {
+              const subRows = await subRes.json();
+              if (subRows && subRows[0]) {
+                const { user_id } = subRows[0];
+
+                // Revert subscription to cancelled / free
+                await fetch(`${SUPABASE_URL}/rest/v1/subscriptions?user_id=eq.${user_id}`, {
+                  method: 'PATCH',
+                  headers: { apikey: dbKey, Authorization: `Bearer ${dbKey}`, 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    tier: 'free',
+                    status: 'cancelled',
+                    updated_at: new Date().toISOString(),
+                  }),
+                });
+
+                // Revert entitlements
+                await fetch(`${SUPABASE_URL}/rest/v1/entitlements?user_id=eq.${user_id}`, {
+                  method: 'PATCH',
+                  headers: { apikey: dbKey, Authorization: `Bearer ${dbKey}`, 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    tier: 'free',
+                    features: { football_predictions: false, simulations: false, vip: false },
+                    updated_at: new Date().toISOString(),
+                  }),
+                });
+              }
+            }
+          }
+          break;
+        }
+
+        case 'invoice.payment_failed': {
+          const inv = event.data;
+          const subId = inv.subscription_id;
+          if (subId) {
+            await fetch(`${SUPABASE_URL}/rest/v1/subscriptions?bachs_subscription_id=eq.${encodeURIComponent(subId)}`, {
+              method: 'PATCH',
+              headers: { apikey: dbKey, Authorization: `Bearer ${dbKey}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                status: 'past_due',
+                updated_at: new Date().toISOString(),
+              }),
+            });
+          }
+          break;
+        }
+
+        case 'collection.succeeded': {
+          const status = (event.data?.status || '').toLowerCase();
+          if (status === 'succeeded') {
+            await handlePaymentFulfillment(event, dbKey);
+          }
+          break;
+        }
+
+        case 'checkout.completed': {
+          const paymentStatus = (event.data?.payment_status || '').toLowerCase();
+          if (paymentStatus === 'paid' || paymentStatus === 'succeeded') {
+            await handlePaymentFulfillment(event, dbKey);
+          }
+          break;
+        }
+
+        default:
+          console.log(`[BACHS-WEBHOOK] Unhandled event type: ${eventType}`);
+          break;
+      }
+    } catch (processingErr) {
+      await fetch(`${SUPABASE_URL}/rest/v1/webhook_events_log?event_id=eq.${encodeURIComponent(eventId)}`, {
+        method: 'DELETE',
+        headers: { apikey: dbKey, Authorization: `Bearer ${dbKey}` },
+      }).catch(() => undefined);
+      throw processingErr;
     }
 
     return new Response(JSON.stringify({ success: true, event_id: eventId }), {
