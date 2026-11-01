@@ -559,9 +559,8 @@ export default async function handler(req: Request): Promise<Response> {
             if (typeof sub.cancel_at_period_end === 'boolean') {
               updatePayload.cancel_at_period_end = sub.cancel_at_period_end;
             }
-            if (sub.current_period_end) {
-              updatePayload.current_period_end = toIsoTimestamp(sub.current_period_end);
-            }
+            // Access is only extended by a successful payment (invoice.paid / collection.succeeded),
+            // never by a subscription update, so the paid-until date is not copied from here.
 
             await fetch(`${SUPABASE_URL}/rest/v1/subscriptions?bachs_subscription_id=eq.${encodeURIComponent(subId)}`, {
               method: 'PATCH',

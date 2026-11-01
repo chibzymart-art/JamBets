@@ -146,5 +146,23 @@ await send(pair(7, 'bigbang', 'NGN', '10000.00')[1]);
 await send(pair(8, 'bigbang', 'NGN', '10000.00')[1]);
 check('renewal: second pass stacks to 60 days', Math.abs(days(db.entitlements[0].valid_until) - 60) < 0.1);
 
+// 7. USD renewals: only a paid renewal extends access, a subscription update never does
+reset();
+{
+  await Promise.all(pair(9, 'standard', 'USD', '5.00', 'sub_r').map((e) => send(e)));
+  const paidUntil = db.subscriptions[0].current_period_end;
+  const later = new Date(Date.now() + 90 * 864e5).toISOString();
+  await send({ id: 'evt_upd_r', type: 'subscription.updated', data: { id: 'sub_r', status: 'active', current_period_end: later } });
+  check('renewal: subscription.updated does not extend access', db.subscriptions[0].current_period_end === paidUntil && db.entitlements[0].valid_until === paidUntil);
+  await send({ id: 'evt_fail_r', type: 'invoice.payment_failed', data: { subscription_id: 'sub_r' } });
+  check('renewal: failed renewal marks past_due, no extension', db.subscriptions[0].status === 'past_due' && db.entitlements[0].valid_until === paidUntil);
+  const renewEnd = new Date(Date.now() + 60 * 864e5).toISOString();
+  await send({ id: 'evt_inv_r', type: 'invoice.paid', data: { id: 'inv_r', subscription_id: 'sub_r', amount_paid: '5.00', currency: 'USD', period_end: renewEnd } });
+  check('renewal: paid invoice extends access and reactivates', db.subscriptions[0].status === 'active' && Math.abs(days(db.entitlements[0].valid_until) - 60) < 0.1);
+  await send({ id: 'evt_col_r2', type: 'collection.succeeded', data: { charge_id: 'ch_r2', status: 'SUCCEEDED', amount: '5.00', currency: 'USD',
+    customer: { id: 'cust_1', email: 'payer@example.com' }, metadata: {} } });
+  check('renewal: auto-renew charge without metadata stacks 30 days on the paid period', Math.abs(days(db.entitlements[0].valid_until) - 90) < 0.1);
+}
+
 if (failed) { console.error(`${failed} bachs webhook check(s) failed`); process.exit(1); }
 console.log('All bachs webhook checks passed');
