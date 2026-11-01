@@ -1,0 +1,56 @@
+name: Lifecycle Emails
+
+# Daily trial / renewal / payment / win-back reminders and the daily results email.
+# See python/src/email_engine/lifecycle.py for who gets what.
+#
+# Off by default: scheduled runs are a dry run (they only list who would get which email) until the
+# repository variable LIFECYCLE_EMAILS_LIVE is set to "true" (Settings > Secrets and variables >
+# Actions > Variables). Real sends also need the RESEND_API_KEY secret and migration
+# 20261101000001_lifecycle_emails.sql applied.
+
+on:
+  schedule:
+    - cron: '30 6 * * *'   # 06:30 UTC = 07:30 WAT, after the overnight settlement runs
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'dry-run lists recipients only; send emails for real'
+        type: choice
+        options: [dry-run, send]
+        default: dry-run
+      only:
+        description: 'Comma-separated campaigns (blank = all): trial_ending,trial_ended,renewal_due,plan_expired,payment_failed,winback,daily_results'
+        required: false
+        default: ''
+
+concurrency:
+  group: lifecycle-emails
+  cancel-in-progress: false
+
+jobs:
+  emails:
+    name: Send lifecycle emails
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install httpx python-dotenv
+
+      - name: Run email job
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          LIFECYCLE_DAILY_CAP: ${{ vars.LIFECYCLE_DAILY_CAP }}
+          MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || (vars.LIFECYCLE_EMAILS_LIVE == 'true' && 'send' || 'dry-run') }}
+          ONLY: ${{ inputs.only }}
+        run: python -m python.src.email_engine.lifecycle --$MODE --only "$ONLY"
