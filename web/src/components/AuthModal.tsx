@@ -339,6 +339,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       return;
     }
 
+    // "+" addresses are refused by the sign-up hook (hook_before_user_created); say so before sending.
+    if (email.trim().split('@')[0].includes('+')) {
+      setErrorMessage('Email addresses with a "+" are not accepted. Please sign up with your main email address.');
+      return;
+    }
+
     // First submit with a likely typo: ask once. Submitting again keeps the address as typed.
     if (emailSuggestion && typoWarnedFor !== email.trim().toLowerCase()) {
       setTypoWarnedFor(email.trim().toLowerCase());
