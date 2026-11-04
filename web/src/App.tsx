@@ -2073,6 +2073,18 @@ export default function App() {
                       <span className="hamburger-item-label">FAQ & Help</span>
                     </button>
 
+                    <a
+                      href="https://wa.me/2348130896049"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="hamburger-menu-item"
+                      style={{ textDecoration: 'none' }}
+                      onClick={() => setIsHamburgerOpen(false)}
+                    >
+                      <span className="hamburger-item-icon">💬</span>
+                      <span className="hamburger-item-label"><strong>Contact Us (WhatsApp)</strong></span>
+                    </a>
+
                     <button
                       type="button"
                       className="hamburger-menu-item"
@@ -2196,6 +2208,19 @@ export default function App() {
               <span className="nav-header-btn-icon">❓</span>
               <span className="nav-header-btn-label">FAQs</span>
             </button>
+
+            {/* Contact Us: opens a WhatsApp chat with support */}
+            <a
+              href="https://wa.me/2348130896049"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="nav-header-contact-btn"
+              title="Contact us on WhatsApp"
+              aria-label="Contact us on WhatsApp"
+            >
+              <span className="nav-header-btn-icon">💬</span>
+              <span className="nav-header-btn-label">Contact Us</span>
+            </a>
 
             {!currentUser ? (
               <>
