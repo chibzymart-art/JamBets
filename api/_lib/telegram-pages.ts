@@ -1,5 +1,5 @@
-// Telegram bot prediction listing: turns fixture cards into numbered pages with
-// inline page buttons (1, 2, 3 ... Prev / Next). Pure functions, no network.
+// Telegram bot prediction lists: turns predictions into readable cards (every sub-prediction
+// included), packs them into pages, and builds the tab and page buttons. Pure functions, no network.
 
 export interface SecondaryLeanItem {
   market: string;
@@ -32,6 +32,7 @@ export interface TelegramFixtureCard {
   hasGoalLean: boolean;
 }
 
+// At most this many matches per page; fewer when cards are long.
 export const PAGE_SIZE = 8;
 // Telegram rejects messages over 4096 characters; stay well under it.
 const MAX_MESSAGE_CHARS = 3900;
@@ -115,82 +116,203 @@ export function pickLabel(market: string, pick: string): string {
   return mkt ? `${outcome} (${mkt})` : outcome;
 }
 
-/** "HIGH CONFIDENCE" -> "High Confidence". */
+/** "HIGH CONFIDENCE" / "GOAL_MACHINE" -> "High Confidence" / "Goal Machine". */
 export function tierLabel(cat: string): string {
   return String(cat || '')
+    .replace(/_/g, ' ')
     .toLowerCase()
-    .replace(/\b\w/g, c => c.toUpperCase());
+    .replace(/\b\w/g, c => c.toUpperCase())
+    .trim();
 }
 
-export const PAGE_COMMANDS = ['today', 'tomorrow', 'bangers', 'toppicks', 'high', 'mid', 'low', 'goals'] as const;
+// ── Cards ────────────────────────────────────────────────────────────────────
 
-export function pageTitle(cmd: string): string {
-  switch (cmd) {
-    case 'today': return "⚽ <b>Today's Predictions</b>";
-    case 'tomorrow': return "⚽ <b>Tomorrow's Predictions</b>";
-    case 'bangers': return '🔥 <b>Super Bankers</b> · 85%+';
-    case 'toppicks': return '⭐ <b>Top Picks</b> · 90–95%';
-    case 'high': return '🟢 <b>High Confidence</b> · 80–89%';
-    case 'mid': return '🔵 <b>Mid Confidence</b> · 70–79%';
-    case 'low': return '🟡 <b>Low Confidence Leans</b> · under 70%';
-    case 'goals': return '⚡ <b>Goals Hub</b> · Over/Under &amp; BTTS';
-    default: return '⚽ <b>Predictions</b>';
-  }
+export interface ListPick {
+  label: string;
+  probability: number; // 0-100
+  tier?: string;
 }
 
-function renderCard(item: TelegramFixtureCard, number: number, maxLeans: number): string {
-  let s = `<b>${number}. ${escapeHtml(item.homeTeam)} vs ${escapeHtml(item.awayTeam)}</b>\n`;
-  s += `🏆 ${escapeHtml(item.leagueCode)}  ·  ⏰ ${escapeHtml(item.kickoffTimeWat)}\n`;
+/** One match, ready to render. Text fields are raw (escaped at render time). */
+export interface ListCard {
+  title: string;
+  league: string;
+  kickoff: string; // HH:MM WAT
+  main: ListPick | null; // null = no safe banker
+  subs: ListPick[];
+  note?: string;
+  tiers: string[]; // normalized tiers across main + subs, used by the tier views
+}
 
-  if (item.isBankerPass) {
-    s += `🛡️ <i>No safe banker for this match</i>\n`;
-    const lean = item.secondaryLeans[0];
-    if (lean && maxLeans > 0) {
-      s += `   ↳ Best lean: ${escapeHtml(pickLabel(lean.market, lean.prediction))} · <b>${lean.probability}%</b>\n`;
-    }
+const MAX_SUBS = 6;
+
+/** Football fixture card -> list card, with every sub-prediction. */
+export function footballListCard(c: TelegramFixtureCard): ListCard {
+  const subs = c.secondaryLeans.map(s => ({
+    label: pickLabel(s.market, s.prediction),
+    probability: s.probability,
+    tier: s.confidenceCategory,
+  }));
+  return {
+    title: `${c.homeTeam} vs ${c.awayTeam}`,
+    league: c.leagueCode,
+    kickoff: c.kickoffTimeWat,
+    main: c.isBankerPass
+      ? null
+      : { label: pickLabel(c.primaryMarket, c.primaryPick), probability: c.primaryProbability, tier: c.primaryCategory },
+    subs,
+    tiers: [...(c.isBankerPass ? [] : [c.primaryCategory]), ...subs.map(s => s.tier || '')].filter(Boolean),
+  };
+}
+
+export function renderCard(card: ListCard, number: number, maxSubs = MAX_SUBS): string {
+  let s = `<b>${number}. ${escapeHtml(card.title)}</b>\n`;
+  s += `🏆 ${escapeHtml(card.league)}  ·  ⏰ ${escapeHtml(card.kickoff)}\n`;
+
+  if (card.main) {
+    const tier = card.main.tier ? ` · ${escapeHtml(tierLabel(card.main.tier))}` : '';
+    s += `🎯 <b>${escapeHtml(card.main.label)}</b> — <b>${card.main.probability}%</b>${tier}\n`;
   } else {
-    s += `🎯 <b>${escapeHtml(pickLabel(item.primaryMarket, item.primaryPick))}</b>\n`;
-    s += `📊 <b>${item.primaryProbability}%</b> · ${escapeHtml(tierLabel(item.primaryCategory))}\n`;
-    for (const lean of item.secondaryLeans.slice(0, maxLeans)) {
-      s += `   ↳ ${escapeHtml(pickLabel(lean.market, lean.prediction))} · ${lean.probability}%\n`;
-    }
+    s += `🛡️ <i>No safe banker — other picks below</i>\n`;
   }
+
+  const subs = card.subs.slice(0, maxSubs);
+  subs.forEach((p, i) => {
+    const branch = i === subs.length - 1 ? '└' : '├';
+    s += `   ${branch} ${escapeHtml(p.label)} · ${p.probability}%\n`;
+  });
+  if (card.note) s += `   <i>${escapeHtml(card.note)}</i>\n`;
   return s;
 }
 
-export function totalPages(count: number): number {
-  return Math.max(1, Math.ceil(count / PAGE_SIZE));
+// ── Views (tabs) ─────────────────────────────────────────────────────────────
+
+export interface ViewDef {
+  title: string; // HTML
+  tab?: string; // label on the tab bar; tier views have none
+  empty: string; // used in "No <empty> found"
 }
 
-export function clampPage(page: number, count: number): number {
-  const total = totalPages(count);
-  if (!Number.isFinite(page) || page < 1) return 1;
-  return Math.min(Math.floor(page), total);
+export const VIEWS: Record<string, ViewDef> = {
+  football: { title: '⚽ <b>Football Predictions</b>', tab: '⚽ Football', empty: 'football predictions' },
+  bangers: { title: '🔥 <b>Bangers</b> · 96%+', empty: 'Banger picks' },
+  toppicks: { title: '⭐ <b>Top Picks</b> · 90–95%', empty: 'Top Picks' },
+  high: { title: '🟢 <b>High Confidence</b> · 80–89%', empty: 'High Confidence picks' },
+  mid: { title: '🔵 <b>Mid Confidence</b> · 70–79%', empty: 'Mid Confidence picks' },
+  low: { title: '🟡 <b>Low Confidence Leans</b> · under 70%', empty: 'Low Confidence leans' },
+  goals: { title: '🎯 <b>Over 2.5 Goals</b>', tab: '🎯 Over 2.5', empty: 'Over 2.5 Goals predictions' },
+  ht05: { title: '⏱️ <b>1st Half Over 0.5 Goals</b>', tab: '⏱️ 1H 0.5', empty: '1st Half Over 0.5 predictions' },
+  corners: { title: '🚩 <b>Corners</b>', tab: '🚩 Corners', empty: 'corners predictions' },
+  basketball: { title: '🏀 <b>Basketball Predictions</b>', tab: '🏀 Basketball', empty: 'basketball predictions' },
+  tennis: { title: '🎾 <b>Tennis Predictions</b>', tab: '🎾 Tennis', empty: 'tennis predictions' },
+};
+
+export const TIER_VIEWS: Record<string, string> = {
+  bangers: 'BANGER',
+  toppicks: 'TOP PICK',
+  high: 'HIGH CONFIDENCE',
+  mid: 'MID CONFIDENCE',
+  low: 'LOW CONFIDENCE',
+};
+
+const TAB_ROWS: string[][] = [
+  ['football', 'goals', 'ht05'],
+  ['corners', 'basketball', 'tennis'],
+];
+
+export const PAGE_COMMANDS = Object.keys(VIEWS);
+
+/** Typed command -> view and day (0 today, 1 tomorrow). null when it is not a list command. */
+export function commandToView(command: string): { view: string; dayOffset: number } | null {
+  const c = command.replace(/^\//, '').toLowerCase();
+  if (c === 'today') return { view: 'football', dayOffset: 0 };
+  if (c === 'tomorrow') return { view: 'football', dayOffset: 1 };
+  if (c === 'top') return { view: 'toppicks', dayOffset: 0 };
+  if (c === 'over25') return { view: 'goals', dayOffset: 0 };
+  if (c === '1h' || c === 'firsthalf' || c === 'ht') return { view: 'ht05', dayOffset: 0 };
+  if (c === 'football') return { view: 'football', dayOffset: 0 };
+  if (VIEWS[c]) return { view: c, dayOffset: 0 };
+  return null;
 }
 
-// Callback data (max 64 bytes): "pg|<cmd>|<YYYY-MM-DD>|<page>"; "pg|noop" for the current page.
+/** The bot's Telegram menu (setMyCommands). Every entry is a routed command. */
+export const BOT_MENU: { command: string; description: string }[] = [
+  { command: 'today', description: "Today's football predictions" },
+  { command: 'tomorrow', description: "Tomorrow's football predictions" },
+  { command: 'bangers', description: 'Bangers (96%+)' },
+  { command: 'toppicks', description: 'Top Picks (90-95%)' },
+  { command: 'high', description: 'High Confidence (80-89%)' },
+  { command: 'mid', description: 'Mid Confidence (70-79%)' },
+  { command: 'low', description: 'Low Confidence leans (under 70%)' },
+  { command: 'goals', description: 'Over 2.5 Goals' },
+  { command: 'ht05', description: '1st Half Over 0.5 Goals' },
+  { command: 'corners', description: 'Corners predictions' },
+  { command: 'basketball', description: 'Basketball predictions' },
+  { command: 'tennis', description: 'Tennis predictions' },
+  { command: 'status', description: 'Your subscription status' },
+  { command: 'help', description: 'FAQs and all commands' },
+];
+
+/** The same list as HTML lines for /start and /help. */
+export function commandListHtml(): string {
+  return BOT_MENU.map(m => `• /${m.command} — ${escapeHtml(m.description)}`).join('\n');
+}
+
+export function filterForView(view: string, cards: ListCard[]): ListCard[] {
+  const tier = TIER_VIEWS[view];
+  return tier ? cards.filter(c => c.tiers.includes(tier)) : cards;
+}
+
+/** Which data set a view reads. Tier views read football. */
+export function sourceForView(view: string): string {
+  return TIER_VIEWS[view] ? 'football' : view;
+}
+
+// ── Pages and buttons ────────────────────────────────────────────────────────
+
+// Callback data (max 64 bytes): "pg|<view>|<YYYY-MM-DD>|<page>"; "pg|noop" for the active tab/page.
 export const NOOP_CALLBACK = 'pg|noop';
 
-export function pageCallback(cmd: string, dateKey: string, page: number): string {
-  return `pg|${cmd}|${dateKey}|${page}`;
+export function pageCallback(view: string, dateKey: string, page: number): string {
+  return `pg|${view}|${dateKey}|${page}`;
 }
 
 export function parsePageCallback(data: string | undefined | null): { cmd: string; dateKey: string; page: number } | null {
   if (!data) return null;
-  const m = String(data).match(/^pg\|([a-z]+)\|(\d{4}-\d{2}-\d{2})\|(\d{1,4})$/);
-  if (!m || !(PAGE_COMMANDS as readonly string[]).includes(m[1])) return null;
-  return { cmd: m[1], dateKey: m[2], page: Number(m[3]) };
+  const m = String(data).match(/^pg\|([a-z0-9]+)\|(\d{4}-\d{2}-\d{2})\|(\d{1,4})$/);
+  if (!m) return null;
+  // Buttons sent before the tabs existed used "today"/"tomorrow".
+  const cmd = m[1] === 'today' || m[1] === 'tomorrow' ? 'football' : m[1];
+  if (!VIEWS[cmd]) return null;
+  return { cmd, dateKey: m[2], page: Number(m[3]) };
 }
 
-/** Page buttons: numbers (current one marked), then Prev / Next. No keyboard for a single page. */
-export function buildPager(cmd: string, dateKey: string, page: number, total: number): any | undefined {
-  if (total <= 1) return undefined;
+/** Packs rendered cards into pages that fit one Telegram message. */
+export function paginate(cardTexts: string[], budget: number, maxPerPage = PAGE_SIZE): number[][] {
+  const pages: number[][] = [];
+  let cur: number[] = [];
+  let size = 0;
+  cardTexts.forEach((t, i) => {
+    const len = t.length + 1;
+    if (cur.length && (cur.length >= maxPerPage || size + len > budget)) {
+      pages.push(cur);
+      cur = [];
+      size = 0;
+    }
+    cur.push(i);
+    size += len;
+  });
+  if (cur.length) pages.push(cur);
+  return pages.length ? pages : [[]];
+}
+
+function pagerRows(view: string, dateKey: string, page: number, total: number): any[][] {
+  if (total <= 1) return [];
 
   let pages: number[];
   if (total <= 5) {
     pages = Array.from({ length: total }, (_, i) => i + 1);
   } else {
-    // First, last, and a window of three around the current page.
     let start = Math.max(1, page - 1);
     let end = Math.min(total, page + 1);
     if (page <= 2) end = 3;
@@ -202,45 +324,97 @@ export function buildPager(cmd: string, dateKey: string, page: number, total: nu
 
   const numberRow = pages.map(p => ({
     text: p === page ? `· ${p} ·` : String(p),
-    callback_data: p === page ? NOOP_CALLBACK : pageCallback(cmd, dateKey, p),
+    callback_data: p === page ? NOOP_CALLBACK : pageCallback(view, dateKey, p),
   }));
-
   const navRow: any[] = [];
-  if (page > 1) navRow.push({ text: '‹ Prev', callback_data: pageCallback(cmd, dateKey, page - 1) });
-  if (page < total) navRow.push({ text: 'Next ›', callback_data: pageCallback(cmd, dateKey, page + 1) });
-
-  return { inline_keyboard: navRow.length ? [numberRow, navRow] : [numberRow] };
+  if (page > 1) navRow.push({ text: '‹ Prev', callback_data: pageCallback(view, dateKey, page - 1) });
+  if (page < total) navRow.push({ text: 'Next ›', callback_data: pageCallback(view, dateKey, page + 1) });
+  return navRow.length ? [numberRow, navRow] : [numberRow];
 }
 
-export function renderPredictionPage(opts: {
-  cmd: string;
+/** Page buttons only (no tabs). No keyboard for a single page. */
+export function buildPager(view: string, dateKey: string, page: number, total: number): any | undefined {
+  const rows = pagerRows(view, dateKey, page, total);
+  return rows.length ? { inline_keyboard: rows } : undefined;
+}
+
+/** Tab bar (sports/markets), day switch, then page buttons. */
+export function buildKeyboard(opts: {
+  view: string;
+  dateKey: string;
+  todayKey: string;
+  tomorrowKey: string;
+  page: number;
+  totalPages: number;
+}): any {
+  const { view, dateKey, todayKey, tomorrowKey } = opts;
+  const activeTab = TIER_VIEWS[view] ? 'football' : view;
+
+  const tabRows = TAB_ROWS.map(row =>
+    row.map(v => ({
+      text: v === activeTab ? `• ${VIEWS[v].tab} •` : VIEWS[v].tab!,
+      callback_data: v === view ? NOOP_CALLBACK : pageCallback(v, dateKey, 1),
+    }))
+  );
+
+  const dayRow = [
+    { key: todayKey, label: 'Today' },
+    { key: tomorrowKey, label: 'Tomorrow' },
+  ].map(d => ({
+    text: d.key === dateKey ? `📅 ${d.label} ✓` : `📅 ${d.label}`,
+    callback_data: d.key === dateKey ? NOOP_CALLBACK : pageCallback(view, d.key, 1),
+  }));
+
+  return { inline_keyboard: [...tabRows, dayRow, ...pagerRows(view, dateKey, opts.page, opts.totalPages)] };
+}
+
+export function totalPages(count: number): number {
+  return Math.max(1, Math.ceil(count / PAGE_SIZE));
+}
+
+export function renderListPage(opts: {
+  view: string;
   displayDate: string;
   dateKey: string;
-  cards: TelegramFixtureCard[];
+  todayKey: string;
+  tomorrowKey: string;
+  cards: ListCard[];
   page: number;
-}): { text: string; replyMarkup?: any; page: number; totalPages: number } {
-  const { cmd, displayDate, dateKey, cards } = opts;
-  const total = totalPages(cards.length);
-  const page = clampPage(opts.page, cards.length);
-  const startIdx = (page - 1) * PAGE_SIZE;
-  const slice = cards.slice(startIdx, startIdx + PAGE_SIZE);
+}): { text: string; replyMarkup: any; page: number; totalPages: number } {
+  const { view, displayDate, dateKey, cards } = opts;
+  const def = VIEWS[view] || VIEWS.football;
   const matchWord = cards.length === 1 ? 'match' : 'matches';
 
-  const build = (maxLeans: number) => {
-    let text = `${pageTitle(cmd)}\n`;
-    text += `📅 ${escapeHtml(displayDate)}  ·  ${cards.length} ${matchWord}\n`;
-    text += `${RULE}\n\n`;
-    text += slice.map((c, i) => renderCard(c, startIdx + i + 1, maxLeans)).join('\n');
-    text += `\n${RULE}\n`;
-    text += `📄 Page <b>${page}</b> of <b>${total}</b>  ·  Times in WAT\n`;
-    text += `/today · /tomorrow · /bangers · /toppicks · /goals`;
-    return text;
+  const header = `${def.title}\n📅 ${escapeHtml(displayDate)}  ·  ${cards.length} ${matchWord}\n${RULE}\n\n`;
+  const footerFor = (p: number, t: number) =>
+    `\n${RULE}\n📄 Page <b>${p}</b> of <b>${t}</b>  ·  Times in WAT\nTap a tab below to switch sport or market.`;
+  const budget = MAX_MESSAGE_CHARS - header.length - footerFor(9999, 9999).length;
+
+  if (cards.length === 0) {
+    const text = `${def.title}\n📅 ${escapeHtml(displayDate)}\n${RULE}\n\nNo ${escapeHtml(def.empty)} found for this day yet. Check back after the next simulation run, or tap another tab below.`;
+    return {
+      text,
+      replyMarkup: buildKeyboard({ ...opts, page: 1, totalPages: 1 }),
+      page: 1,
+      totalPages: 1,
+    };
+  }
+
+  // Render each card with all its sub-picks; trim sub-picks only if a single card is too long.
+  const texts = cards.map((c, i) => {
+    let t = renderCard(c, i + 1);
+    for (let n = MAX_SUBS - 1; t.length > budget && n >= 0; n--) t = renderCard(c, i + 1, n);
+    return t;
+  });
+  const pages = paginate(texts, budget);
+  const total = pages.length;
+  const page = Math.min(Math.max(1, Math.floor(Number.isFinite(opts.page) ? opts.page : 1)), total);
+
+  const text = header + pages[page - 1].map(i => texts[i]).join('\n') + footerFor(page, total);
+  return {
+    text,
+    replyMarkup: buildKeyboard({ ...opts, page, totalPages: total }),
+    page,
+    totalPages: total,
   };
-
-  // Long team names can push a page over Telegram's limit; drop extra leans if they do.
-  let text = build(2);
-  if (text.length > MAX_MESSAGE_CHARS) text = build(1);
-  if (text.length > MAX_MESSAGE_CHARS) text = build(0);
-
-  return { text, replyMarkup: buildPager(cmd, dateKey, page, total), page, totalPages: total };
 }

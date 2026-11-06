@@ -1,10 +1,20 @@
-// Behaviour test for the Telegram bot's paged prediction lists.
-// Runs the real webhook handler against a mocked Supabase and Telegram API and checks that every
-// match is listed across pages, the page buttons work, and the premium gate still applies.
+// Behaviour test for the Telegram bot's prediction lists: every match listed across pages, every
+// sub-prediction inside its card, sport/market tabs, day switch, page buttons, the menu, and the
+// premium gate on every button. Runs the real webhook handler against mocked Supabase and Telegram.
 // Run: node tests/edge/run.mjs
 import './telegram-env';
 import webhook from '../../api/telegram-webhook';
-import { PAGE_SIZE, buildPager, parsePageCallback, pickLabel, renderPredictionPage } from '../../api/_lib/telegram-pages';
+import {
+  BOT_MENU,
+  PAGE_SIZE,
+  buildPager,
+  commandToView,
+  paginate,
+  parsePageCallback,
+  pickLabel,
+  renderListPage,
+  tierLabel,
+} from '../../api/_lib/telegram-pages';
 
 const future = new Date(Date.now() + 10 * 864e5).toISOString();
 const PAID = 2;
@@ -14,29 +24,70 @@ const accounts: Record<number, { user: any; subs: any[] }> = {
   [PAID]: { user: { id: 'u-std', email: 'std@example.com', role: 'standard' }, subs: [{ tier: 'standard', status: 'active', current_period_end: future }] },
 };
 
-const MATCHES = 21; // 3 pages of 8
 const kickoff = new Date(Date.now() + 2 * 3600e3).toISOString();
-const predictions = Array.from({ length: MATCHES }, (_, i) => ({
+const fbFixture = (i: number) => ({
+  id: `f${i}`,
+  target_kickoff_at: kickoff,
+  status: 'scheduled',
+  home_team: { name: `Home-${i}` },
+  away_team: { name: `Away ${i}` },
+  league: { code: 'EPL', name: 'Premier League', country: 'England' },
+});
+
+const MATCHES = 21;
+const football = Array.from({ length: MATCHES }, (_, i) => ({
   id: `p${i + 1}`,
   fixture_id: `f${i + 1}`,
-  prediction: i % 3 === 0 ? 'over' : i % 3 === 1 ? '1' : 'yes',
-  market: i % 3 === 0 ? 'over_under_2.5' : i % 3 === 1 ? '1x2' : 'btts',
+  prediction: i % 3 === 0 ? 'over' : i % 3 === 1 ? '1x' : 'yes',
+  market: i % 3 === 0 ? 'over_under_1.5' : i % 3 === 1 ? 'double_chance' : 'btts',
   probability: i === 0 ? 0.97 : 0.75,
-  confidence_category: null,
-  secondary_predictions: [{ market: 'over_under_1.5', prediction: 'over', probability: 0.82 }],
+  confidence_category: i === 0 ? 'BANGER' : 'MID CONFIDENCE',
+  secondary_predictions: [
+    { market: 'away_goals_0.5', prediction: 'over', probability: 0.9035, prob: 90.35, confidence_tier: 'TOP PICK' },
+    { market: 'double_chance', prediction: '12', probability: 0.8002, prob: 80.02, confidence_tier: 'HIGH CONFIDENCE' },
+    { market: 'btts', prediction: 'yes', probability: 0.6752, prob: 67.52, confidence_tier: 'LOW CONFIDENCE' },
+    { market: 'corners_10.5', prediction: 'under', probability: 0.6066, prob: 60.66, confidence_tier: 'RISKY' },
+  ],
   target_kickoff_at: kickoff,
-  fixture: {
-    id: `f${i + 1}`,
-    target_kickoff_at: kickoff,
-    status: 'scheduled',
-    home_team: { name: `Home-${i + 1}` },
-    away_team: { name: `Away ${i + 1}` },
-    league: { code: 'EPL', name: 'Premier League', country: 'England' },
-  },
+  fixture: fbFixture(i + 1),
 }));
+
+const goals = [
+  { id: 'g1', fixture_id: 'f1', market: 'over_2.5_goals', probability: 0.81, confidence_tier: 'GOAL_MACHINE', xg_combined: 3.12, target_kickoff_at: kickoff, fixture: fbFixture(1) },
+  { id: 'g2', fixture_id: 'f1', market: 'ht_over_0.5_goals', probability: 0.78, confidence_tier: 'TEMPO_HIGH', xg_combined: null, target_kickoff_at: kickoff, fixture: fbFixture(1) },
+  { id: 'g3', fixture_id: 'f2', market: 'ht_over_0.5_goals', probability: 0.72, confidence_tier: 'EARLY_STRIKE', xg_combined: null, target_kickoff_at: kickoff, fixture: fbFixture(2) },
+];
+const corners = [
+  { id: 'c1', fixture_id: 'f3', market: 'over_8.5_corners', prediction: 'Over 8.5 Corners', probability: 0.6059, confidence_category: 'MID_CONFIDENCE', predicted_total_corners: 10.2, over_8_5_prob: 0.6059, over_9_5_prob: 0.48, over_10_5_prob: null, target_kickoff_at: kickoff, fixture: fbFixture(3) },
+];
+const basketball = [
+  {
+    id: 'b1', market: 'moneyline', prediction: 'Mogi Das Cruzes To Win', probability: 0.897, confidence_category: 'BANGER',
+    secondary_predictions: [
+      { pick: 'Under 164.0 Total Points', market: 'game_total_over_under', prediction: 'Under 164.0 Total Points', probability: 0.6813, confidence_category: 'HIGH CONFIDENCE' },
+      { pick: 'Basquete Cearense +27.5 Points', market: 'point_spread', prediction: 'Basquete Cearense +27.5 Points', probability: 0.6783, confidence_category: 'HIGH CONFIDENCE' },
+    ],
+    target_kickoff_at: kickoff,
+    fixture: { target_kickoff_at: kickoff, league: { code: 'BRA_NBB', name: 'Novo Basquete Brasil (NBB)' }, home_team: { canonical_name: 'Mogi Das Cruzes', short_name: 'MOD' }, away_team: { canonical_name: 'Basquete Cearense', short_name: 'BAC' } },
+  },
+];
+const tennis = [
+  {
+    id: 't1', market: 'NO_SAFE_BANKER', prediction: 'NO SAFE BANKER (High Volatility)', probability: 0.5, confidence_category: 'NO_SAFE_BANKER',
+    secondary_predictions: [
+      { market: 'game_handicap', prediction: 'Lucio Ratti +1.5 Games', probability: 0.6094 },
+      { market: 'first_set_winner', prediction: 'Lucio Ratti 1st Set', probability: 0.5007 },
+      { market: 'set_handicap', prediction: 'Lucio Ratti +1.5 Sets', probability: 0.7496 },
+      { market: 'total_games_over_under', prediction: 'Over 25.5 Games', probability: 0.5083 },
+    ],
+    target_kickoff_at: kickoff,
+    fixture: { target_kickoff_at: kickoff, round: 'R32', tournament: { name: 'Villa Maria, Argentina', tour: 'ATP', surface: 'hard_outdoor' }, player1: { display_name: 'Lucio Ratti' }, player2: { display_name: 'Carlos Maria Zarate' } },
+  },
+];
 
 type Call = { method: string; body: any };
 let calls: Call[] = [];
+const queried: string[] = [];
 const json = (v: unknown, status = 200) => new Response(JSON.stringify(v), { status, headers: { 'content-type': 'application/json' } });
 const param = (url: URL, key: string) => (url.searchParams.get(key) || '').replace(/^eq\./, '');
 
@@ -53,7 +104,14 @@ const param = (url: URL, key: string) => (url.searchParams.get(key) || '').repla
   const owner = Object.values(accounts).find((a) => a.user.id === param(url, 'user_id'));
   if (url.pathname.endsWith('/rest/v1/subscriptions')) return json(owner ? owner.subs : []);
   if (url.pathname.endsWith('/rest/v1/entitlements')) return json([]);
-  if (url.pathname.endsWith('/rest/v1/football_predictions')) return json(predictions);
+  const table = url.pathname.split('/').pop() || '';
+  queried.push(`${table}?${url.search}`);
+  if (url.searchParams.get('publication_status') !== 'eq.published') return json([]); // must filter published
+  if (table === 'football_predictions') return json(football);
+  if (table === 'goals_predictions') return json(goals);
+  if (table === 'corner_predictions') return json(corners);
+  if (table === 'basketball_predictions') return json(basketball);
+  if (table === 'tennis_predictions') return json(tennis);
   return json([]);
 };
 
@@ -71,83 +129,159 @@ const press = (chatId: number, data: string) =>
 let failed = 0;
 const check = (name: string, ok: boolean, detail = '') => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${ok ? '' : '  ' + detail}`); if (!ok) failed++; };
 const buttons = (markup: any): any[] => (markup?.inline_keyboard || []).flat();
+const sentText = () => calls.find((c) => c.method === 'sendMessage')?.body;
+const editBody = () => calls.find((c) => c.method === 'editMessageText')?.body;
 
-// Pure helpers
-check('pick label: over 2.5', pickLabel('over_under_2.5', 'over') === 'Over 2.5 Goals');
+// ── Pure helpers
+check('pick label: over 1.5', pickLabel('over_under_1.5', 'over') === 'Over 1.5 Goals');
 check('pick label: btts yes', pickLabel('btts', 'yes') === 'BTTS: Yes');
-check('pick label: home win', pickLabel('1x2', '1') === 'Home Win');
+check('pick label: away over 0.5', pickLabel('away_goals_0.5', 'over') === 'Away Over 0.5');
+check('pick label: corners under', pickLabel('corners_10.5', 'under') === 'Corners Under 10.5');
 check('pick label: double chance', pickLabel('double_chance', '1x') === 'Home or Draw (1X)');
-check('callback parse round trip', JSON.stringify(parsePageCallback('pg|today|2026-11-06|3')) === JSON.stringify({ cmd: 'today', dateKey: '2026-11-06', page: 3 }));
+check('tier label: underscores', tierLabel('GOAL_MACHINE') === 'Goal Machine' && tierLabel('MID_CONFIDENCE') === 'Mid Confidence');
+check('callback parse round trip', JSON.stringify(parsePageCallback('pg|basketball|2026-11-06|3')) === JSON.stringify({ cmd: 'basketball', dateKey: '2026-11-06', page: 3 }));
+check('callback parse: old "today" buttons still work', parsePageCallback('pg|today|2026-11-06|2')?.cmd === 'football');
 check('callback parse rejects junk', parsePageCallback('pg|drop|2026-11-06|3') === null && parsePageCallback('x') === null);
-check('single page has no buttons', buildPager('today', '2026-11-06', 1, 1) === undefined);
-const big = buttons(buildPager('today', '2026-11-06', 6, 12)).map((b) => b.text);
+check('single page has no page buttons', buildPager('football', '2026-11-06', 1, 1) === undefined);
+const big = buttons(buildPager('football', '2026-11-06', 6, 12)).map((b) => b.text);
 check('many pages: first, window, last, prev/next', JSON.stringify(big) === JSON.stringify(['1', '5', '· 6 ·', '7', '12', '‹ Prev', 'Next ›']), JSON.stringify(big));
-for (const cmd of ['today', 'tomorrow', 'bangers', 'toppicks', 'high', 'mid', 'low', 'goals']) {
-  const data = buttons(buildPager(cmd, '2026-11-06', 500, 999)).map((b) => b.callback_data);
-  check(`callback data fits 64 bytes (${cmd})`, data.every((d) => new TextEncoder().encode(d).length <= 64));
+check('paginate respects size budget', JSON.stringify(paginate(['a'.repeat(60), 'b'.repeat(60), 'c'.repeat(60)], 130)) === JSON.stringify([[0, 1], [2]]));
+check('paginate respects max per page', paginate(Array(PAGE_SIZE + 1).fill('x'), 10000).length === 2);
+for (const view of ['football', 'bangers', 'toppicks', 'high', 'mid', 'low', 'goals', 'ht05', 'corners', 'basketball', 'tennis']) {
+  const kb = renderListPage({ view, displayDate: 'Fri 6 Nov', dateKey: '2026-11-06', todayKey: '2026-11-06', tomorrowKey: '2026-11-07', cards: [], page: 999 }).replyMarkup;
+  check(`callback data fits 64 bytes (${view})`, buttons(kb).every((b) => new TextEncoder().encode(b.callback_data).length <= 64));
 }
-const longCards = Array.from({ length: PAGE_SIZE }, (_, i) => ({
-  ...({} as any), fixtureId: `f${i}`, homeTeam: 'X'.repeat(200), awayTeam: 'Y'.repeat(200), leagueCode: 'L', kickoffTimeWat: '12:00', targetKickoffAt: kickoff,
-  isBankerPass: false, primaryMarket: 'btts', primaryPick: 'yes', primaryProbability: 80, primaryCategory: 'HIGH CONFIDENCE',
-  secondaryLeans: [{ market: 'over_under_1.5', prediction: 'over', probability: 81, confidenceCategory: 'HIGH CONFIDENCE', formattedMkt: '', formattedPick: '' }],
-}));
-check('page stays under Telegram limit with long names', renderPredictionPage({ cmd: 'today', displayDate: 'Fri 6 Nov', dateKey: '2026-11-06', cards: longCards, page: 1 }).text.length <= 4096);
+const longCard = { title: 'X'.repeat(300) + ' vs ' + 'Y'.repeat(300), league: 'L', kickoff: '12:00', main: { label: 'Over 1.5 Goals', probability: 80, tier: 'HIGH CONFIDENCE' }, subs: Array(6).fill({ label: 'Z'.repeat(150), probability: 70 }), tiers: [] };
+const longPage = renderListPage({ view: 'football', displayDate: 'Fri 6 Nov', dateKey: '2026-11-06', todayKey: '2026-11-06', tomorrowKey: '2026-11-07', cards: Array(12).fill(longCard), page: 1 });
+check('pages stay under Telegram limit with long cards', longPage.text.length <= 4096 && longPage.totalPages > 1, `${longPage.text.length} chars, ${longPage.totalPages} pages`);
 
-// /today for a paid account: page 1 with buttons, no "visit the dashboard" cut-off
+// Menu: every entry is answered by the bot
+for (const m of BOT_MENU) {
+  if (m.command === 'status' || m.command === 'help') continue;
+  check(`menu /${m.command} is a list command`, !!commandToView('/' + m.command));
+}
+check('menu has no admin-only /settled', !BOT_MENU.some((m) => m.command === 'settled'));
+check('menu covers 1H 0.5, corners, basketball, tennis, tomorrow', ['ht05', 'corners', 'basketball', 'tennis', 'tomorrow'].every((c) => BOT_MENU.some((m) => m.command === c)));
+
+// ── /today: page 1, every sub-prediction inside each card, tabs + pages underneath
 calls = [];
 await command(PAID, '/today');
-const first = calls.find((c) => c.method === 'sendMessage');
+let body = sentText();
 check('/today sends one message', calls.filter((c) => c.method === 'sendMessage').length === 1);
-check('page 1 lists matches 1-8', !!first && /<b>1\. Home 1 vs Away 1<\/b>/.test(first.body.text) && /<b>8\. /.test(first.body.text) && !/<b>9\. /.test(first.body.text), first?.body.text);
-check('page 1 says page 1 of 3 and the total', !!first && /Page <b>1<\/b> of <b>3<\/b>/.test(first.body.text) && /21 matches/.test(first.body.text));
-check('no "more fixtures on dashboard" cut-off', !!first && !/more fixtures/i.test(first.body.text));
-check('clean pick labels', !!first && /Over 2\.5 Goals/.test(first.body.text) && /Home Win/.test(first.body.text) && /BTTS: Yes/.test(first.body.text));
-const kb = buttons(first?.body.reply_markup);
-check('page buttons 1, 2, 3 and Next', JSON.stringify(kb.map((b) => b.text)) === JSON.stringify(['· 1 ·', '2', '3', 'Next ›']), JSON.stringify(kb.map((b) => b.text)));
+check('page 1 starts at match 1 and lists all its sub-picks', !!body && /<b>1\. Home 1 vs Away 1<\/b>/.test(body.text) && /Away Over 0\.5 · 90%/.test(body.text) && /Home or Away \(12\) · 80%/.test(body.text) && /BTTS: Yes · 68%/.test(body.text) && /Corners Under 10\.5 · 61%/.test(body.text), body?.text.slice(0, 600));
+check('main pick shows % and tier', !!body && /🎯 <b>Over 1\.5 Goals<\/b> — <b>97%<\/b> · Banger/.test(body.text));
+check('no "more fixtures on dashboard" cut-off', !!body && !/more fixtures/i.test(body.text));
+const kb = buttons(body?.reply_markup).map((b) => b.text);
+check('tabs: football active, then Over 2.5, 1H 0.5, Corners, Basketball, Tennis', ['• ⚽ Football •', '🎯 Over 2.5', '⏱️ 1H 0.5', '🚩 Corners', '🏀 Basketball', '🎾 Tennis'].every((t) => kb.includes(t)), JSON.stringify(kb));
+check('day switch with Today active', kb.includes('📅 Today ✓') && kb.includes('📅 Tomorrow'));
+check('page buttons present', kb.includes('· 1 ·') && kb.includes('Next ›'));
+check('message under Telegram limit', !!body && body.text.length <= 4096);
 
-// Press page 3: same message is edited to show matches 17-21
-const page3 = kb.find((b) => b.text === '3')?.callback_data;
-calls = [];
-await press(PAID, page3);
-const edit = calls.find((c) => c.method === 'editMessageText');
-check('page button answers the callback', calls.some((c) => c.method === 'answerCallbackQuery'));
-check('page button edits the same message', !!edit && edit.body.message_id === 55 && edit.body.chat_id === PAID);
-check('page 3 lists matches 17-21', !!edit && /<b>17\. /.test(edit.body.text) && /<b>21\. /.test(edit.body.text) && !/<b>16\. /.test(edit.body.text), edit?.body.text);
-check('page 3 has Prev, no Next', !!edit && buttons(edit.body.reply_markup).some((b) => b.text === '‹ Prev') && !buttons(edit.body.reply_markup).some((b) => b.text === 'Next ›'));
-
-// Every match is reachable across the pages
+// Every football match is reachable across the pages
+const total = Number(body?.text.match(/of <b>(\d+)<\/b>/)?.[1] || 0);
 const seen = new Set<number>();
-for (let p = 1; p <= 3; p++) {
+const pageBtn = buttons(body?.reply_markup).find((b) => b.text === 'Next ›')?.callback_data as string;
+for (let p = 1; p <= total; p++) {
   calls = [];
-  await press(PAID, page3.replace(/\|3$/, `|${p}`));
-  const t = calls.find((c) => c.method === 'editMessageText')?.body.text || '';
-  for (const m of t.matchAll(/<b>(\d+)\. Home /g)) seen.add(Number(m[1]));
+  await press(PAID, pageBtn.replace(/\|\d+$/, `|${p}`));
+  for (const m of (editBody()?.text || '').matchAll(/<b>(\d+)\. Home /g)) seen.add(Number(m[1]));
 }
-check('all 21 matches appear across pages', seen.size === MATCHES, String(seen.size));
+check(`all ${MATCHES} matches appear across ${total} pages`, seen.size === MATCHES, String(seen.size));
 
-// Premium gate still applies to page buttons
+// ── Tabs switch sport/market in the same message
+const tab = (label: string) => buttons(body?.reply_markup).find((b) => b.text === label)?.callback_data as string;
 calls = [];
-await press(FREE, page3);
-check('free account pressing a page button gets the upgrade message, no picks',
-  calls.some((c) => c.method === 'sendMessage' && /VIP Access Required/.test(c.body.text)) && !calls.some((c) => c.method === 'editMessageText'));
-calls = [];
-await press(99, page3);
-check('unlinked chat pressing a page button is asked to link',
-  calls.some((c) => c.method === 'sendMessage' && /Authentication Required/.test(c.body.text)) && !calls.some((c) => c.method === 'editMessageText'));
-calls = [];
-await command(FREE, '/today');
-check('free account /today still gets the upgrade message', calls.some((c) => /VIP Access Required/.test(c.body.text || '')) && !calls.some((c) => /Home 1 vs/.test(c.body.text || '')));
+await press(PAID, tab('🏀 Basketball'));
+let ed = editBody();
+check('Basketball tab: edits the same message', !!ed && ed.message_id === 55);
+check('Basketball tab: card with all sub-picks', !!ed && /Mogi Das Cruzes vs Basquete Cearense/.test(ed.text) && /Mogi Das Cruzes To Win<\/b> — <b>90%<\/b> · Banger/.test(ed.text) && /Under 164\.0 Total Points · 68%/.test(ed.text) && /Basquete Cearense \+27\.5 Points · 68%/.test(ed.text), ed?.text);
+check('Basketball tab is marked active', buttons(ed?.reply_markup).some((b) => b.text === '• 🏀 Basketball •'));
 
-// Filtered command keeps its own filter on page turns
+calls = [];
+await press(PAID, tab('🎾 Tennis'));
+ed = editBody();
+check('Tennis tab: no safe banker, but every other pick listed', !!ed && /Lucio Ratti vs Carlos Maria Zarate/.test(ed.text) && /ATP Villa Maria, Argentina · R32/.test(ed.text) && /No safe banker/.test(ed.text) && /Lucio Ratti \+1\.5 Sets · 75%/.test(ed.text) && /Over 25\.5 Games · 51%/.test(ed.text), ed?.text);
+
+calls = [];
+await press(PAID, tab('🎯 Over 2.5'));
+ed = editBody();
+check('Over 2.5 tab: only over 2.5 rows, with 1H 0.5 as a sub-pick and xG', !!ed && /Over 2\.5 Goals<\/b> — <b>81%<\/b> · Goal Machine/.test(ed.text) && /1st Half Over 0\.5 Goals · 78%/.test(ed.text) && /xG\): 3\.12/.test(ed.text) && /1 match\b/.test(ed.text), ed?.text);
+
+calls = [];
+await press(PAID, tab('⏱️ 1H 0.5'));
+ed = editBody();
+check('1H 0.5 tab: both 1st-half rows', !!ed && /2 matches/.test(ed.text) && /1st Half Over 0\.5 Goals<\/b> — <b>78%<\/b> · Tempo High/.test(ed.text) && /Early Strike/.test(ed.text), ed?.text);
+
+calls = [];
+await press(PAID, tab('🚩 Corners'));
+ed = editBody();
+check('Corners tab: main line, other lines and expected corners', !!ed && /Over 8\.5 Corners<\/b> — <b>61%<\/b> · Mid Confidence/.test(ed.text) && /Over 9\.5 Corners · 48%/.test(ed.text) && /Expected corners: 10\.2/.test(ed.text) && !/Over 8\.5 Corners · 61%/.test(ed.text), ed?.text);
+
+// Day switch
+const tomorrowBtn = buttons(body?.reply_markup).find((b) => b.text === '📅 Tomorrow')?.callback_data as string;
+calls = [];
+await press(PAID, tomorrowBtn);
+ed = editBody();
+check('Tomorrow button marks Tomorrow active', buttons(ed?.reply_markup).some((b) => b.text === '📅 Tomorrow ✓'));
+
+// Empty tab still shows the tabs so the user can move on
+const savedTennis = tennis.splice(0);
+calls = [];
+await press(PAID, tab('🎾 Tennis'));
+ed = editBody();
+check('empty tab: friendly message and tabs kept', !!ed && /No tennis predictions found/.test(ed.text) && buttons(ed.reply_markup).some((b) => b.text === '⚽ Football'));
+tennis.push(...savedTennis);
+
+// ── Commands for each menu item
+for (const [cmd, expect] of [
+  ['/goals', /Over 2\.5 Goals<\/b>/],
+  ['/ht05', /1st Half Over 0\.5 Goals<\/b>/],
+  ['/corners', /Corners<\/b>/],
+  ['/basketball', /Basketball Predictions/],
+  ['/tennis', /Tennis Predictions/],
+  ['/tomorrow', /Football Predictions/],
+] as [string, RegExp][]) {
+  calls = [];
+  await command(PAID, cmd);
+  check(`${cmd} shows its list`, expect.test(sentText()?.text || ''), (sentText()?.text || '').slice(0, 200));
+}
+
+// Tier views use the tiers shown on the cards (site thresholds: Banger 96%+)
 calls = [];
 await command(PAID, '/bangers');
-const bang = calls.find((c) => c.method === 'sendMessage');
-check('/bangers lists only the 97% match, single page, no buttons', !!bang && /Super Bankers/.test(bang.body.text) && /1 match\b/.test(bang.body.text) && !bang.body.reply_markup, bang?.body.text);
+body = sentText();
+check('/bangers lists only the Banger match', !!body && /Bangers<\/b> · 96%\+/.test(body.text) && /1 match\b/.test(body.text) && /Home 1 vs Away 1/.test(body.text), body?.text.slice(0, 300));
+calls = [];
+await command(PAID, '/toppicks');
+check('/toppicks lists matches with a Top Pick inside', /21 matches/.test(sentText()?.text || ''));
 
-// Current-page button just closes the spinner
+// Every table query filters to published rows
+check('every prediction query filters publication_status=published', queried.length > 0 && queried.every((q) => q.includes('publication_status=eq.published')));
+
+// ── Premium gate still applies to every button
+calls = [];
+await press(FREE, tab('🏀 Basketball'));
+check('free account pressing a tab gets the upgrade message, no picks',
+  calls.some((c) => c.method === 'sendMessage' && /VIP Access Required/.test(c.body.text)) && !calls.some((c) => c.method === 'editMessageText'));
+calls = [];
+await press(99, pageBtn);
+check('unlinked chat pressing a page button is asked to link',
+  calls.some((c) => c.method === 'sendMessage' && /Authentication Required/.test(c.body.text)) && !calls.some((c) => c.method === 'editMessageText'));
+for (const cmd of ['/today', '/basketball', '/tennis', '/corners', '/ht05']) {
+  calls = [];
+  await command(FREE, cmd);
+  check(`free account ${cmd} still gets the upgrade message`, calls.some((c) => /VIP Access Required/.test(c.body.text || '')) && !calls.some((c) => /%/.test(c.body.text || '') && /vs/.test(c.body.text || '')));
+}
+
+// Active tab / page button just closes the spinner
 calls = [];
 await press(PAID, 'pg|noop');
-check('current page button only answers the callback', calls.length === 1 && calls[0].method === 'answerCallbackQuery');
+check('active button only answers the callback', calls.length === 1 && calls[0].method === 'answerCallbackQuery');
+
+// /help and /start list the same commands as the menu
+calls = [];
+await command(PAID, '/help');
+check('/help lists every menu command', BOT_MENU.every((m) => (sentText()?.text || '').includes('/' + m.command)));
 
 if (failed) { console.log(`\n${failed} FAILED`); process.exit(1); }
 console.log('\nTELEGRAM PAGES: ALL PASSED');
