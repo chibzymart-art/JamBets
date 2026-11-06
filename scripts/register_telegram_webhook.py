@@ -46,7 +46,7 @@ payload = {
     "url": WEBHOOK_URL,
     "secret_token": WEBHOOK_SECRET,
     "drop_pending_updates": False,
-    "allowed_updates": ["message"]
+    "allowed_updates": ["message", "callback_query"]
 }
 
 req = urllib.request.Request(
