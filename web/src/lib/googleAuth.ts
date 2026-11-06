@@ -1,5 +1,6 @@
 import { tryCaptchaToken } from './turnstile';
 import { supabase } from './supabase';
+import { authRedirectOrigin } from './siteUrl';
 
 export const GOOGLE_CLIENT_ID =
   import.meta.env.VITE_GOOGLE_CLIENT_ID ||
@@ -216,7 +217,7 @@ export async function promptGoogleOneTap() {
  * Fallback to standard Supabase OAuth redirect flow if GIS is unavailable.
  */
 export async function triggerOAuthFallback() {
-  const redirectTo = `${window.location.origin}${window.location.pathname === '/' ? '/dashboard' : window.location.pathname}`;
+  const redirectTo = `${authRedirectOrigin()}${window.location.pathname === '/' ? '/dashboard' : window.location.pathname}`;
   return await supabase.auth.signInWithOAuth({
     provider: 'google',
     options: {

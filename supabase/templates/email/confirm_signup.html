@@ -16,7 +16,7 @@
 <p style="margin:0 0 20px;font-size:15px;color:#cbd5e1;line-height:1.6;">Confirm <strong>{{ .Email }}</strong> to finish creating your account and start your 3-day free trial.</p>
 <p style="margin:0 0 28px;font-size:14px;color:#94a3b8;line-height:1.6;">The button below works once. If you did not sign up for Oddsbanta, ignore this email and no account will be activated.</p>
 <table role="presentation" border="0" cellspacing="0" cellpadding="0" style="margin:0 auto;"><tr><td align="center" style="border-radius:10px;background:linear-gradient(135deg,#10b981 0%,#059669 100%);">
-<a href="{{ .ConfirmationURL }}" target="_blank" style="display:inline-block;padding:16px 36px;font-size:15px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:10px;">Confirm email &rarr;</a>
+<a href="https://www.oddsbanta.com/auth/confirm?token_hash={{ .TokenHash }}&amp;type=email" target="_blank" style="display:inline-block;padding:16px 36px;font-size:15px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:10px;">Confirm email &rarr;</a>
 </td></tr></table>
 <p style="margin:16px 0 0;font-size:12px;color:#64748b;">Oddsbanta staff will never ask for your password.</p>
 </td></tr>

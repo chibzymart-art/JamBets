@@ -26,7 +26,7 @@ if env_path.exists():
 
 BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN") or env_vars.get("TELEGRAM_BOT_TOKEN")
 WEBHOOK_SECRET = os.environ.get("TELEGRAM_WEBHOOK_SECRET") or env_vars.get("TELEGRAM_WEBHOOK_SECRET")
-WEBHOOK_URL = os.environ.get("TELEGRAM_WEBHOOK_URL") or "https://jambets.vercel.app/api/telegram-webhook"
+WEBHOOK_URL = os.environ.get("TELEGRAM_WEBHOOK_URL") or "https://www.oddsbanta.com/api/telegram-webhook"
 
 if not BOT_TOKEN:
     print("[-] Error: TELEGRAM_BOT_TOKEN is not set in .env or environment.")
