@@ -1,10 +1,16 @@
 import {
   type SecondaryLeanItem,
   type TelegramFixtureCard,
+  type ListCard,
   formatMarket,
   formatOutcome,
-  renderPredictionPage,
+  footballListCard,
+  renderListPage,
   parsePageCallback,
+  commandToView,
+  commandListHtml,
+  filterForView,
+  sourceForView,
   NOOP_CALLBACK,
 } from './_lib/telegram-pages';
 
@@ -464,15 +470,178 @@ async function loadFixtureCards(dateRange: { startUtc: string; endUtc: string })
   return fixtureCards;
 }
 
-function filterCardsForCommand(cmd: string, cards: TelegramFixtureCard[]): TelegramFixtureCard[] {
-  switch (cmd) {
-    case 'bangers': return cards.filter(c => c.hasBanger);
-    case 'toppicks': return cards.filter(c => c.hasTopPick);
-    case 'high': return cards.filter(c => c.hasHigh);
-    case 'mid': return cards.filter(c => c.hasMid);
-    case 'low': return cards.filter(c => c.hasLow);
-    case 'goals': return cards.filter(c => c.hasGoalLean);
-    default: return cards; // today, tomorrow
+function watTime(iso: string): string {
+  return new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Africa/Lagos' });
+}
+
+function serviceHeaders() {
+  return { apikey: SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}` };
+}
+
+function dayFilter(range: { startUtc: string; endUtc: string }): string {
+  return `and=${encodeURIComponent(`(target_kickoff_at.gte.${range.startUtc},target_kickoff_at.lte.${range.endUtc})`)}`;
+}
+
+async function fetchRows(table: string, select: string, range: { startUtc: string; endUtc: string }, extra = ''): Promise<any[] | null> {
+  const url = `${SUPABASE_URL}/rest/v1/${table}?select=${encodeURIComponent(select)}&publication_status=eq.published&${dayFilter(range)}${extra}&order=target_kickoff_at.asc,id.asc&limit=500`;
+  const res = await fetch(url, { headers: serviceHeaders() });
+  if (!res.ok) return null;
+  const rows = await res.json();
+  return Array.isArray(rows) ? rows : [];
+}
+
+function parseJsonArray(v: any): any[] {
+  if (typeof v === 'string') {
+    try { v = JSON.parse(v); } catch { return []; }
+  }
+  return Array.isArray(v) ? v : [];
+}
+
+const FOOTBALL_FIXTURE_JOIN =
+  'fixture:football_fixtures!inner(id,target_kickoff_at,home_team:football_teams!football_fixtures_home_team_id_fkey(name),away_team:football_teams!football_fixtures_away_team_id_fkey(name),league:football_leagues(code,name))';
+
+const GOALS_LABELS: Record<string, string> = {
+  'over_2.5_goals': 'Over 2.5 Goals',
+  'ht_over_0.5_goals': '1st Half Over 0.5 Goals',
+};
+
+/** Over 2.5 / 1st-half 0.5 goals (goals_predictions). The other goals market for the same match is a sub-pick. */
+async function loadGoalsCards(range: { startUtc: string; endUtc: string }, market: string): Promise<ListCard[] | null> {
+  const rows = await fetchRows(
+    'goals_predictions',
+    `id,fixture_id,market,probability,confidence_tier,xg_combined,target_kickoff_at,${FOOTBALL_FIXTURE_JOIN}`,
+    range,
+    '&settlement_status=neq.void'
+  );
+  if (!rows) return null;
+  const byFixture = new Map<string, any[]>();
+  for (const r of rows) {
+    const list = byFixture.get(r.fixture_id) || [];
+    list.push(r);
+    byFixture.set(r.fixture_id, list);
+  }
+  return rows
+    .filter(r => r.market === market)
+    .map(r => {
+      const f = r.fixture || {};
+      const others = (byFixture.get(r.fixture_id) || []).filter(o => o.market !== market && GOALS_LABELS[o.market]);
+      const xg = Number(r.xg_combined);
+      return {
+        title: `${(f.home_team?.name || 'Home').replace(/-/g, ' ')} vs ${(f.away_team?.name || 'Away').replace(/-/g, ' ')}`,
+        league: f.league?.code || f.league?.name || 'League',
+        kickoff: watTime(r.target_kickoff_at || f.target_kickoff_at),
+        main: { label: GOALS_LABELS[market], probability: normalizeProbability(r.probability), tier: r.confidence_tier || undefined },
+        subs: others.map(o => ({ label: GOALS_LABELS[o.market], probability: normalizeProbability(o.probability), tier: o.confidence_tier || undefined })),
+        note: Number.isFinite(xg) && xg > 0 ? `Expected goals (xG): ${xg.toFixed(2)}` : undefined,
+        tiers: [],
+      };
+    });
+}
+
+/** Corners (corner_predictions). The other corner lines' probabilities are sub-picks. */
+async function loadCornerCards(range: { startUtc: string; endUtc: string }): Promise<ListCard[] | null> {
+  const rows = await fetchRows(
+    'corner_predictions',
+    `id,fixture_id,market,prediction,probability,confidence_category,predicted_total_corners,over_8_5_prob,over_9_5_prob,over_10_5_prob,target_kickoff_at,${FOOTBALL_FIXTURE_JOIN}`,
+    range,
+    '&settlement_status=neq.void'
+  );
+  if (!rows) return null;
+  return rows.map(r => {
+    const f = r.fixture || {};
+    const mainLabel = String(r.prediction || formatMarket(r.market || '')).trim();
+    const lines: [string, any][] = [['Over 8.5 Corners', r.over_8_5_prob], ['Over 9.5 Corners', r.over_9_5_prob], ['Over 10.5 Corners', r.over_10_5_prob]];
+    const subs = lines
+      .filter(([label, v]) => v != null && Number(v) > 0 && label.toLowerCase() !== mainLabel.toLowerCase())
+      .map(([label, v]) => ({ label, probability: normalizeProbability(v) }));
+    const total = Number(r.predicted_total_corners);
+    return {
+      title: `${(f.home_team?.name || 'Home').replace(/-/g, ' ')} vs ${(f.away_team?.name || 'Away').replace(/-/g, ' ')}`,
+      league: f.league?.code || f.league?.name || 'League',
+      kickoff: watTime(r.target_kickoff_at || f.target_kickoff_at),
+      main: { label: mainLabel, probability: normalizeProbability(r.probability), tier: r.confidence_category || undefined },
+      subs,
+      note: Number.isFinite(total) && total > 0 ? `Expected corners: ${total.toFixed(1)}` : undefined,
+      tiers: [],
+    };
+  });
+}
+
+function isNoBanker(market: any, prediction: any, category: any): boolean {
+  const m = String(market || '').toUpperCase();
+  const c = String(category || '').toUpperCase().replace(/_/g, ' ');
+  return !prediction || m === 'NO_SAFE_BANKER' || c === 'NO SAFE BANKER' || String(prediction).toUpperCase().startsWith('NO SAFE BANKER');
+}
+
+function subPicksFrom(secondary: any): { label: string; probability: number; tier?: string }[] {
+  return parseJsonArray(secondary)
+    .map((s: any) => ({
+      label: String(s.prediction || s.pick || '').trim(),
+      probability: normalizeProbability(s.probability ?? s.prob),
+      tier: s.confidence_category || s.tier || undefined,
+    }))
+    .filter(s => s.label && s.label.toUpperCase() !== 'SKIP')
+    .sort((a, b) => b.probability - a.probability);
+}
+
+/** Basketball (basketball_predictions): main pick plus every secondary market. */
+async function loadBasketballCards(range: { startUtc: string; endUtc: string }): Promise<ListCard[] | null> {
+  const rows = await fetchRows(
+    'basketball_predictions',
+    'id,market,prediction,probability,confidence_category,secondary_predictions,target_kickoff_at,fixture:basketball_fixtures(target_kickoff_at,league:basketball_leagues(code,name),home_team:basketball_teams!basketball_fixtures_home_team_id_fkey(canonical_name,short_name),away_team:basketball_teams!basketball_fixtures_away_team_id_fkey(canonical_name,short_name))',
+    range
+  );
+  if (!rows) return null;
+  return rows.map(r => {
+    const f = r.fixture || {};
+    const pass = isNoBanker(r.market, r.prediction, r.confidence_category);
+    return {
+      title: `${f.home_team?.canonical_name || f.home_team?.short_name || 'Home'} vs ${f.away_team?.canonical_name || f.away_team?.short_name || 'Away'}`,
+      league: f.league?.name || f.league?.code || 'League',
+      kickoff: watTime(r.target_kickoff_at || f.target_kickoff_at),
+      main: pass ? null : { label: String(r.prediction), probability: normalizeProbability(r.probability), tier: r.confidence_category || undefined },
+      subs: subPicksFrom(r.secondary_predictions),
+      tiers: [],
+    };
+  });
+}
+
+/** Tennis (tennis_predictions): main pick (or no safe banker) plus every secondary market. */
+async function loadTennisCards(range: { startUtc: string; endUtc: string }): Promise<ListCard[] | null> {
+  const rows = await fetchRows(
+    'tennis_predictions',
+    'id,market,prediction,probability,confidence_category,secondary_predictions,target_kickoff_at,fixture:tennis_fixtures(target_kickoff_at,round,tournament:tennis_tournaments(name,tour),player1:tennis_players!tennis_fixtures_player1_id_fkey(display_name),player2:tennis_players!tennis_fixtures_player2_id_fkey(display_name))',
+    range
+  );
+  if (!rows) return null;
+  return rows.map(r => {
+    const f = r.fixture || {};
+    const pass = isNoBanker(r.market, r.prediction, r.confidence_category);
+    const t = f.tournament || {};
+    const league = [t.tour, t.name].filter(Boolean).join(' ') + (f.round ? ` · ${f.round}` : '');
+    return {
+      title: `${f.player1?.display_name || 'Player 1'} vs ${f.player2?.display_name || 'Player 2'}`,
+      league: league || 'Tennis',
+      kickoff: watTime(r.target_kickoff_at || f.target_kickoff_at),
+      main: pass ? null : { label: String(r.prediction), probability: normalizeProbability(r.probability), tier: r.confidence_category || undefined },
+      subs: subPicksFrom(r.secondary_predictions),
+      tiers: [],
+    };
+  });
+}
+
+/** Cards for a view (tab) on one WAT day. null on a database error. */
+async function loadCardsForView(view: string, range: { startUtc: string; endUtc: string }): Promise<ListCard[] | null> {
+  switch (sourceForView(view)) {
+    case 'goals': return loadGoalsCards(range, 'over_2.5_goals');
+    case 'ht05': return loadGoalsCards(range, 'ht_over_0.5_goals');
+    case 'corners': return loadCornerCards(range);
+    case 'basketball': return loadBasketballCards(range);
+    case 'tennis': return loadTennisCards(range);
+    default: {
+      const football = await loadFixtureCards(range);
+      return football === null ? null : filterForView(view, football.map(footballListCard));
+    }
   }
 }
 
@@ -534,25 +703,22 @@ export default async function handler(req: Request) {
 
       // The list stays on the day it was requested for, even after midnight.
       const cbRange = getLagosDateBoundaries(lagosOffsetForDateKey(parsed.dateKey));
-      const cbCards = await loadFixtureCards(cbRange);
+      const cbCards = await loadCardsForView(parsed.cmd, cbRange);
       if (cbCards === null) {
         await answerCallbackQuery(cq.id, 'Could not load predictions. Please try again shortly.');
         return new Response(JSON.stringify({ ok: true }), { status: 200 });
       }
-      const cbFiltered = filterCardsForCommand(parsed.cmd, cbCards);
-      if (cbFiltered.length === 0) {
-        await answerCallbackQuery(cq.id, 'These predictions are no longer available.');
-        return new Response(JSON.stringify({ ok: true }), { status: 200 });
-      }
 
-      const view = renderPredictionPage({
-        cmd: parsed.cmd,
+      const view = renderListPage({
+        view: parsed.cmd,
         displayDate: cbRange.displayDate,
         dateKey: parsed.dateKey,
-        cards: cbFiltered,
+        todayKey: getLagosDateBoundaries(0).lagosDateStr,
+        tomorrowKey: getLagosDateBoundaries(1).lagosDateStr,
+        cards: cbCards,
         page: parsed.page,
       });
-      await answerCallbackQuery(cq.id, `Page ${view.page} of ${view.totalPages}`);
+      await answerCallbackQuery(cq.id);
       await editTelegramMessage(cbChatId, cbMessageId, view.text, view.replyMarkup);
       return new Response(JSON.stringify({ ok: true }), { status: 200 });
     }
@@ -581,16 +747,7 @@ export default async function handler(req: Request) {
             `Welcome <b>${escapeHtml(linkResult.email)}</b>!\n` +
             `Your Oddsbanta profile is now linked.\n\n` +
             `<b>Available Commands:</b>\n` +
-            `• /today - All scheduled match predictions (Today WAT)\n` +
-            `• /tomorrow - Tomorrow's match predictions (WAT)\n` +
-            `• /bangers - Super Bankers (P ≥ 85%)\n` +
-            `• /toppicks - Top Picks (90% - 95%)\n` +
-            `• /high - High Confidence (80% - 89%)\n` +
-            `• /mid - Mid Confidence (70% - 79%)\n` +
-            `• /low - Low Confidence Leans (&lt; 70%)\n` +
-            `• /goals - Over 2.5 &amp; Goals Hub\n` +
-            `• /status - Your subscription status\n` +
-            `• /help - Full FAQ &amp; Guide`
+            commandListHtml()
           );
           return new Response(JSON.stringify({ ok: true }), { status: 200 });
         } else {
@@ -613,16 +770,7 @@ export default async function handler(req: Request) {
           `• Access Tier: <b>${escapeHtml(authInfo.tier)}</b>\n` +
           `• VIP Status: <b>${authInfo.isPaid ? 'UNLOCKED ✅' : 'LOCKED 🔒'}</b>\n\n` +
           `<b>Ready to pull calibrated predictions:</b>\n` +
-          `• /today - All active predictions (Today WAT)\n` +
-          `• /tomorrow - Tomorrow's predictions (WAT)\n` +
-          `• /bangers - Super Bankers (P ≥ 85%)\n` +
-          `• /toppicks - Top Picks (90% - 95%)\n` +
-          `• /high - High Confidence (80% - 89%)\n` +
-          `• /mid - Mid Confidence (70% - 79%)\n` +
-          `• /low - Low Confidence value leans\n` +
-          `• /goals - Over 2.5 &amp; 1st Half Goals Hub\n` +
-          `• /status - Subscription details\n` +
-          `• /help - Complete FAQs &amp; Command Guide`
+          commandListHtml()
         );
       } else {
         await sendTelegramMessage(
@@ -657,7 +805,7 @@ export default async function handler(req: Request) {
           `🎉 <b>Account Connected Successfully!</b>\n\n` +
           `Welcome <b>${escapeHtml(linkResult.email)}</b>!\n` +
           `You can now pull predictions anytime using:\n` +
-          `• /today\n• /tomorrow\n• /bangers\n• /toppicks\n• /high\n• /goals\n• /status`
+          commandListHtml()
         );
       } else {
         await sendTelegramMessage(
@@ -700,32 +848,24 @@ export default async function handler(req: Request) {
         `❓ <b>1. What is Oddsbanta?</b>\n` +
         `Oddsbanta is an automated sports predictive intelligence platform. Every match is evaluated with calibrated Poisson and statistical models (xG, home advantage, form weighting) to identify true probability edges.\n\n` +
         `❓ <b>2. What is a "Banger"?</b>\n` +
-        `A Banger is our highest-conviction classification (simulated probability ≥ 85%-96%+). It represents extreme mathematical alignment across simulations.\n\n` +
+        `A Banger is our highest-conviction classification (simulated probability 96% and above). It represents extreme mathematical alignment across simulations.\n\n` +
         `❓ <b>3. What do the Confidence Tiers mean?</b>\n` +
-        `• <b>Banger:</b> ≥ 85%-96%+ simulated probability\n` +
-        `• <b>Top Pick:</b> 90% - 95% simulated probability\n` +
-        `• <b>High Confidence:</b> 80% - 89% simulated probability\n` +
-        `• <b>Mid Confidence:</b> 70% - 79% simulated probability\n` +
-        `• <b>Low Confidence:</b> &lt; 70% statistical value leans\n\n` +
+        `• <b>Banger:</b> 96% and above\n` +
+        `• <b>Top Pick:</b> 90% - 95%\n` +
+        `• <b>High Confidence:</b> 80% - 89%\n` +
+        `• <b>Mid Confidence:</b> 70% - 79%\n` +
+        `• <b>Low Confidence:</b> under 70%, statistical value leans\n\n` +
         `❓ <b>4. Why are some matches passed or marked SKIP?</b>\n` +
-        `When no market meets our 80% Banker threshold, our Anti-Loss Guard flags the match as SKIP / NO SAFE BANKER. The bot automatically filters these out so you only receive actionable predictions.\n\n` +
+        `When no market meets our 80% Banker threshold, our Anti-Loss Guard flags the match as SKIP / NO SAFE BANKER. The bot still lists that match with its other picks, clearly marked, so you can judge them yourself.\n\n` +
         `❓ <b>5. How does Match Settlement work?</b>\n` +
         `Our autonomous settlement engine checks official full-time results every 5 minutes. Every published prediction is permanently marked as WON, LOST, or VOID with zero retroactive editing.\n\n` +
         `❓ <b>6. What happens if a match is Postponed?</b>\n` +
         `Postponed or abandoned matches are marked as ⊘ VOID. They do not count as a loss.\n\n` +
         `━━━━━━━━━━━━━━━━━━━━\n` +
         `📋 <b>BOT COMMANDS LIST:</b>\n\n` +
-        `• /today - All verified active predictions (Today WAT)\n` +
-        `• /tomorrow - Tomorrow's verified predictions (WAT)\n` +
-        `• /bangers - Super Bankers (P ≥ 85%)\n` +
-        `• /toppicks - Top Picks (90% - 95%)\n` +
-        `• /high - High Confidence (80% - 89%)\n` +
-        `• /mid - Mid Confidence (70% - 79%)\n` +
-        `• /low - Low Confidence value leans\n` +
-        `• /goals - Over 2.5, Over 1.5 &amp; BTTS Hub\n` +
-        `• /status - Check account &amp; VIP subscription status\n` +
-        `• /link &lt;CODE&gt; - Connect your Oddsbanta web profile\n` +
-        `• /help - Display this FAQ &amp; command list\n\n` +
+        commandListHtml() + `\n` +
+        `• /link &lt;CODE&gt; — Connect your Oddsbanta web profile\n\n` +
+        `Every list shows all matches in pages. Use the buttons under a list to switch sport or market, change day, or turn pages.\n\n` +
         `🌐 <b>Website:</b> https://www.oddsbanta.com\n` +
         `📊 <b>Dashboard:</b> https://www.oddsbanta.com/dashboard`;
 
@@ -784,9 +924,9 @@ export default async function handler(req: Request) {
       return new Response(JSON.stringify({ ok: true }), { status: 200 });
     }
 
-    // 6. ROUTE PREDICTION COMMANDS: /today, /tomorrow, /bangers, /toppicks, /high, /mid, /low, /goals
-    const predCommands = ['/today', '/tomorrow', '/bangers', '/toppicks', '/top', '/high', '/mid', '/low', '/goals'];
-    if (predCommands.includes(commandToken)) {
+    // 6. ROUTE PREDICTION LISTS: football (/today, /tomorrow, tier views), /goals, /ht05, /corners, /basketball, /tennis
+    const listTarget = commandToView(commandToken);
+    if (listTarget) {
       const user = await getLinkedUser(chatId);
       if (!user) {
         await sendTelegramMessage(chatId, LINK_REQUIRED_MESSAGE);
@@ -800,38 +940,21 @@ export default async function handler(req: Request) {
       }
 
       // Date scoping strictly in Africa/Lagos (WAT, UTC+1)
-      const isTomorrow = commandToken === '/tomorrow';
-      const dateRange = getLagosDateBoundaries(isTomorrow ? 1 : 0);
-      const cmd = commandToken === '/top' ? 'toppicks' : commandToken.slice(1);
-
-      const fixtureCards = await loadFixtureCards(dateRange);
-      if (fixtureCards === null) {
+      const dateRange = getLagosDateBoundaries(listTarget.dayOffset);
+      const cards = await loadCardsForView(listTarget.view, dateRange);
+      if (cards === null) {
         await sendTelegramMessage(chatId, '⚠️ Error pulling predictions from database. Please try again shortly.');
         return new Response(JSON.stringify({ ok: true }), { status: 200 });
       }
-      if (fixtureCards.length === 0) {
-        await sendTelegramMessage(
-          chatId,
-          `⚽ No scheduled predictions found for <b>${dateRange.displayDate}</b>.\n\nUse /today or /tomorrow to check fixtures, or check back after the next automated simulation run!`
-        );
-        return new Response(JSON.stringify({ ok: true }), { status: 200 });
-      }
 
-      const filtered = filterCardsForCommand(cmd, fixtureCards);
-      if (filtered.length === 0) {
-        await sendTelegramMessage(
-          chatId,
-          `⚽ No matching predictions found for <b>${escapeHtml(commandToken)}</b> on ${dateRange.displayDate}.\n\nUse /today or /tomorrow to see all matches, or check back after the next simulation run!`
-        );
-        return new Response(JSON.stringify({ ok: true }), { status: 200 });
-      }
-
-      // Every match is listed, PAGE_SIZE per page, with page buttons underneath.
-      const view = renderPredictionPage({
-        cmd,
+      // Every match is listed across pages, with sport/market tabs and page buttons underneath.
+      const view = renderListPage({
+        view: listTarget.view,
         displayDate: dateRange.displayDate,
         dateKey: dateRange.lagosDateStr,
-        cards: filtered,
+        todayKey: getLagosDateBoundaries(0).lagosDateStr,
+        tomorrowKey: getLagosDateBoundaries(1).lagosDateStr,
+        cards,
         page: 1,
       });
       await sendTelegramMessage(chatId, view.text, view.replyMarkup);
