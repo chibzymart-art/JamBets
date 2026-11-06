@@ -1,3 +1,13 @@
+import {
+  type SecondaryLeanItem,
+  type TelegramFixtureCard,
+  formatMarket,
+  formatOutcome,
+  renderPredictionPage,
+  parsePageCallback,
+  NOOP_CALLBACK,
+} from './_lib/telegram-pages';
+
 export const config = {
   runtime: 'edge',
 };
@@ -33,6 +43,12 @@ interface TelegramUpdate {
     };
     date: number;
     text?: string;
+  };
+  callback_query?: {
+    id: string;
+    from: { id: number; username?: string };
+    message?: { message_id: number; chat: { id: number; type: string } };
+    data?: string;
   };
 }
 
@@ -78,11 +94,52 @@ async function sendTelegramMessage(chatId: number, htmlText: string, replyMarkup
           chat_id: chatId,
           text: plainText,
           disable_web_page_preview: true,
+          ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
         }),
       });
     }
   } catch (err) {
     console.error('Failed to send Telegram message:', err);
+  }
+}
+
+// Replaces the text (and page buttons) of a message the bot already sent. Used for page turns.
+async function editTelegramMessage(chatId: number, messageId: number, htmlText: string, replyMarkup?: any) {
+  if (!TELEGRAM_BOT_TOKEN) return;
+  try {
+    const base: any = { chat_id: chatId, message_id: messageId, disable_web_page_preview: true };
+    if (replyMarkup) base.reply_markup = replyMarkup;
+    const res = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/editMessageText`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...base, text: htmlText, parse_mode: 'HTML' }),
+    });
+    if (!res.ok) {
+      const errText = await res.text().catch(() => '');
+      if (/message is not modified/i.test(errText)) return;
+      console.error('Telegram HTML editMessageText failed, trying plain text fallback:', res.status, errText);
+      await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/editMessageText`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...base, text: htmlText.replace(/<[^>]+>/g, '') }),
+      });
+    }
+  } catch (err) {
+    console.error('Failed to edit Telegram message:', err);
+  }
+}
+
+// Stops the loading spinner on a pressed inline button.
+async function answerCallbackQuery(callbackQueryId: string, text?: string) {
+  if (!TELEGRAM_BOT_TOKEN) return;
+  try {
+    await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/answerCallbackQuery`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ callback_query_id: callbackQueryId, ...(text ? { text } : {}) }),
+    });
+  } catch (err) {
+    console.error('Failed to answer Telegram callback query:', err);
   }
 }
 
@@ -202,6 +259,223 @@ async function linkUserByToken(chatId: number, username: string | undefined, tok
   return { success: true, email: user.email };
 }
 
+// ── Prediction listing (paged) ────────────────────────────────────────────────
+
+function normalizeProbability(val: any): number {
+  const n = parseFloat(val) || 0;
+  return n <= 1 && n > 0 ? Math.round(n * 100) : Math.round(n);
+}
+
+function normalizeCategory(cat: any, prob: number): string {
+  const c = String(cat || '').toUpperCase().replace(/_/g, ' ').trim();
+  if (c === 'BANGER' || c === 'SUPER BANKER' || prob >= 96) return 'BANGER';
+  if (c === 'TOP PICK' || (prob >= 90 && prob < 96)) return 'TOP PICK';
+  if (c === 'HIGH CONFIDENCE' || (prob >= 80 && prob < 90)) return 'HIGH CONFIDENCE';
+  if (c === 'MID CONFIDENCE' || (prob >= 70 && prob < 80)) return 'MID CONFIDENCE';
+  if (c === 'LOW CONFIDENCE' || (prob > 0 && prob < 70)) return 'LOW CONFIDENCE';
+  return 'CONSENSUS';
+}
+
+function getLagosDateBoundaries(offsetDays: number = 0): { startUtc: string; endUtc: string; lagosDateStr: string; displayDate: string } {
+  const now = new Date();
+  const lagosTodayStr = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Africa/Lagos',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).format(now);
+
+  const [y, m, d] = lagosTodayStr.split('-').map(Number);
+  const startUtcDate = new Date(Date.UTC(y, m - 1, d + offsetDays, -1, 0, 0, 0));
+  const endUtcDate = new Date(Date.UTC(y, m - 1, d + offsetDays, 22, 59, 59, 999));
+
+  const targetDateObj = new Date(Date.UTC(y, m - 1, d + offsetDays, 12, 0, 0));
+  const targetLagosStr = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Africa/Lagos',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).format(targetDateObj);
+
+  const displayDate = targetDateObj.toLocaleDateString('en-GB', {
+    timeZone: 'UTC',
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short'
+  });
+
+  return {
+    startUtc: startUtcDate.toISOString(),
+    endUtc: endUtcDate.toISOString(),
+    lagosDateStr: targetLagosStr,
+    displayDate,
+  };
+}
+
+/** Days from today's Lagos date to a YYYY-MM-DD Lagos date (0 = today, 1 = tomorrow). */
+function lagosOffsetForDateKey(dateKey: string): number {
+  const today = getLagosDateBoundaries(0).lagosDateStr;
+  const [ty, tm, td] = today.split('-').map(Number);
+  const [y, m, d] = dateKey.split('-').map(Number);
+  return Math.round((Date.UTC(y, m - 1, d) - Date.UTC(ty, tm - 1, td)) / 864e5);
+}
+
+// Same gate messages as before; used for typed commands and page buttons alike.
+const LINK_REQUIRED_MESSAGE =
+  `🔒 <b>Authentication Required</b>\n\n` +
+  `Please link your Oddsbanta account first to pull predictions.\n\n` +
+  `1. Sign in at <a href="https://www.oddsbanta.com/dashboard">Oddsbanta</a>\n` +
+  `2. Click <b>Connect Telegram VIP Bot</b>\n` +
+  `3. Enter the code here: <code>/link YOUR_CODE</code>`;
+
+const VIP_REQUIRED_MESSAGE =
+  `🔒 <b>VIP Access Required</b>\n\n` +
+  `Your account is currently on the <b>Free Tier</b>.\n` +
+  `To unlock live predictions directly in Telegram, upgrade your plan:\n\n` +
+  `👉 <a href="https://www.oddsbanta.com/subscription">Upgrade to VIP (₦5,000/mo)</a>`;
+
+/** Loads one WAT day of published predictions as one card per fixture. null on a database error. */
+async function loadFixtureCards(dateRange: { startUtc: string; endUtc: string }): Promise<TelegramFixtureCard[] | null> {
+  const headers = {
+    apikey: SUPABASE_SERVICE_ROLE_KEY,
+    Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+  };
+
+  const selectFields = encodeURIComponent(
+    'id,fixture_id,prediction,market,probability,confidence_category,secondary_predictions,target_kickoff_at,fixture:football_fixtures!inner(id,target_kickoff_at,status,home_team:football_teams!football_fixtures_home_team_id_fkey(name),away_team:football_teams!football_fixtures_away_team_id_fkey(name),league:football_leagues!inner(code,name,country))'
+  );
+
+  const andFilter = encodeURIComponent(`(target_kickoff_at.gte.${dateRange.startUtc},target_kickoff_at.lte.${dateRange.endUtc})`);
+  const queryUrl = `${SUPABASE_URL}/rest/v1/football_predictions?select=${selectFields}&publication_status=eq.published&and=${andFilter}&order=target_kickoff_at.asc,id.asc&limit=200`;
+
+  const res = await fetch(queryUrl, { headers });
+  if (!res.ok) return null;
+
+  const rawPreds: any[] = await res.json();
+  if (!Array.isArray(rawPreds)) return [];
+
+  // Group into 1 fixture = 1 card
+  const fixtureCards: TelegramFixtureCard[] = [];
+
+  for (const p of rawPreds) {
+    const f = p.fixture;
+    const home = f?.home_team?.name?.replace(/-/g, ' ') || 'Home';
+    const away = f?.away_team?.name?.replace(/-/g, ' ') || 'Away';
+    const league = f?.league?.code || f?.league?.name || 'League';
+    const kickoffIso = p.target_kickoff_at || f?.target_kickoff_at;
+    const kickoffWat = new Date(kickoffIso).toLocaleTimeString('en-GB', {
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZone: 'Africa/Lagos',
+    });
+
+    const rawMkt = String(p.market || '').trim();
+    const rawPred = String(p.prediction || '').trim();
+    const rawCat = String(p.confidence_category || '').trim();
+    const isPass =
+      !rawPred ||
+      rawPred.toUpperCase() === 'SKIP' ||
+      rawMkt.toUpperCase() === 'NO_SAFE_BANKER' ||
+      rawCat.toUpperCase() === 'NO_SAFE_BANKER' ||
+      rawCat.toUpperCase() === 'NO SAFE BANKER';
+
+    const primProb = normalizeProbability(p.probability);
+    const primCat = isPass ? 'NO SAFE BANKER' : normalizeCategory(p.confidence_category, primProb);
+
+    let sec = p.secondary_predictions;
+    if (typeof sec === 'string') {
+      try {
+        sec = JSON.parse(sec);
+      } catch {
+        sec = [];
+      }
+    }
+
+    const secondaryLeans: SecondaryLeanItem[] = [];
+    if (Array.isArray(sec)) {
+      for (const s of sec) {
+        const sProb = normalizeProbability(s.probability || s.prob);
+        const sPred = String(s.prediction || '').trim();
+        const sMkt = String(s.market || '').trim();
+        const sCat = normalizeCategory(s.confidence_tier || s.tier, sProb);
+        if (sPred && sMkt && sPred.toUpperCase() !== 'SKIP' && sMkt.toUpperCase() !== 'NO_SAFE_BANKER') {
+          secondaryLeans.push({
+            market: sMkt,
+            prediction: sPred,
+            probability: sProb,
+            confidenceCategory: sCat,
+            formattedMkt: formatMarket(sMkt),
+            formattedPick: formatOutcome(sPred, sMkt),
+          });
+        }
+      }
+    }
+    secondaryLeans.sort((a, b) => b.probability - a.probability);
+
+    let maxProb = isPass ? 0 : primProb;
+    for (const s of secondaryLeans) {
+      if (s.probability > maxProb) maxProb = s.probability;
+    }
+
+    const isGoalMatch = (m: string, pr: string) => {
+      const ml = m.toLowerCase();
+      const pl = pr.toLowerCase();
+      return (
+        ml.includes('over') ||
+        ml.includes('under') ||
+        ml.includes('goal') ||
+        ml.includes('btts') ||
+        pl.includes('over') ||
+        pl.includes('under') ||
+        pl.includes('goal')
+      );
+    };
+
+    const hasBanger = (!isPass && (primCat === 'BANGER' || primProb >= 85)) || secondaryLeans.some(s => s.confidenceCategory === 'BANGER' || s.probability >= 85);
+    const hasTopPick = (!isPass && (primCat === 'TOP PICK' || (primProb >= 90 && primProb < 96))) || secondaryLeans.some(s => s.confidenceCategory === 'TOP PICK' || (s.probability >= 90 && s.probability < 96));
+    const hasHigh = (!isPass && (primCat === 'HIGH CONFIDENCE' || (primProb >= 80 && primProb < 90))) || secondaryLeans.some(s => s.confidenceCategory === 'HIGH CONFIDENCE' || (s.probability >= 80 && s.probability < 90));
+    const hasMid = (!isPass && (primCat === 'MID CONFIDENCE' || (primProb >= 70 && primProb < 80))) || secondaryLeans.some(s => s.confidenceCategory === 'MID CONFIDENCE' || (s.probability >= 70 && s.probability < 80));
+    const hasLow = (!isPass && (primCat === 'LOW CONFIDENCE' || (primProb > 0 && primProb < 70))) || secondaryLeans.some(s => s.confidenceCategory === 'LOW CONFIDENCE' || (s.probability > 0 && s.probability < 70));
+    const hasGoalLean = (!isPass && isGoalMatch(rawMkt, rawPred)) || secondaryLeans.some(s => isGoalMatch(s.market, s.prediction));
+
+    fixtureCards.push({
+      fixtureId: p.fixture_id || f?.id,
+      homeTeam: home,
+      awayTeam: away,
+      leagueCode: league,
+      kickoffTimeWat: kickoffWat,
+      targetKickoffAt: kickoffIso,
+      isBankerPass: isPass,
+      primaryMarket: rawMkt,
+      primaryPick: rawPred,
+      primaryProbability: primProb,
+      primaryCategory: primCat,
+      secondaryLeans,
+      maxProbability: maxProb,
+      hasBanger,
+      hasTopPick,
+      hasHigh,
+      hasMid,
+      hasLow,
+      hasGoalLean,
+    });
+  }
+
+  return fixtureCards;
+}
+
+function filterCardsForCommand(cmd: string, cards: TelegramFixtureCard[]): TelegramFixtureCard[] {
+  switch (cmd) {
+    case 'bangers': return cards.filter(c => c.hasBanger);
+    case 'toppicks': return cards.filter(c => c.hasTopPick);
+    case 'high': return cards.filter(c => c.hasHigh);
+    case 'mid': return cards.filter(c => c.hasMid);
+    case 'low': return cards.filter(c => c.hasLow);
+    case 'goals': return cards.filter(c => c.hasGoalLean);
+    default: return cards; // today, tomorrow
+  }
+}
+
 export default async function handler(req: Request) {
   if (req.method !== 'POST') {
     return new Response(JSON.stringify({ ok: true, status: 'Oddsbanta Telegram Webhook Active' }), {
@@ -231,6 +505,58 @@ export default async function handler(req: Request) {
 
   try {
     const update: TelegramUpdate = await req.json();
+
+    // 0. PAGE BUTTONS on a prediction list (inline keyboard callbacks)
+    if (update.callback_query) {
+      const cq = update.callback_query;
+      const cbChatId = cq.message?.chat?.id;
+      const cbMessageId = cq.message?.message_id;
+      const parsed = parsePageCallback(cq.data);
+
+      if (cq.data === NOOP_CALLBACK || !parsed || !cbChatId || !cbMessageId) {
+        await answerCallbackQuery(cq.id);
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      }
+
+      // Same premium gate as typed commands, checked again on every page turn.
+      const cbUser = await getLinkedUser(cbChatId);
+      if (!cbUser) {
+        await answerCallbackQuery(cq.id);
+        await sendTelegramMessage(cbChatId, LINK_REQUIRED_MESSAGE);
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      }
+      const cbAuth = await isUserPaidOrAdmin(cbUser);
+      if (!cbAuth.isPaid) {
+        await answerCallbackQuery(cq.id);
+        await sendTelegramMessage(cbChatId, VIP_REQUIRED_MESSAGE);
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      }
+
+      // The list stays on the day it was requested for, even after midnight.
+      const cbRange = getLagosDateBoundaries(lagosOffsetForDateKey(parsed.dateKey));
+      const cbCards = await loadFixtureCards(cbRange);
+      if (cbCards === null) {
+        await answerCallbackQuery(cq.id, 'Could not load predictions. Please try again shortly.');
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      }
+      const cbFiltered = filterCardsForCommand(parsed.cmd, cbCards);
+      if (cbFiltered.length === 0) {
+        await answerCallbackQuery(cq.id, 'These predictions are no longer available.');
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      }
+
+      const view = renderPredictionPage({
+        cmd: parsed.cmd,
+        displayDate: cbRange.displayDate,
+        dateKey: parsed.dateKey,
+        cards: cbFiltered,
+        page: parsed.page,
+      });
+      await answerCallbackQuery(cq.id, `Page ${view.page} of ${view.totalPages}`);
+      await editTelegramMessage(cbChatId, cbMessageId, view.text, view.replyMarkup);
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    }
+
     if (!update.message || !update.message.text) {
       return new Response(JSON.stringify({ ok: true }), { status: 200 });
     }
@@ -458,178 +784,32 @@ export default async function handler(req: Request) {
       return new Response(JSON.stringify({ ok: true }), { status: 200 });
     }
 
-function formatMarket(mkt: string): string {
-  const m = (mkt || '').toLowerCase().trim();
-  if (m === 'over_under_1.5') return 'Over/Under 1.5';
-  if (m === 'over_under_2.5') return 'Over/Under 2.5';
-  if (m === 'over_under_3.5') return 'Over/Under 3.5';
-  if (m === 'over_under_4.5') return 'Over/Under 4.5';
-  if (m === 'btts') return 'Both Teams to Score';
-  if (m === 'double_chance') return 'Double Chance';
-  if (m === 'moneyline' || m === '1x2') return 'Match Result (1X2)';
-  if (m === 'home_goals_0.5') return 'Home Over 0.5';
-  if (m === 'away_goals_0.5') return 'Away Over 0.5';
-  if (m === 'home_goals_1.5') return 'Home Over 1.5';
-  if (m === 'away_goals_1.5') return 'Away Over 1.5';
-  if (m === '1h_goals_0.5' || m === 'ht_goals_0.5') return '1st Half Over 0.5';
-  if (m === '1h_goals_1.5' || m === 'ht_goals_1.5') return '1st Half Over 1.5';
-  if (m === '2h_goals_0.5') return '2nd Half Over 0.5';
-  if (m === '2h_goals_1.5') return '2nd Half Over 1.5';
-  if (m.startsWith('corners_')) return `Corners ${m.replace('corners_', '')}`;
-  return (mkt || '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-}
-
-function formatOutcome(pick: string, market?: string): string {
-  const p = (pick || '').toLowerCase().trim();
-  if (p === 'over') return 'OVER';
-  if (p === 'under') return 'UNDER';
-  if (p === 'yes') return 'YES';
-  if (p === 'no') return 'NO';
-  if (p === '1') return 'Home Win (1)';
-  if (p === '2') return 'Away Win (2)';
-  if (p === 'x') return 'Draw (X)';
-  if (p === '1x') return 'Home or Draw (1X)';
-  if (p === 'x2') return 'Draw or Away (X2)';
-  if (p === '12') return 'Home or Away (12)';
-  return pick ? pick.toUpperCase() : '';
-}
-
-function normalizeProbability(val: any): number {
-  const n = parseFloat(val) || 0;
-  return n <= 1 && n > 0 ? Math.round(n * 100) : Math.round(n);
-}
-
-function normalizeCategory(cat: any, prob: number): string {
-  const c = String(cat || '').toUpperCase().replace(/_/g, ' ').trim();
-  if (c === 'BANGER' || c === 'SUPER BANKER' || prob >= 96) return 'BANGER';
-  if (c === 'TOP PICK' || (prob >= 90 && prob < 96)) return 'TOP PICK';
-  if (c === 'HIGH CONFIDENCE' || (prob >= 80 && prob < 90)) return 'HIGH CONFIDENCE';
-  if (c === 'MID CONFIDENCE' || (prob >= 70 && prob < 80)) return 'MID CONFIDENCE';
-  if (c === 'LOW CONFIDENCE' || (prob > 0 && prob < 70)) return 'LOW CONFIDENCE';
-  return 'CONSENSUS';
-}
-
-function getLagosDateBoundaries(offsetDays: number = 0): { startUtc: string; endUtc: string; lagosDateStr: string; displayDate: string } {
-  const now = new Date();
-  const lagosTodayStr = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Africa/Lagos',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit'
-  }).format(now);
-
-  const [y, m, d] = lagosTodayStr.split('-').map(Number);
-  const startUtcDate = new Date(Date.UTC(y, m - 1, d + offsetDays, -1, 0, 0, 0));
-  const endUtcDate = new Date(Date.UTC(y, m - 1, d + offsetDays, 22, 59, 59, 999));
-
-  const targetDateObj = new Date(Date.UTC(y, m - 1, d + offsetDays, 12, 0, 0));
-  const targetLagosStr = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Africa/Lagos',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit'
-  }).format(targetDateObj);
-
-  const displayDate = targetDateObj.toLocaleDateString('en-GB', {
-    timeZone: 'UTC',
-    weekday: 'short',
-    day: 'numeric',
-    month: 'short'
-  });
-
-  return {
-    startUtc: startUtcDate.toISOString(),
-    endUtc: endUtcDate.toISOString(),
-    lagosDateStr: targetLagosStr,
-    displayDate,
-  };
-}
-
-interface SecondaryLeanItem {
-  market: string;
-  prediction: string;
-  probability: number;
-  confidenceCategory: string;
-  formattedMkt: string;
-  formattedPick: string;
-}
-
-interface TelegramFixtureCard {
-  fixtureId: string;
-  homeTeam: string;
-  awayTeam: string;
-  leagueCode: string;
-  kickoffTimeWat: string;
-  targetKickoffAt: string;
-  isBankerPass: boolean;
-  primaryMarket: string;
-  primaryPick: string;
-  primaryProbability: number;
-  primaryCategory: string;
-  secondaryLeans: SecondaryLeanItem[];
-  maxProbability: number;
-  hasBanger: boolean;
-  hasTopPick: boolean;
-  hasHigh: boolean;
-  hasMid: boolean;
-  hasLow: boolean;
-  hasGoalLean: boolean;
-}
-
     // 6. ROUTE PREDICTION COMMANDS: /today, /tomorrow, /bangers, /toppicks, /high, /mid, /low, /goals
     const predCommands = ['/today', '/tomorrow', '/bangers', '/toppicks', '/top', '/high', '/mid', '/low', '/goals'];
     if (predCommands.includes(commandToken)) {
       const user = await getLinkedUser(chatId);
       if (!user) {
-        await sendTelegramMessage(
-          chatId,
-          `🔒 <b>Authentication Required</b>\n\n` +
-          `Please link your Oddsbanta account first to pull predictions.\n\n` +
-          `1. Sign in at <a href="https://www.oddsbanta.com/dashboard">Oddsbanta</a>\n` +
-          `2. Click <b>Connect Telegram VIP Bot</b>\n` +
-          `3. Enter the code here: <code>/link YOUR_CODE</code>`
-        );
+        await sendTelegramMessage(chatId, LINK_REQUIRED_MESSAGE);
         return new Response(JSON.stringify({ ok: true }), { status: 200 });
       }
 
       const authInfo = await isUserPaidOrAdmin(user);
       if (!authInfo.isPaid) {
-        await sendTelegramMessage(
-          chatId,
-          `🔒 <b>VIP Access Required</b>\n\n` +
-          `Your account is currently on the <b>Free Tier</b>.\n` +
-          `To unlock live predictions directly in Telegram, upgrade your plan:\n\n` +
-          `👉 <a href="https://www.oddsbanta.com/subscription">Upgrade to VIP (₦5,000/mo)</a>`
-        );
+        await sendTelegramMessage(chatId, VIP_REQUIRED_MESSAGE);
         return new Response(JSON.stringify({ ok: true }), { status: 200 });
       }
 
       // Date scoping strictly in Africa/Lagos (WAT, UTC+1)
       const isTomorrow = commandToken === '/tomorrow';
       const dateRange = getLagosDateBoundaries(isTomorrow ? 1 : 0);
+      const cmd = commandToken === '/top' ? 'toppicks' : commandToken.slice(1);
 
-      // Query database with strict WAT window & deterministic tie-breaker
-      const headers = {
-        apikey: SUPABASE_SERVICE_ROLE_KEY,
-        Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-      };
-
-      const selectFields = encodeURIComponent(
-        'id,fixture_id,prediction,market,probability,confidence_category,secondary_predictions,target_kickoff_at,fixture:football_fixtures!inner(id,target_kickoff_at,status,home_team:football_teams!football_fixtures_home_team_id_fkey(name),away_team:football_teams!football_fixtures_away_team_id_fkey(name),league:football_leagues!inner(code,name,country))'
-      );
-
-      const andFilter = encodeURIComponent(`(target_kickoff_at.gte.${dateRange.startUtc},target_kickoff_at.lte.${dateRange.endUtc})`);
-      const queryUrl = `${SUPABASE_URL}/rest/v1/football_predictions?select=${selectFields}&publication_status=eq.published&and=${andFilter}&order=target_kickoff_at.asc,id.asc&limit=200`;
-
-      const res = await fetch(queryUrl, { headers });
-
-      if (!res.ok) {
+      const fixtureCards = await loadFixtureCards(dateRange);
+      if (fixtureCards === null) {
         await sendTelegramMessage(chatId, '⚠️ Error pulling predictions from database. Please try again shortly.');
         return new Response(JSON.stringify({ ok: true }), { status: 200 });
       }
-
-      const rawPreds: any[] = await res.json();
-      if (!Array.isArray(rawPreds) || rawPreds.length === 0) {
+      if (fixtureCards.length === 0) {
         await sendTelegramMessage(
           chatId,
           `⚽ No scheduled predictions found for <b>${dateRange.displayDate}</b>.\n\nUse /today or /tomorrow to check fixtures, or check back after the next automated simulation run!`
@@ -637,142 +817,7 @@ interface TelegramFixtureCard {
         return new Response(JSON.stringify({ ok: true }), { status: 200 });
       }
 
-      // Group into 1 fixture = 1 card
-      const fixtureCards: TelegramFixtureCard[] = [];
-
-      for (const p of rawPreds) {
-        const f = p.fixture;
-        const home = f?.home_team?.name?.replace(/-/g, ' ') || 'Home';
-        const away = f?.away_team?.name?.replace(/-/g, ' ') || 'Away';
-        const league = f?.league?.code || f?.league?.name || 'League';
-        const kickoffIso = p.target_kickoff_at || f?.target_kickoff_at;
-        const kickoffWat = new Date(kickoffIso).toLocaleTimeString('en-GB', {
-          hour: '2-digit',
-          minute: '2-digit',
-          timeZone: 'Africa/Lagos',
-        });
-
-        const rawMkt = String(p.market || '').trim();
-        const rawPred = String(p.prediction || '').trim();
-        const rawCat = String(p.confidence_category || '').trim();
-        const isPass =
-          !rawPred ||
-          rawPred.toUpperCase() === 'SKIP' ||
-          rawMkt.toUpperCase() === 'NO_SAFE_BANKER' ||
-          rawCat.toUpperCase() === 'NO_SAFE_BANKER' ||
-          rawCat.toUpperCase() === 'NO SAFE BANKER';
-
-        const primProb = normalizeProbability(p.probability);
-        const primCat = isPass ? 'NO SAFE BANKER' : normalizeCategory(p.confidence_category, primProb);
-
-        let sec = p.secondary_predictions;
-        if (typeof sec === 'string') {
-          try {
-            sec = JSON.parse(sec);
-          } catch {
-            sec = [];
-          }
-        }
-
-        const secondaryLeans: SecondaryLeanItem[] = [];
-        if (Array.isArray(sec)) {
-          for (const s of sec) {
-            const sProb = normalizeProbability(s.probability || s.prob);
-            const sPred = String(s.prediction || '').trim();
-            const sMkt = String(s.market || '').trim();
-            const sCat = normalizeCategory(s.confidence_tier || s.tier, sProb);
-            if (sPred && sMkt && sPred.toUpperCase() !== 'SKIP' && sMkt.toUpperCase() !== 'NO_SAFE_BANKER') {
-              secondaryLeans.push({
-                market: sMkt,
-                prediction: sPred,
-                probability: sProb,
-                confidenceCategory: sCat,
-                formattedMkt: formatMarket(sMkt),
-                formattedPick: formatOutcome(sPred, sMkt),
-              });
-            }
-          }
-        }
-        secondaryLeans.sort((a, b) => b.probability - a.probability);
-
-        let maxProb = isPass ? 0 : primProb;
-        for (const s of secondaryLeans) {
-          if (s.probability > maxProb) maxProb = s.probability;
-        }
-
-        const isGoalMatch = (m: string, pr: string) => {
-          const ml = m.toLowerCase();
-          const pl = pr.toLowerCase();
-          return (
-            ml.includes('over') ||
-            ml.includes('under') ||
-            ml.includes('goal') ||
-            ml.includes('btts') ||
-            pl.includes('over') ||
-            pl.includes('under') ||
-            pl.includes('goal')
-          );
-        };
-
-        const hasBanger = (!isPass && (primCat === 'BANGER' || primProb >= 85)) || secondaryLeans.some(s => s.confidenceCategory === 'BANGER' || s.probability >= 85);
-        const hasTopPick = (!isPass && (primCat === 'TOP PICK' || (primProb >= 90 && primProb < 96))) || secondaryLeans.some(s => s.confidenceCategory === 'TOP PICK' || (s.probability >= 90 && s.probability < 96));
-        const hasHigh = (!isPass && (primCat === 'HIGH CONFIDENCE' || (primProb >= 80 && primProb < 90))) || secondaryLeans.some(s => s.confidenceCategory === 'HIGH CONFIDENCE' || (s.probability >= 80 && s.probability < 90));
-        const hasMid = (!isPass && (primCat === 'MID CONFIDENCE' || (primProb >= 70 && primProb < 80))) || secondaryLeans.some(s => s.confidenceCategory === 'MID CONFIDENCE' || (s.probability >= 70 && s.probability < 80));
-        const hasLow = (!isPass && (primCat === 'LOW CONFIDENCE' || (primProb > 0 && primProb < 70))) || secondaryLeans.some(s => s.confidenceCategory === 'LOW CONFIDENCE' || (s.probability > 0 && s.probability < 70));
-        const hasGoalLean = (!isPass && isGoalMatch(rawMkt, rawPred)) || secondaryLeans.some(s => isGoalMatch(s.market, s.prediction));
-
-        fixtureCards.push({
-          fixtureId: p.fixture_id || f?.id,
-          homeTeam: home,
-          awayTeam: away,
-          leagueCode: league,
-          kickoffTimeWat: kickoffWat,
-          targetKickoffAt: kickoffIso,
-          isBankerPass: isPass,
-          primaryMarket: rawMkt,
-          primaryPick: rawPred,
-          primaryProbability: primProb,
-          primaryCategory: primCat,
-          secondaryLeans,
-          maxProbability: maxProb,
-          hasBanger,
-          hasTopPick,
-          hasHigh,
-          hasMid,
-          hasLow,
-          hasGoalLean,
-        });
-      }
-
-      let categoryTitle = 'ALL MATCHES';
-      let filtered: TelegramFixtureCard[] = [];
-
-      if (commandToken === '/today') {
-        categoryTitle = `TODAY'S FIXTURES (${dateRange.displayDate})`;
-        filtered = fixtureCards;
-      } else if (commandToken === '/tomorrow') {
-        categoryTitle = `TOMORROW'S FIXTURES (${dateRange.displayDate})`;
-        filtered = fixtureCards;
-      } else if (commandToken === '/bangers') {
-        categoryTitle = `🔥 SUPER BANGERS (P ≥ 85%-96%+) • ${dateRange.displayDate}`;
-        filtered = fixtureCards.filter(c => c.hasBanger);
-      } else if (commandToken === '/toppicks' || commandToken === '/top') {
-        categoryTitle = `⭐ TOP PICKS (90% - 95%) • ${dateRange.displayDate}`;
-        filtered = fixtureCards.filter(c => c.hasTopPick);
-      } else if (commandToken === '/high') {
-        categoryTitle = `🟢 HIGH CONFIDENCE (80% - 89%) • ${dateRange.displayDate}`;
-        filtered = fixtureCards.filter(c => c.hasHigh);
-      } else if (commandToken === '/mid') {
-        categoryTitle = `🔵 MID CONFIDENCE (70% - 79%) • ${dateRange.displayDate}`;
-        filtered = fixtureCards.filter(c => c.hasMid);
-      } else if (commandToken === '/low') {
-        categoryTitle = `🟡 LOW CONFIDENCE VALUE LEANS (< 70%) • ${dateRange.displayDate}`;
-        filtered = fixtureCards.filter(c => c.hasLow);
-      } else if (commandToken === '/goals') {
-        categoryTitle = `⚡ OVER 2.5 &amp; GOALS HUB • ${dateRange.displayDate}`;
-        filtered = fixtureCards.filter(c => c.hasGoalLean);
-      }
-
+      const filtered = filterCardsForCommand(cmd, fixtureCards);
       if (filtered.length === 0) {
         await sendTelegramMessage(
           chatId,
@@ -781,43 +826,15 @@ interface TelegramFixtureCard {
         return new Response(JSON.stringify({ ok: true }), { status: 200 });
       }
 
-      // Build Telegram message
-      let reply = `⚽ <b>Oddsbanta VIP Predictions</b>\n`;
-      reply += `🏷️ <b>Filter:</b> ${categoryTitle}\n`;
-      reply += `📅 Calibrated Poisson probability models • Total: <b>${filtered.length} matches</b>\n\n`;
-
-      filtered.slice(0, 10).forEach((item, idx) => {
-        reply += `<b>${idx + 1}. ${escapeHtml(item.homeTeam)} vs ${escapeHtml(item.awayTeam)}</b>\n`;
-        reply += `🏆 ${escapeHtml(item.leagueCode)} • ⏰ ${item.kickoffTimeWat} WAT\n`;
-
-        if (item.isBankerPass) {
-          reply += `🎯 <b>Banker:</b> 🛡️ <i>Risk Guard: Pass (No Safe Banker)</i>\n`;
-          if (item.secondaryLeans.length > 0) {
-            const topLean = item.secondaryLeans[0];
-            reply += `  • <i>Top Value Lean: ${escapeHtml(topLean.formattedPick)} (${escapeHtml(topLean.formattedMkt)}) — <b>${topLean.probability}%</b> [${escapeHtml(topLean.confidenceCategory)}]</i>\n`;
-          }
-        } else {
-          const mktFmt = escapeHtml(formatMarket(item.primaryMarket));
-          const pickFmt = escapeHtml(formatOutcome(item.primaryPick, item.primaryMarket));
-          reply += `🎯 <b>Banker:</b> <b>${pickFmt}</b> (${mktFmt})\n`;
-          reply += `📊 Certainty: <b>${item.primaryProbability}%</b> • Tier: <code>${escapeHtml(item.primaryCategory)}</code>\n`;
-          if (item.secondaryLeans.length > 0) {
-            const topLeans = item.secondaryLeans.slice(0, 2);
-            for (const s of topLeans) {
-              reply += `  • <i>Value Lean: ${escapeHtml(s.formattedPick)} (${escapeHtml(s.formattedMkt)}) — ${s.probability}%</i>\n`;
-            }
-          }
-        }
-        reply += `\n`;
+      // Every match is listed, PAGE_SIZE per page, with page buttons underneath.
+      const view = renderPredictionPage({
+        cmd,
+        displayDate: dateRange.displayDate,
+        dateKey: dateRange.lagosDateStr,
+        cards: filtered,
+        page: 1,
       });
-
-      if (filtered.length > 10) {
-        reply += `<i>...and ${filtered.length - 10} more fixtures on <a href="https://www.oddsbanta.com/dashboard">Oddsbanta Dashboard</a></i>\n\n`;
-      }
-
-      reply += `Quick Commands: /today | /tomorrow | /bangers | /toppicks | /goals`;
-
-      await sendTelegramMessage(chatId, reply);
+      await sendTelegramMessage(chatId, view.text, view.replyMarkup);
       return new Response(JSON.stringify({ ok: true }), { status: 200 });
     }
 
