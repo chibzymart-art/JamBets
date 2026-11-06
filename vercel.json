@@ -55,6 +55,18 @@
     }
   ],
   "redirects": [
+    {
+      "source": "/:path((?!api/).*)",
+      "has": [{ "type": "host", "value": "jambets.vercel.app" }],
+      "destination": "https://www.oddsbanta.com/:path",
+      "permanent": true
+    },
+    {
+      "source": "/:path((?!api/).*)",
+      "has": [{ "type": "host", "value": "jam-bets-neon.vercel.app" }],
+      "destination": "https://www.oddsbanta.com/:path",
+      "permanent": true
+    },
     { "source": "/predictions", "destination": "/dashboard", "permanent": true },
     { "source": "/football", "destination": "/dashboard", "permanent": true },
     { "source": "/analytics", "destination": "/dashboard", "permanent": true },

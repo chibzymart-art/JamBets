@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { tryCaptchaToken, captchaErrorMessage } from '../lib/turnstile';
+import { authRedirectOrigin } from '../lib/siteUrl';
 
 export const PasswordRecoveryPage: React.FC = () => {
   const navigate = useNavigate();
@@ -84,7 +85,7 @@ export const PasswordRecoveryPage: React.FC = () => {
       // Supabase Auth sends the branded "Reset your Oddsbanta password" email.
       const captchaToken = await tryCaptchaToken();
       const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
-        redirectTo: `${window.location.origin}/reset-password`,
+        redirectTo: `${authRedirectOrigin()}/reset-password`,
         captchaToken,
       });
 

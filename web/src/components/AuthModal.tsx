@@ -10,6 +10,7 @@ import {
 import { tryCaptchaToken, captchaErrorMessage } from '../lib/turnstile';
 import { getEasyEasyClickId } from '../lib/easyeasy';
 import { suggestEmailFix } from '../lib/emailTypo';
+import { authRedirectOrigin } from '../lib/siteUrl';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -363,6 +364,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           password,
           options: {
             captchaToken,
+            // Without this, Supabase sends the confirm link to the project's Site URL setting.
+            emailRedirectTo: `${authRedirectOrigin()}/dashboard`,
             data: {
               display_name: displayName.trim() || email.split('@')[0],
               disclaimer_age_accepted: true,
@@ -451,7 +454,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       const { error } = await executeAuthWithRetry(async () => {
         const captchaToken = await tryCaptchaToken();
         const res = await supabase.auth.resetPasswordForEmail(email.trim(), {
-          redirectTo: `${window.location.origin}/reset-password`,
+          redirectTo: `${authRedirectOrigin()}/reset-password`,
           captchaToken,
         });
         if (res.error) {

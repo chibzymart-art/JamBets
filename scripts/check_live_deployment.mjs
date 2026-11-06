@@ -4,7 +4,7 @@ import path from 'path';
 
 const ARTIFACT_DIR = 'C:\\Users\\HP\\.gemini\\antigravity-ide\\brain\\8c0eee48-5099-492b-89c9-c2d1fa78c689';
 const PORT = 9222;
-const LIVE_BASE = 'https://jambets.vercel.app';
+const LIVE_BASE = 'https://www.oddsbanta.com';
 
 function sleep(ms) {
   return new Promise((res) => setTimeout(res, ms));
