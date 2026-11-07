@@ -12,6 +12,11 @@ import {
   filterForView,
   sourceForView,
   NOOP_CALLBACK,
+  normalizeResult,
+  parseDateArg,
+  daysBetween,
+  MIN_DAY_OFFSET,
+  MAX_DAY_OFFSET,
 } from './_lib/telegram-pages';
 
 export const config = {
@@ -340,6 +345,19 @@ const VIP_REQUIRED_MESSAGE =
   `To unlock live predictions directly in Telegram, upgrade your plan:\n\n` +
   `👉 <a href="https://www.oddsbanta.com/subscription">Upgrade to VIP (₦5,000/mo)</a>`;
 
+/** "FT 2-1" once a football match has a score; "Live 1-0" while it is in play. */
+function footballScoreLine(actualScore: any, f: any): string | undefined {
+  const status = String(f?.status || '').toLowerCase();
+  const hs = f?.home_score, as = f?.away_score;
+  const fromFixture = hs != null && as != null ? `${hs}-${as}` : '';
+  const score = String(actualScore || '').trim() || fromFixture;
+  if (!score) return undefined;
+  if (['live', 'in_play', '1h', '2h', 'ht', 'halftime'].includes(status)) return `Live ${fromFixture || score}`;
+  if (['postponed', 'cancelled', 'abandoned'].includes(status)) return status.charAt(0).toUpperCase() + status.slice(1);
+  const ht = f?.half_time_home_score != null && f?.half_time_away_score != null ? ` · HT ${f.half_time_home_score}-${f.half_time_away_score}` : '';
+  return `FT ${score}${ht}`;
+}
+
 /** Loads one WAT day of published predictions as one card per fixture. null on a database error. */
 async function loadFixtureCards(dateRange: { startUtc: string; endUtc: string }): Promise<TelegramFixtureCard[] | null> {
   const headers = {
@@ -348,7 +366,7 @@ async function loadFixtureCards(dateRange: { startUtc: string; endUtc: string })
   };
 
   const selectFields = encodeURIComponent(
-    'id,fixture_id,prediction,market,probability,confidence_category,secondary_predictions,target_kickoff_at,fixture:football_fixtures!inner(id,target_kickoff_at,status,home_team:football_teams!football_fixtures_home_team_id_fkey(name),away_team:football_teams!football_fixtures_away_team_id_fkey(name),league:football_leagues!inner(code,name,country))'
+    'id,fixture_id,prediction,market,probability,confidence_category,secondary_predictions,target_kickoff_at,settlement_status,actual_score,fixture:football_fixtures!inner(id,target_kickoff_at,status,home_score,away_score,half_time_home_score,half_time_away_score,home_team:football_teams!football_fixtures_home_team_id_fkey(name),away_team:football_teams!football_fixtures_away_team_id_fkey(name),league:football_leagues!inner(code,name,country))'
   );
 
   const andFilter = encodeURIComponent(`(target_kickoff_at.gte.${dateRange.startUtc},target_kickoff_at.lte.${dateRange.endUtc})`);
@@ -412,6 +430,7 @@ async function loadFixtureCards(dateRange: { startUtc: string; endUtc: string })
             confidenceCategory: sCat,
             formattedMkt: formatMarket(sMkt),
             formattedPick: formatOutcome(sPred, sMkt),
+            result: s.settlement_status ? normalizeResult(s.settlement_status) : undefined,
           });
         }
       }
@@ -464,6 +483,8 @@ async function loadFixtureCards(dateRange: { startUtc: string; endUtc: string })
       hasMid,
       hasLow,
       hasGoalLean,
+      primaryResult: isPass ? undefined : normalizeResult(p.settlement_status),
+      scoreLine: footballScoreLine(p.actual_score, f),
     });
   }
 
@@ -509,7 +530,7 @@ const GOALS_LABELS: Record<string, string> = {
 async function loadGoalsCards(range: { startUtc: string; endUtc: string }, market: string): Promise<ListCard[] | null> {
   const rows = await fetchRows(
     'goals_predictions',
-    `id,fixture_id,market,probability,confidence_tier,xg_combined,target_kickoff_at,${FOOTBALL_FIXTURE_JOIN}`,
+    `id,fixture_id,market,probability,confidence_tier,xg_combined,target_kickoff_at,settlement_status,actual_score,ht_score,${FOOTBALL_FIXTURE_JOIN}`,
     range,
     '&settlement_status=neq.void'
   );
@@ -530,19 +551,28 @@ async function loadGoalsCards(range: { startUtc: string; endUtc: string }, marke
         title: `${(f.home_team?.name || 'Home').replace(/-/g, ' ')} vs ${(f.away_team?.name || 'Away').replace(/-/g, ' ')}`,
         league: f.league?.code || f.league?.name || 'League',
         kickoff: watTime(r.target_kickoff_at || f.target_kickoff_at),
-        main: { label: GOALS_LABELS[market], probability: normalizeProbability(r.probability), tier: r.confidence_tier || undefined },
-        subs: others.map(o => ({ label: GOALS_LABELS[o.market], probability: normalizeProbability(o.probability), tier: o.confidence_tier || undefined })),
+        main: { label: GOALS_LABELS[market], probability: normalizeProbability(r.probability), tier: r.confidence_tier || undefined, result: normalizeResult(r.settlement_status) },
+        subs: others.map(o => ({ label: GOALS_LABELS[o.market], probability: normalizeProbability(o.probability), tier: o.confidence_tier || undefined, result: normalizeResult(o.settlement_status) })),
+        score: [r.actual_score ? `FT ${r.actual_score}` : '', r.ht_score ? `HT ${r.ht_score}` : ''].filter(Boolean).join(' · ') || undefined,
         note: Number.isFinite(xg) && xg > 0 ? `Expected goals (xG): ${xg.toFixed(2)}` : undefined,
         tiers: [],
       };
     });
 }
 
+/** "Corners: 6 (4H - 2A)" from actual_corners such as "6 corners (4H - 2A)"; nothing for "N/A" etc. */
+function cornersScoreLine(actual: any): string | undefined {
+  const t = String(actual ?? '').trim();
+  const m = t.match(/^(\d+)\s*(?:corners?)?\s*(.*)$/i);
+  if (!m) return undefined;
+  return `Corners: ${m[1]}${m[2] ? ` ${m[2].trim()}` : ''}`;
+}
+
 /** Corners (corner_predictions). The other corner lines' probabilities are sub-picks. */
 async function loadCornerCards(range: { startUtc: string; endUtc: string }): Promise<ListCard[] | null> {
   const rows = await fetchRows(
     'corner_predictions',
-    `id,fixture_id,market,prediction,probability,confidence_category,predicted_total_corners,over_8_5_prob,over_9_5_prob,over_10_5_prob,target_kickoff_at,${FOOTBALL_FIXTURE_JOIN}`,
+    `id,fixture_id,market,prediction,probability,confidence_category,predicted_total_corners,over_8_5_prob,over_9_5_prob,over_10_5_prob,target_kickoff_at,settlement_status,actual_corners,${FOOTBALL_FIXTURE_JOIN}`,
     range,
     '&settlement_status=neq.void'
   );
@@ -559,8 +589,9 @@ async function loadCornerCards(range: { startUtc: string; endUtc: string }): Pro
       title: `${(f.home_team?.name || 'Home').replace(/-/g, ' ')} vs ${(f.away_team?.name || 'Away').replace(/-/g, ' ')}`,
       league: f.league?.code || f.league?.name || 'League',
       kickoff: watTime(r.target_kickoff_at || f.target_kickoff_at),
-      main: { label: mainLabel, probability: normalizeProbability(r.probability), tier: r.confidence_category || undefined },
+      main: { label: mainLabel, probability: normalizeProbability(r.probability), tier: r.confidence_category || undefined, result: normalizeResult(r.settlement_status) },
       subs,
+      score: cornersScoreLine(r.actual_corners),
       note: Number.isFinite(total) && total > 0 ? `Expected corners: ${total.toFixed(1)}` : undefined,
       tiers: [],
     };
@@ -579,6 +610,7 @@ function subPicksFrom(secondary: any): { label: string; probability: number; tie
       label: String(s.prediction || s.pick || '').trim(),
       probability: normalizeProbability(s.probability ?? s.prob),
       tier: s.confidence_category || s.tier || undefined,
+      result: s.settlement_status ? normalizeResult(s.settlement_status) : undefined,
     }))
     .filter(s => s.label && s.label.toUpperCase() !== 'SKIP')
     .sort((a, b) => b.probability - a.probability);
@@ -588,7 +620,7 @@ function subPicksFrom(secondary: any): { label: string; probability: number; tie
 async function loadBasketballCards(range: { startUtc: string; endUtc: string }): Promise<ListCard[] | null> {
   const rows = await fetchRows(
     'basketball_predictions',
-    'id,market,prediction,probability,confidence_category,secondary_predictions,target_kickoff_at,fixture:basketball_fixtures(target_kickoff_at,league:basketball_leagues(code,name),home_team:basketball_teams!basketball_fixtures_home_team_id_fkey(canonical_name,short_name),away_team:basketball_teams!basketball_fixtures_away_team_id_fkey(canonical_name,short_name))',
+    'id,market,prediction,probability,confidence_category,secondary_predictions,target_kickoff_at,settlement_status,actual_result,fixture:basketball_fixtures(target_kickoff_at,status,home_score,away_score,league:basketball_leagues(code,name),home_team:basketball_teams!basketball_fixtures_home_team_id_fkey(canonical_name,short_name),away_team:basketball_teams!basketball_fixtures_away_team_id_fkey(canonical_name,short_name))',
     range
   );
   if (!rows) return null;
@@ -599,18 +631,38 @@ async function loadBasketballCards(range: { startUtc: string; endUtc: string }):
       title: `${f.home_team?.canonical_name || f.home_team?.short_name || 'Home'} vs ${f.away_team?.canonical_name || f.away_team?.short_name || 'Away'}`,
       league: f.league?.name || f.league?.code || 'League',
       kickoff: watTime(r.target_kickoff_at || f.target_kickoff_at),
-      main: pass ? null : { label: String(r.prediction), probability: normalizeProbability(r.probability), tier: r.confidence_category || undefined },
+      main: pass ? null : { label: String(r.prediction), probability: normalizeProbability(r.probability), tier: r.confidence_category || undefined, result: normalizeResult(r.settlement_status) },
       subs: subPicksFrom(r.secondary_predictions),
+      score: String(r.actual_result || '').trim()
+        || (f.home_score != null && f.away_score != null && (Number(f.home_score) > 0 || Number(f.away_score) > 0) ? `FT ${f.home_score}-${f.away_score}` : '')
+        || undefined,
       tiers: [],
     };
   });
+}
+
+/** "Sets 2-0 (6-4, 6-3)" once a tennis match has a score. */
+function tennisScoreLine(f: any): string | undefined {
+  const a = f?.score_p1_sets, b = f?.score_p2_sets;
+  if (a == null || b == null || (Number(a) === 0 && Number(b) === 0)) return undefined;
+  let sets = '';
+  const raw = parseJsonArray(f?.set_scores);
+  if (raw.length) {
+    sets = raw
+      .map((x: any) => (Array.isArray(x) ? `${x[0]}-${x[1]}` : x && typeof x === 'object' ? `${x.p1 ?? x.player1 ?? x[0] ?? '?'}-${x.p2 ?? x.player2 ?? x[1] ?? '?'}` : String(x)))
+      .join(', ');
+  } else if (typeof f?.set_scores === 'string' && f.set_scores.trim() && !f.set_scores.trim().startsWith('[')) {
+    sets = f.set_scores.trim();
+  }
+  const live = ['live', 'in_progress', 'in_play'].includes(String(f?.status || '').toLowerCase());
+  return `${live ? 'Live' : 'Sets'} ${a}-${b}${sets ? ` (${sets})` : ''}`;
 }
 
 /** Tennis (tennis_predictions): main pick (or no safe banker) plus every secondary market. */
 async function loadTennisCards(range: { startUtc: string; endUtc: string }): Promise<ListCard[] | null> {
   const rows = await fetchRows(
     'tennis_predictions',
-    'id,market,prediction,probability,confidence_category,secondary_predictions,target_kickoff_at,fixture:tennis_fixtures(target_kickoff_at,round,tournament:tennis_tournaments(name,tour),player1:tennis_players!tennis_fixtures_player1_id_fkey(display_name),player2:tennis_players!tennis_fixtures_player2_id_fkey(display_name))',
+    'id,market,prediction,probability,confidence_category,secondary_predictions,target_kickoff_at,settlement_status,actual_result,fixture:tennis_fixtures(target_kickoff_at,status,score_p1_sets,score_p2_sets,set_scores,round,tournament:tennis_tournaments(name,tour),player1:tennis_players!tennis_fixtures_player1_id_fkey(display_name),player2:tennis_players!tennis_fixtures_player2_id_fkey(display_name))',
     range
   );
   if (!rows) return null;
@@ -623,8 +675,9 @@ async function loadTennisCards(range: { startUtc: string; endUtc: string }): Pro
       title: `${f.player1?.display_name || 'Player 1'} vs ${f.player2?.display_name || 'Player 2'}`,
       league: league || 'Tennis',
       kickoff: watTime(r.target_kickoff_at || f.target_kickoff_at),
-      main: pass ? null : { label: String(r.prediction), probability: normalizeProbability(r.probability), tier: r.confidence_category || undefined },
+      main: pass ? null : { label: String(r.prediction), probability: normalizeProbability(r.probability), tier: r.confidence_category || undefined, result: normalizeResult(r.settlement_status) },
       subs: subPicksFrom(r.secondary_predictions),
+      score: String(r.actual_result || '').trim() || tennisScoreLine(f),
       tiers: [],
     };
   });
@@ -702,7 +755,12 @@ export default async function handler(req: Request) {
       }
 
       // The list stays on the day it was requested for, even after midnight.
-      const cbRange = getLagosDateBoundaries(lagosOffsetForDateKey(parsed.dateKey));
+      const cbOffset = lagosOffsetForDateKey(parsed.dateKey);
+      if (cbOffset < MIN_DAY_OFFSET || cbOffset > MAX_DAY_OFFSET) {
+        await answerCallbackQuery(cq.id, 'That day is out of range.');
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      }
+      const cbRange = getLagosDateBoundaries(cbOffset);
       const cbCards = await loadCardsForView(parsed.cmd, cbRange);
       if (cbCards === null) {
         await answerCallbackQuery(cq.id, 'Could not load predictions. Please try again shortly.');
@@ -874,7 +932,7 @@ export default async function handler(req: Request) {
     }
 
     // 5. ROUTE /settled or /results
-    if (commandToken === '/settled' || commandToken === '/results') {
+    if (commandToken === '/settled') {
       // Admin-only: settled results are no longer public (Track Record is an admin feature).
       const settledUser = await getLinkedUser(chatId);
       const settledEmail = (settledUser?.email || '').toLowerCase().trim();
@@ -925,7 +983,23 @@ export default async function handler(req: Request) {
     }
 
     // 6. ROUTE PREDICTION LISTS: football (/today, /tomorrow, tier views), /goals, /ht05, /corners, /basketball, /tennis
-    const listTarget = commandToView(commandToken);
+    // /date <day>: football list for any day in range (past days show results).
+    let listTarget = commandToView(commandToken);
+    if (commandToken === '/date') {
+      const todayKey = getLagosDateBoundaries(0).lagosDateStr;
+      const arg = rawText.split(/\s+/).slice(1).join(' ');
+      const dateKey = parseDateArg(arg, todayKey);
+      const offset = dateKey ? daysBetween(todayKey, dateKey) : NaN;
+      if (!dateKey || offset < MIN_DAY_OFFSET || offset > MAX_DAY_OFFSET) {
+        await sendTelegramMessage(
+          chatId,
+          `📅 <b>Pick a day</b>\n\nSend <code>/date 2026-11-05</code>, <code>/date 5/11</code> or <code>/date 5 Nov</code>.\n` +
+          `You can go back ${-MIN_DAY_OFFSET} days and ahead ${MAX_DAY_OFFSET} days. Past days show each pick's result.`
+        );
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      }
+      listTarget = { view: 'football', dayOffset: offset };
+    }
     if (listTarget) {
       const user = await getLinkedUser(chatId);
       if (!user) {
