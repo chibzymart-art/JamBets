@@ -17,7 +17,16 @@ import {
   daysBetween,
   MIN_DAY_OFFSET,
   MAX_DAY_OFFSET,
+  VIEWS,
 } from './_lib/telegram-pages';
+import {
+  BOOKABLE_VIEWS,
+  bookCallback,
+  parseBookCallback,
+  legsFromCards,
+  bookLegsCached,
+  renderBookingMessage,
+} from './_lib/sportybet-booking';
 
 export const config = {
   runtime: 'edge',
@@ -698,6 +707,14 @@ async function loadCardsForView(view: string, range: { startUtc: string; endUtc:
   }
 }
 
+/** Adds a "Book on SportyBet" button under football lists for today and later days. */
+function withBookButton(replyMarkup: any, view: string, dateKey: string, cards: ListCard[]): any {
+  if (!BOOKABLE_VIEWS.has(view) || lagosOffsetForDateKey(dateKey) < 0) return replyMarkup;
+  if (!cards.some(c => c.main && (!c.main.result || c.main.result === 'pending'))) return replyMarkup;
+  const rows = Array.isArray(replyMarkup?.inline_keyboard) ? replyMarkup.inline_keyboard : [];
+  return { inline_keyboard: [...rows, [{ text: '🎟 Book these on SportyBet', callback_data: bookCallback(view, dateKey) }]] };
+}
+
 export default async function handler(req: Request) {
   if (req.method !== 'POST') {
     return new Response(JSON.stringify({ ok: true, status: 'Oddsbanta Telegram Webhook Active' }), {
@@ -734,6 +751,39 @@ export default async function handler(req: Request) {
       const cbChatId = cq.message?.chat?.id;
       const cbMessageId = cq.message?.message_id;
       const parsed = parsePageCallback(cq.data);
+      const bookReq = parseBookCallback(cq.data);
+
+      // SportyBet booking code for the list on screen (same premium gate as the lists).
+      if (bookReq && cbChatId) {
+        const bkUser = await getLinkedUser(cbChatId);
+        if (!bkUser) {
+          await answerCallbackQuery(cq.id);
+          await sendTelegramMessage(cbChatId, LINK_REQUIRED_MESSAGE);
+          return new Response(JSON.stringify({ ok: true }), { status: 200 });
+        }
+        const bkAuth = await isUserPaidOrAdmin(bkUser);
+        if (!bkAuth.isPaid) {
+          await answerCallbackQuery(cq.id);
+          await sendTelegramMessage(cbChatId, VIP_REQUIRED_MESSAGE);
+          return new Response(JSON.stringify({ ok: true }), { status: 200 });
+        }
+        const bkOffset = lagosOffsetForDateKey(bookReq.dateKey);
+        if (bkOffset < 0 || bkOffset > MAX_DAY_OFFSET) {
+          await answerCallbackQuery(cq.id, 'Only today and upcoming days can be booked.');
+          return new Response(JSON.stringify({ ok: true }), { status: 200 });
+        }
+        await answerCallbackQuery(cq.id, 'Booking on SportyBet…');
+        const bkRange = getLagosDateBoundaries(bkOffset);
+        const bkCards = await loadCardsForView(bookReq.view, bkRange);
+        if (bkCards === null) {
+          await sendTelegramMessage(cbChatId, '⚠️ Could not load predictions. Please try again shortly.');
+          return new Response(JSON.stringify({ ok: true }), { status: 200 });
+        }
+        const result = await bookLegsCached(`${bookReq.view}|${bookReq.dateKey}`, legsFromCards(bkCards, bookReq.dateKey));
+        const title = (VIEWS[bookReq.view]?.title || 'Picks').replace(/<[^>]+>/g, '');
+        await sendTelegramMessage(cbChatId, renderBookingMessage(result, title, bkRange.displayDate));
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      }
 
       if (cq.data === NOOP_CALLBACK || !parsed || !cbChatId || !cbMessageId) {
         await answerCallbackQuery(cq.id);
@@ -777,7 +827,7 @@ export default async function handler(req: Request) {
         page: parsed.page,
       });
       await answerCallbackQuery(cq.id);
-      await editTelegramMessage(cbChatId, cbMessageId, view.text, view.replyMarkup);
+      await editTelegramMessage(cbChatId, cbMessageId, view.text, withBookButton(view.replyMarkup, parsed.cmd, parsed.dateKey, cbCards));
       return new Response(JSON.stringify({ ok: true }), { status: 200 });
     }
 
@@ -1031,7 +1081,7 @@ export default async function handler(req: Request) {
         cards,
         page: 1,
       });
-      await sendTelegramMessage(chatId, view.text, view.replyMarkup);
+      await sendTelegramMessage(chatId, view.text, withBookButton(view.replyMarkup, listTarget.view, dateRange.lagosDateStr, cards));
       return new Response(JSON.stringify({ ok: true }), { status: 200 });
     }
 
