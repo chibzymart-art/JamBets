@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { AdBannerSlot } from './AdBannerSlot';
 import { formatKickoff } from '../lib/dateUtils';
+import { SportyBetBookButton } from './SportyBetBookButton';
 
 export interface FavoritePredictionItem {
   id: string; // unique `${fixtureId}::${market}::${prediction}`
@@ -168,6 +169,8 @@ export const FavoritesDrawer: React.FC<FavoritesDrawerProps> = ({
                   Clear
                 </button>
               </div>
+
+              <SportyBetBookButton items={favorites} />
             </div>
           )}
 
