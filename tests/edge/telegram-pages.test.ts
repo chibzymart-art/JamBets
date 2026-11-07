@@ -14,6 +14,9 @@ import {
   pickLabel,
   renderListPage,
   tierLabel,
+  parseDateArg,
+  shiftDateKey,
+  normalizeResult,
 } from '../../api/_lib/telegram-pages';
 
 const future = new Date(Date.now() + 10 * 864e5).toISOString();
@@ -52,17 +55,23 @@ const football = Array.from({ length: MATCHES }, (_, i) => ({
   fixture: fbFixture(i + 1),
 }));
 
+// Settled examples: match 2 won (2-1, one sub-pick lost), match 3 lost.
+Object.assign(football[1], { settlement_status: 'won', actual_score: '2-1' });
+football[1].fixture = { ...football[1].fixture, status: 'finished', home_score: 2, away_score: 1 } as any;
+football[1].secondary_predictions = football[1].secondary_predictions.map((x: any, i: number) => ({ ...x, settlement_status: i === 0 ? 'lost' : 'won' }));
+Object.assign(football[2], { settlement_status: 'lost', actual_score: '0-0' });
+
 const goals = [
-  { id: 'g1', fixture_id: 'f1', market: 'over_2.5_goals', probability: 0.81, confidence_tier: 'GOAL_MACHINE', xg_combined: 3.12, target_kickoff_at: kickoff, fixture: fbFixture(1) },
+  { id: 'g1', fixture_id: 'f1', market: 'over_2.5_goals', probability: 0.81, confidence_tier: 'GOAL_MACHINE', xg_combined: 3.12, settlement_status: 'won', actual_score: '3-1', ht_score: '1-0', target_kickoff_at: kickoff, fixture: fbFixture(1) },
   { id: 'g2', fixture_id: 'f1', market: 'ht_over_0.5_goals', probability: 0.78, confidence_tier: 'TEMPO_HIGH', xg_combined: null, target_kickoff_at: kickoff, fixture: fbFixture(1) },
   { id: 'g3', fixture_id: 'f2', market: 'ht_over_0.5_goals', probability: 0.72, confidence_tier: 'EARLY_STRIKE', xg_combined: null, target_kickoff_at: kickoff, fixture: fbFixture(2) },
 ];
 const corners = [
-  { id: 'c1', fixture_id: 'f3', market: 'over_8.5_corners', prediction: 'Over 8.5 Corners', probability: 0.6059, confidence_category: 'MID_CONFIDENCE', predicted_total_corners: 10.2, over_8_5_prob: 0.6059, over_9_5_prob: 0.48, over_10_5_prob: null, target_kickoff_at: kickoff, fixture: fbFixture(3) },
+  { id: 'c1', fixture_id: 'f3', market: 'over_8.5_corners', prediction: 'Over 8.5 Corners', probability: 0.6059, confidence_category: 'MID_CONFIDENCE', predicted_total_corners: 10.2, settlement_status: 'lost', actual_corners: '6 corners (4H - 2A)', over_8_5_prob: 0.6059, over_9_5_prob: 0.48, over_10_5_prob: null, target_kickoff_at: kickoff, fixture: fbFixture(3) },
 ];
 const basketball = [
   {
-    id: 'b1', market: 'moneyline', prediction: 'Mogi Das Cruzes To Win', probability: 0.897, confidence_category: 'BANGER',
+    id: 'b1', market: 'moneyline', prediction: 'Mogi Das Cruzes To Win', probability: 0.897, confidence_category: 'BANGER', settlement_status: 'won', actual_result: 'Mogi Das Cruzes 88 - 71 Basquete Cearense',
     secondary_predictions: [
       { pick: 'Under 164.0 Total Points', market: 'game_total_over_under', prediction: 'Under 164.0 Total Points', probability: 0.6813, confidence_category: 'HIGH CONFIDENCE' },
       { pick: 'Basquete Cearense +27.5 Points', market: 'point_spread', prediction: 'Basquete Cearense +27.5 Points', probability: 0.6783, confidence_category: 'HIGH CONFIDENCE' },
@@ -73,11 +82,11 @@ const basketball = [
 ];
 const tennis = [
   {
-    id: 't1', market: 'NO_SAFE_BANKER', prediction: 'NO SAFE BANKER (High Volatility)', probability: 0.5, confidence_category: 'NO_SAFE_BANKER',
+    id: 't1', market: 'NO_SAFE_BANKER', prediction: 'NO SAFE BANKER (High Volatility)', probability: 0.5, confidence_category: 'NO_SAFE_BANKER', actual_result: 'Lucio Ratti won 2-0 (6-4, 6-1)',
     secondary_predictions: [
       { market: 'game_handicap', prediction: 'Lucio Ratti +1.5 Games', probability: 0.6094 },
       { market: 'first_set_winner', prediction: 'Lucio Ratti 1st Set', probability: 0.5007 },
-      { market: 'set_handicap', prediction: 'Lucio Ratti +1.5 Sets', probability: 0.7496 },
+      { market: 'set_handicap', prediction: 'Lucio Ratti +1.5 Sets', probability: 0.7496, settlement_status: 'won' },
       { market: 'total_games_over_under', prediction: 'Over 25.5 Games', probability: 0.5083 },
     ],
     target_kickoff_at: kickoff,
@@ -157,7 +166,7 @@ check('pages stay under Telegram limit with long cards', longPage.text.length <=
 
 // Menu: every entry is answered by the bot
 for (const m of BOT_MENU) {
-  if (m.command === 'status' || m.command === 'help') continue;
+  if (m.command === 'status' || m.command === 'help' || m.command === 'date') continue;
   check(`menu /${m.command} is a list command`, !!commandToView('/' + m.command));
 }
 check('menu has no admin-only /settled', !BOT_MENU.some((m) => m.command === 'settled'));
@@ -173,7 +182,7 @@ check('main pick shows % and tier', !!body && /🎯 <b>Over 1\.5 Goals<\/b> — 
 check('no "more fixtures on dashboard" cut-off', !!body && !/more fixtures/i.test(body.text));
 const kb = buttons(body?.reply_markup).map((b) => b.text);
 check('tabs: football active, then Over 2.5, 1H 0.5, Corners, Basketball, Tennis', ['• ⚽ Football •', '🎯 Over 2.5', '⏱️ 1H 0.5', '🚩 Corners', '🏀 Basketball', '🎾 Tennis'].every((t) => kb.includes(t)), JSON.stringify(kb));
-check('day switch with Today active', kb.includes('📅 Today ✓') && kb.includes('📅 Tomorrow'));
+check('day switch: previous day, Today active, Tomorrow', kb.includes('📅 Today ✓') && kb.includes('Tomorrow ›') && kb.some((t) => /^‹ \w{3} \d{1,2} \w{3}$/.test(t)), JSON.stringify(kb));
 check('page buttons present', kb.includes('· 1 ·') && kb.includes('Next ›'));
 check('message under Telegram limit', !!body && body.text.length <= 4096);
 
@@ -218,11 +227,11 @@ ed = editBody();
 check('Corners tab: main line, other lines and expected corners', !!ed && /Over 8\.5 Corners<\/b> — <b>61%<\/b> · Mid Confidence/.test(ed.text) && /Over 9\.5 Corners · 48%/.test(ed.text) && /Expected corners: 10\.2/.test(ed.text) && !/Over 8\.5 Corners · 61%/.test(ed.text), ed?.text);
 
 // Day switch
-const tomorrowBtn = buttons(body?.reply_markup).find((b) => b.text === '📅 Tomorrow')?.callback_data as string;
+const tomorrowBtn = buttons(body?.reply_markup).find((b) => b.text === 'Tomorrow ›')?.callback_data as string;
 calls = [];
 await press(PAID, tomorrowBtn);
 ed = editBody();
-check('Tomorrow button marks Tomorrow active', buttons(ed?.reply_markup).some((b) => b.text === '📅 Tomorrow ✓'));
+check('Tomorrow button moves the day (Today no longer active)', buttons(ed?.reply_markup).some((b) => b.text === '📅 Today') && !buttons(ed?.reply_markup).some((b) => b.text === '📅 Today ✓'));
 
 // Empty tab still shows the tabs so the user can move on
 const savedTennis = tennis.splice(0);
@@ -282,6 +291,70 @@ check('active button only answers the callback', calls.length === 1 && calls[0].
 calls = [];
 await command(PAID, '/help');
 check('/help lists every menu command', BOT_MENU.every((m) => (sentText()?.text || '').includes('/' + m.command)));
+
+
+// ── Results and day history
+check('normalizeResult', normalizeResult('won') === 'won' && normalizeResult('LOST') === 'lost' && normalizeResult('void') === 'void' && normalizeResult(null) === 'pending');
+check('parseDateArg: ISO', parseDateArg('2026-11-05', '2026-11-07') === '2026-11-05');
+check('parseDateArg: 5/11 and 5 Nov and Nov 5', parseDateArg('5/11', '2026-11-07') === '2026-11-05' && parseDateArg('5 Nov', '2026-11-07') === '2026-11-05' && parseDateArg('nov 5', '2026-11-07') === '2026-11-05');
+check('parseDateArg: nearest year across new year', parseDateArg('30/12', '2027-01-02') === '2026-12-30');
+check('parseDateArg: rejects junk', parseDateArg('hello', '2026-11-07') === null && parseDateArg('31/02', '2026-11-07') === null);
+check('shiftDateKey across month end', shiftDateKey('2026-10-31', 1) === '2026-11-01' && shiftDateKey('2026-11-01', -1) === '2026-10-31');
+
+calls = [];
+await command(PAID, '/today');
+body = sentText();
+check('settled main pick shows ✅ WON and the final score', !!body && /<b>2\. Home 2 vs Away 2<\/b>\n🏆 EPL  ·  ⏰ \d\d:\d\d\n📋 <b>FT 2-1<\/b>\n🎯 <b>Home or Draw \(1X\)<\/b> — <b>75%<\/b> · Mid Confidence  <b>✅ WON<\/b>/.test(body.text), body?.text.slice(0, 900));
+check('settled sub-picks show ✅/❌', !!body && /Away Over 0\.5 · 90% ❌/.test(body.text) && /Home or Away \(12\) · 80% ✅/.test(body.text));
+check('lost main pick shows ❌ LOST', !!body && /❌ LOST/.test(body.text));
+check('unsettled picks show no badge', !!body && /<b>1\. Home 1 vs Away 1<\/b>\n🏆 EPL  ·  ⏰ \d\d:\d\d\n🎯 <b>Over 1\.5 Goals<\/b> — <b>97%<\/b> · Banger\n/.test(body.text));
+check('day results line with hit rate', !!body && /📊 Results: ✅ 1 won · ❌ 1 lost · ⏳ 19 to play  \(50% hit rate\)/.test(body.text), body?.text.slice(0, 200));
+
+calls = [];
+await press(PAID, (buttons(body?.reply_markup).find((b) => b.text === '🎯 Over 2.5')?.callback_data) as string);
+check('goals card shows FT and HT score and result', /📋 <b>FT 3-1 · HT 1-0<\/b>/.test(editBody()?.text || '') && /✅ WON/.test(editBody()?.text || ''), editBody()?.text);
+
+
+calls = [];
+await press(PAID, (buttons(body?.reply_markup).find((b) => b.text === '🚩 Corners')?.callback_data) as string);
+check('corners card shows the corner count and result', /📋 <b>Corners: 6 \(4H - 2A\)<\/b>/.test(editBody()?.text || '') && /❌ LOST/.test(editBody()?.text || ''), editBody()?.text);
+calls = [];
+await press(PAID, (buttons(body?.reply_markup).find((b) => b.text === '🏀 Basketball')?.callback_data) as string);
+check('basketball card shows the final score and result', /📋 <b>Mogi Das Cruzes 88 - 71 Basquete Cearense<\/b>/.test(editBody()?.text || '') && /✅ WON/.test(editBody()?.text || ''));
+calls = [];
+await press(PAID, (buttons(body?.reply_markup).find((b) => b.text === '🎾 Tennis')?.callback_data) as string);
+check('tennis card shows the result and settled sub-pick', /📋 <b>Lucio Ratti won 2-0 \(6-4, 6-1\)<\/b>/.test(editBody()?.text || '') && /Lucio Ratti \+1\.5 Sets · 75% ✅/.test(editBody()?.text || ''), editBody()?.text);
+
+const prevBtn = buttons(body?.reply_markup).find((b) => /^‹ /.test(b.text))?.callback_data as string;
+calls = [];
+await press(PAID, prevBtn);
+ed = editBody();
+check('previous-day button opens yesterday with Today button to come back', !!ed && buttons(ed.reply_markup).some((b) => b.text === '📅 Today') && /past|Results|matches/.test(ed.text));
+
+calls = [];
+await command(PAID, '/yesterday');
+check('/yesterday shows a list', /Football Predictions/.test(sentText()?.text || ''));
+calls = [];
+await command(PAID, '/results');
+check('/results now shows the day list (not admin-only)', /Football Predictions/.test(sentText()?.text || '') && !/not available/.test(sentText()?.text || ''));
+calls = [];
+await command(PAID, '/date 5 Nov');
+check('/date with a day shows that day', /Football Predictions/.test(sentText()?.text || ''));
+calls = [];
+await command(PAID, '/date');
+check('/date without a day explains how', /Pick a day/.test(sentText()?.text || ''));
+calls = [];
+await command(PAID, '/date 2020-01-01');
+check('/date out of range explains the limits', /go back 60 days/.test(sentText()?.text || ''));
+calls = [];
+await press(PAID, 'pg|football|2020-01-01|1');
+check('out-of-range day button is refused', calls.some((c) => c.method === 'answerCallbackQuery' && /out of range/.test(c.body.text || '')) && !calls.some((c) => c.method === 'editMessageText'));
+calls = [];
+await command(FREE, '/date 5 Nov');
+check('free account /date still gets the upgrade message', calls.some((c) => /VIP Access Required/.test(c.body.text || '')));
+calls = [];
+await command(FREE, '/results');
+check('free account /results still gets the upgrade message', calls.some((c) => /VIP Access Required/.test(c.body.text || '')));
 
 if (failed) { console.log(`\n${failed} FAILED`); process.exit(1); }
 console.log('\nTELEGRAM PAGES: ALL PASSED');

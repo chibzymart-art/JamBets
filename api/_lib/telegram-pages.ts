@@ -8,6 +8,7 @@ export interface SecondaryLeanItem {
   confidenceCategory: string;
   formattedMkt: string;
   formattedPick: string;
+  result?: string; // won | lost | void | pending
 }
 
 export interface TelegramFixtureCard {
@@ -30,6 +31,8 @@ export interface TelegramFixtureCard {
   hasMid: boolean;
   hasLow: boolean;
   hasGoalLean: boolean;
+  primaryResult?: string;
+  scoreLine?: string;
 }
 
 // At most this many matches per page; fewer when cards are long.
@@ -131,7 +134,20 @@ export interface ListPick {
   label: string;
   probability: number; // 0-100
   tier?: string;
+  result?: string; // won | lost | void | pending (anything else = not settled)
 }
+
+/** Settlement status -> one of won / lost / void / pending. */
+export function normalizeResult(status: any): string {
+  const s = String(status || '').toLowerCase().trim();
+  if (s === 'won' || s === 'win') return 'won';
+  if (s === 'lost' || s === 'loss') return 'lost';
+  if (s === 'void' || s === 'push' || s === 'cancelled' || s === 'postponed') return 'void';
+  return 'pending';
+}
+
+const RESULT_BADGE: Record<string, string> = { won: '✅ WON', lost: '❌ LOST', void: '⊘ VOID' };
+const RESULT_ICON: Record<string, string> = { won: '✅', lost: '❌', void: '⊘' };
 
 /** One match, ready to render. Text fields are raw (escaped at render time). */
 export interface ListCard {
@@ -141,6 +157,7 @@ export interface ListCard {
   main: ListPick | null; // null = no safe banker
   subs: ListPick[];
   note?: string;
+  score?: string; // e.g. "FT 2-1", "Sets 2-0 (6-4, 6-3)"
   tiers: string[]; // normalized tiers across main + subs, used by the tier views
 }
 
@@ -152,6 +169,7 @@ export function footballListCard(c: TelegramFixtureCard): ListCard {
     label: pickLabel(s.market, s.prediction),
     probability: s.probability,
     tier: s.confidenceCategory,
+    result: s.result,
   }));
   return {
     title: `${c.homeTeam} vs ${c.awayTeam}`,
@@ -159,8 +177,9 @@ export function footballListCard(c: TelegramFixtureCard): ListCard {
     kickoff: c.kickoffTimeWat,
     main: c.isBankerPass
       ? null
-      : { label: pickLabel(c.primaryMarket, c.primaryPick), probability: c.primaryProbability, tier: c.primaryCategory },
+      : { label: pickLabel(c.primaryMarket, c.primaryPick), probability: c.primaryProbability, tier: c.primaryCategory, result: c.primaryResult },
     subs,
+    score: c.scoreLine,
     tiers: [...(c.isBankerPass ? [] : [c.primaryCategory]), ...subs.map(s => s.tier || '')].filter(Boolean),
   };
 }
@@ -168,10 +187,12 @@ export function footballListCard(c: TelegramFixtureCard): ListCard {
 export function renderCard(card: ListCard, number: number, maxSubs = MAX_SUBS): string {
   let s = `<b>${number}. ${escapeHtml(card.title)}</b>\n`;
   s += `🏆 ${escapeHtml(card.league)}  ·  ⏰ ${escapeHtml(card.kickoff)}\n`;
+  if (card.score) s += `📋 <b>${escapeHtml(card.score)}</b>\n`;
 
   if (card.main) {
     const tier = card.main.tier ? ` · ${escapeHtml(tierLabel(card.main.tier))}` : '';
-    s += `🎯 <b>${escapeHtml(card.main.label)}</b> — <b>${card.main.probability}%</b>${tier}\n`;
+    const badge = RESULT_BADGE[card.main.result || ''] ? `  <b>${RESULT_BADGE[card.main.result!]}</b>` : '';
+    s += `🎯 <b>${escapeHtml(card.main.label)}</b> — <b>${card.main.probability}%</b>${tier}${badge}\n`;
   } else {
     s += `🛡️ <i>No safe banker — other picks below</i>\n`;
   }
@@ -179,7 +200,8 @@ export function renderCard(card: ListCard, number: number, maxSubs = MAX_SUBS): 
   const subs = card.subs.slice(0, maxSubs);
   subs.forEach((p, i) => {
     const branch = i === subs.length - 1 ? '└' : '├';
-    s += `   ${branch} ${escapeHtml(p.label)} · ${p.probability}%\n`;
+    const icon = RESULT_ICON[p.result || ''] ? ` ${RESULT_ICON[p.result!]}` : '';
+    s += `   ${branch} ${escapeHtml(p.label)} · ${p.probability}%${icon}\n`;
   });
   if (card.note) s += `   <i>${escapeHtml(card.note)}</i>\n`;
   return s;
@@ -227,6 +249,7 @@ export function commandToView(command: string): { view: string; dayOffset: numbe
   const c = command.replace(/^\//, '').toLowerCase();
   if (c === 'today') return { view: 'football', dayOffset: 0 };
   if (c === 'tomorrow') return { view: 'football', dayOffset: 1 };
+  if (c === 'yesterday' || c === 'results') return { view: 'football', dayOffset: -1 };
   if (c === 'top') return { view: 'toppicks', dayOffset: 0 };
   if (c === 'over25') return { view: 'goals', dayOffset: 0 };
   if (c === '1h' || c === 'firsthalf' || c === 'ht') return { view: 'ht05', dayOffset: 0 };
@@ -239,6 +262,8 @@ export function commandToView(command: string): { view: string; dayOffset: numbe
 export const BOT_MENU: { command: string; description: string }[] = [
   { command: 'today', description: "Today's football predictions" },
   { command: 'tomorrow', description: "Tomorrow's football predictions" },
+  { command: 'yesterday', description: "Yesterday's picks with results" },
+  { command: 'date', description: 'Any day, e.g. /date 2026-11-05' },
   { command: 'bangers', description: 'Bangers (96%+)' },
   { command: 'toppicks', description: 'Top Picks (90-95%)' },
   { command: 'high', description: 'High Confidence (80-89%)' },
@@ -338,7 +363,61 @@ export function buildPager(view: string, dateKey: string, page: number, total: n
   return rows.length ? { inline_keyboard: rows } : undefined;
 }
 
-/** Tab bar (sports/markets), day switch, then page buttons. */
+// How far back and ahead the day buttons and /date reach.
+export const MIN_DAY_OFFSET = -60;
+export const MAX_DAY_OFFSET = 7;
+
+/** YYYY-MM-DD plus n days. */
+export function shiftDateKey(dateKey: string, days: number): string {
+  const [y, m, d] = dateKey.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
+}
+
+/** Days from one YYYY-MM-DD to another. */
+export function daysBetween(fromKey: string, toKey: string): number {
+  const [y1, m1, d1] = fromKey.split('-').map(Number);
+  const [y2, m2, d2] = toKey.split('-').map(Number);
+  return Math.round((Date.UTC(y2, m2 - 1, d2) - Date.UTC(y1, m1 - 1, d1)) / 864e5);
+}
+
+/** "Thu 5 Nov" for a YYYY-MM-DD. */
+export function shortDay(dateKey: string): string {
+  const [y, m, d] = dateKey.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d, 12)).toLocaleDateString('en-GB', { timeZone: 'UTC', weekday: 'short', day: 'numeric', month: 'short' });
+}
+
+/**
+ * Parses the argument of /date: "2026-11-05", "5/11", "05-11", "5 Nov" or "Nov 5".
+ * Day-month dates without a year pick the year that puts them nearest today. null when unreadable.
+ */
+export function parseDateArg(arg: string, todayKey: string): string | null {
+  const a = (arg || '').trim().toLowerCase();
+  if (!a) return null;
+  const valid = (y: number, m: number, d: number) => {
+    const dt = new Date(Date.UTC(y, m - 1, d));
+    return dt.getUTCFullYear() === y && dt.getUTCMonth() === m - 1 && dt.getUTCDate() === d ? dt.toISOString().slice(0, 10) : null;
+  };
+  let mm = a.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (mm) return valid(+mm[1], +mm[2], +mm[3]);
+
+  const months = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+  let day = 0, month = 0;
+  mm = a.match(/^(\d{1,2})[\/\-.](\d{1,2})$/);
+  if (mm) { day = +mm[1]; month = +mm[2]; }
+  mm = a.match(/^(\d{1,2})\s*([a-z]{3})[a-z]*$/);
+  if (mm && months.includes(mm[2])) { day = +mm[1]; month = months.indexOf(mm[2]) + 1; }
+  mm = a.match(/^([a-z]{3})[a-z]*\s*(\d{1,2})$/);
+  if (mm && months.includes(mm[1])) { day = +mm[2]; month = months.indexOf(mm[1]) + 1; }
+  if (!day || !month) return null;
+
+  const ty = Number(todayKey.slice(0, 4));
+  const options = [ty - 1, ty, ty + 1].map(y => valid(y, month, day)).filter(Boolean) as string[];
+  if (!options.length) return null;
+  options.sort((x, y) => Math.abs(daysBetween(todayKey, x)) - Math.abs(daysBetween(todayKey, y)));
+  return options[0];
+}
+
+/** Tab bar (sports/markets), day switch (previous day, today, next day), then page buttons. */
 export function buildKeyboard(opts: {
   view: string;
   dateKey: string;
@@ -357,13 +436,21 @@ export function buildKeyboard(opts: {
     }))
   );
 
-  const dayRow = [
-    { key: todayKey, label: 'Today' },
-    { key: tomorrowKey, label: 'Tomorrow' },
-  ].map(d => ({
-    text: d.key === dateKey ? `📅 ${d.label} ✓` : `📅 ${d.label}`,
-    callback_data: d.key === dateKey ? NOOP_CALLBACK : pageCallback(view, d.key, 1),
-  }));
+  const offset = daysBetween(todayKey, dateKey);
+  const dayRow: any[] = [];
+  if (offset > MIN_DAY_OFFSET) {
+    const prev = shiftDateKey(dateKey, -1);
+    dayRow.push({ text: `‹ ${shortDay(prev)}`, callback_data: pageCallback(view, prev, 1) });
+  }
+  dayRow.push({
+    text: dateKey === todayKey ? '📅 Today ✓' : '📅 Today',
+    callback_data: dateKey === todayKey ? NOOP_CALLBACK : pageCallback(view, todayKey, 1),
+  });
+  if (offset < MAX_DAY_OFFSET) {
+    const next = shiftDateKey(dateKey, 1);
+    const label = next === tomorrowKey ? 'Tomorrow' : shortDay(next);
+    dayRow.push({ text: `${label} ›`, callback_data: pageCallback(view, next, 1) });
+  }
 
   return { inline_keyboard: [...tabRows, dayRow, ...pagerRows(view, dateKey, opts.page, opts.totalPages)] };
 }
@@ -385,13 +472,23 @@ export function renderListPage(opts: {
   const def = VIEWS[view] || VIEWS.football;
   const matchWord = cards.length === 1 ? 'match' : 'matches';
 
-  const header = `${def.title}\n📅 ${escapeHtml(displayDate)}  ·  ${cards.length} ${matchWord}\n${RULE}\n\n`;
+  // Results line once any main pick on this day is settled.
+  const tally = { won: 0, lost: 0, void: 0, pending: 0 } as Record<string, number>;
+  for (const c of cards) if (c.main) tally[c.main.result && tally[c.main.result] !== undefined ? c.main.result : 'pending']++;
+  const settled = tally.won + tally.lost;
+  const resultsLine = settled + tally.void > 0
+    ? `📊 Results: ✅ ${tally.won} won · ❌ ${tally.lost} lost` +
+      (tally.void ? ` · ⊘ ${tally.void} void` : '') +
+      (tally.pending ? ` · ⏳ ${tally.pending} to play` : '') +
+      (settled ? `  (${Math.round((tally.won / settled) * 100)}% hit rate)` : '') + `\n`
+    : '';
+  const header = `${def.title}\n📅 ${escapeHtml(displayDate)}  ·  ${cards.length} ${matchWord}\n${resultsLine}${RULE}\n\n`;
   const footerFor = (p: number, t: number) =>
-    `\n${RULE}\n📄 Page <b>${p}</b> of <b>${t}</b>  ·  Times in WAT\nTap a tab below to switch sport or market.`;
+    `\n${RULE}\n📄 Page <b>${p}</b> of <b>${t}</b>  ·  Times in WAT\nTabs switch sport or market; ‹ › change the day.`;
   const budget = MAX_MESSAGE_CHARS - header.length - footerFor(9999, 9999).length;
 
   if (cards.length === 0) {
-    const text = `${def.title}\n📅 ${escapeHtml(displayDate)}\n${RULE}\n\nNo ${escapeHtml(def.empty)} found for this day yet. Check back after the next simulation run, or tap another tab below.`;
+    const text = `${def.title}\n📅 ${escapeHtml(displayDate)}\n${RULE}\n\nNo ${escapeHtml(def.empty)} found for this day${daysBetween(opts.todayKey, dateKey) >= 0 ? ' yet. Check back after the next simulation run, or' : '.'} tap another tab or day below.`;
     return {
       text,
       replyMarkup: buildKeyboard({ ...opts, page: 1, totalPages: 1 }),

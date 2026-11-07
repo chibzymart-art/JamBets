@@ -37,9 +37,9 @@ if not WEBHOOK_SECRET:
     sys.exit(1)
 
 print("=== REGISTERING TELEGRAM WEBHOOK (SEC-03) ===")
-print(f"Bot Token: {BOT_TOKEN[:10]}...{BOT_TOKEN[-5:]}")
+print("Bot Token: set (hidden)")
 print(f"Webhook URL: {WEBHOOK_URL}")
-print(f"Secret Token: {WEBHOOK_SECRET[:12]}...{WEBHOOK_SECRET[-6:]} (Length: {len(WEBHOOK_SECRET)})")
+print("Secret Token: set (hidden)")
 
 # 1. Call setWebhook
 payload = {
@@ -86,7 +86,7 @@ except Exception as e:
 
 print("\n" + "="*60)
 print("REQUIRED VERCEL ENVIRONMENT VARIABLES (Settings > Environment Variables):")
-print(f"1. TELEGRAM_BOT_TOKEN = {BOT_TOKEN}")
-print(f"2. TELEGRAM_WEBHOOK_SECRET = {WEBHOOK_SECRET}")
+print("1. TELEGRAM_BOT_TOKEN = (the same value as in your .env)")
+print("2. TELEGRAM_WEBHOOK_SECRET = (the same value as in your .env)")
 print("3. SUPABASE_SERVICE_ROLE_KEY = (Your Supabase service_role JWT)")
 print("="*60 + "\n")
