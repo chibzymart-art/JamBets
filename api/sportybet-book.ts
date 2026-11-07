@@ -7,6 +7,7 @@ import { checkRateLimit, getClientIp } from './rate-limiter';
 
 export const config = {
   runtime: 'edge',
+  regions: ['cpt1'],
 };
 
 const JSON_HEADERS = { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' };
