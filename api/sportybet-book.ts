@@ -2,7 +2,7 @@
 // Body: { items: [{ id?, homeTeam, awayTeam, targetKickoffAt, market, prediction }] } (max 50).
 // The slip only holds picks the user can already see, so the code reveals nothing new.
 // A booking code stakes nothing; see api/_lib/sportybet-booking.ts.
-import { bookLegsCached, MAX_LEGS, type BookingLeg } from './_lib/sportybet-booking';
+import { bookLegsCached, bookingEnabled, MAX_LEGS, type BookingLeg } from './_lib/sportybet-booking';
 import { checkRateLimit, getClientIp } from './rate-limiter';
 
 export const config = {
@@ -37,6 +37,7 @@ export function itemToLeg(item: any): BookingLeg | null {
 
 export default async function handler(req: Request): Promise<Response> {
   if (req.method !== 'POST') return reply(405, { ok: false, error: 'Use POST.' });
+  if (!bookingEnabled()) return reply(503, { ok: false, error: 'SportyBet booking is coming soon.' });
 
   const rl = checkRateLimit(`sportybet-book:${getClientIp(req)}`, 6, 60);
   if (!rl.allowed) return reply(429, { ok: false, error: `Too many booking requests. Try again in ${rl.resetSec}s.` });
