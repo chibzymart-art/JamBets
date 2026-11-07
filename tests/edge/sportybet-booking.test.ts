@@ -237,6 +237,9 @@ const run = async () => {
     2: { user: { id: 'u-std', email: 'std@example.com', role: 'standard' }, subs: [{ tier: 'standard', status: 'active', current_period_end: future }] },
   };
   const kickoffIso = iso(ko(3));
+  // Open the list for the Lagos day the kickoff falls on (after 21:00 WAT, now + 3h is tomorrow).
+  const lagosDay = (ms: number) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Lagos' }).format(new Date(ms));
+  const listCommand = lagosDay(ko(3)) === lagosDay(now) ? '/today' : '/tomorrow';
   const football = [{
     id: 'p1', fixture_id: 'f1', prediction: 'over', market: 'over_under_2.5', probability: 0.8, confidence_category: 'HIGH CONFIDENCE',
     secondary_predictions: [], target_kickoff_at: kickoffIso,
@@ -269,7 +272,7 @@ const run = async () => {
   const press = (chatId: number, data: string) =>
     post({ update_id: 2, callback_query: { id: 'cq1', from: { id: chatId }, message: { message_id: 55, chat: { id: chatId, type: 'private' } }, data } });
 
-  await post({ update_id: 1, message: { message_id: 1, chat: { id: 2, type: 'private' }, from: { id: 2 }, text: '/today' } });
+  await post({ update_id: 1, message: { message_id: 1, chat: { id: 2, type: 'private' }, from: { id: 2 }, text: listCommand } });
   const list = tg.find(c => c.method === 'sendMessage');
   const btn = (list?.body?.reply_markup?.inline_keyboard || []).flat().find((b: any) => String(b.callback_data).startsWith('bk|'));
   check('today list has a SportyBet button', !!btn && /SportyBet/.test(btn.text), JSON.stringify(list?.body?.reply_markup));
@@ -301,7 +304,7 @@ const run = async () => {
   tg.length = 0;
   shareBodies = [];
   feedCalls = 0;
-  await post({ update_id: 1, message: { message_id: 1, chat: { id: 2, type: 'private' }, from: { id: 2 }, text: '/today' } });
+  await post({ update_id: 1, message: { message_id: 1, chat: { id: 2, type: 'private' }, from: { id: 2 }, text: listCommand } });
   const offList = tg.find(c => c.method === 'sendMessage');
   check('switched off: no SportyBet button', !!offList && !(offList.body.reply_markup?.inline_keyboard || []).flat().some((b: any) => String(b.callback_data).startsWith('bk|')));
   tg.length = 0;
