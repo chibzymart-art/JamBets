@@ -2,6 +2,7 @@
 // against a mocked SportyBet, the website endpoint, and the Telegram button with its premium gate.
 // Run: node tests/edge/run.mjs
 import './telegram-env';
+process.env.SPORTYBET_BOOKING_ENABLED = 'true';
 import webhook from '../../api/telegram-webhook';
 import bookEndpoint, { itemToLeg } from '../../api/sportybet-book';
 import {
@@ -294,6 +295,21 @@ const run = async () => {
   tg.length = 0;
   await press(2, 'bk|football|2020-01-01');
   check('old day refused', tg.some(c => c.method === 'answerCallbackQuery' && /today and upcoming/.test(c.body.text || '')) && !tg.some(c => c.method === 'sendMessage'));
+
+  // Switched off (the default): no button, button presses refused, endpoint closed, no SportyBet calls.
+  process.env.SPORTYBET_BOOKING_ENABLED = '';
+  tg.length = 0;
+  shareBodies = [];
+  feedCalls = 0;
+  await post({ update_id: 1, message: { message_id: 1, chat: { id: 2, type: 'private' }, from: { id: 2 }, text: '/today' } });
+  const offList = tg.find(c => c.method === 'sendMessage');
+  check('switched off: no SportyBet button', !!offList && !(offList.body.reply_markup?.inline_keyboard || []).flat().some((b: any) => String(b.callback_data).startsWith('bk|')));
+  tg.length = 0;
+  await press(2, btn.callback_data);
+  check('switched off: old button says coming soon', tg.some(c => c.method === 'answerCallbackQuery' && /coming soon/.test(c.body.text || '')) && !tg.some(c => c.method === 'sendMessage'));
+  const offRes = await bookEndpoint(new Request('https://www.oddsbanta.com/api/sportybet-book', { method: 'POST', headers: { 'x-forwarded-for': '7.7.7.7' }, body: JSON.stringify({ items: [{ homeTeam: 'Arsenal', awayTeam: 'Chelsea', targetKickoffAt: iso(ko(3)), market: 'btts', prediction: 'yes' }] }) }));
+  check('switched off: endpoint closed', offRes.status === 503);
+  check('switched off: SportyBet never called', feedCalls === 0 && shareBodies.length === 0);
 
   if (failed) {
     console.error(`${failed} SportyBet booking check(s) failed`);

@@ -170,7 +170,7 @@ export const FavoritesDrawer: React.FC<FavoritesDrawerProps> = ({
                 </button>
               </div>
 
-              <SportyBetBookButton items={favorites} />
+              {import.meta.env.VITE_SPORTYBET_BOOKING === 'true' && <SportyBetBookButton items={favorites} />}
             </div>
           )}
 

@@ -11,6 +11,11 @@
 export const SPORTYBET_API = 'https://www.sportybet.com/api/ng';
 export const MAX_LEGS = 50; // SportyBet rejects bigger slips
 
+/** On/off switch: SPORTYBET_BOOKING_ENABLED=true turns the bot button and the endpoint on (off by default). */
+export function bookingEnabled(): boolean {
+  return String((typeof process !== 'undefined' && process.env?.SPORTYBET_BOOKING_ENABLED) || '').toLowerCase() === 'true';
+}
+
 const HEADERS: Record<string, string> = {
   accept: 'application/json, text/plain, */*',
   'accept-language': 'en-GB,en;q=0.9',

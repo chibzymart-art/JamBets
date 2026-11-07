@@ -26,6 +26,7 @@ import {
   legsFromCards,
   bookLegsCached,
   renderBookingMessage,
+  bookingEnabled,
 } from './_lib/sportybet-booking';
 
 export const config = {
@@ -709,7 +710,7 @@ async function loadCardsForView(view: string, range: { startUtc: string; endUtc:
 
 /** Adds a "Book on SportyBet" button under football lists for today and later days. */
 function withBookButton(replyMarkup: any, view: string, dateKey: string, cards: ListCard[]): any {
-  if (!BOOKABLE_VIEWS.has(view) || lagosOffsetForDateKey(dateKey) < 0) return replyMarkup;
+  if (!bookingEnabled() || !BOOKABLE_VIEWS.has(view) || lagosOffsetForDateKey(dateKey) < 0) return replyMarkup;
   if (!cards.some(c => c.main && (!c.main.result || c.main.result === 'pending'))) return replyMarkup;
   const rows = Array.isArray(replyMarkup?.inline_keyboard) ? replyMarkup.inline_keyboard : [];
   return { inline_keyboard: [...rows, [{ text: '🎟 Book these on SportyBet', callback_data: bookCallback(view, dateKey) }]] };
@@ -755,6 +756,10 @@ export default async function handler(req: Request) {
 
       // SportyBet booking code for the list on screen (same premium gate as the lists).
       if (bookReq && cbChatId) {
+        if (!bookingEnabled()) {
+          await answerCallbackQuery(cq.id, 'SportyBet booking is coming soon.');
+          return new Response(JSON.stringify({ ok: true }), { status: 200 });
+        }
         const bkUser = await getLinkedUser(cbChatId);
         if (!bkUser) {
           await answerCallbackQuery(cq.id);
