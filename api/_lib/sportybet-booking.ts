@@ -213,8 +213,19 @@ function eventsFromPage(data: any): SportyEvent[] {
 }
 
 async function fetchJson(url: string, init: RequestInit, fetchImpl: typeof fetch): Promise<any> {
-  const res = await fetchImpl(url, { ...init, headers: { ...HEADERS, ...(init.headers as any) } });
-  if (!res.ok) throw new Error(`SportyBet HTTP ${res.status}`);
+  const path = url.replace(SPORTYBET_API, '').split('?')[0];
+  let res: Response;
+  try {
+    res = await fetchImpl(url, { ...init, headers: { ...HEADERS, ...(init.headers as any) } });
+  } catch (e: any) {
+    console.error(`[sportybet] ${path} network error: ${e?.message || e}`);
+    throw e;
+  }
+  if (!res.ok) {
+    const snippet = (await res.text().catch(() => '')).slice(0, 200).replace(/\s+/g, ' ');
+    console.error(`[sportybet] ${path} HTTP ${res.status}: ${snippet}`);
+    throw new Error(`SportyBet HTTP ${res.status}`);
+  }
   return res.json();
 }
 
@@ -377,7 +388,8 @@ export async function bookLegs(legs: BookingLeg[], fetchImpl: typeof fetch = fet
   let events: SportyEvent[];
   try {
     events = await loadSportyEvents(fetchImpl, now, timeline);
-  } catch {
+  } catch (e: any) {
+    console.error(`[sportybet] feed failed: ${e?.message || e}`);
     return { ok: false, booked: [], skipped, error: 'SportyBet is not responding right now.' };
   }
 
