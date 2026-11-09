@@ -15,6 +15,7 @@ from python.src.football.models import (
 )
 from python.src.football.identity import build_canonical_fixture, find_matching_canonical_fixture
 from python.src.football.stale_checker import evaluate_freshness
+from python.src.football.league_filter import get_fixture_eligibility
 from python.src.football.validator import merge_and_validate_fixture
 from python.src.sources.registry import SourceRegistry
 from python.src.db.supabase_client import SupabaseClient
@@ -96,6 +97,14 @@ class AcquisitionPipeline:
                         freshness, reason = evaluate_freshness(raw, now_utc)
                         if freshness == DataFreshnessState.STALE:
                             metrics["stale_payloads_rejected"] += 1
+                            continue
+
+                        # 2b. Youth / women's sides, judged on the provider's raw team names.
+                        # Fuzzy name resolution below can map "Nottingham Forest U21" onto the senior
+                        # club ("nottingham-forest"), after which the youth filter can no longer see it.
+                        raw_ok, _ = get_fixture_eligibility(home_team=raw.home_team_raw, away_team=raw.away_team_raw)
+                        if not raw_ok:
+                            metrics["youth_or_women_rejected"] = metrics.get("youth_or_women_rejected", 0) + 1
                             continue
 
                         # 3. Canonical Identity Resolution
