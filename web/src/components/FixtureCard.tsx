@@ -1047,14 +1047,16 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
 
           <button
             type="button"
-            className={`glance-chevron-btn ${isExpanded ? 'expanded' : ''}`}
+            className={`glance-chevron-btn glance-chevron-btn--labeled ${isExpanded ? 'expanded' : ''}`}
             onClick={(e) => {
               e.stopPropagation();
               onToggleExpand();
             }}
             title={isExpanded ? 'Hide Poisson Breakdown' : 'Expand Poisson Breakdown'}
+            aria-expanded={isExpanded}
           >
-            {isExpanded ? '⌃' : '⌄'}
+            <span className="glance-chevron-label">{isExpanded ? 'View Less' : 'View More'}</span>
+            <span className="glance-chevron-icon" aria-hidden="true">{isExpanded ? '⌃' : '⌄'}</span>
           </button>
         </div>
       </div>

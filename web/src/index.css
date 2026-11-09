@@ -11170,6 +11170,36 @@ body {
   border-color: #0f172a !important;
 }
 
+/* Football card only: chevron button with a "View More" text label */
+.glance-chevron-btn.glance-chevron-btn--labeled {
+  width: auto !important;
+  height: 26px !important;
+  padding: 0 10px !important;
+  border-radius: 9999px;
+  gap: 4px;
+  font-size: 11px !important;
+  white-space: nowrap;
+  line-height: 1;
+}
+
+.glance-chevron-btn--labeled .glance-chevron-icon {
+  font-size: 12px;
+  line-height: 1;
+}
+
+@media (max-width: 768px) {
+  .glance-chevron-btn.glance-chevron-btn--labeled {
+    width: auto !important;
+    height: 22px !important;
+    padding: 0 8px !important;
+    font-size: 9.5px !important;
+  }
+
+  .glance-chevron-btn--labeled .glance-chevron-icon {
+    font-size: 10px;
+  }
+}
+
 /* ==========================================================================
    PASSWORD RECOVERY PAGE STYLES
    ========================================================================== */
