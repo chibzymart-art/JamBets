@@ -150,6 +150,27 @@ LEAGUE_REGISTRY: Dict[str, LeagueConfig] = {
         code="ENG_EFL_CUP", name="EFL Cup", country="England", tier=1,
         espn_slug="eng.league_cup", livescore_country="england", livescore_stage="efl-cup"
     ),
+    "ENG_EFL_TROPHY": LeagueConfig(
+        code="ENG_EFL_TROPHY", name="EFL Trophy", country="England", tier=3,
+        espn_slug="eng.trophy", livescore_country="england", livescore_stage="efl-trophy"
+    ),
+    "ESP_CDR": LeagueConfig(
+        code="ESP_CDR", name="Copa del Rey", country="Spain", tier=1,
+        espn_slug="esp.copa_del_rey", livescore_country="spain", livescore_stage="copa-del-rey"
+    ),
+    "COL_PA": LeagueConfig(
+        code="COL_PA", name="Colombian Primera A", country="Colombia", tier=1,
+        espn_slug="col.1", livescore_country="colombia", livescore_stage="primera-a-clausura"
+    ),
+    "BRA_SB": LeagueConfig(
+        code="BRA_SB", name="Brasileirão Série B", country="Brazil", tier=2,
+        espn_slug="bra.2", livescore_country="brazil", livescore_stage="serie-b"
+    ),
+    # ESPN does not carry the J.League Cup (YBC Levain Cup): LiveScore is the only fixture source.
+    "JPN_LC": LeagueConfig(
+        code="JPN_LC", name="J.League Cup", country="Japan", tier=1,
+        espn_slug="", livescore_country="japan", livescore_stage="league-cup"
+    ),
     "ESP_LL2": LeagueConfig(
         code="ESP_LL2", name="LaLiga 2", country="Spain", tier=2,
         espn_slug="esp.2", livescore_country="spain", livescore_stage="laliga-2"

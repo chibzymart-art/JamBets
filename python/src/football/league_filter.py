@@ -8,7 +8,8 @@ Centralized validation ensuring strict quality control across all prediction eng
    - Tier 3: League One (ENG_L1)
    - Tier 4: League Two (ENG_L2)
    - Tier 5: National League (ENG_NL)
-   - Major Cups: EFL Cup (ENG_EFL_CUP), FA Cup (ENG_FA_CUP)
+   - Major Cups: EFL Cup (ENG_EFL_CUP), FA Cup (ENG_FA_CUP), EFL Trophy (ENG_EFL_TROPHY,
+     academy/U21 entrants excluded by the youth filter)
    - Permanently Excluded: Tier 6 (ENG_NL_N, ENG_NL_S), Tier 7 (ENG_NPL, ENG_ILP, ENG_SLP),
      and Youth/Reserves (ENG_PL2, ENG_PL_U18, U21, etc.)
 """
@@ -25,6 +26,7 @@ PERMITTED_ENGLISH_LEAGUES: Set[str] = {
     "ENG_NL",
     "ENG_EFL_CUP",
     "ENG_FA_CUP",
+    "ENG_EFL_TROPHY",  # League One/Two clubs; Premier League academy sides are dropped by the youth filter
 }
 
 # Explicitly excluded league codes across all countries
@@ -73,6 +75,7 @@ YOUTH_KEYWORDS = [
     r"\bpremier league 2\b",
     r"\breserves\b",
     r"\byouth\b",
+    r"\bacademy\b",  # EFL Trophy entrants listed as "Brentford Academy" etc.
 ]
 
 _WOMEN_PATTERN = re.compile("|".join(WOMEN_KEYWORDS), re.IGNORECASE)
