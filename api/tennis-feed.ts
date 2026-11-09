@@ -111,19 +111,22 @@ function getCorsOrigin(req: Request): string {
   return allowed.includes(origin) ? origin : 'https://www.oddsbanta.com';
 }
 
-async function fetchTennisDataFromUpstream(rawToken?: string | null): Promise<TennisFeedData> {
-  const headers: Record<string, string> = {
-    apikey: SUPABASE_ANON_KEY,
+// Supabase headers for a given bearer token.
+// Project keys (sb_secret_ / sb_publishable_, or the legacy service/anon keys) must be sent as BOTH
+// apikey and Authorization: Supabase rejects a publishable apikey paired with an sb_secret_ bearer
+// (401 PGRST301 "Expected 3 parts in JWT"). A signed-in user's JWT pairs with the anon apikey.
+function supabaseHeaders(token?: string | null): Record<string, string> {
+  const bearer = token || SUPABASE_SERVICE_ROLE_KEY || SUPABASE_ANON_KEY;
+  const isProjectKey = bearer === SUPABASE_SERVICE_ROLE_KEY || bearer === SUPABASE_ANON_KEY;
+  return {
+    apikey: isProjectKey ? bearer : SUPABASE_ANON_KEY,
+    Authorization: `Bearer ${bearer}`,
     Accept: 'application/json',
   };
+}
 
-  if (rawToken) {
-    headers['Authorization'] = `Bearer ${rawToken}`;
-  } else if (SUPABASE_SERVICE_ROLE_KEY) {
-    headers['Authorization'] = `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`;
-  } else {
-    headers['Authorization'] = `Bearer ${SUPABASE_ANON_KEY}`;
-  }
+async function fetchTennisDataFromUpstream(rawToken?: string | null): Promise<TennisFeedData> {
+  const headers = supabaseHeaders(rawToken);
 
   // 1. Primary Path: Zero-Join Point Read from pre-computed cached_feeds table (Sub-Phase 2.3)
   try {
@@ -155,8 +158,7 @@ async function fetchTennisDataFromUpstream(rawToken?: string | null): Promise<Te
 }
 
 function serviceHeaders(): Record<string, string> {
-  const key = SUPABASE_SERVICE_ROLE_KEY || SUPABASE_ANON_KEY;
-  return { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${key}`, Accept: 'application/json' };
+  return supabaseHeaders(null);
 }
 
 // Predictions with kickoff from minIso up to maxIso (inclusive for the fallback, exclusive for a day).
