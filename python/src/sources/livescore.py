@@ -57,7 +57,12 @@ class LiveScoreAdapter(BaseSourceAdapter):
         "USA_MLS": ["major-league-soccer-2026", "mls"],
         "BRA_SA": ["serie-a"],
         "ARG_PD": ["liga-profesional-clausura", "primera-division"],
-        "MEX_LMX": ["liga-mx-apertura", "liga-mx-clausura", "liga-mx"],
+        # Liguilla (play-off) stages are listed separately; the women's play-off code ends in "-women"
+        # and is deliberately not matched.
+        "MEX_LMX": ["liga-mx-apertura", "liga-mx-clausura", "liga-mx",
+                    "liga-mx-apertura-play-off", "liga-mx-clausura-play-off"],
+        "BRA_SB": ["serie-b"],
+        "JPN_LC": ["league-cup", "j-league-cup"],
         "SAU_SPL": ["saudi-professional-league", "pro-league"],
         "JPN_J1": ["j-league-2025", "j1-league"],
         "EUR_CL": ["champions-league", "uefa-champions-league"],
@@ -71,6 +76,15 @@ class LiveScoreAdapter(BaseSourceAdapter):
         "FIFA_WCQ_CAF": ["world-cup-qualification-caf", "world-cup-qualification"],
         "FIFA_WCQ_AFC": ["world-cup-qualification-afc", "world-cup-qualification"],
         "FIFA_FRIENDLY": ["international-friendlies", "friendlies"]
+    }
+
+    # Cups whose LiveScore stage code changes every round or group (e.g. "efl-trophy-north-group-b",
+    # "copa-del-rey-round-1-2024-2025"). A stage matches when its code starts with one of these
+    # prefixes; the country check still applies.
+    LIVESCORE_STAGE_PREFIXES = {
+        "ENG_EFL_TROPHY": ["efl-trophy"],
+        "ESP_CDR": ["copa-del-rey"],
+        "COL_PA": ["primera-a"],  # apertura, clausura and their play-off stages
     }
 
     def _map_livescore_status(self, eps: str) -> FixtureStatus:
@@ -135,9 +149,11 @@ class LiveScoreAdapter(BaseSourceAdapter):
                         "uefa-nations-league", "concacaf-nations-league", "uefa-champions-league",
                         "champions-league", "europa-league", "conference-league", "international-friendlies"
                     ]
+                    stage_prefixes = self.LIVESCORE_STAGE_PREFIXES.get(league.code, [])
                     stage_matches = (
                         stage_code in allowed_stages or
                         stage_name in allowed_stages or
+                        any(stage_code.startswith(p) for p in stage_prefixes) or
                         (is_tournament_country and stage_country == league.livescore_country)
                     )
                     if not (country_matches and stage_matches):
