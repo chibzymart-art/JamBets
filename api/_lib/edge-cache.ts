@@ -2,6 +2,23 @@
 // Protects Supabase Free Tier from Connection Exhaustion & Egress Limits
 // Enhanced for Sub-Phase 2.4: Real-Time Dynamic Snapshot Invalidation
 
+// Keeps a background promise alive after the response is sent.
+// The Vercel Edge runtime stops pending work once a handler returns unless it is passed to
+// waitUntil. Without it, the stale-while-revalidate refresh below never finished, so a server
+// instance kept serving its first snapshot for up to an hour after each engine run.
+// This reads the same request context that @vercel/functions' waitUntil uses, so no dependency
+// is needed. Outside Vercel (local dev, tests) there is no context and the promise simply runs.
+const VERCEL_REQUEST_CONTEXT = Symbol.for('@vercel/request-context');
+
+export function keepAlive(promise: Promise<unknown>): void {
+  try {
+    const ctx = (globalThis as any)[VERCEL_REQUEST_CONTEXT]?.get?.();
+    if (ctx && typeof ctx.waitUntil === 'function') ctx.waitUntil(promise);
+  } catch {
+    // No request context available: nothing to register.
+  }
+}
+
 export interface EdgeCacheEntry<T> {
   data: T;
   freshUntil: number;
@@ -134,6 +151,7 @@ export class EdgeSwrCache<T> {
         console.warn(`Background revalidation failed for ${key}:`, err.message || err);
       });
     this.inflight.set(key, promise);
+    keepAlive(promise);
   }
 }
 
