@@ -17,6 +17,13 @@ import {
   parseDateArg,
   shiftDateKey,
   normalizeResult,
+  buildKeyboard,
+  lagosTodayKey,
+  lagosDayLabel,
+  shortDay,
+  refreshCallback,
+  parseRefreshCallback,
+  NOOP_CALLBACK,
 } from '../../api/_lib/telegram-pages';
 
 const future = new Date(Date.now() + 10 * 864e5).toISOString();
@@ -96,6 +103,7 @@ const tennis = [
 
 type Call = { method: string; body: any };
 let calls: Call[] = [];
+let editError = ''; // when set, editMessageText fails with this Telegram error description
 const queried: string[] = [];
 const json = (v: unknown, status = 200) => new Response(JSON.stringify(v), { status, headers: { 'content-type': 'application/json' } });
 const param = (url: URL, key: string) => (url.searchParams.get(key) || '').replace(/^eq\./, '');
@@ -103,7 +111,9 @@ const param = (url: URL, key: string) => (url.searchParams.get(key) || '').repla
 (globalThis as any).fetch = async (input: any, init?: any) => {
   const url = new URL(String(typeof input === 'string' ? input : input.url));
   if (url.hostname === 'api.telegram.org') {
-    calls.push({ method: url.pathname.split('/').pop() || '', body: JSON.parse(init?.body || '{}') });
+    const method = url.pathname.split('/').pop() || '';
+    calls.push({ method, body: JSON.parse(init?.body || '{}') });
+    if (method === 'editMessageText' && editError) return json({ ok: false, error_code: 400, description: editError }, 400);
     return json({ ok: true, result: {} });
   }
   if (url.pathname.endsWith('/rest/v1/users')) {
@@ -182,7 +192,9 @@ check('main pick shows % and tier', !!body && /🎯 <b>Over 1\.5 Goals<\/b> — 
 check('no "more fixtures on dashboard" cut-off', !!body && !/more fixtures/i.test(body.text));
 const kb = buttons(body?.reply_markup).map((b) => b.text);
 check('tabs: football active, then Over 2.5, 1H 0.5, Corners, Basketball, Tennis', ['• ⚽ Football •', '🎯 Over 2.5', '⏱️ 1H 0.5', '🚩 Corners', '🏀 Basketball', '🎾 Tennis'].every((t) => kb.includes(t)), JSON.stringify(kb));
-check('day switch: previous day, Today active, Tomorrow', kb.includes('📅 Today ✓') && kb.includes('Tomorrow ›') && kb.some((t) => /^‹ \w{3} \d{1,2} \w{3}$/.test(t)), JSON.stringify(kb));
+const TODAY = lagosTodayKey();
+check('day switch: dated prev, today marked, dated next', kb.includes(`‹ ${shortDay(shiftDateKey(TODAY, -1))}`) && kb.includes(`• ${shortDay(TODAY)}`) && kb.includes(`${shortDay(shiftDateKey(TODAY, 1))} ›`) && !kb.some((t) => /Today|Tomorrow/.test(t)), JSON.stringify(kb));
+check('refresh button on the list', buttons(body?.reply_markup).some((b) => b.text === '🔄 Refresh' && b.callback_data === 'rf|football'));
 check('page buttons present', kb.includes('· 1 ·') && kb.includes('Next ›'));
 check('message under Telegram limit', !!body && body.text.length <= 4096);
 
@@ -227,11 +239,33 @@ ed = editBody();
 check('Corners tab: main line, other lines and expected corners', !!ed && /Over 8\.5 Corners<\/b> — <b>61%<\/b> · Mid Confidence/.test(ed.text) && /Over 9\.5 Corners · 48%/.test(ed.text) && /Expected corners: 10\.2/.test(ed.text) && !/Over 8\.5 Corners · 61%/.test(ed.text), ed?.text);
 
 // Day switch
-const tomorrowBtn = buttons(body?.reply_markup).find((b) => b.text === 'Tomorrow ›')?.callback_data as string;
+const TOMORROW = shiftDateKey(TODAY, 1);
+const tomorrowBtn = buttons(body?.reply_markup).find((b) => b.text === `${shortDay(TOMORROW)} ›`)?.callback_data as string;
+check('next-day button carries an explicit date', tomorrowBtn === `pg|football|${TOMORROW}|1`, tomorrowBtn);
 calls = [];
 await press(PAID, tomorrowBtn);
 ed = editBody();
-check('Tomorrow button moves the day (Today no longer active)', buttons(ed?.reply_markup).some((b) => b.text === '📅 Today') && !buttons(ed?.reply_markup).some((b) => b.text === '📅 Today ✓'));
+const tmKb = buttons(ed?.reply_markup).map((b) => b.text);
+check('next-day button moves the labels: prev = today, current = tomorrow (not marked today), next = day after',
+  tmKb.includes(`‹ ${shortDay(TODAY)}`) && tmKb.includes(`📅 ${shortDay(TOMORROW)}`) && tmKb.includes(`${shortDay(shiftDateKey(TODAY, 2))} ›`) && !tmKb.some((t) => t.startsWith('• ') && /\d/.test(t)), JSON.stringify(tmKb));
+
+// Refresh: edits in place with today's list, page 1, same tab, and answers "Refreshed"
+calls = [];
+await press(PAID, 'rf|basketball');
+ed = editBody();
+const rfAnswer = calls.find((c) => c.method === 'answerCallbackQuery');
+check('refresh edits the same message with today on the same tab', !!ed && ed.message_id === 55 && /Basketball Predictions/.test(ed.text) && buttons(ed.reply_markup).some((b) => b.text === `• ${shortDay(TODAY)}`) && buttons(ed.reply_markup).some((b) => b.text === '• 🏀 Basketball •'), ed?.text?.slice(0, 200));
+check('refresh answers the callback with "Refreshed"', rfAnswer?.body.text === 'Refreshed');
+editError = 'Bad Request: message is not modified: specified new message content and reply markup are exactly the same';
+calls = [];
+await press(PAID, 'rf|football');
+editError = '';
+check('refresh with unchanged content: no fallback retry, callback still answered',
+  calls.filter((c) => c.method === 'editMessageText').length === 1 && calls.some((c) => c.method === 'answerCallbackQuery' && c.body.text === 'Refreshed'), JSON.stringify(calls.map((c) => c.method)));
+calls = [];
+await press(FREE, 'rf|football');
+check('free account pressing Refresh gets the upgrade message, no picks',
+  calls.some((c) => c.method === 'sendMessage' && /VIP Access Required/.test(c.body.text)) && !calls.some((c) => c.method === 'editMessageText'));
 
 // Empty tab still shows the tabs so the user can move on
 const savedTennis = tennis.splice(0);
@@ -329,7 +363,7 @@ const prevBtn = buttons(body?.reply_markup).find((b) => /^‹ /.test(b.text))?.c
 calls = [];
 await press(PAID, prevBtn);
 ed = editBody();
-check('previous-day button opens yesterday with Today button to come back', !!ed && buttons(ed.reply_markup).some((b) => b.text === '📅 Today') && /past|Results|matches/.test(ed.text));
+check("previous-day button opens yesterday; next button shows today's date to come back", !!ed && buttons(ed.reply_markup).some((b) => b.text === `📅 ${shortDay(shiftDateKey(TODAY, -1))}`) && buttons(ed.reply_markup).some((b) => b.text === `${shortDay(TODAY)} ›` && b.callback_data === `pg|football|${TODAY}|1`) && /past|Results|matches/.test(ed.text));
 
 calls = [];
 await command(PAID, '/yesterday');
@@ -355,6 +389,35 @@ check('free account /date still gets the upgrade message', calls.some((c) => /VI
 calls = [];
 await command(FREE, '/results');
 check('free account /results still gets the upgrade message', calls.some((c) => /VIP Access Required/.test(c.body.text || '')));
+
+// ── Dated day labels (Lagos time, UTC+1) and Refresh
+check('label: Lagos weekday + date', lagosDayLabel(new Date('2026-11-12T12:00:00Z')) === 'Thu 12 Nov', lagosDayLabel(new Date('2026-11-12T12:00:00Z')));
+check('label: 22:59 UTC is still the same Lagos day', lagosDayLabel(new Date('2026-11-11T22:59:00Z')) === 'Wed 11 Nov');
+check('label: 23:00 UTC is already the next Lagos day', lagosDayLabel(new Date('2026-11-11T23:00:00Z')) === 'Thu 12 Nov');
+check('today from injected now: just before Lagos midnight', lagosTodayKey(new Date('2026-11-11T22:59:59Z')) === '2026-11-11');
+check('today from injected now: just after Lagos midnight', lagosTodayKey(new Date('2026-11-11T23:00:01Z')) === '2026-11-12');
+check('today from injected now: across month end', lagosTodayKey(new Date('2026-11-30T23:30:00Z')) === '2026-12-01');
+check('shortDay for a date key', shortDay('2026-11-13') === 'Fri 13 Nov' && shortDay('2026-11-01') === 'Sun 1 Nov');
+
+const dayRow = (k: any): any[] => k.inline_keyboard.find((r: any[]) => r.some((b) => /^(•|📅) \w{3} \d{1,2} \w{3,4}$/.test(b.text)));
+const k1 = buildKeyboard({ view: 'football', dateKey: '2026-11-12', todayKey: '2026-11-12', page: 1, totalPages: 1 });
+check('viewing today: "‹ Wed 11 Nov" · "• Thu 12 Nov" · "Fri 13 Nov ›"', JSON.stringify(dayRow(k1).map((b) => b.text)) === JSON.stringify(['‹ Wed 11 Nov', '• Thu 12 Nov', 'Fri 13 Nov ›']), JSON.stringify(dayRow(k1)));
+check('day buttons carry explicit dates', JSON.stringify(dayRow(k1).map((b) => b.callback_data)) === JSON.stringify(['pg|football|2026-11-11|1', NOOP_CALLBACK, 'pg|football|2026-11-13|1']));
+const k2 = buildKeyboard({ view: 'goals', dateKey: '2026-11-13', todayKey: '2026-11-12', page: 1, totalPages: 1 });
+check('labels shift with the viewed day (D+1)', JSON.stringify(dayRow(k2).map((b) => b.text)) === JSON.stringify(['‹ Thu 12 Nov', '📅 Fri 13 Nov', 'Sat 14 Nov ›']), JSON.stringify(dayRow(k2)));
+const k3 = buildKeyboard({ view: 'football', dateKey: '2026-11-11', todayKey: '2026-11-11', page: 1, totalPages: 1 });
+const k3b = buildKeyboard({ view: 'football', dateKey: '2026-11-11', todayKey: '2026-11-12', page: 1, totalPages: 1 });
+check('same day re-rendered after midnight is no longer marked today', dayRow(k3)[1].text === '• Wed 11 Nov' && dayRow(k3b)[1].text === '📅 Wed 11 Nov');
+const kMax = buildKeyboard({ view: 'football', dateKey: shiftDateKey('2026-11-12', 7), todayKey: '2026-11-12', page: 1, totalPages: 1 });
+const kMin = buildKeyboard({ view: 'football', dateKey: shiftDateKey('2026-11-12', -60), todayKey: '2026-11-12', page: 1, totalPages: 1 });
+check('no next button at +7 days, no prev button at -60 days', !dayRow(kMax).some((b) => b.text.endsWith(' ›')) && !dayRow(kMin).some((b) => b.text.startsWith('‹ ')) && dayRow(kMax).length === 2 && dayRow(kMin).length === 2);
+const kPaged = buildKeyboard({ view: 'tennis', dateKey: '2026-11-12', todayKey: '2026-11-12', page: 2, totalPages: 3 });
+const lastRow = kPaged.inline_keyboard[kPaged.inline_keyboard.length - 1];
+check('refresh is the last row, after the page buttons', lastRow.length === 1 && lastRow[0].text === '🔄 Refresh' && lastRow[0].callback_data === 'rf|tennis');
+check('refresh callback round trip', refreshCallback('ht05') === 'rf|ht05' && parseRefreshCallback('rf|ht05')?.cmd === 'ht05' && parseRefreshCallback('rf|bangers')?.cmd === 'bangers');
+check('refresh callback rejects junk', parseRefreshCallback('rf|drop') === null && parseRefreshCallback('rf|football|x') === null && parseRefreshCallback('pg|football|2026-11-12|1') === null && parseRefreshCallback(null) === null);
+check('refresh callback is not a page callback', parsePageCallback('rf|football') === null);
+check('every callback fits 64 bytes incl. refresh', [k1, k2, kPaged].every((k) => buttons(k).every((b) => new TextEncoder().encode(b.callback_data).length <= 64)));
 
 if (failed) { console.log(`\n${failed} FAILED`); process.exit(1); }
 console.log('\nTELEGRAM PAGES: ALL PASSED');

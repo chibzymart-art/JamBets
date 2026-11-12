@@ -295,8 +295,21 @@ export function sourceForView(view: string): string {
 
 // ── Pages and buttons ────────────────────────────────────────────────────────
 
-// Callback data (max 64 bytes): "pg|<view>|<YYYY-MM-DD>|<page>"; "pg|noop" for the active tab/page.
+// Callback data (max 64 bytes): "pg|<view>|<YYYY-MM-DD>|<page>"; "pg|noop" for the active tab/page;
+// "rf|<view>" for Refresh (reopens the view on the current Lagos day, page 1).
 export const NOOP_CALLBACK = 'pg|noop';
+
+export function refreshCallback(view: string): string {
+  return `rf|${view}`;
+}
+
+/** "rf|<view>" -> the view to reload on today's Lagos date. null when it is not a Refresh button. */
+export function parseRefreshCallback(data: string | undefined | null): { cmd: string } | null {
+  if (!data) return null;
+  const m = String(data).match(/^rf\|([a-z0-9]+)$/);
+  if (!m || !VIEWS[m[1]]) return null;
+  return { cmd: m[1] };
+}
 
 export function pageCallback(view: string, dateKey: string, page: number): string {
   return `pg|${view}|${dateKey}|${page}`;
@@ -380,10 +393,24 @@ export function daysBetween(fromKey: string, toKey: string): number {
   return Math.round((Date.UTC(y2, m2 - 1, d2) - Date.UTC(y1, m1 - 1, d1)) / 864e5);
 }
 
-/** "Thu 5 Nov" for a YYYY-MM-DD. */
+const LAGOS_TZ = 'Africa/Lagos';
+const LAGOS_DAY_LABEL = new Intl.DateTimeFormat('en-GB', { timeZone: LAGOS_TZ, weekday: 'short', day: 'numeric', month: 'short' });
+const LAGOS_DATE_KEY = new Intl.DateTimeFormat('en-CA', { timeZone: LAGOS_TZ, year: 'numeric', month: '2-digit', day: '2-digit' });
+
+/** Today's YYYY-MM-DD in Lagos for the given instant. Call at render/callback time, never cache. */
+export function lagosTodayKey(now: Date = new Date()): string {
+  return LAGOS_DATE_KEY.format(now);
+}
+
+/** "Thu 12 Nov": the Lagos calendar day an instant falls on. */
+export function lagosDayLabel(instant: Date): string {
+  return LAGOS_DAY_LABEL.format(instant);
+}
+
+/** "Thu 5 Nov" for a YYYY-MM-DD Lagos date (noon UTC sits inside that Lagos day). */
 export function shortDay(dateKey: string): string {
   const [y, m, d] = dateKey.split('-').map(Number);
-  return new Date(Date.UTC(y, m - 1, d, 12)).toLocaleDateString('en-GB', { timeZone: 'UTC', weekday: 'short', day: 'numeric', month: 'short' });
+  return lagosDayLabel(new Date(Date.UTC(y, m - 1, d, 12)));
 }
 
 /**
@@ -417,16 +444,20 @@ export function parseDateArg(arg: string, todayKey: string): string | null {
   return options[0];
 }
 
-/** Tab bar (sports/markets), day switch (previous day, today, next day), then page buttons. */
+/**
+ * Tab bar (sports/markets), dated day switch ("‹ Wed 11 Nov" · "• Thu 12 Nov" · "Fri 13 Nov ›"),
+ * page buttons, then Refresh. todayKey must be the Lagos date at render time; the labels come from
+ * the viewed date, so they move as the user scrolls, and the callbacks carry explicit dates.
+ */
 export function buildKeyboard(opts: {
   view: string;
   dateKey: string;
   todayKey: string;
-  tomorrowKey: string;
+  tomorrowKey?: string; // unused; kept so existing callers still compile
   page: number;
   totalPages: number;
 }): any {
-  const { view, dateKey, todayKey, tomorrowKey } = opts;
+  const { view, dateKey, todayKey } = opts;
   const activeTab = TIER_VIEWS[view] ? 'football' : view;
 
   const tabRows = TAB_ROWS.map(row =>
@@ -442,17 +473,14 @@ export function buildKeyboard(opts: {
     const prev = shiftDateKey(dateKey, -1);
     dayRow.push({ text: `‹ ${shortDay(prev)}`, callback_data: pageCallback(view, prev, 1) });
   }
-  dayRow.push({
-    text: dateKey === todayKey ? '📅 Today ✓' : '📅 Today',
-    callback_data: dateKey === todayKey ? NOOP_CALLBACK : pageCallback(view, todayKey, 1),
-  });
+  dayRow.push({ text: `${dateKey === todayKey ? '• ' : '📅 '}${shortDay(dateKey)}`, callback_data: NOOP_CALLBACK });
   if (offset < MAX_DAY_OFFSET) {
     const next = shiftDateKey(dateKey, 1);
-    const label = next === tomorrowKey ? 'Tomorrow' : shortDay(next);
-    dayRow.push({ text: `${label} ›`, callback_data: pageCallback(view, next, 1) });
+    dayRow.push({ text: `${shortDay(next)} ›`, callback_data: pageCallback(view, next, 1) });
   }
 
-  return { inline_keyboard: [...tabRows, dayRow, ...pagerRows(view, dateKey, opts.page, opts.totalPages)] };
+  const refreshRow = [{ text: '🔄 Refresh', callback_data: refreshCallback(view) }];
+  return { inline_keyboard: [...tabRows, dayRow, ...pagerRows(view, dateKey, opts.page, opts.totalPages), refreshRow] };
 }
 
 export function totalPages(count: number): number {
@@ -464,7 +492,7 @@ export function renderListPage(opts: {
   displayDate: string;
   dateKey: string;
   todayKey: string;
-  tomorrowKey: string;
+  tomorrowKey?: string;
   cards: ListCard[];
   page: number;
 }): { text: string; replyMarkup: any; page: number; totalPages: number } {
@@ -484,7 +512,7 @@ export function renderListPage(opts: {
     : '';
   const header = `${def.title}\n📅 ${escapeHtml(displayDate)}  ·  ${cards.length} ${matchWord}\n${resultsLine}${RULE}\n\n`;
   const footerFor = (p: number, t: number) =>
-    `\n${RULE}\n📄 Page <b>${p}</b> of <b>${t}</b>  ·  Times in WAT\nTabs switch sport or market; ‹ › change the day.`;
+    `\n${RULE}\n📄 Page <b>${p}</b> of <b>${t}</b>  ·  Times in WAT\nTabs switch sport or market; ‹ › change the day; 🔄 jumps to today.`;
   const budget = MAX_MESSAGE_CHARS - header.length - footerFor(9999, 9999).length;
 
   if (cards.length === 0) {
