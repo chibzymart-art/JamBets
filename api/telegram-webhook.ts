@@ -7,6 +7,7 @@ import {
   footballListCard,
   renderListPage,
   parsePageCallback,
+  parseRefreshCallback,
   commandToView,
   commandListHtml,
   filterForView,
@@ -751,7 +752,10 @@ export default async function handler(req: Request) {
       const cq = update.callback_query;
       const cbChatId = cq.message?.chat?.id;
       const cbMessageId = cq.message?.message_id;
-      const parsed = parsePageCallback(cq.data);
+      // Refresh reopens the same view on the current Lagos day, page 1 (today is computed now, not stored).
+      const refreshReq = parseRefreshCallback(cq.data);
+      const parsed = parsePageCallback(cq.data)
+        ?? (refreshReq ? { cmd: refreshReq.cmd, dateKey: getLagosDateBoundaries(0).lagosDateStr, page: 1 } : null);
       const bookReq = parseBookCallback(cq.data);
 
       // SportyBet booking code for the list on screen (same premium gate as the lists).
@@ -831,7 +835,8 @@ export default async function handler(req: Request) {
         cards: cbCards,
         page: parsed.page,
       });
-      await answerCallbackQuery(cq.id);
+      // editTelegramMessage swallows "message is not modified" (a Refresh with no new data).
+      await answerCallbackQuery(cq.id, refreshReq ? 'Refreshed' : undefined);
       await editTelegramMessage(cbChatId, cbMessageId, view.text, withBookButton(view.replyMarkup, parsed.cmd, parsed.dateKey, cbCards));
       return new Response(JSON.stringify({ ok: true }), { status: 200 });
     }
