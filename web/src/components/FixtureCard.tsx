@@ -1,5 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import { PredictionGlance } from './PredictionGlance';
 import { QueueFixture, FootballPrediction, SecondaryPrediction, PoissonParameters, SimulationOutlines } from '../types';
 import { FavoritePredictionItem } from './FavoritesDrawer';
 import { PICK_DISCLAIMER } from '../lib/confidenceScore';
@@ -816,254 +817,92 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
       onClick={onToggleExpand}
       style={{ cursor: 'pointer' }}
     >
-      {/* 1. TOP META ROW: FAVORITE, LIVE SCORE, LEAGUE, TIME */}
-      <div className="glance-top-row">
-        <button
-          type="button"
-          className={`glance-favorite-btn ${isPrimaryFav ? 'starred' : ''}`}
-          title={isPrimaryFav ? 'Remove from Acca Slip' : 'Add to Acca Slip'}
-          onClick={(e) => {
-            e.stopPropagation();
-            handleTogglePrimaryFav(e);
-          }}
-        >
-          {isPrimaryFav ? '✓ IN SLIP' : '+ ADD TO SLIP'}
-        </button>
-
-        {isLive && (
-          <div className="glance-live-badge">
-            <span className="glance-live-tag">⚡ LIVE {fixture.period && fixture.period !== 'LIVE' ? `(${fixture.period})` : ''}</span>
-            <span className="glance-live-score-pill">
-              {fixture.home_score ?? 0} - {fixture.away_score ?? 0} {fixture.match_minute ? `• ${fixture.match_minute}'` : ''}
-            </span>
-          </div>
-        )}
-
-        {isFinished && (
-          <div className="glance-finished-badge">
-            <span className="glance-ft-tag">FULL TIME</span>
-            <span className="glance-ft-score-pill">
-              {fixture.home_score ?? 0} - {fixture.away_score ?? 0}
-            </span>
-          </div>
-        )}
-
-        <span className="glance-league-pill" title={leagueDisplay}>
-          {leagueDisplay}
-        </span>
-
-        <span className="glance-time-pill">
-          📅 {formattedDateTime}
-        </span>
-      </div>
-
-      {/* 2. MIDDLE ROW: CONFIDENCE, MATCHUP & PROMINENT KEY SIM PICK */}
-      <div className="glance-middle-row">
-        {/* Left Side: Confidence Badges, Teams & Venue */}
-        <div className="glance-left-col">
-          <div className="glance-confidence-row">
+      {/* 1-2. CARD HEADER (shared prototype layout): league · time / teams / tier + pick / slip · View More */}
+      <PredictionGlance
+        league={leagueDisplay}
+        leagueTitle={leagueDisplay}
+        time={`📅 ${formattedDateTime}`}
+        statusChip={
+          isLive
+            ? { kind: 'live', text: `LIVE${fixture.period && fixture.period !== 'LIVE' ? ` ${fixture.period}` : ''}${fixture.match_minute ? ` · ${fixture.match_minute}'` : ''}` }
+            : isFinished
+            ? { kind: 'final', text: 'FULL TIME' }
+            : null
+        }
+        home={formatTeamName(fixture.home_team_name)}
+        away={formatTeamName(fixture.away_team_name)}
+        centerScore={
+          isLive || isFinished || (fixture.home_score != null && fixture.away_score != null)
+            ? `${fixture.home_score ?? 0} - ${fixture.away_score ?? 0}`
+            : null
+        }
+        isLive={isLive}
+        tierLabel={cleanTierLabel}
+        tierClassName={tierConfig.badgeClass}
+        tierStyle={{ color: tierConfig.textColor, borderColor: tierConfig.borderColor, background: tierConfig.bgColor }}
+        settle={
+          !prediction
+            ? null
+            : isWon
+            ? 'won'
+            : isLost
+            ? 'lost'
+            : isVoid
+            ? (isNoBanker ? 'passed' : 'void')
+            : isLive
+            ? 'live'
+            : null
+        }
+        badges={
+          !isLocked && hasNewChange ? (
             <span
-              className={`glance-conf-pill ${tierConfig.badgeClass}`}
-              style={{ color: tierConfig.textColor, borderColor: tierConfig.borderColor, background: tierConfig.bgColor }}
+              className="badge-new-change pg-settle"
+              style={{ color: '#b45309', background: '#fffbeb' }}
+              title="Model recalibrated this pick with fresh squad news and live market drift"
             >
-              <span className="glance-conf-bullet" style={{ background: tierConfig.textColor }} />
-              {cleanTierLabel}
+              ⚡ NEW CHANGE
             </span>
-
-            {scoreRating && (
-              <span className="glance-score-pill">
-                Score: {scoreRating} / 10
-              </span>
-            )}
-
-            {prediction && (
-              <>
-                {isWon && (
-                  <span className={`glance-settle-pill ${isLive ? 'won-live' : ''}`}>
-                    <span style={{ color: '#16a34a', fontWeight: 800 }}>
-                      ✓ WON {isLive ? '(IN-PLAY)' : ''}
-                    </span>
-                  </span>
-                )}
-                {isLost && (
-                  <span className="glance-settle-pill">
-                    <span style={{ color: '#dc2626', fontWeight: 800 }}>✗ LOST</span>
-                  </span>
-                )}
-                {isLive && !isWon && (
-                  <span className="glance-settle-pill live-pending">
-                    <span style={{ color: '#b45309', fontWeight: 800 }}>⚡ IN-PLAY</span>
-                  </span>
-                )}
-                {isVoid && (
-                  <span className="glance-settle-pill">
-                    <span style={{ color: isNoBanker ? '#475569' : '#64748b', fontWeight: 800 }}>
-                      {isNoBanker ? '🛡️ SETTLED (PASSED)' : '⊘ VOID'}
-                    </span>
-                  </span>
-                )}
-              </>
-            )}
-          </div>
-
-          <div className="glance-teams-row">
-            <span className="glance-team-name">{formatTeamName(fixture.home_team_name)}</span>
-            {isLive || isFinished || (fixture.home_score != null && fixture.away_score != null) ? (
-              <span
-                className={`glance-live-match-score ${isLive ? 'in-play' : 'final'}`}
-                title={isLive ? 'Current Live Match Score' : 'Final Match Score'}
-              >
-                {isLive && <span className="live-dot" />}
-                {fixture.home_score ?? 0} - {fixture.away_score ?? 0}
-              </span>
-            ) : (
-              <span className="glance-vs-pill">vs</span>
-            )}
-            <span className="glance-team-name">{formatTeamName(fixture.away_team_name)}</span>
-          </div>
-
-          <div className="glance-venue-row">
-            <span className="glance-venue-icon">📍</span>
-            <span className="glance-venue-text">{venueText}</span>
-          </div>
-        </div>
-
-        {/* Right Side: Key 250,000 Sim Pick Box + Expand Chevron */}
-        <div className="glance-right-col">
-          {isLocked ? (
-            <div
-              className="glance-key-pick-card locked"
+          ) : null
+        }
+        pick={isLocked ? `🔒 ${isVisitor ? 'Oddsbanta AI prediction' : 'Key model pick'}` : glancePick}
+        locked={isLocked}
+        lockedCta={
+          isVisitor ? (
+            <button
+              type="button"
+              className="key-pick-unlock-link"
               onClick={(e) => {
                 e.stopPropagation();
-                if (isVisitor && onRegisterClick) {
-                  onRegisterClick();
-                } else {
-                  onToggleExpand();
-                }
+                if (onRegisterClick) onRegisterClick();
               }}
             >
-              <div className="key-pick-badge">
-                <span className="key-pick-spark">🔒</span>
-                <span>{isVisitor ? 'ODDSBANTA AI PREDICTION' : 'KEY MODEL PICK'}</span>
-              </div>
-              <div className="key-pick-outcome locked-blur">
-                ••••••••••••••••
-              </div>
-              {isVisitor ? (
-                <button
-                  type="button"
-                  className="key-pick-unlock-link"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (onRegisterClick) onRegisterClick();
-                  }}
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
-                >
-                  Register for 3 Days Free →
-                </button>
-              ) : (
-                <Link
-                  to="/subscription"
-                  className="key-pick-unlock-link"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  Trial Expired • Upgrade to VIP ({formatPrice(pricing.standard.monthly)}/mo) →
-                </Link>
-              )}
-            </div>
+              Register for 3 Days Free →
+            </button>
           ) : (
-            <div
-              className="glance-key-pick-card"
-              onClick={onToggleExpand}
-              title="Click to expand calibrated Poisson &amp; probability breakdown"
+            <Link
+              to="/subscription"
+              className="key-pick-unlock-link"
+              onClick={(e) => e.stopPropagation()}
             >
-              <div className="key-pick-badge">
-                <span className="key-pick-spark">✨</span>
-                <span>KEY MODEL PICK</span>
-                {hasNewChange && (
-                  <span
-                    className="badge-new-change"
-                    style={{
-                      marginLeft: 6,
-                      padding: '2px 8px',
-                      background: 'linear-gradient(135deg, #f59e0b, #d97706)',
-                      color: '#ffffff',
-                      borderRadius: 4,
-                      fontSize: 10,
-                      fontWeight: 900,
-                      letterSpacing: '0.04em',
-                      boxShadow: '0 2px 5px rgba(217, 119, 6, 0.4)',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 3
-                    }}
-                    title="Model recalibrated this pick with fresh squad news and live market drift"
-                  >
-                    ⚡ NEW CHANGE
-                  </span>
-                )}
-                {!isNoBanker && (
-                  <button
-                    type="button"
-                    className={`glance-slip-add-btn ${isPrimaryFav ? 'active' : ''}`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleTogglePrimaryFav(e);
-                    }}
-                    title={isPrimaryFav ? 'Remove from Acca Slip' : 'Add to Acca Slip'}
-                  >
-                    {isPrimaryFav ? '✓ IN SLIP' : '+ ADD TO SLIP'}
-                  </button>
-                )}
-                {isWon && (
-                  <span style={{ marginLeft: 6, padding: '1px 6px', background: '#16a34a', color: '#fff', borderRadius: 4, fontSize: 10, fontWeight: 900 }}>
-                    ✓ WON {isLive ? '(IN-PLAY)' : ''}
-                  </span>
-                )}
-                {isLost && (
-                  <span style={{ marginLeft: 6, padding: '1px 6px', background: '#dc2626', color: '#fff', borderRadius: 4, fontSize: 10, fontWeight: 900 }}>
-                    ✗ LOST
-                  </span>
-                )}
-                {isLive && !isWon && (
-                  <span style={{ marginLeft: 6, padding: '1px 6px', background: '#ea580c', color: '#fff', borderRadius: 4, fontSize: 10, fontWeight: 900 }}>
-                    ⚡ LIVE
-                  </span>
-                )}
-                {isVoid && (
-                  <span style={{ marginLeft: 6, padding: '1px 6px', background: '#475569', color: '#fff', borderRadius: 4, fontSize: 10, fontWeight: 900 }}>
-                    {isNoBanker ? '🛡️ SETTLED' : '⊘ VOID'}
-                  </span>
-                )}
-              </div>
-              <div className="key-pick-outcome">
-                {glancePick}
-              </div>
-              <div className="key-pick-prob">
-                {probPct ? `${probPct}% Probability` : 'Simulated'}
-              </div>
-            </div>
-          )}
-
-          <button
-            type="button"
-            className={`glance-chevron-btn glance-chevron-btn--labeled ${isExpanded ? 'expanded' : ''}`}
-            onClick={(e) => {
-              e.stopPropagation();
-              onToggleExpand();
-            }}
-            title={isExpanded ? 'Hide Poisson Breakdown' : 'Expand Poisson Breakdown'}
-            aria-expanded={isExpanded}
-          >
-            <span className="glance-chevron-label">{isExpanded ? 'View Less' : 'View More'}</span>
-            <span className="glance-chevron-icon" aria-hidden="true">{isExpanded ? '⌃' : '⌄'}</span>
-          </button>
-        </div>
-      </div>
+              Trial Expired • Upgrade to VIP ({formatPrice(pricing.standard.monthly)}/mo) →
+            </Link>
+          )
+        }
+        scoreText={scoreRating ? `${scoreRating}/10` : null}
+        scoreSub={!isLocked ? (probPct ? `${probPct}% probability` : 'model estimate') : null}
+        slip={isNoBanker ? null : { active: isPrimaryFav, onClick: handleTogglePrimaryFav }}
+        expanded={isExpanded}
+        onToggle={onToggleExpand}
+      />
 
       {/* 3. EXPANDABLE BREAKDOWN BODY */}
       {isExpanded && (
         <div className="expanded-breakdown-body" onClick={(e) => e.stopPropagation()}>
+          {venueText && (
+            <div className="pg-detail-row">
+              <span>📍 {venueText}</span>
+            </div>
+          )}
           {isLocked ? (
             /* CRITICAL DIRECTIVE 3: PAYWALL UI BLURRED LOCK STATE */
             <div className="paywall-lock-container">

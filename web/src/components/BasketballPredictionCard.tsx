@@ -5,6 +5,7 @@
  */
 
 import React, { useState, useMemo } from 'react';
+import { PredictionGlance } from './PredictionGlance';
 import { BasketballPrediction } from '../types/basketball';
 import { getTierConfig } from './FixtureCard';
 import { FavoritePredictionItem } from './FavoritesDrawer';
@@ -186,93 +187,69 @@ export const BasketballPredictionCard: React.FC<BasketballPredictionCardProps> =
       className={`bball-card ${isWon ? 'card-won' : isLost ? 'card-lost' : isVoid ? 'card-void' : ''}`}
       onClick={() => setIsExpanded(!isExpanded)}
     >
-      {/* 1. TOP META BAR */}
-      <div className="bball-card-meta">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span className="bball-card-league-badge">
-            🏀 {leagueCode}
-          </span>
-          <span className="bball-card-time">
-            📅 {formattedDateTime}
-          </span>
-        </div>
+      {/* 1-3. CARD HEADER (shared prototype layout); rest days, pace, sims and secondary markets open in View More */}
+      <PredictionGlance
+        league={`🏀 ${leagueCode}`}
+        leagueTitle={leagueName}
+        time={`📅 ${formattedDateTime}`}
+        statusChip={isLive ? { kind: 'live', text: fixture?.current_period || 'LIVE' } : null}
+        home={homeName}
+        away={awayName}
+        centerScore={isLive || isWon || isLost || isVoid ? `${fixture?.home_score ?? 0} - ${fixture?.away_score ?? 0}` : null}
+        isLive={isLive}
+        tierLabel={cleanTierLabel}
+        tierStyle={{ color: tierConfig.textColor, background: tierConfig.bgColor, borderColor: tierConfig.borderColor }}
+        settle={isWon ? 'won' : isLost ? 'lost' : isVoid ? 'void' : null}
+        marketLabel={
+          prediction.market === 'point_spread'
+            ? 'Point Spread (Handicap)'
+            : prediction.market === 'game_total_over_under'
+            ? 'Game Totals (Over/Under)'
+            : 'Moneyline Winner'
+        }
+        pick={isLocked ? '🔒 BigBang VIP Pick' : displayedPrediction}
+        locked={isLocked}
+        lockedCta={
+          <button
+            type="button"
+            className="bball-unlock-link"
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpenUpgrade ? onOpenUpgrade() : onOpenAuth ? onOpenAuth('signin') : null;
+            }}
+          >
+            👑 Unlock BigBang VIP (₦10,000/mo) →
+          </button>
+        }
+        scoreText={!isLocked && probPct ? `${probPct}%` : null}
+        scoreSub={
+          !isLocked
+            ? prediction.edge_percentage != null && prediction.edge_percentage > 0
+              ? `win prob · +${prediction.edge_percentage.toFixed(1)}% edge`
+              : 'win prob'
+            : null
+        }
+        slip={onToggleFavorite && !isLocked ? { active: !!isFavorite, onClick: handleFavoriteClick } : null}
+        expanded={isExpanded}
+        onToggle={() => setIsExpanded(!isExpanded)}
+      />
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          {onToggleFavorite && (
-            <button
-              type="button"
-              className={`glance-favorite-btn ${isFavorite ? 'starred' : ''}`}
-              title={isFavorite ? 'Remove from Acca Slip' : 'Add to Acca Slip'}
-              onClick={(e) => {
-                e.stopPropagation();
-                handleFavoriteClick(e);
-              }}
-            >
-              {isFavorite ? '✓ IN SLIP' : '+ ADD TO SLIP'}
-            </button>
-          )}
+      {/* Details that used to sit on the collapsed card (shown in View More) */}
+      {isExpanded && (
+        <div className="pg-detail-row" onClick={(e) => e.stopPropagation()}>
+          <span>🏠 {homeName}: {fixture?.home_rest_days != null ? `${fixture.home_rest_days}d Rest` : 'Normal Rest'}{fixture?.is_home_b2b ? ' · ⚠️ B2B Game' : ''}</span>
+          <span>✈️ {awayName}: {fixture?.away_rest_days != null ? `${fixture.away_rest_days}d Rest` : 'Normal Rest'}{fixture?.is_away_b2b ? ' · ⚠️ B2B Game' : ''}</span>
+          <span>⚡ Pace: {expectedPace.toFixed(1)} Poss</span>
           {altitudeBonus && (
             <span className="bball-altitude-badge" title="Mile-High Altitude Advantage">
               🏔️ {homeTeam.city} (+{(simulation?.altitude_hca_bonus || 4.15).toFixed(1)} HCA)
             </span>
           )}
-          <span style={{ fontSize: '11px', color: '#64748b', fontWeight: 600 }}>
-            ⚡ Pace: {expectedPace.toFixed(1)} Poss
-          </span>
         </div>
-      </div>
-
-      {/* 2. MATCHUP TEAMS ROW */}
-      <div className="bball-matchup-row">
-        {/* Home Team */}
-        <div className="bball-team-col">
-          {homeTeam?.logo_url ? (
-            <img src={homeTeam.logo_url} alt={homeName} className="bball-team-logo" />
-          ) : (
-            <div className="bball-hero-icon-ring" style={{ width: 34, height: 34, fontSize: 16 }}>
-              🏠
-            </div>
-          )}
-          <div className="bball-team-info">
-            <span className="bball-team-name">{homeName}</span>
-            <div className="bball-team-tags">
-              <span className="bball-rest-tag">
-                {fixture?.home_rest_days != null ? `${fixture.home_rest_days}d Rest` : 'Normal Rest'}
-              </span>
-              {fixture?.is_home_b2b && (
-                <span className="bball-b2b-tag">⚠️ B2B Game</span>
-              )}
-            </div>
-          </div>
-        </div>
-
-        <span className="bball-vs-badge">VS</span>
-
-        {/* Away Team */}
-        <div className="bball-team-col away">
-          <div className="bball-team-info">
-            <span className="bball-team-name">{awayName}</span>
-            <div className="bball-team-tags away">
-              {fixture?.is_away_b2b && (
-                <span className="bball-b2b-tag">⚠️ B2B Game</span>
-              )}
-              <span className="bball-rest-tag">
-                {fixture?.away_rest_days != null ? `${fixture.away_rest_days}d Rest` : 'Normal Rest'}
-              </span>
-            </div>
-          </div>
-          {awayTeam?.logo_url ? (
-            <img src={awayTeam.logo_url} alt={awayName} className="bball-team-logo" />
-          ) : (
-            <div className="bball-hero-icon-ring" style={{ width: 34, height: 34, fontSize: 16, background: '#1e293b' }}>
-              ✈️
-            </div>
-          )}
-        </div>
-      </div>
+      )}
 
       {/* 2.5 250k MONTE CARLO SIMULATED SCORELINE RIBBON */}
-      {!isLocked && prediction.simulated_home_score != null && prediction.simulated_away_score != null && (
+      {isExpanded && !isLocked && prediction.simulated_home_score != null && prediction.simulated_away_score != null && (
         <div
           style={{
             background: 'linear-gradient(90deg, #fff7ed 0%, #ffedd5 50%, #fff7ed 100%)',
@@ -307,102 +284,8 @@ export const BasketballPredictionCard: React.FC<BasketballPredictionCardProps> =
         </div>
       )}
 
-      {/* 3. PRIMARY SUPER BANKER SELECTION BOX */}
-      <div className={`bball-banker-box ${isWon ? 'box-won' : isLost ? 'box-lost' : isVoid ? 'box-void' : ''}`}>
-        <div className="bball-banker-left">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-            <span
-              style={{
-                fontSize: '10px',
-                fontWeight: 900,
-                padding: '2px 7px',
-                borderRadius: '4px',
-                background: 'linear-gradient(135deg, #ea580c 0%, #c2410c 100%)',
-                color: '#ffffff',
-                letterSpacing: '0.04em',
-                textTransform: 'uppercase',
-                boxShadow: '0 1px 3px rgba(234, 88, 12, 0.3)',
-              }}
-            >
-              🔥 PRIMARY BANKER
-            </span>
-            <span className="bball-market-label">
-              {prediction.market === 'point_spread'
-                ? 'Point Spread (Handicap)'
-                : prediction.market === 'game_total_over_under'
-                ? 'Game Totals (Over/Under)'
-                : 'Moneyline Winner'}
-            </span>
-            <span
-              style={{
-                fontSize: '10px',
-                fontWeight: 800,
-                padding: '2px 6px',
-                borderRadius: '4px',
-                background: tierConfig.bgColor,
-                color: tierConfig.textColor,
-              }}
-            >
-              {cleanTierLabel}
-            </span>
-          </div>
-
-          <div className="bball-prediction-text" style={{ marginTop: 4 }}>
-            {isLocked ? (
-              <div>
-                <span style={{ color: '#ea580c', fontWeight: 700 }}>🔒 BigBang VIP Pick</span>
-                <div style={{ fontSize: 11, color: '#b45309', marginTop: 2, fontWeight: 500 }}>
-                  250,000 Monte Carlo simulations &amp; Four Factors reserved for BigBang VIP.
-                </div>
-              </div>
-            ) : (
-              <span>{displayedPrediction}</span>
-            )}
-          </div>
-        </div>
-
-        <div className="bball-banker-right">
-          {isLocked ? (
-            <button
-              type="button"
-              className="bball-add-slip-btn"
-              onClick={(e) => {
-                e.stopPropagation();
-                onOpenUpgrade ? onOpenUpgrade() : onOpenAuth ? onOpenAuth('signin') : null;
-              }}
-            >
-              👑 Unlock BigBang VIP (₦10,000/mo) →
-            </button>
-          ) : (
-            <>
-              {probPct && (
-                <div className="bball-prob-pill">
-                  <span>{probPct}%</span>
-                  <span className="bball-prob-sub">Win Prob</span>
-                </div>
-              )}
-
-              {prediction.edge_percentage != null && prediction.edge_percentage > 0 && (
-                <div className="bball-edge-pill">
-                  +{prediction.edge_percentage.toFixed(1)}% Edge
-                </div>
-              )}
-
-              <button
-                type="button"
-                className={`bball-add-slip-btn ${isFavorite ? 'in-slip' : ''}`}
-                onClick={handleFavoriteClick}
-                title={isFavorite ? 'In Accumulator Slip' : 'Add to Accumulator Slip'}
-              >
-                {isFavorite ? '✓ IN SLIP' : '+ ADD TO SLIP'}
-              </button>
-            </>
-          )}
-        </div>
-      </div>
-
       {/* 3.5 DYNAMIC SECONDARY PREDICTIONS OR ANTI-LOSS VIP TEASER */}
-      {isSecondaryRedacted ? (
+      {isExpanded && (isSecondaryRedacted ? (
         <div
           className="bball-anti-loss-teaser-box"
           style={{
@@ -615,10 +498,10 @@ export const BasketballPredictionCard: React.FC<BasketballPredictionCardProps> =
             })}
           </div>
         </div>
-      ) : null}
+      ) : null)}
 
       {/* 4. SETTLEMENT RESULT (IF SETTLED) */}
-      {(isWon || isLost || isVoid) && (
+      {isExpanded && (isWon || isLost || isVoid) && (
         <div className={`bball-settled-bar ${isWon ? 'won' : isLost ? 'lost' : 'void'}`}>
           <span>
             {isWon ? '🏆 WON' : isLost ? '❌ LOST' : '⚖️ VOID (PUSH)'}: {prediction.actual_result || prediction.settlement_notes}
@@ -630,7 +513,7 @@ export const BasketballPredictionCard: React.FC<BasketballPredictionCardProps> =
       )}
 
       {/* 5. IN-PLAY SCORE (IF LIVE) */}
-      {isLive && (
+      {isExpanded && isLive && (
         <div style={{ background: '#fef2f2', color: '#991b1b', border: '1px solid #fecaca', padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 700, display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10 }}>
           <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: '#ef4444', animation: 'pulse 1.5s infinite' }} />

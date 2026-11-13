@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { PredictionGlance } from './PredictionGlance';
 import { TennisPrediction, TennisSurface } from '../types/tennis';
 import { getTierConfig } from './FixtureCard';
 import { FavoritePredictionItem } from './FavoritesDrawer';
@@ -262,221 +263,62 @@ export const TennisPredictionCard: React.FC<TennisPredictionCardProps> = ({
       onClick={() => setIsExpanded(!isExpanded)}
       style={{ cursor: 'pointer', marginBottom: 12 }}
     >
-      {/* 1. TOP META ROW: TOURNAMENT, TIME, SURFACE & CPI */}
-      <div className="glance-top-row">
-        {onToggleFavorite && (
-          <button
-            type="button"
-            className={`glance-favorite-btn ${isPrimaryFav ? 'starred' : ''}`}
-            title={isPrimaryFav ? 'Remove from Acca Slip' : 'Add to Acca Slip'}
-            onClick={handlePrimaryFavoriteToggle}
+      {/* 1-2. CARD HEADER (shared prototype layout); surface, CPI and location move into View More */}
+      <PredictionGlance
+        league={
+          <span
+            style={{ ...tourPillStyle, border: `1px solid ${tourPillStyle.borderColor}`, padding: '1px 6px', borderRadius: 6, fontWeight: 600 }}
           >
-            {isPrimaryFav ? '✓ IN SLIP' : '+ ADD TO SLIP'}
-          </button>
-        )}
-
-        <span className="glance-league-pill" title={tournamentDisplay} style={tourPillStyle}>
-          {tournamentDisplay}
-        </span>
-
-        {roundName && (
-          <span className="glance-round-pill">
-            🎯 {roundName}
+            {tournamentDisplay}
           </span>
-        )}
-
-        <span className="glance-time-pill">
-          📅 {formattedDateTime}
-        </span>
-
-        <span className="glance-time-pill" style={{ background: '#f8fafc', borderColor: '#e2e8f0', color: '#475569' }}>
-          {surfaceMeta.icon} {surfaceMeta.label} • CPI {cpi}
-        </span>
-
-        {isLive && (
-          <div className="glance-live-badge">
-            <span className="glance-live-tag">⚡ LIVE</span>
-            <span className="glance-live-score-pill">
-              {fixture?.score_p1_sets ?? 0} - {fixture?.score_p2_sets ?? 0} Sets
-            </span>
-          </div>
-        )}
-
-        {isFinished && (
-          <div className="glance-finished-badge">
-            <span className="glance-ft-tag">FINAL</span>
-            <span className="glance-ft-score-pill">
-              {fixture?.score_p1_sets ?? 0} - {fixture?.score_p2_sets ?? 0} Sets
-            </span>
-          </div>
-        )}
-      </div>
-
-      {/* 2. MIDDLE ROW: CONFIDENCE, MATCHUP & PROMINENT KEY SIM PICK */}
-      <div className="glance-middle-row">
-        {/* Left Col: Confidence Badge, Players & Location */}
-        <div className="glance-left-col">
-          <div className="glance-confidence-row">
-            <span
-              className={`glance-conf-pill ${tierConfig.badgeClass}`}
-              style={{ color: tierConfig.textColor, borderColor: tierConfig.borderColor, background: tierConfig.bgColor }}
-            >
-              <span className="glance-conf-bullet" style={{ background: tierConfig.textColor }} />
-              {cleanTierLabel}
-            </span>
-
-            {scoreRating && !isLocked && (
-              <span className="glance-score-pill">
-                Score: {scoreRating} / 10
-              </span>
-            )}
-
-            {isWon && (
-              <span className="glance-settle-pill">
-                <span style={{ color: '#16a34a', fontWeight: 800 }}>✓ WON</span>
-              </span>
-            )}
-            {isLost && (
-              <span className="glance-settle-pill">
-                <span style={{ color: '#dc2626', fontWeight: 800 }}>✗ LOST</span>
-              </span>
-            )}
-            {isVoid && (
-              <span className="glance-settle-pill">
-                <span style={{ color: '#64748b', fontWeight: 800 }}>⊘ VOID</span>
-              </span>
-            )}
-          </div>
-
-          <div className="glance-teams-row">
-            <span className="glance-team-name">
-              {p1DisplayName}{p1RankText}
-            </span>
-            {isLive || isFinished ? (
-              <span className={`glance-live-match-score ${isLive ? 'in-play' : 'final'}`}>
-                {fixture?.score_p1_sets ?? 0} - {fixture?.score_p2_sets ?? 0}
-              </span>
-            ) : (
-              <span className="glance-vs-pill">vs</span>
-            )}
-            <span className="glance-team-name">
-              {p2DisplayName}{p2RankText}
-            </span>
-          </div>
-
-          <div className="glance-venue-row">
-            <span className="glance-venue-icon">📍</span>
-            <span className="glance-venue-text">
-              {locationText} • {surfaceMeta.label}{isLocked ? '' : ` • ${eloDiffText}`}
-            </span>
-          </div>
-        </div>
-
-        {/* Right Col: Exact Football Key 250,000 Sim Pick Card + Favorite Button + Chevron */}
-        <div className="glance-right-col">
-          {onToggleFavorite && (
-            <button
-              type="button"
-              className={`tennis-add-slip-btn ${isPrimaryFav ? 'in-slip' : ''}`}
-              onClick={handlePrimaryFavoriteToggle}
-              title={isPrimaryFav ? 'Remove from Acca Slip' : 'Add to Acca Slip'}
-              aria-label={isPrimaryFav ? 'Remove from Acca Slip' : 'Add to Acca Slip'}
-            >
-              {isPrimaryFav ? '✓ IN SLIP' : '+ ADD TO SLIP'}
-            </button>
-          )}
-
-          {isLocked ? (
-            <div className="glance-key-pick-card locked" onClick={() => setIsExpanded(!isExpanded)}>
-              <div className="key-pick-badge">
-                <span className="key-pick-spark">✨</span>
-                <span>KEY MODEL PICK</span>
-              </div>
-              <div className="key-pick-outcome locked-blur">
-                🔒 BigBang VIP Pick
-              </div>
-              <button
-                type="button"
-                className="key-pick-unlock-link"
-                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (onOpenUpgrade) onOpenUpgrade();
-                  else if (onOpenAuth) onOpenAuth('register');
-                }}
-              >
-                Unlock BigBang VIP (₦10,000/mo) →
-              </button>
-            </div>
-          ) : (
-            <div
-              className="glance-key-pick-card"
-              onClick={() => setIsExpanded(!isExpanded)}
-              title="Click to expand calibrated model probability & Markov breakdown"
-            >
-              <div className="key-pick-badge">
-                <span className="key-pick-spark">✨</span>
-                <span>KEY MODEL PICK</span>
-                {isWon && (
-                  <span style={{ marginLeft: 6, padding: '1px 6px', background: '#16a34a', color: '#fff', borderRadius: 4, fontSize: 10, fontWeight: 900 }}>
-                    ✓ WON
-                  </span>
-                )}
-                {isLost && (
-                  <span style={{ marginLeft: 6, padding: '1px 6px', background: '#dc2626', color: '#fff', borderRadius: 4, fontSize: 10, fontWeight: 900 }}>
-                    ✗ LOST
-                  </span>
-                )}
-              </div>
-              <div className="key-pick-outcome">
-                {displayedPrediction}
-              </div>
-              <div className="key-pick-prob">
-                {probPct ? `${probPct}% Probability` : 'Simulated'}
-              </div>
-              <div className={`key-pick-view-more-tag ${isExpanded ? 'is-expanded' : ''}`}>
-                {isExpanded ? '▴ Hide Details' : '▾ Click to View More'}
-              </div>
-            </div>
-          )}
-
+        }
+        leagueTitle={tournamentDisplay}
+        leagueExtra={roundName || null}
+        time={`📅 ${formattedDateTime}`}
+        statusChip={
+          isLive
+            ? { kind: 'live', text: 'LIVE' }
+            : isFinished
+            ? { kind: 'final', text: 'FINAL' }
+            : null
+        }
+        home={<>{p1DisplayName}{p1RankText}</>}
+        away={<>{p2DisplayName}{p2RankText}</>}
+        centerScore={isLive || isFinished ? `${fixture?.score_p1_sets ?? 0} - ${fixture?.score_p2_sets ?? 0}` : null}
+        isLive={isLive}
+        tierLabel={cleanTierLabel}
+        tierClassName={tierConfig.badgeClass}
+        tierStyle={{ color: tierConfig.textColor, borderColor: tierConfig.borderColor, background: tierConfig.bgColor }}
+        settle={isWon ? 'won' : isLost ? 'lost' : isVoid ? 'void' : null}
+        pick={isLocked ? '🔒 BigBang VIP Pick' : displayedPrediction}
+        locked={isLocked}
+        lockedCta={
           <button
             type="button"
-            className={`glance-chevron-btn ${isExpanded ? 'expanded' : ''}`}
+            className="key-pick-unlock-link"
             onClick={(e) => {
               e.stopPropagation();
-              setIsExpanded(!isExpanded);
+              if (onOpenUpgrade) onOpenUpgrade();
+              else if (onOpenAuth) onOpenAuth('register');
             }}
-            title={isExpanded ? 'Hide Simulation Breakdown' : 'Expand Simulation Breakdown'}
           >
-            {isExpanded ? '⌃' : '⌄'}
+            Unlock BigBang VIP (₦10,000/mo) →
           </button>
-        </div>
-      </div>
-
-      {/* 2.5 EXPLICIT CLICK TO VIEW MORE CALL-TO-ACTION (Overs, Handicaps & Simulation Breakdown) */}
-      <div
-        className={`tennis-card-expand-bar ${isExpanded ? 'is-expanded' : ''}`}
-        onClick={(e) => {
-          e.stopPropagation();
-          setIsExpanded(!isExpanded);
-        }}
-        title="Click to view more: Over/Under total games, set handicaps, dominance ratios and AI analysis"
-      >
-        <div className="tennis-expand-teaser">
-          <span className="tennis-expand-teaser-dot">⚡</span>
-          <span className="tennis-expand-teaser-text">
-            Secondary Markets: <strong>Game Spread</strong> • <strong>1st Set</strong> • <strong>Set Handicap</strong> • <strong>Total Games</strong>
-          </span>
-        </div>
-        <div className="tennis-expand-cta-btn">
-          <span>{isExpanded ? '▴ HIDE DETAILS' : '▾ CLICK TO VIEW MORE (OVERS & STATS)'}</span>
-        </div>
-      </div>
+        }
+        scoreText={scoreRating && !isLocked ? `${scoreRating}/10` : null}
+        scoreSub={!isLocked ? (probPct ? `${probPct}% probability` : 'model estimate') : null}
+        slip={onToggleFavorite ? { active: isPrimaryFav, onClick: handlePrimaryFavoriteToggle } : null}
+        expanded={isExpanded}
+        onToggle={() => setIsExpanded(!isExpanded)}
+      />
 
       {/* 3. EXPANDABLE BREAKDOWN BODY (MATCHING PRODUCTION VERSION 1 CARD EXACTLY) */}
       {isExpanded && (
         <div className="expanded-breakdown-body" onClick={(e) => e.stopPropagation()}>
+          <div className="pg-detail-row">
+            <span>{surfaceMeta.icon} {surfaceMeta.label} • CPI {cpi}</span>
+            <span>📍 {locationText}{isLocked ? '' : ` • ${eloDiffText}`}</span>
+          </div>
           {isLocked ? (
             /* PAYWALL UI BLURRED LOCK STATE */
             <div className="paywall-lock-container">
