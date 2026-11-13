@@ -18,6 +18,7 @@ import { PricingModal } from './components/PricingModal';
 import { FaqModal } from './components/FaqModal';
 import { NavigationFooter } from './components/NavigationFooter';
 import { HubSwitch, isPlayPath } from './components/HubSwitch';
+import { MobileDateStrip } from './components/MobileDateStrip';
 import { PLAY_TABS, playTabFromPath } from './features/play/playTabs';
 
 // Play Hub is loaded only when someone opens it, so the Predictions Hub bundle is unchanged.
@@ -965,8 +966,8 @@ export default function App() {
     const day3 = getDateDetailsByOffset(3, timeZone);
     const day4 = getDateDetailsByOffset(4, timeZone);
 
-    // Past dates list (last 30 days plus any fixture dates before today)
-    const rawPastDates = getPastDatesList(30, Array.from(fixtureCountByDate.keys()), timeZone);
+    // Past dates list (last 90 days plus any fixture dates before today)
+    const rawPastDates = getPastDatesList(90, Array.from(fixtureCountByDate.keys()), timeZone);
     const pastDates = rawPastDates.map((pd) => ({
       ...pd,
       count: fixtureCountByDate.get(pd.iso) || 0
@@ -1017,6 +1018,7 @@ export default function App() {
         count: fixtureCountByDate.get(day4.iso) || 0
       },
       pastDates,
+      countByDate: fixtureCountByDate,
       todayIso: today.iso,
       yesterdayIso: yesterday.iso
     };
@@ -2284,6 +2286,45 @@ export default function App() {
               </>
             )}
 
+            {/* Phone header (prototype): plan pill + avatar. Opens the profile, or sign-in when logged out. */}
+            <div className="header-mobile-acct">
+              {currentUser && (
+                <button
+                  type="button"
+                  className={`header-mobile-plan ${trialState.isPaidVip || trialState.isAdmin ? 'is-vip' : ''}`}
+                  onClick={() => setIsPricingModalOpen(true)}
+                  title="Your plan"
+                >
+                  {trialState.isAdmin
+                    ? 'Admin'
+                    : trialState.isPaidVip
+                    ? 'VIP'
+                    : trialState.isPaidStandard
+                    ? 'Standard'
+                    : trialState.isTrialActive
+                    ? 'Trial'
+                    : 'Free'}
+                </button>
+              )}
+              <button
+                type="button"
+                id="btn-header-mobile-account"
+                className="header-mobile-avatar"
+                onClick={() => {
+                  if (currentUser) {
+                    setIsProfileModalOpen(true);
+                  } else {
+                    setAuthModalMode('signin');
+                    setIsAuthModalOpen(true);
+                  }
+                }}
+                title={currentUser ? 'Account Settings & Profile' : 'Sign In to Account'}
+                aria-label={currentUser ? 'Account Settings & Profile' : 'Sign In to Account'}
+              >
+                👤
+              </button>
+            </div>
+
             {/* Catalogue Acca Slip Button across all screens (Mobile & Desktop) */}
             <button
               type="button"
@@ -2324,26 +2365,77 @@ export default function App() {
         {/* Predictions Hub sport tabs (moved here from the top bar) */}
         {isDashboard && (
         <nav className="sport-subtabs" aria-label="Sports">
-          {sportsList.map((sport) => {
-            const isActive = isSportActive(sport.id);
+          {(() => {
+            const path = location.pathname.replace(/\/+$/, '');
+            const onGoals = path === DASHBOARD_PATHS.goals;
+            // Results (phones) = the football page on yesterday's date: same route and date state as Football + Yesterday.
+            const isResults =
+              path === DASHBOARD_PATHS.football &&
+              selectedSport === 'football' &&
+              selectedDate === dynamicDateTabs.yesterdayIso;
 
-            return (
+            const marketsTab = (
               <button
-                key={sport.id}
+                key="other-markets"
                 type="button"
-                className={`sport-subtab ${isActive ? 'active' : ''}`}
-                onClick={() => handleSportSelect(sport.id)}
-                title={`${sport.name} Predictions`}
-                aria-current={isActive ? 'page' : undefined}
+                className={`sport-subtab sport-subtab--markets ${onGoals ? 'active' : ''}`}
+                onClick={() => {
+                  navigate(DASHBOARD_PATHS.goals);
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                title="Other Markets: Over 2.5 Goals, First Half and Corners"
+                aria-current={onGoals ? 'page' : undefined}
               >
-                <span className="sport-subtab-icon" aria-hidden="true">{sport.icon}</span>
-                <span>{sport.name}</span>
-                {!sport.isAvailable && (
-                  <span className="sport-subtab-soon">Soon</span>
-                )}
+                <span className="sport-subtab-markets-top">O2.5 · 1H</span>
+                <span className="sport-subtab-markets-sep" aria-hidden="true"> · </span>
+                <span className="sport-subtab-markets-bottom">Corners</span>
               </button>
             );
-          })}
+
+            const sportTabs = sportsList.flatMap((sport) => {
+              const isActive =
+                sport.id === 'football' ? isSportActive('football') && !onGoals && !isResults : isSportActive(sport.id);
+
+              const tab = (
+                <button
+                  key={sport.id}
+                  type="button"
+                  className={`sport-subtab ${isActive ? 'active' : ''} ${!sport.isAvailable ? 'sport-subtab--soon' : ''}`}
+                  onClick={() => {
+                    if (sport.id === 'football' && isResults) setSelectedDate(dynamicDateTabs.todayIso);
+                    handleSportSelect(sport.id);
+                  }}
+                  title={`${sport.name} Predictions`}
+                  aria-current={isActive ? 'page' : undefined}
+                >
+                  <span className="sport-subtab-icon" aria-hidden="true">{sport.icon}</span>
+                  <span>{sport.name}</span>
+                  {!sport.isAvailable && (
+                    <span className="sport-subtab-soon">Soon</span>
+                  )}
+                </button>
+              );
+              return sport.id === 'football' ? [tab, marketsTab] : [tab];
+            });
+
+            const resultsTab = (
+              <button
+                key="results"
+                type="button"
+                className={`sport-subtab sport-subtab--results ${isResults ? 'active' : ''}`}
+                onClick={() => {
+                  setSelectedDate(dynamicDateTabs.yesterdayIso);
+                  handleSportSelect('football');
+                }}
+                title="Yesterday's settled football picks"
+                aria-current={isResults ? 'page' : undefined}
+              >
+                Results
+              </button>
+            );
+
+            return [...sportTabs, resultsTab];
+          })()}
         </nav>
         )}
 
@@ -2747,6 +2839,16 @@ export default function App() {
 
 
           {/* Date Navigation Pills Bar: Strictly Ordered: Select Date (Drop down) | Yesterday | Today | Day (with date) | Day (with date) | Day (with date) | All Dates */}
+          {/* Phone date row: ‹ 4 days › + 📅 (same selected-date state as the pills below) */}
+          <MobileDateStrip
+            selected={selectedDate}
+            onSelect={setSelectedDate}
+            timeZone={timeZone}
+            minOffset={-90}
+            maxOffset={4}
+            countFor={(iso) => dynamicDateTabs.countByDate.get(iso)}
+          />
+
           <div className="date-nav-pills-bar">
             {/* Pill 1: Select Date (Drop down of all past dates) */}
             <div
@@ -3529,7 +3631,7 @@ export default function App() {
 
       {/* MOBILE APP BOTTOM TAB BAR (Sport Selectors: Dashboard Only) */}
       {isDashboard && (
-      <nav className="mobile-app-bottom-bar" aria-label="Mobile Sports & Account Navigation">
+      <nav className="mobile-app-bottom-bar mobile-app-bottom-bar--sports" aria-label="Mobile Sports & Account Navigation">
         {sportsList.map((sport) => {
           const isActive = isSportActive(sport.id);
 

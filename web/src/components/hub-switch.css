@@ -134,8 +134,33 @@
   color: var(--text-muted);
 }
 
+/* Other Markets tab (O2.5 · 1H · Corners), right after Football: a small card of its own. */
+.sport-subtab--markets {
+  margin: 6px 4px 8px;
+  padding: 4px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-secondary);
+  font-size: 12.5px;
+  letter-spacing: 0.01em;
+}
+
+.sport-subtab--markets.active {
+  border-color: var(--green-border);
+  background: var(--green-light);
+  color: var(--green-dark);
+}
+
+/* Phone-only bits (hidden on desktop) */
+.header-mobile-acct,
+.hub-switch-dot,
+.sport-subtab--results {
+  display: none;
+}
+
 @media (max-width: 768px) {
-  /* On phones the switch takes its own full-width row under the logo row. */
+  /* Phone layout follows the approved two-hub prototype:
+     logo row, full-width hub switch, sport tabs right under it, no bottom bar in the Predictions Hub. */
   .site-header-inner:has(.header-hub-slot) {
     flex-wrap: wrap !important;
     row-gap: 6px !important;
@@ -144,20 +169,177 @@
   .header-hub-slot {
     order: 3;
     flex: 1 0 100%;
-    margin: 0 0 4px;
+    margin: 6px 0 0;
   }
 
   .hub-switch {
     max-width: none;
-  }
-
-  /* Phones already have the sport selector in the bottom bar. */
-  .sport-subtabs {
-    display: none;
+    border: 0;
+    border-radius: 12px;
+    padding: 4px;
+    gap: 4px;
   }
 
   .hub-switch-btn {
-    font-size: 13px;
-    padding: 8px 6px;
+    border-radius: 9px;
+    padding: 9px 6px;
+    font-size: 15px;
+    font-weight: 600;
+    gap: 7px;
+  }
+
+  .hub-switch-btn.active {
+    color: var(--text-primary);
+  }
+
+  .hub-switch-icon,
+  .hub-switch-word {
+    display: none;
+  }
+
+  .hub-switch-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex: 0 0 auto;
+  }
+
+  .hub-switch-dot--pred { background: var(--green-primary); }
+  .hub-switch-dot--play { background: #4f46e5; }
+
+  .hub-switch-new {
+    font-size: 10px;
+    padding: 1px 6px;
+    border: 0;
+    background: #4f46e5;
+    color: #fff;
+  }
+
+  /* Plan pill + avatar on the right of the logo row */
+  .header-mobile-acct {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .header-mobile-plan {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 8px;
+    border-radius: 999px;
+    border: 1px solid var(--border-strong);
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    cursor: pointer;
+  }
+
+  .header-mobile-plan.is-vip {
+    border-color: var(--green-border);
+    background: var(--green-light);
+    color: var(--green-dark);
+  }
+
+  .header-mobile-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: 1px solid var(--border-subtle);
+    background: var(--bg-tertiary);
+    display: grid;
+    place-items: center;
+    font-size: 16px;
+    padding: 0;
+    cursor: pointer;
+  }
+
+  .header-mobile-avatar:focus-visible,
+  .header-mobile-plan:focus-visible {
+    outline: 2px solid var(--border-focus);
+    outline-offset: 2px;
+  }
+
+  /* Sport tabs sit directly under the hub switch: five raised cards that fit one phone screen.
+     Football | O2.5 · 1H · Corners | Basketball | Tennis | Results. "Soon" sports stay in the menu. */
+  .sport-subtabs {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 4px;
+    overflow: visible;
+    margin: -8px -8px 12px;
+    padding: 10px 8px 12px;
+    background: var(--bg-card);
+    border-bottom: 1px solid var(--border-subtle);
+  }
+
+  .sport-subtab {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    min-width: 0;
+    min-height: 40px;
+    margin: 0;
+    padding: 6px 2px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    background: var(--bg-card);
+    box-shadow: 0 2px 0 var(--border-strong), 0 2px 6px rgba(15, 23, 42, 0.08);
+    font-size: 11.5px;
+    font-weight: 700;
+    line-height: 1.15;
+    color: var(--text-secondary);
+    text-align: center;
+    white-space: normal;
+    transition: transform 0.08s ease, box-shadow 0.08s ease;
+  }
+
+  .sport-subtab:active {
+    transform: translateY(1px);
+    box-shadow: 0 1px 0 var(--border-strong), 0 1px 3px rgba(15, 23, 42, 0.08);
+  }
+
+  .sport-subtab.active {
+    background: var(--green-primary);
+    border-color: var(--green-primary);
+    border-bottom-color: var(--green-primary);
+    color: #fff;
+    box-shadow: 0 2px 0 var(--green-dark), 0 2px 6px rgba(15, 23, 42, 0.12);
+  }
+
+  .sport-subtab.active:active {
+    box-shadow: 0 1px 0 var(--green-dark), 0 1px 3px rgba(15, 23, 42, 0.12);
+  }
+
+  .sport-subtab:focus-visible {
+    outline-offset: 2px;
+  }
+
+  .sport-subtab-icon,
+  .sport-subtab--soon,
+  .sport-subtab-markets-sep {
+    display: none;
+  }
+
+  .sport-subtab--markets {
+    font-size: 10.5px;
+    letter-spacing: -0.01em;
+  }
+
+  .sport-subtab-markets-top,
+  .sport-subtab-markets-bottom {
+    display: block;
+    white-space: nowrap;
+  }
+
+  .sport-subtab--results {
+    display: flex;
+  }
+
+  /* Predictions Hub: the sport tabs and the header avatar replace the bottom bar on phones.
+     The Play Hub keeps its own bottom bar. */
+  .mobile-app-bottom-bar.mobile-app-bottom-bar--sports {
+    display: none !important;
   }
 }

@@ -654,7 +654,8 @@ export const BasketballPredictionCard: React.FC<BasketballPredictionCardProps> =
       )}
 
       {/* Accordion toggle prompt - BOLD & EYE CATCHING CLICK TO VIEW MORE */}
-      <div style={{ display: 'flex', justifyContent: 'center', marginTop: 12 }}>
+      {/* Hidden on phones, where the card's own View More (PredictionGlance) is the one toggle. */}
+      <div className="bball-view-more-row" style={{ display: 'flex', justifyContent: 'center', marginTop: 12 }}>
         <button
           type="button"
           className={`bball-view-more-btn ${isExpanded ? 'expanded' : ''}`}

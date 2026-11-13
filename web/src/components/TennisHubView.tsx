@@ -8,6 +8,7 @@ import {
   useUserTimeZone,
 } from '../lib/dateUtils';
 import { TennisPredictionCard } from './TennisPredictionCard';
+import { MobileDateStrip } from './MobileDateStrip';
 import { LeftSidebarAd } from './LeftSidebarAd';
 import { WatchlistSidebar } from './WatchlistSidebar';
 import { FavoritePredictionItem } from './FavoritesDrawer';
@@ -160,8 +161,8 @@ export const TennisHubView: React.FC<TennisHubViewProps> = ({
     const day2 = getDateDetailsByOffset(2, timeZone);
     const day3 = getDateDetailsByOffset(3, timeZone);
 
-    // Past dates list (last 30 days plus any fixture dates before today)
-    const rawPastDates = getPastDatesList(30, Array.from(fixtureCountByDate.keys()));
+    // Past dates list (last 90 days plus any fixture dates before today; each day loads via ?date=)
+    const rawPastDates = getPastDatesList(90, Array.from(fixtureCountByDate.keys()));
     const pastDates = rawPastDates.map((pd) => ({
       ...pd,
       count: fixtureCountByDate.get(pd.iso) || 0,
@@ -203,6 +204,7 @@ export const TennisHubView: React.FC<TennisHubViewProps> = ({
         count: fixtureCountByDate.get(day3.iso) || 0,
       },
       pastDates,
+      countByDate: fixtureCountByDate,
       todayIso: today.iso,
       yesterdayIso: yesterday.iso,
     };
@@ -574,6 +576,16 @@ export const TennisHubView: React.FC<TennisHubViewProps> = ({
             </div>
           </div>
         </div>
+
+        {/* Phone date row: ‹ 4 days › + 📅 (same selected-date state as the pills below) */}
+        <MobileDateStrip
+          selected={selectedDate}
+          onSelect={setSelectedDate}
+          timeZone={timeZone}
+          minOffset={-90}
+          maxOffset={3}
+          countFor={(iso) => dynamicDateTabs.countByDate.get(iso)}
+        />
 
         {/* Date Navigation Pills Bar: Strictly Ordered: Select Date (Drop down) | Yesterday | Today | Day+1 | Day+2 | Day+3 | All Dates */}
         <div className="date-nav-pills-bar">
