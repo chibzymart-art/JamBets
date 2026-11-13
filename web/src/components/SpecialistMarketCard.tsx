@@ -3,6 +3,7 @@ import { UnifiedMarketPrediction } from '../lib/marketFeedService';
 import { FavoritePredictionItem } from './FavoritesDrawer';
 import { formatClubName } from './GoalCard';
 import { formatKickoff } from '../lib/dateUtils';
+import { PredictionGlance } from './PredictionGlance';
 
 export interface SpecialistMarketCardProps {
   prediction: UnifiedMarketPrediction;
@@ -158,6 +159,8 @@ export const SpecialistMarketCard: React.FC<SpecialistMarketCardProps> = ({
     return null;
   })();
 
+  const [isExpanded, setIsExpanded] = React.useState(false);
+
   const handleFavoriteClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!onToggleFavorite) return;
@@ -178,69 +181,88 @@ export const SpecialistMarketCard: React.FC<SpecialistMarketCardProps> = ({
 
   return (
     <div className={`specialist-market-card ${isLocked ? 'is-freemium-locked' : ''} ${isSettled ? `settled-${prediction.settlement_status}` : ''}`}>
-      {/* Top Card Header */}
-      <div className="card-top-row">
-        <div className="card-league-badge">
-          <span className="league-icon">🏆</span>
-          <span className="league-text">{leagueName}</span>
-        </div>
-
-        <div className="card-time-status">
-          {isLive ? (
-            <span className="live-match-pill">
-              <span className="live-pulsing-dot" />
-              <span>{period === 'HT' ? 'HALF TIME' : `LIVE ${minute ? `${minute}'` : ''}`}</span>
-            </span>
-          ) : isSettled && !isLocked ? (
-            <span className={`settle-status-pill ${isWon ? 'won' : isLost ? 'lost' : 'void'}`}>
-              {isWon ? '✓ WON' : isLost ? '✕ LOST' : '⟲ VOID'}
-            </span>
-          ) : isFinished ? (
-            <span className="kickoff-time-pill">
-              <span>FULL TIME</span>
-            </span>
-          ) : (
-            <span className="kickoff-time-pill">
-              <span className="time-clock">⏰</span>
-              <span>{timeFormatted.time}</span>
-              {timeFormatted.date && <span className="time-dot">• {timeFormatted.date}</span>}
-            </span>
-          )}
-        </div>
+      {/* CARD HEADER (shared prototype layout); scout notes, gauge and telemetry open in View More */}
+      <div onClick={() => setIsExpanded(!isExpanded)} style={{ cursor: 'pointer' }}>
+        <PredictionGlance
+          league={`🏆 ${leagueName}`}
+          leagueTitle={leagueName}
+          time={`⏰ ${timeFormatted.time}${timeFormatted.date ? ` • ${timeFormatted.date}` : ''}`}
+          statusChip={
+            isLive
+              ? { kind: 'live', text: period === 'HT' ? 'HALF TIME' : `LIVE ${minute ? `${minute}'` : ''}` }
+              : isFinished
+              ? { kind: 'final', text: 'FULL TIME' }
+              : null
+          }
+          home={homeName}
+          away={awayName}
+          centerScore={
+            isLive
+              ? `${fixture?.home_score ?? 0} - ${fixture?.away_score ?? 0}`
+              : isFinished && hasFtScore
+              ? `${ftHome} - ${ftAway}`
+              : null
+          }
+          isLive={isLive}
+          tierLabel={!isLocked && prediction.confidence_tier ? prediction.confidence_tier.replace(/_/g, ' ') : null}
+          tierClassName={`confidence-tier-pill tier-${prediction.confidence_tier?.toLowerCase()}`}
+          settle={isSettled && !isLocked ? (isWon ? 'won' : isLost ? 'lost' : 'void') : null}
+          marketLabel={`${prediction.market_icon} ${prediction.market_label}`}
+          pick={
+            isLocked
+              ? `🔒 ${isVisitor ? 'Register to unlock' : 'VIP calibrated signal'}`
+              : prediction.prediction === 'Home Win'
+              ? '🏠 Home Win (1)'
+              : prediction.prediction === 'Away Win'
+              ? '✈️ Away Win (2)'
+              : prediction.prediction
+          }
+          locked={isLocked}
+          lockedCta={
+            isVisitor ? (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (onOpenAuth) onOpenAuth('register');
+                  else onOpenUpgrade?.();
+                }}
+              >
+                Register to view →
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpenUpgrade?.();
+                }}
+              >
+                Subscribe →
+              </button>
+            )
+          }
+          scoreText={!isLocked && prediction.display_probability !== null ? `${prediction.display_probability}%` : null}
+          scoreSub={!isLocked && prediction.display_probability !== null ? 'edge conf.' : null}
+          slip={!isLocked && onToggleFavorite ? { active: isFavorite, onClick: handleFavoriteClick } : null}
+          expanded={isExpanded}
+          onToggle={() => setIsExpanded(!isExpanded)}
+        />
       </div>
 
-      {/* Match Competitors Header */}
-      <div className="card-matchup-row">
-        <div className="team-box home-box">
-          <span className="team-name">{homeName}</span>
+      {/* Locked explanation (shown in View More) */}
+      {isExpanded && isLocked && (
+        <div className="pg-detail-row">
+          {isVisitor
+            ? 'Register for a 3-day free trial to view Oddsbanta AI predictions'
+            : isTrialExpired
+            ? 'Free trial expired. Subscribe to Oddsbanta VIP to view calibrated signals'
+            : 'Monte Carlo edge & high-conviction mathematical pick locked'}
         </div>
-
-        <div className="vs-center-box">
-          {isLive ? (
-            <div className="live-score-badge is-live" title="Match In-Play">
-              <span className="live-score-text">
-                {fixture?.home_score ?? 0} - {fixture?.away_score ?? 0}
-              </span>
-            </div>
-          ) : isFinished && hasFtScore ? (
-            <div className="ft-score-badge" title="Full-Time Official Result">
-              <span className="ft-tag">FT</span>
-              <span className="ft-score-text">
-                {ftHome} - {ftAway}
-              </span>
-            </div>
-          ) : (
-            <span className="vs-badge">VS</span>
-          )}
-        </div>
-
-        <div className="team-box away-box">
-          <span className="team-name">{awayName}</span>
-        </div>
-      </div>
+      )}
 
       {/* Settled Prediction-Specific Outcome Score Bar */}
-      {!isLocked && isFinished && predictionOutcomeDetail && (
+      {isExpanded && !isLocked && isFinished && predictionOutcomeDetail && (
         <div className={`settled-outcome-bar ${isWon ? 'is-won' : isLost ? 'is-lost' : 'is-void'}`}>
           <div className="outcome-metric-left">
             <span className="outcome-icon">{isWon ? '🎯' : '📊'}</span>
@@ -253,22 +275,8 @@ export const SpecialistMarketCard: React.FC<SpecialistMarketCardProps> = ({
         </div>
       )}
 
-      {/* Specialist Engine Banner */}
-      <div className="card-engine-bar">
-        <div className="engine-identity">
-          <span className="engine-icon">{prediction.market_icon}</span>
-          <span className="engine-label">{prediction.market_label}</span>
-        </div>
-
-        {!isLocked && (
-          <span className={`confidence-tier-pill tier-${prediction.confidence_tier?.toLowerCase()}`}>
-            {prediction.confidence_tier?.replace(/_/g, ' ')}
-          </span>
-        )}
-      </div>
-
       {/* AI Tactical Scout Written Analysis (Just like in early Over 2.5 & 1H 0.5 versions) */}
-      {!isLocked && prediction.tactical_rationale && (
+      {isExpanded && !isLocked && prediction.tactical_rationale && (
         <div className="specialist-ai-scout-banner">
           <span className="scout-icon">🤖</span>
           <div className="scout-content">
@@ -280,67 +288,10 @@ export const SpecialistMarketCard: React.FC<SpecialistMarketCardProps> = ({
         </div>
       )}
 
-      {/* Main Prediction & Probability Section */}
+      {/* Main Prediction & Probability Section (gauge and telemetry, shown in View More) */}
+      {isExpanded && !isLocked && (
       <div className="card-prediction-container">
-        {isLocked ? (
-          /* Frosted Freemium Paywall Mask */
-          <div className="freemium-locked-overlay">
-            <div className="locked-mask-content">
-              <div className="locked-icon-shield">🔒</div>
-              <div className="locked-title-text">
-                {isVisitor ? 'REGISTER TO UNLOCK' : 'VIP CALIBRATED SIGNAL'}
-              </div>
-              <div className="locked-sub-text">
-                {isVisitor
-                  ? 'Register for a 3-day free trial to view Oddsbanta AI predictions'
-                  : isTrialExpired
-                  ? 'Free trial expired. Subscribe to Oddsbanta VIP to view calibrated signals'
-                  : 'Monte Carlo edge & high-conviction mathematical pick locked'}
-              </div>
-              {isVisitor ? (
-                <button
-                  type="button"
-                  className="locked-unlock-cta-btn"
-                  onClick={() => (onOpenAuth ? onOpenAuth('register') : onOpenUpgrade?.())}
-                >
-                  <span>Register to view</span>
-                  <span className="arrow-chip">→</span>
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  className="locked-unlock-cta-btn"
-                  onClick={onOpenUpgrade}
-                >
-                  <span>Subscribe</span>
-                  <span className="arrow-chip">→</span>
-                </button>
-              )}
-            </div>
-          </div>
-        ) : (
-          /* Unlocked High-Conviction Intelligence Display */
           <>
-            <div className="prediction-headline-row">
-              <div className="prediction-pick-wrap">
-                <span className="pick-prefix">CALIBRATED PICK:</span>
-                <span className="pick-value">
-                  {prediction.prediction === 'Home Win'
-                    ? '🏠 Home Win (1)'
-                    : prediction.prediction === 'Away Win'
-                    ? '✈️ Away Win (2)'
-                    : prediction.prediction}
-                </span>
-              </div>
-
-              {prediction.display_probability !== null && (
-                <div className="probability-metric-box">
-                  <span className="prob-pct">{prediction.display_probability}%</span>
-                  <span className="prob-sub">Edge Conf.</span>
-                </div>
-              )}
-            </div>
-
             {/* Glowing Probability Gauge Bar */}
             {prediction.display_probability !== null && (
               <div className="probability-bar-track">
@@ -406,25 +357,9 @@ export const SpecialistMarketCard: React.FC<SpecialistMarketCardProps> = ({
               )}
             </div>
           </>
-        )}
       </div>
+      )}
 
-      {/* Action Footer: + Add to Acca Slip Button */}
-      <div className="card-action-footer">
-        <div className="action-left-info" />
-
-        {!isLocked && (
-          <button
-            type="button"
-            className={`add-to-acca-btn ${isFavorite ? 'in-slip' : ''}`}
-            onClick={handleFavoriteClick}
-            title={isFavorite ? 'Remove from Acca Slip' : 'Add to Acca Slip'}
-          >
-            <span className="btn-icon">{isFavorite ? '✓' : '+'}</span>
-            <span className="btn-label">{isFavorite ? 'IN SLIP' : 'ADD TO SLIP'}</span>
-          </button>
-        )}
-      </div>
     </div>
   );
 };

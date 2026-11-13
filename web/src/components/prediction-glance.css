@@ -1,0 +1,264 @@
+/* Shared prediction card header (approved prototype). Existing palette tokens only. */
+
+.pg {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  font-family: var(--font-body);
+}
+
+.pg-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.pg-league {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.pg-league-extra {
+  color: var(--text-light);
+}
+
+.pg-chip {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.pg-chip--live {
+  background: #fff7ed;
+  color: #c2410c;
+  font-weight: 600;
+}
+
+.pg-chip--final {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.pg-live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #ea580c;
+}
+
+.pg-teams {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0 10px;
+  font-weight: 600;
+  font-size: 14.5px;
+  color: var(--text-primary);
+}
+
+.pg-team {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.pg-team--away {
+  text-align: right;
+}
+
+.pg-vs {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-light);
+}
+
+.pg-score-center {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+  background: var(--bg-tertiary);
+  border-radius: 6px;
+  padding: 2px 8px;
+}
+
+.pg-score-center.is-live {
+  color: #c2410c;
+  background: #fff7ed;
+}
+
+.pg-pick {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.pg-pick-left {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.pg-tags {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.pg-tier {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 3px 7px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  line-height: 1.2;
+}
+
+.pg-settle {
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 3px 7px;
+  border-radius: 6px;
+  line-height: 1.2;
+}
+
+.pg-settle--won { color: #16a34a; background: #f0fdf4; }
+.pg-settle--lost { color: #dc2626; background: #fef2f2; }
+.pg-settle--void,
+.pg-settle--passed { color: #475569; background: var(--bg-tertiary); }
+.pg-settle--live { color: #b45309; background: #fffbeb; }
+
+.pg-market {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.pg-pick-text {
+  font-family: var(--font-heading);
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.pg-pick-text.is-locked {
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.pg-locked-cta a,
+.pg-locked-cta button {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--green-primary);
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: none;
+  text-align: left;
+}
+
+.pg-pick-right {
+  flex: 0 0 auto;
+  text-align: right;
+}
+
+.pg-score {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 500;
+  color: #047857;
+}
+
+.pg-score-sub {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+.pg-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.pg-slip {
+  border: 1px solid var(--border-strong);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  border-radius: 8px;
+  padding: 5px 10px;
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.pg-slip.is-active {
+  border-color: var(--green-border);
+  background: var(--green-light);
+  color: var(--green-primary);
+}
+
+.pg-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 0;
+  background: none;
+  color: var(--green-primary);
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 4px 2px;
+}
+
+.pg-toggle-icon {
+  font-size: 13px;
+  line-height: 1;
+}
+
+.pg-slip:focus-visible,
+.pg-toggle:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+}
+
+/* Detail rows that used to sit in the collapsed card now open inside the dropdown. */
+.pg-detail-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  font-size: 12px;
+  color: var(--text-muted);
+  padding: 8px 0 4px;
+}
+
+

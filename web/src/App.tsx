@@ -2067,6 +2067,9 @@ export default function App() {
                     >
                       <span className="hamburger-item-icon">⚡</span>
                       <span className="hamburger-item-label">VIP Subscription Plans</span>
+                      <span className="pricing-flat-badge">
+                        {currency === 'NGN' ? 'from ₦5k' : `from ${symbol}${pricing.standard.monthly}`}
+                      </span>
                     </button>
 
                     <button
@@ -2153,28 +2156,10 @@ export default function App() {
             )}
           </div>
 
-            {/* Clean Unified Navigation Links: Sport Types Selection (Dashboard Only) */}
-          {isDashboard && (
-          <div className="header-center-links header-sports-nav">
-            {sportsList.map((sport) => {
-              const isActive = isSportActive(sport.id);
-
-              return (
-                <button
-                  key={sport.id}
-                  type="button"
-                  className={`nav-link-btn nav-sport-btn ${isActive ? 'active' : ''}`}
-                  onClick={() => handleSportSelect(sport.id)}
-                  title={`${sport.name} Predictions`}
-                >
-                  <span className="nav-sport-icon">{sport.icon}</span>
-                  <span className="nav-sport-name">{sport.name}</span>
-                  {!sport.isAvailable && (
-                    <span className="nav-sport-soon-badge">Soon</span>
-                  )}
-                </button>
-              );
-            })}
+            {/* Top bar centre: Predictions Hub / Play Hub switch (sport tabs moved below the header) */}
+          {(isDashboard || isPlay) && (
+          <div className="header-hub-slot">
+            <HubSwitch />
           </div>
           )}
 
@@ -2185,68 +2170,8 @@ export default function App() {
               </Link>
             )}
 
-            {/* Plans Button (Top Menu on Mobile & Desktop) */}
-            <Link
-              to="/subscription"
-              className="nav-header-plans-btn"
-              onClick={(e) => {
-                if (location.pathname === '/subscription') {
-                  e.preventDefault();
-                  document.querySelector('.pricing-cards-grid')?.scrollIntoView({ behavior: 'smooth' });
-                }
-              }}
-              title="View VIP Subscription Plans"
-              aria-label="Plans & Pricing"
-            >
-              <span className="nav-header-btn-icon">⚡</span>
-              <span className="nav-header-btn-label">Plans</span>
-              <span className="pricing-flat-badge desktop-only">
-                {currency === 'NGN' ? 'from ₦5k' : `from ${symbol}${pricing.standard.monthly}`}
-              </span>
-            </Link>
-
-            {/* FAQs Button (Top Menu on Mobile & Desktop) */}
-            <button
-              type="button"
-              className="nav-header-faq-btn"
-              onClick={() => setIsFaqModalOpen(true)}
-              title="Frequently Asked Questions"
-              aria-label="FAQ"
-            >
-              <span className="nav-header-btn-icon">❓</span>
-              <span className="nav-header-btn-label">FAQs</span>
-            </button>
-
-            {/* Contact Us: opens a WhatsApp chat with support */}
-            <a
-              href="https://wa.me/2348130896049"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="nav-header-contact-btn"
-              title="Contact us on WhatsApp"
-              aria-label="Contact us on WhatsApp"
-            >
-              <span className="nav-header-btn-icon">💬</span>
-              <span className="nav-header-btn-label">Contact Us</span>
-            </a>
-
             {!currentUser ? (
               <>
-                <button
-                  type="button"
-                  id="btn-header-google-auth"
-                  className="google-header-login-btn desktop-only"
-                  onClick={handleGoogleSignIn}
-                  title="Instant 1-Click Sign In with Google / Gmail"
-                >
-                  <svg viewBox="0 0 24 24" width="15" height="15">
-                    <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z"/>
-                    <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.35 24 12 24z"/>
-                    <path fill="#FBBC05" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 10.03 0 12s.45 3.82 1.25 5.42l4.03-3.15z"/>
-                    <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.35 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"/>
-                  </svg>
-                  <span>Sign In with Google</span>
-                </button>
                 <button
                   type="button"
                   className="login-action-btn desktop-only"
@@ -2396,7 +2321,31 @@ export default function App() {
       </header>
 
       <main className="app-container">
-        {(isDashboard || isPlay) && <HubSwitch />}
+        {/* Predictions Hub sport tabs (moved here from the top bar) */}
+        {isDashboard && (
+        <nav className="sport-subtabs" aria-label="Sports">
+          {sportsList.map((sport) => {
+            const isActive = isSportActive(sport.id);
+
+            return (
+              <button
+                key={sport.id}
+                type="button"
+                className={`sport-subtab ${isActive ? 'active' : ''}`}
+                onClick={() => handleSportSelect(sport.id)}
+                title={`${sport.name} Predictions`}
+                aria-current={isActive ? 'page' : undefined}
+              >
+                <span className="sport-subtab-icon" aria-hidden="true">{sport.icon}</span>
+                <span>{sport.name}</span>
+                {!sport.isAvailable && (
+                  <span className="sport-subtab-soon">Soon</span>
+                )}
+              </button>
+            );
+          })}
+        </nav>
+        )}
 
         {/* GLOBAL SPONSORED LEADERBOARD BANNER (ALL CURRENT & FUTURE PAGES) */}
         <div className="global-top-ad-banner-wrapper">
