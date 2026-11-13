@@ -2153,28 +2153,10 @@ export default function App() {
             )}
           </div>
 
-            {/* Clean Unified Navigation Links: Sport Types Selection (Dashboard Only) */}
-          {isDashboard && (
-          <div className="header-center-links header-sports-nav">
-            {sportsList.map((sport) => {
-              const isActive = isSportActive(sport.id);
-
-              return (
-                <button
-                  key={sport.id}
-                  type="button"
-                  className={`nav-link-btn nav-sport-btn ${isActive ? 'active' : ''}`}
-                  onClick={() => handleSportSelect(sport.id)}
-                  title={`${sport.name} Predictions`}
-                >
-                  <span className="nav-sport-icon">{sport.icon}</span>
-                  <span className="nav-sport-name">{sport.name}</span>
-                  {!sport.isAvailable && (
-                    <span className="nav-sport-soon-badge">Soon</span>
-                  )}
-                </button>
-              );
-            })}
+            {/* Top bar centre: Predictions Hub / Play Hub switch (sport tabs moved below the header) */}
+          {(isDashboard || isPlay) && (
+          <div className="header-hub-slot">
+            <HubSwitch />
           </div>
           )}
 
@@ -2396,7 +2378,31 @@ export default function App() {
       </header>
 
       <main className="app-container">
-        {(isDashboard || isPlay) && <HubSwitch />}
+        {/* Predictions Hub sport tabs (moved here from the top bar) */}
+        {isDashboard && (
+        <nav className="sport-subtabs" aria-label="Sports">
+          {sportsList.map((sport) => {
+            const isActive = isSportActive(sport.id);
+
+            return (
+              <button
+                key={sport.id}
+                type="button"
+                className={`sport-subtab ${isActive ? 'active' : ''}`}
+                onClick={() => handleSportSelect(sport.id)}
+                title={`${sport.name} Predictions`}
+                aria-current={isActive ? 'page' : undefined}
+              >
+                <span className="sport-subtab-icon" aria-hidden="true">{sport.icon}</span>
+                <span>{sport.name}</span>
+                {!sport.isAvailable && (
+                  <span className="sport-subtab-soon">Soon</span>
+                )}
+              </button>
+            );
+          })}
+        </nav>
+        )}
 
         {/* GLOBAL SPONSORED LEADERBOARD BANNER (ALL CURRENT & FUTURE PAGES) */}
         <div className="global-top-ad-banner-wrapper">
