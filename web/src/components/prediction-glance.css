@@ -273,8 +273,12 @@
 
 /* Card frame: thicker borders and more space between cards (colours unchanged). */
 .glance-fixture-box:has(> .pg) {
-  border-width: 2px !important;
   margin-bottom: 18px !important;
+}
+
+/* Extra class keeps this above the .glance-fixture-box.card-state-* border rules. */
+.fixture-card.glance-fixture-box:has(> .pg) {
+  border-width: 2px !important;
 }
 
 .bball-card:has(> .pg) {
