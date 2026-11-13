@@ -2284,6 +2284,45 @@ export default function App() {
               </>
             )}
 
+            {/* Phone header (prototype): plan pill + avatar. Opens the profile, or sign-in when logged out. */}
+            <div className="header-mobile-acct">
+              {currentUser && (
+                <button
+                  type="button"
+                  className={`header-mobile-plan ${trialState.isPaidVip || trialState.isAdmin ? 'is-vip' : ''}`}
+                  onClick={() => setIsPricingModalOpen(true)}
+                  title="Your plan"
+                >
+                  {trialState.isAdmin
+                    ? 'Admin'
+                    : trialState.isPaidVip
+                    ? 'VIP'
+                    : trialState.isPaidStandard
+                    ? 'Standard'
+                    : trialState.isTrialActive
+                    ? 'Trial'
+                    : 'Free'}
+                </button>
+              )}
+              <button
+                type="button"
+                id="btn-header-mobile-account"
+                className="header-mobile-avatar"
+                onClick={() => {
+                  if (currentUser) {
+                    setIsProfileModalOpen(true);
+                  } else {
+                    setAuthModalMode('signin');
+                    setIsAuthModalOpen(true);
+                  }
+                }}
+                title={currentUser ? 'Account Settings & Profile' : 'Sign In to Account'}
+                aria-label={currentUser ? 'Account Settings & Profile' : 'Sign In to Account'}
+              >
+                👤
+              </button>
+            </div>
+
             {/* Catalogue Acca Slip Button across all screens (Mobile & Desktop) */}
             <button
               type="button"
@@ -3529,7 +3568,7 @@ export default function App() {
 
       {/* MOBILE APP BOTTOM TAB BAR (Sport Selectors: Dashboard Only) */}
       {isDashboard && (
-      <nav className="mobile-app-bottom-bar" aria-label="Mobile Sports & Account Navigation">
+      <nav className="mobile-app-bottom-bar mobile-app-bottom-bar--sports" aria-label="Mobile Sports & Account Navigation">
         {sportsList.map((sport) => {
           const isActive = isSportActive(sport.id);
 

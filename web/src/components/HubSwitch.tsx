@@ -57,7 +57,8 @@ export function HubSwitch() {
           onClick={goPredictions}
         >
           <span className="hub-switch-icon" aria-hidden="true">📊</span>
-          <span>Predictions Hub</span>
+          <span className="hub-switch-dot hub-switch-dot--pred" aria-hidden="true" />
+          <span>Predictions<span className="hub-switch-word"> Hub</span></span>
         </button>
         <button
           type="button"
@@ -68,7 +69,8 @@ export function HubSwitch() {
           onClick={goPlay}
         >
           <span className="hub-switch-icon" aria-hidden="true">🎯</span>
-          <span>Play Hub</span>
+          <span className="hub-switch-dot hub-switch-dot--play" aria-hidden="true" />
+          <span>Play<span className="hub-switch-word"> Hub</span></span>
           <span className="hub-switch-new">New</span>
         </button>
       </div>
