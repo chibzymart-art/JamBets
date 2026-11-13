@@ -857,8 +857,8 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
         badges={
           !isLocked && hasNewChange ? (
             <span
-              className="badge-new-change pg-settle"
-              style={{ color: '#b45309', background: '#fffbeb' }}
+              className="badge-new-change"
+              style={{ padding: '2px 8px', background: 'linear-gradient(135deg, #f59e0b, #d97706)', color: '#ffffff', borderRadius: 4, fontSize: 10, fontWeight: 900, letterSpacing: '0.04em', boxShadow: '0 2px 5px rgba(217, 119, 6, 0.4)', display: 'inline-flex', alignItems: 'center', gap: 3 }}
               title="Model recalibrated this pick with fresh squad news and live market drift"
             >
               ⚡ NEW CHANGE
