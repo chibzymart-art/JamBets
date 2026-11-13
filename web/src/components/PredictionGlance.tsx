@@ -21,6 +21,8 @@ export interface PredictionGlanceProps {
   statusChip?: { kind: 'live' | 'final'; text: ReactNode } | null;
   home: ReactNode;
   away: ReactNode;
+  /** Fixture venue, shown under the teams. */
+  venue?: ReactNode | null;
   /** Score shown between the teams (live or final). Falls back to "vs". */
   centerScore?: ReactNode | null;
   isLive?: boolean;
@@ -57,7 +59,7 @@ const SETTLE_TEXT: Record<Exclude<GlanceSettle, null>, string> = {
 
 export function PredictionGlance(props: PredictionGlanceProps) {
   const {
-    league, leagueTitle, leagueExtra, time, statusChip, home, away, centerScore, isLive,
+    league, leagueTitle, leagueExtra, time, statusChip, home, away, venue, centerScore, isLive,
     tierLabel, tierStyle, tierClassName, settle, badges, marketLabel, pick, locked, lockedCta,
     scoreText, scoreSub, slip, expanded, onToggle,
   } = props;
@@ -88,6 +90,8 @@ export function PredictionGlance(props: PredictionGlanceProps) {
         )}
         <span className="pg-team pg-team--away">{away}</span>
       </div>
+
+      {venue ? <div className="pg-venue">📍 {venue}</div> : null}
 
       <div className="pg-pick">
         <div className="pg-pick-left">

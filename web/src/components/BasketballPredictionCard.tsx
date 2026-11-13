@@ -189,6 +189,7 @@ export const BasketballPredictionCard: React.FC<BasketballPredictionCardProps> =
     >
       {/* 1-3. CARD HEADER (shared prototype layout); rest days, pace, sims and secondary markets open in View More */}
       <PredictionGlance
+        venue={homeTeam?.arena_name ? `${homeTeam.arena_name}${homeTeam.city ? `, ${homeTeam.city}` : ''}` : homeTeam?.city || null}
         league={`🏀 ${leagueCode}`}
         leagueTitle={leagueName}
         time={`📅 ${formattedDateTime}`}

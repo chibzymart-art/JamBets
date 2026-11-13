@@ -151,9 +151,9 @@
     max-width: none;
   }
 
-  .sport-subtab {
-    font-size: 13px;
-    padding: 9px 10px;
+  /* Phones already have the sport selector in the bottom bar. */
+  .sport-subtabs {
+    display: none;
   }
 
   .hub-switch-btn {
