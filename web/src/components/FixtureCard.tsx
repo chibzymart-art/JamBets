@@ -888,7 +888,7 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
             </Link>
           )
         }
-        scoreText={scoreRating ? `${scoreRating}/10` : null}
+        scoreText={scoreRating && !isLocked ? `${scoreRating}/10` : null}
         scoreSub={!isLocked ? (probPct ? `${probPct}% probability` : 'model estimate') : null}
         slip={isNoBanker ? null : { active: isPrimaryFav, onClick: handleTogglePrimaryFav }}
         expanded={isExpanded}
