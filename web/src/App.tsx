@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback, useRef, Fragment } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef, Fragment, lazy, Suspense } from 'react';
 import { Routes, Route, Navigate, useNavigate, useLocation, Link } from 'react-router-dom';
 import { supabase } from './lib/supabase';
 import { getCircuitBreaker, SafeStorage, withTimeout } from './lib/circuitBreaker';
@@ -17,6 +17,11 @@ import { AdminView } from './components/AdminView';
 import { PricingModal } from './components/PricingModal';
 import { FaqModal } from './components/FaqModal';
 import { NavigationFooter } from './components/NavigationFooter';
+import { HubSwitch, isPlayPath } from './components/HubSwitch';
+import { PLAY_TABS, playTabFromPath } from './features/play/playTabs';
+
+// Play Hub is loaded only when someone opens it, so the Predictions Hub bundle is unchanged.
+const PlayHub = lazy(() => import('./features/play/PlayHub'));
 import { FixtureCard } from './components/FixtureCard';
 import { FavoritesDrawer, FavoritePredictionItem } from './components/FavoritesDrawer';
 import { FloatingFavoritesWidget } from './components/FloatingFavoritesWidget';
@@ -1339,6 +1344,9 @@ export default function App() {
     location.pathname.startsWith('/dashboard/') ||
     location.pathname === DASHBOARD_PATHS.trackRecord;
 
+  /** Play Hub pages (/play...). The hub switch shows on Predictions (dashboard) and Play pages only. */
+  const isPlay = isPlayPath(location.pathname);
+
   const isSportActive = (sportId: string) => {
     const p = location.pathname.replace(/\/+$/, '');
     if (sportId === 'football') {
@@ -2388,6 +2396,8 @@ export default function App() {
       </header>
 
       <main className="app-container">
+        {(isDashboard || isPlay) && <HubSwitch />}
+
         {/* GLOBAL SPONSORED LEADERBOARD BANNER (ALL CURRENT & FUTURE PAGES) */}
         <div className="global-top-ad-banner-wrapper">
           <AdBannerSlot slotType="leaderboard" />
@@ -3531,6 +3541,21 @@ export default function App() {
               </div>
             }
           />
+          {/* PLAY HUB (UI only for now: coming-soon screens, no data) */}
+          <Route
+            path="/play/*"
+            element={
+              <Suspense fallback={<div className="play-hub-loading" aria-busy="true" />}>
+                <PlayHub
+                  isSignedIn={!!currentUser}
+                  onCreateAccount={() => {
+                    setAuthModalMode('register');
+                    setIsAuthModalOpen(true);
+                  }}
+                />
+              </Suspense>
+            }
+          />
           {/* FALLBACK ROUTE */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
@@ -3594,6 +3619,24 @@ export default function App() {
           <span className="mobile-tab-icon">👤</span>
           <span className="mobile-tab-label">Account</span>
         </button>
+      </nav>
+      )}
+
+      {/* MOBILE APP BOTTOM TAB BAR (Play Hub only; same bar styling as the dashboard) */}
+      {isPlay && (
+      <nav className="mobile-app-bottom-bar" aria-label="Play Hub sections">
+        {PLAY_TABS.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            className={`mobile-tab-item ${playTabFromPath(location.pathname) === t.id ? 'active' : ''}`}
+            onClick={() => navigate(t.path)}
+            title={t.label}
+          >
+            <span className="mobile-tab-icon">{t.icon}</span>
+            <span className="mobile-tab-label">{t.label}</span>
+          </button>
+        ))}
       </nav>
       )}
 

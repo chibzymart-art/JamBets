@@ -51,6 +51,11 @@ export const ROUTE_SEO: Record<string, RouteSeo> = {
     title: 'Cricket Predictions: Coming Soon | Oddsbanta',
     description: 'Cricket predictions with a 0–10 confidence score are coming soon to Oddsbanta.',
   },
+  '/play': {
+    title: 'Play Hub: Make Your Own Calls | Oddsbanta',
+    description:
+      'Make your own football calls, compete on weekly leaderboards and start private leagues with friends. Free to play, coming soon to Oddsbanta.',
+  },
   '/subscription': {
     title: 'Plans & Pricing | Oddsbanta',
     description:

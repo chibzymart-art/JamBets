@@ -1,0 +1,81 @@
+/* Hub switch (Predictions Hub / Play Hub). Uses only the existing palette tokens from index.css. */
+
+.hub-switch-wrap {
+  display: flex;
+  justify-content: center;
+  padding: 10px 0 4px;
+}
+
+.hub-switch {
+  display: inline-grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  padding: 4px;
+  width: 100%;
+  max-width: 460px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+}
+
+.hub-switch-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 9px 8px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text-muted);
+  font-family: var(--font-heading);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.hub-switch-btn:hover {
+  color: var(--text-primary);
+}
+
+.hub-switch-btn.active {
+  background: var(--bg-card);
+  color: var(--green-dark);
+  box-shadow: var(--shadow-sm);
+}
+
+.hub-switch-btn:focus-visible,
+.play-tab:focus-visible,
+.play-btn-primary:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+}
+
+.hub-switch-icon {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.hub-switch-new {
+  font-family: var(--font-body);
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--green-light);
+  color: var(--green-primary);
+  border: 1px solid var(--green-border);
+}
+
+@media (max-width: 768px) {
+  .hub-switch-wrap {
+    padding: 6px 0 2px;
+  }
+
+  .hub-switch-btn {
+    font-size: 13px;
+    padding: 8px 6px;
+  }
+}
