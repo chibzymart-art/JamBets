@@ -1,0 +1,127 @@
+/* Phone date row from the two-hub prototype. Hidden on desktop, where each hub keeps its own date bar. */
+
+.mds {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .mds {
+    display: grid;
+    grid-template-columns: 26px 1fr 26px 34px;
+    align-items: stretch;
+    gap: 5px;
+    margin: 8px 0 10px;
+    width: 100%;
+  }
+
+  /* The phone row replaces the old scrolling pill bar right after it. */
+  .mds + .date-nav-pills-bar,
+  .mds + .calendar-ribbon {
+    display: none !important;
+  }
+
+  .mds-chips {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 5px;
+    min-width: 0;
+  }
+
+  .mds-chip,
+  .mds-arrow,
+  .mds-cal {
+    border: 1px solid var(--border-subtle);
+    background: var(--bg-card);
+    border-radius: 10px;
+    color: var(--text-primary);
+    font-family: var(--font-body);
+    cursor: pointer;
+  }
+
+  .mds-chip {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1px;
+    min-width: 0;
+    padding: 6px 2px;
+    line-height: 1.2;
+  }
+
+  .mds-chip-label {
+    font-size: 12px;
+    letter-spacing: -0.01em;
+    font-weight: 700;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+  }
+
+  .mds-chip-sub {
+    font-size: 10.5px;
+    color: var(--text-muted);
+    white-space: nowrap;
+  }
+
+  .mds-chip-label--long {
+    font-size: 10px;
+    letter-spacing: -0.02em;
+    text-overflow: clip;
+  }
+
+  .mds-chip.is-active {
+    background: var(--green-primary);
+    border-color: var(--green-primary);
+    color: #fff;
+  }
+
+  .mds-chip.is-active .mds-chip-sub {
+    color: rgba(255, 255, 255, 0.85);
+  }
+
+  .mds-arrow {
+    display: grid;
+    place-items: center;
+    padding: 0;
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text-secondary);
+  }
+
+  .mds-arrow:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+  }
+
+  .mds-cal {
+    position: relative;
+    display: grid;
+    place-items: center;
+    font-size: 17px;
+  }
+
+  .mds-cal.is-active {
+    border-color: var(--green-primary);
+    background: var(--green-light);
+  }
+
+  /* Native select covers the button so the phone's own picker opens on tap. */
+  .mds-cal-select {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    cursor: pointer;
+    font-size: 16px;
+  }
+
+  .mds-chip:focus-visible,
+  .mds-arrow:focus-visible,
+  .mds-cal:focus-within {
+    outline: 2px solid var(--border-focus);
+    outline-offset: 2px;
+  }
+}

@@ -317,6 +317,11 @@
     font-size: 15px;
   }
 
+  /* Basketball's old "Click to View More" bar duplicates the card's View More on phones. */
+  .bball-card:has(> .pg) .bball-view-more-row {
+    display: none !important;
+  }
+
   .pg-actions {
     margin-top: 10px;
   }

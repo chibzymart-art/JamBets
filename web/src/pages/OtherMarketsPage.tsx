@@ -10,6 +10,7 @@ import { updatePageSeo } from '../lib/seo';
 import { recordSportsSearch } from '../lib/sportsIntentTracker';
 import { trackSportsSearchEvent } from '../lib/pixelTracker';
 import { DesktopSidebarLayout } from '../components/DesktopSidebarLayout';
+import { MobileDateStrip } from '../components/MobileDateStrip';
 import {
   getDateDetailsByOffset,
   getPastDatesList
@@ -418,6 +419,14 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
 
         {/* TIER 2: Calendar Ribbon + Inline Status Scorecard Pills */}
         <div className="command-tier-secondary">
+          {/* Phone date row: ‹ 4 days › + 📅. The market feed keeps about 30 days, so the calendar stops there. */}
+          <MobileDateStrip
+            selected={dateFilter}
+            onSelect={handleSelectDate}
+            minOffset={-30}
+            maxOffset={4}
+          />
+
           <div className="calendar-ribbon">
             {/* 1. Select Date (Drop down of all past dates) */}
             <div className={`cal-pill cal-pill-dropdown-wrap ${isPastDateSelected ? 'active' : ''}`}>
