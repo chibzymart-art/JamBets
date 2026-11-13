@@ -265,6 +265,7 @@ export const TennisPredictionCard: React.FC<TennisPredictionCardProps> = ({
     >
       {/* 1-2. CARD HEADER (shared prototype layout); surface, CPI and location move into View More */}
       <PredictionGlance
+        venue={locationText}
         league={
           <span
             style={{ ...tourPillStyle, border: `1px solid ${tourPillStyle.borderColor}`, padding: '1px 6px', borderRadius: 6, fontWeight: 600 }}

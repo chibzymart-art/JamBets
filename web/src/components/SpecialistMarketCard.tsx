@@ -184,6 +184,7 @@ export const SpecialistMarketCard: React.FC<SpecialistMarketCardProps> = ({
       {/* CARD HEADER (shared prototype layout); scout notes, gauge and telemetry open in View More */}
       <div onClick={() => setIsExpanded(!isExpanded)} style={{ cursor: 'pointer' }}>
         <PredictionGlance
+          venue={fixture?.venue || null}
           league={`🏆 ${leagueName}`}
           leagueTitle={leagueName}
           time={`⏰ ${timeFormatted.time}${timeFormatted.date ? ` • ${timeFormatted.date}` : ''}`}

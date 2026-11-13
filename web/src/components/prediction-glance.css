@@ -81,6 +81,14 @@
   text-align: right;
 }
 
+.pg-venue {
+  margin: -4px 0 10px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
 .pg-vs {
   font-size: 11px;
   font-weight: 500;
@@ -230,18 +238,20 @@
 .pg-toggle {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  border: 0;
-  background: none;
-  color: var(--green-primary);
-  font-size: 12.5px;
-  font-weight: 700;
+  gap: 6px;
+  border: 1.5px solid var(--green-border);
+  background: var(--green-light);
+  color: var(--green-dark);
+  border-radius: 8px;
+  font-size: 13.5px;
+  font-weight: 800;
   cursor: pointer;
-  padding: 4px 2px;
+  padding: 5px 12px;
 }
 
 .pg-toggle-icon {
-  font-size: 13px;
+  font-size: 15px;
+  font-weight: 800;
   line-height: 1;
 }
 
@@ -261,4 +271,32 @@
   padding: 8px 0 4px;
 }
 
+/* Card frame: thicker borders and more space between cards (colours unchanged). */
+.glance-fixture-box:has(> .pg) {
+  border-width: 2px !important;
+  margin-bottom: 18px !important;
+}
 
+.bball-card:has(> .pg) {
+  margin-bottom: 20px;
+}
+
+.bball-card:has(> .pg):not(.card-won):not(.card-lost) {
+  border-width: 2px;
+}
+
+.specialist-market-card:has(.pg) {
+  border-width: 2px;
+  margin-bottom: 20px;
+}
+
+@media (max-width: 768px) {
+  .glance-fixture-box:has(> .pg) {
+    margin-bottom: 14px !important;
+  }
+
+  .bball-card:has(> .pg),
+  .specialist-market-card:has(.pg) {
+    margin-bottom: 14px !important;
+  }
+}

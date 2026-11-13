@@ -819,6 +819,7 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
     >
       {/* 1-2. CARD HEADER (shared prototype layout): league · time / teams / tier + pick / slip · View More */}
       <PredictionGlance
+        venue={venueText}
         league={leagueDisplay}
         leagueTitle={leagueDisplay}
         time={`📅 ${formattedDateTime}`}
@@ -898,11 +899,6 @@ export const FixtureCard: React.FC<FixtureCardProps> = ({
       {/* 3. EXPANDABLE BREAKDOWN BODY */}
       {isExpanded && (
         <div className="expanded-breakdown-body" onClick={(e) => e.stopPropagation()}>
-          {venueText && (
-            <div className="pg-detail-row">
-              <span>📍 {venueText}</span>
-            </div>
-          )}
           {isLocked ? (
             /* CRITICAL DIRECTIVE 3: PAYWALL UI BLURRED LOCK STATE */
             <div className="paywall-lock-container">
