@@ -115,3 +115,63 @@ export function splitLeaderboard<T extends { place: number; is_me: boolean }>(ro
   const meOutside = rows.find((r) => r.is_me && r.place > limit) || null;
   return { top, me: meOutside };
 }
+
+// ---------------------------------------------------------------------------
+// Private leagues
+// ---------------------------------------------------------------------------
+
+export const LEAGUE_NAME_MIN = 3;
+export const LEAGUE_NAME_MAX = 40;
+export const MAX_LEAGUES_PER_MEMBER = 20;
+export const MAX_MEMBERS_PER_LEAGUE = 200;
+export const INVITE_CODE_PATTERN = /^[A-Z0-9]{8}$/;
+export const INVITE_BASE = 'https://www.oddsbanta.com/play/leagues';
+
+/** Invite link that opens Banter Hub Leagues with the join box filled in. */
+export function inviteLink(code: string): string {
+  return `${INVITE_BASE}?join=${encodeURIComponent(code)}`;
+}
+
+/** Cleans a typed or pasted invite: accepts the bare code or a full invite link. */
+export function normaliseInvite(input: string): string {
+  const raw = (input || '').trim();
+  const fromLink = raw.match(/[?&]join=([A-Za-z0-9]+)/);
+  return (fromLink ? fromLink[1] : raw).replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+}
+
+export function leagueShareText(name: string, code: string): string {
+  return `Join my Oddsbanta Banter league "${name}" and let's see who predicts best: ${inviteLink(code)}`;
+}
+
+export function whatsappShareUrl(name: string, code: string): string {
+  return `https://wa.me/?text=${encodeURIComponent(leagueShareText(name, code))}`;
+}
+
+export function telegramShareUrl(name: string, code: string): string {
+  return `https://t.me/share/url?url=${encodeURIComponent(inviteLink(code))}&text=${encodeURIComponent(`Join my Oddsbanta Banter league "${name}"`)}`;
+}
+
+export function leagueErrorMessage(code: string): string {
+  switch (code) {
+    case 'name_invalid':
+      return `League names need ${LEAGUE_NAME_MIN} to ${LEAGUE_NAME_MAX} characters.`;
+    case 'too_many_leagues':
+      return `You can be in up to ${MAX_LEAGUES_PER_MEMBER} leagues. Leave one to join or create another.`;
+    case 'league_not_found':
+      return "We couldn't find a league with that code. Check it and try again.";
+    case 'league_full':
+      return `That league is full (${MAX_MEMBERS_PER_LEAGUE} members).`;
+    case 'not_member':
+      return "You're not in that league.";
+    case 'no_profile':
+      return 'Choose a username first.';
+    case 'no_access':
+      return 'Banter Hub is for paid members. Upgrade to use leagues.';
+    case 'not_ready':
+      return "Leagues aren't switched on yet. Please check back soon.";
+    case 'not_signed_in':
+      return 'Please sign in again.';
+    default:
+      return 'Something went wrong. Please try again.';
+  }
+}
