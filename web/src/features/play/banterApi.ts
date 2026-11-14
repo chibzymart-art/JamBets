@@ -22,8 +22,10 @@ export async function fetchBanterState(isSignedIn: boolean): Promise<BanterState
 }
 
 /** Server error code from a raised exception (the message is the code), or 'unknown'. */
-function errorCode(err: { message?: string } | null): string {
+function errorCode(err: { message?: string; code?: string } | null): string {
   const m = (err?.message || '').trim();
+  // The database function isn't there yet (migration not applied): PostgREST PGRST202.
+  if (err?.code === 'PGRST202' || /could not find the function/i.test(m)) return 'not_ready';
   return /^[a-z_]+$/.test(m) ? m : 'unknown';
 }
 
@@ -136,3 +138,30 @@ export interface LeaderboardRow {
 
 export const fetchLeaderboard = (period: LeaderboardPeriod, limit = 50) =>
   call<LeaderboardRow[]>('banter_leaderboard', { p_period: period, p_limit: limit });
+
+// ---------------------------------------------------------------------------
+// Private leagues
+// ---------------------------------------------------------------------------
+
+export interface BanterLeagueSummary {
+  league_id: string;
+  name: string;
+  invite_code: string;
+  is_owner: boolean;
+  members: number;
+  created_at: string;
+}
+
+export const fetchMyLeagues = () => call<BanterLeagueSummary[]>('banter_my_leagues', {});
+
+export const createLeague = (name: string) =>
+  call<{ league_id: string; name: string; invite_code: string }>('banter_create_league', { p_name: name.trim() });
+
+export const joinLeague = (code: string) =>
+  call<{ league_id: string; name: string; already_member: boolean }>('banter_join_league', { p_invite_code: code.trim().toUpperCase() });
+
+export const leaveLeague = (leagueId: string) =>
+  call<'left' | 'deleted'>('banter_leave_league', { p_league_id: leagueId });
+
+export const fetchLeagueTable = (leagueId: string, period: LeaderboardPeriod) =>
+  call<LeaderboardRow[]>('banter_league_table', { p_league_id: leagueId, p_period: period });
