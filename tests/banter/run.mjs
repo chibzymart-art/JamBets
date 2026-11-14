@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 const here = dirname(fileURLToPath(import.meta.url));
-for (const name of ['banter-foundations']) {
+for (const name of ['banter-foundations', 'banter-football-picks']) {
   const dir = mkdtempSync(join(tmpdir(), 'banter-test-'));
   const out = join(dir, `${name}.mjs`);
   await build({ entryPoints: [join(here, `${name}.test.ts`)], bundle: true, platform: 'node', format: 'esm', outfile: out, logLevel: 'error' });

@@ -42,3 +42,75 @@ export async function saveBanterProfile(
     return { ok: false, code: 'unknown' };
   }
 }
+
+// ---------------------------------------------------------------------------
+// Football picks
+// ---------------------------------------------------------------------------
+
+export interface BanterFixture {
+  fixture_id: string;
+  kickoff_at: string;
+  status: string;
+  league_code: string;
+  league_name: string;
+  league_country: string;
+  home_team: string | null;
+  away_team: string | null;
+  home_score: number | null;
+  away_score: number | null;
+}
+
+export interface BanterLeague {
+  league_code: string;
+  league_name: string;
+  league_country: string;
+  fixtures: number;
+}
+
+export interface BanterPick {
+  id: string;
+  fixture_id: string;
+  market: string;
+  selection: string;
+  kickoff_at: string;
+  status: 'pending' | 'won' | 'lost' | 'void';
+  points: number | null;
+  settled_at: string | null;
+  fixture_status: string;
+  league_name: string | null;
+  league_country: string | null;
+  home_team: string | null;
+  away_team: string | null;
+  home_score: number | null;
+  away_score: number | null;
+}
+
+type Result<T> = { ok: true; data: T } | { ok: false; code: string };
+
+async function call<T>(fn: string, args: Record<string, unknown>): Promise<Result<T>> {
+  try {
+    const { data, error } = await supabase.rpc(fn, args);
+    if (error) return { ok: false, code: errorCode(error) };
+    return { ok: true, data: data as T };
+  } catch {
+    return { ok: false, code: 'unknown' };
+  }
+}
+
+export const fetchFootballLeagues = (date: string, tz: string) =>
+  call<BanterLeague[]>('banter_football_leagues', { p_date: date, p_tz: tz });
+
+export const fetchFootballFixtures = (date: string, tz: string, leagues: string[] | null) =>
+  call<BanterFixture[]>('banter_football_fixtures', { p_date: date, p_tz: tz, p_leagues: leagues });
+
+export const fetchMyFootballPicks = (date: string | null, tz: string) =>
+  call<BanterPick[]>('banter_my_football_picks', { p_date: date, p_tz: tz });
+
+export const submitFootballPick = (fixtureId: string, market: string, selection: string) =>
+  call<{ id: string }>('banter_submit_football_pick', { p_fixture_id: fixtureId, p_market: market, p_selection: selection });
+
+export const cancelFootballPick = (fixtureId: string, market: string) =>
+  call<boolean>('banter_cancel_football_pick', { p_fixture_id: fixtureId, p_market: market });
+
+export const saveBanterLeagues = (leagues: string[]) =>
+  call<unknown>('set_banter_leagues', { p_leagues: leagues });

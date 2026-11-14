@@ -1,6 +1,8 @@
 import { NavLink, useLocation } from 'react-router-dom';
 import { PLAY_TABS, playTabFromPath } from './playTabs';
 import { BanterGate } from './BanterGate';
+import { BanterToday } from './BanterToday';
+import { BanterMyPicks } from './BanterMyPicks';
 import './play.css';
 
 /** Banter Hub goes live only when VITE_BANTER_LIVE=true. Off: the coming-soon screens below, unchanged. */
@@ -157,7 +159,13 @@ export default function PlayHub(props: PlayHubProps) {
                 <p className="banter-me">
                   <span aria-hidden="true">{me.avatar}</span> Signed in as <strong>{me.handle}</strong>
                 </p>
-                <HubTabs tab={tab} {...props} />
+                {tab === 'today' ? (
+                  <BanterToday savedLeagues={me.leagues} />
+                ) : tab === 'picks' ? (
+                  <BanterMyPicks />
+                ) : (
+                  <HubTabs tab={tab} {...props} />
+                )}
               </>
             )}
           </BanterGate>
