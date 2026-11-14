@@ -1,0 +1,6 @@
+{
+  "_note": "Banter Hub points per settled pick. Single source for the website (banterRules.ts) and the settle job (python/src/banter/football_settlement.py). Owner has not confirmed 3 vs 10 for a correct pick.",
+  "won": 3,
+  "lost": 0,
+  "void": 0.5
+}
