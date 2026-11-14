@@ -361,3 +361,98 @@
     font-size: 20px;
   }
 }
+
+/* ---- Banter Hub entry screens (only when VITE_BANTER_LIVE=true) ---- */
+.banter-gate {
+  display: grid;
+  gap: 10px;
+}
+
+.banter-me {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.banter-form {
+  display: grid;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.banter-label {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.banter-input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 16px;
+}
+
+.banter-input:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 1px;
+}
+
+.banter-input.is-invalid {
+  border-color: #dc2626;
+}
+
+.banter-help {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+.banter-help.is-error {
+  color: #b91c1c;
+  font-weight: 600;
+}
+
+.banter-avatars {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.banter-avatar {
+  display: grid;
+  place-items: center;
+  height: 42px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  background: var(--bg-secondary);
+  font-size: 20px;
+  cursor: pointer;
+}
+
+.banter-avatar.is-selected {
+  border-color: var(--green-primary);
+  background: var(--green-light);
+  box-shadow: inset 0 0 0 1px var(--green-primary);
+}
+
+.banter-avatar:focus-visible,
+.banter-link:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+}
+
+.banter-link {
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--green-primary);
+  font-weight: 700;
+  cursor: pointer;
+}

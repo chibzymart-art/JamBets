@@ -1,6 +1,10 @@
 import { NavLink, useLocation } from 'react-router-dom';
 import { PLAY_TABS, playTabFromPath } from './playTabs';
+import { BanterGate } from './BanterGate';
 import './play.css';
+
+/** Banter Hub goes live only when VITE_BANTER_LIVE=true. Off: the coming-soon screens below, unchanged. */
+const BANTER_LIVE = import.meta.env.VITE_BANTER_LIVE === 'true';
 
 /**
  * Play Hub (UI only). User picks, leaderboards and leagues are not live yet,
@@ -10,6 +14,8 @@ import './play.css';
 interface PlayHubProps {
   isSignedIn: boolean;
   onCreateAccount: () => void;
+  /** Opens the existing pricing modal (Banter Hub upgrade prompt). */
+  onOpenPricing?: () => void;
 }
 
 function SoonBadge() {
@@ -140,6 +146,37 @@ export default function PlayHub(props: PlayHubProps) {
       </nav>
 
       <div className="play-body">
+        {BANTER_LIVE ? (
+          <BanterGate
+            isSignedIn={props.isSignedIn}
+            onCreateAccount={props.onCreateAccount}
+            onOpenPricing={props.onOpenPricing || (() => {})}
+          >
+            {(me) => (
+              <>
+                <p className="banter-me">
+                  <span aria-hidden="true">{me.avatar}</span> Signed in as <strong>{me.handle}</strong>
+                </p>
+                <HubTabs tab={tab} {...props} />
+              </>
+            )}
+          </BanterGate>
+        ) : (
+          <HubTabs tab={tab} {...props} />
+        )}
+
+        <p className="play-disclaimer">
+          Oddsbanta is an analytics tool, not a bookmaker. Banter Hub is a free game with no stakes. 18+.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+/** The coming-soon content of each tab (unchanged). */
+function HubTabs({ tab, ...props }: PlayHubProps & { tab: ReturnType<typeof playTabFromPath> }) {
+  return (
+    <>
         {tab === 'today' && <TodayTab {...props} />}
 
         {tab === 'picks' && (
@@ -187,10 +224,6 @@ export default function PlayHub(props: PlayHubProps) {
           />
         )}
 
-        <p className="play-disclaimer">
-          Oddsbanta is an analytics tool, not a bookmaker. Banter Hub is a free game with no stakes. 18+.
-        </p>
-      </div>
-    </div>
+    </>
   );
 }

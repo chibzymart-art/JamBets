@@ -3698,6 +3698,7 @@ export default function App() {
                     setAuthModalMode('register');
                     setIsAuthModalOpen(true);
                   }}
+                  onOpenPricing={() => setIsPricingModalOpen(true)}
                 />
               </Suspense>
             }
