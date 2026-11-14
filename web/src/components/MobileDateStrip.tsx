@@ -117,7 +117,10 @@ export function MobileDateStrip({
       </button>
 
       <label className={`mds-cal ${calendarValue ? 'is-active' : ''}`} title="Past dates and all dates">
-        <span aria-hidden="true">📅</span>
+        <svg aria-hidden="true" width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+          <rect x="2.5" y="3.5" width="13" height="12" rx="2" />
+          <path d="M2.5 7.5h13M6 2v3M12 2v3" />
+        </svg>
         <select
           className="mds-cal-select"
           value={calendarValue}
