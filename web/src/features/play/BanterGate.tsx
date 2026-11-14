@@ -5,7 +5,7 @@ import { AVATAR_CHOICES, HANDLE_MAX, checkHandle, handleMessage } from './banter
 /**
  * Who may enter Banter Hub, decided by the server:
  *  - visitor (not signed in): sign-up prompt
- *  - signed in, trial over and not paid: upgrade prompt
+ *  - signed in but not on a paid plan (free or trial): upgrade prompt
  *  - has access, no username yet: choose a username
  *  - has access and a username: the hub (children)
  * Loading shows a placeholder; any error shows a retry, never the hub (fails closed).
@@ -40,13 +40,13 @@ export function BanterGate({ isSignedIn, onCreateAccount, onOpenPricing, childre
         <div className="play-empty-icon" aria-hidden="true">💬</div>
         <h1 className="play-title">Join Banter Hub</h1>
         <p className="play-lead">
-          Predict today's matches against other members and climb the leaderboard. Create a free account to start your free trial.
+          Predict today's matches against other members and climb the leaderboard. Banter Hub is for paid members: create an account, then pick a plan.
         </p>
         <div className="play-cta-row">
           <button type="button" className="play-btn-primary" onClick={onCreateAccount}>
-            Create a free account
+            Create an account
           </button>
-          <span className="play-cta-note">Free to play. 18+ only.</span>
+          <span className="play-cta-note">Paid members only. 18+.</span>
         </div>
       </section>
     );
@@ -56,9 +56,9 @@ export function BanterGate({ isSignedIn, onCreateAccount, onOpenPricing, childre
     return (
       <section className="play-card banter-gate">
         <div className="play-empty-icon" aria-hidden="true">🔒</div>
-        <h1 className="play-title">Your free trial has ended</h1>
+        <h1 className="play-title">Banter Hub is for paid members</h1>
         <p className="play-lead">
-          Banter Hub is for members on a free trial or a paid plan. Upgrade to keep predicting and stay on the leaderboard.
+          Upgrade to a paid plan to make unlimited picks, see other members' calls and climb the leaderboard.
         </p>
         <div className="play-cta-row">
           <button type="button" className="play-btn-primary" onClick={onOpenPricing}>

@@ -78,4 +78,10 @@ test('pickable set requires a published prediction and exposes no AI fields', ()
   }
 });
 
+test('no limit on how many picks a member makes', () => {
+  const submit = sql.slice(sql.indexOf('create or replace function public.banter_submit_football_pick'), sql.indexOf('create or replace function public.banter_cancel_football_pick'));
+  assert.ok(!/count\(\*\)|daily|per_day|max_picks/i.test(submit), 'submit must not count or cap picks');
+  assert.ok(sql.includes('limit 2000;'), 'My Picks returns up to 2000 rows');
+});
+
 console.log(`banter-football-picks: ${passed} passed`);

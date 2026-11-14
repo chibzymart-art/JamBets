@@ -264,6 +264,7 @@ end;
 $$;
 
 -- The caller's picks with match details. With a date: that local day. Without: the last 60 days.
+-- There is no limit on how many picks a member makes (owner); the list returns up to 2000 rows.
 create or replace function public.banter_my_football_picks(p_date date default null, p_tz text default 'Africa/Lagos')
 returns table (
   id uuid,
@@ -319,7 +320,7 @@ begin
    where k.user_id = v_uid
      and k.kickoff_at >= v_start and k.kickoff_at < v_end
    order by k.kickoff_at desc, k.market
-   limit 500;
+   limit 2000;
 end;
 $$;
 

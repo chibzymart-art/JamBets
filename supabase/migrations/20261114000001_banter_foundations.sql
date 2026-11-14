@@ -5,11 +5,12 @@
 -- Before applying, compare with the live catalog as AGENTS.md section 6 rule 3 says, and rerun the
 -- Supabase Security Advisor afterwards (Errors must stay 0).
 --
--- Access rule (owner): admins, paid members, and free members inside their trial. Visitors and
--- expired trials get nothing from any Banter table or function.
--- has_banter_access() reuses public.is_football_entitled(), the same check the football paywall
--- uses (is_admin() OR is_paid_subscriber() OR a paid users.role OR auth.users.created_at within
--- the 3-day trial), so there is one trial clock, not two.
+-- Access rule (owner, 14 Nov 2026): PAID MEMBERS ONLY (and admins). Free members, including those
+-- inside the 3-day trial, and visitors get nothing from any Banter table or function.
+-- has_banter_access() reuses the existing paywall helpers: public.is_admin() and
+-- public.is_paid_subscriber() (active entitlements / subscriptions), plus the same paid users.role
+-- values public.is_football_entitled() accepts. The trial clause of is_football_entitled() is
+-- deliberately not used. (Edited before first apply: this file had never been applied.)
 
 -- ---------------------------------------------------------------------------
 -- 1. Access check
@@ -22,7 +23,15 @@ security invoker
 set search_path = ''
 as $$
   select (select auth.uid()) is not null
-     and coalesce(public.is_football_entitled(), false);
+     and (
+       coalesce(public.is_admin(), false)
+       or coalesce(public.is_paid_subscriber(), false)
+       or exists (
+         select 1 from public.users u
+          where u.id = (select auth.uid())
+            and lower(coalesce(u.role, '')) in ('standard', 'bigbang', 'big_bang', 'vip', 'pro', 'premium', 'admin')
+       )
+     );
 $$;
 
 revoke execute on function public.has_banter_access() from public, anon;
