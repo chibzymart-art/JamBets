@@ -3,6 +3,7 @@ import { PLAY_TABS, playTabFromPath } from './playTabs';
 import { BanterGate } from './BanterGate';
 import { BanterToday } from './BanterToday';
 import { BanterMyPicks } from './BanterMyPicks';
+import { BanterLeaderboard } from './BanterLeaderboard';
 import { BANTER_POINTS } from './banterRules';
 import './play.css';
 
@@ -164,6 +165,8 @@ export default function PlayHub(props: PlayHubProps) {
                   <BanterToday savedLeagues={me.leagues} />
                 ) : tab === 'picks' ? (
                   <BanterMyPicks />
+                ) : tab === 'leaderboard' ? (
+                  <BanterLeaderboard />
                 ) : (
                   <HubTabs tab={tab} {...props} />
                 )}

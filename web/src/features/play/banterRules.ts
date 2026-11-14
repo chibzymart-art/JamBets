@@ -100,3 +100,18 @@ export function pickErrorMessage(code: string): string {
       return "Couldn't save that pick. Please try again.";
   }
 }
+
+/** "12.5 pts" / "3 pts": points with at most one decimal (void picks give halves). */
+export function formatPoints(points: number | string | null | undefined): string {
+  const n = Number(points ?? 0);
+  if (!Number.isFinite(n)) return '0 pts';
+  const text = Number.isInteger(n) ? String(n) : n.toFixed(1);
+  return `${text} pts`;
+}
+
+/** Splits leaderboard rows into the top list and the caller's own row when it falls outside it. */
+export function splitLeaderboard<T extends { place: number; is_me: boolean }>(rows: T[], limit: number): { top: T[]; me: T | null } {
+  const top = rows.filter((r) => r.place <= limit);
+  const meOutside = rows.find((r) => r.is_me && r.place > limit) || null;
+  return { top, me: meOutside };
+}
