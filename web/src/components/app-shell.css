@@ -119,6 +119,52 @@
     display: none !important;
   }
 
+  /* In-list sponsored card becomes a slim strip: title, Sponsored tag and the button. */
+  .ad-native-match-card {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) auto !important;
+    align-items: center !important;
+    gap: 4px 10px !important;
+    padding: 9px 10px !important;
+    border-radius: 12px !important;
+    min-height: 0 !important;
+  }
+
+  .ad-native-match-card .ad-native-header {
+    grid-column: 1 / -1 !important;
+    margin: 0 !important;
+  }
+
+  .ad-native-match-card .ad-native-text,
+  .ad-native-match-card .ad-native-perks,
+  .ad-native-match-card .ad-verified-tag,
+  .ad-native-match-card .ad-badge-gold {
+    display: none !important;
+  }
+
+  .ad-native-match-card .ad-native-body {
+    margin: 0 !important;
+    min-width: 0 !important;
+  }
+
+  .ad-native-match-card .ad-native-heading {
+    margin: 0 !important;
+    font-size: 13px !important;
+    line-height: 1.3 !important;
+  }
+
+  .ad-native-match-card .ad-native-footer {
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+  }
+
+  .ad-native-match-card .ad-native-cta-btn {
+    padding: 5px 9px !important;
+    font-size: 11.5px !important;
+    white-space: nowrap !important;
+  }
+
   /* ---- General / Other Markets cards duplicate the tabs ---- */
   .app-container .prediction-markets-bar,
   .app-container .top-markets-selector-bar {
