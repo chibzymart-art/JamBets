@@ -5,6 +5,7 @@ import { BanterToday } from './BanterToday';
 import { BanterMyPicks } from './BanterMyPicks';
 import { BanterLeaderboard } from './BanterLeaderboard';
 import { BanterLeagues } from './BanterLeagues';
+import { BanterProfile } from './BanterProfile';
 import { BANTER_POINTS } from './banterRules';
 import './play.css';
 
@@ -157,7 +158,7 @@ export default function PlayHub(props: PlayHubProps) {
             onCreateAccount={props.onCreateAccount}
             onOpenPricing={props.onOpenPricing || (() => {})}
           >
-            {(me) => (
+            {(me, onProfileSaved) => (
               <>
                 <p className="banter-me">
                   <span aria-hidden="true">{me.avatar}</span> Signed in as <strong>{me.handle}</strong>
@@ -170,6 +171,8 @@ export default function PlayHub(props: PlayHubProps) {
                   <BanterLeaderboard />
                 ) : tab === 'leagues' ? (
                   <BanterLeagues />
+                ) : tab === 'profile' ? (
+                  <BanterProfile me={me} onProfileSaved={onProfileSaved} />
                 ) : (
                   <HubTabs tab={tab} {...props} />
                 )}
