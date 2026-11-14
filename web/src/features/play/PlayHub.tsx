@@ -3,6 +3,7 @@ import { PLAY_TABS, playTabFromPath } from './playTabs';
 import { BanterGate } from './BanterGate';
 import { BanterToday } from './BanterToday';
 import { BanterMyPicks } from './BanterMyPicks';
+import { BANTER_POINTS } from './banterRules';
 import './play.css';
 
 /** Banter Hub goes live only when VITE_BANTER_LIVE=true. Off: the coming-soon screens below, unchanged. */
@@ -28,16 +29,16 @@ function SignupCta({ isSignedIn, onCreateAccount }: PlayHubProps) {
   if (isSignedIn) {
     return (
       <p className="play-cta-note">
-        You're signed in, so you're ready. Banter Hub opens here as soon as it launches.
+        Banter Hub opens here for paid members as soon as it launches.
       </p>
     );
   }
   return (
     <div className="play-cta-row">
       <button type="button" className="play-btn-primary" onClick={onCreateAccount}>
-        Create a free account
+        Create an account
       </button>
-      <span className="play-cta-note">Free to play. 18+ only.</span>
+      <span className="play-cta-note">Paid members only. 18+.</span>
     </div>
   );
 }
@@ -51,7 +52,7 @@ function TodayTab(props: PlayHubProps) {
           <SoonBadge />
         </div>
         <p className="play-lead">
-          Pick results on today's matches, beat your friends and the Oddsbanta AI, and climb the weekly leaderboard.
+          Predict today's matches against other members, make as many calls as you like, and climb the leaderboard.
         </p>
         <ol className="play-steps">
           <li>
@@ -64,8 +65,8 @@ function TodayTab(props: PlayHubProps) {
           <li>
             <span className="play-step-num">2</span>
             <div>
-              <strong>Calls lock at kickoff</strong>
-              <span>Other players' calls stay hidden until the match starts.</span>
+              <strong>Calls lock a minute before kickoff</strong>
+              <span>Members can see each other's calls.</span>
             </div>
           </li>
           <li>
@@ -174,7 +175,7 @@ export default function PlayHub(props: PlayHubProps) {
         )}
 
         <p className="play-disclaimer">
-          Oddsbanta is an analytics tool, not a bookmaker. Banter Hub is a free game with no stakes. 18+.
+          Oddsbanta is an analytics tool, not a bookmaker. Banter Hub is a prediction game with no money stakes. 18+.
         </p>
       </div>
     </div>
@@ -206,9 +207,9 @@ function HubTabs({ tab, ...props }: PlayHubProps & { tab: ReturnType<typeof play
             <table className="play-score-table">
               <caption>Planned scoring</caption>
               <tbody>
-                <tr><td>Correct call</td><td>+10</td></tr>
-                <tr><td>Wrong call</td><td>0</td></tr>
-                <tr><td>Correct when the AI got it wrong</td><td>+5 bonus</td></tr>
+                <tr><td>Correct call</td><td>+{BANTER_POINTS.won}</td></tr>
+                <tr><td>Wrong call</td><td>{BANTER_POINTS.lost}</td></tr>
+                <tr><td>Match voided</td><td>+{BANTER_POINTS.void}</td></tr>
               </tbody>
             </table>
           </EmptyTab>

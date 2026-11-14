@@ -3,11 +3,14 @@
  * the owner has not yet confirmed 3 vs 10 points for a correct pick, so change it here only.
  */
 
-export const BANTER_POINTS = {
-  won: 3,
-  lost: 0,
-  void: 0.5,
-} as const;
+import scoring from './banter_scoring.json';
+
+/** Points per settled pick, read from banter_scoring.json (also read by the Python settle job). */
+export const BANTER_POINTS: { readonly won: number; readonly lost: number; readonly void: number } = {
+  won: scoring.won,
+  lost: scoring.lost,
+  void: scoring.void,
+};
 
 /** Picks close this many seconds before kickoff (matches the database check). */
 export const PICK_LOCK_SECONDS = 60;
