@@ -337,19 +337,19 @@
   }
 }
 
-/* ---- Settled cards: Won is fully green, Lost gets a red strike band reading LOST ---- */
+/* ---- Settled cards: Won reads light green; Lost gets a thin red strike line labelled LOST ---- */
 .fixture-card.glance-fixture-box.card-state-won:has(> .pg),
 .bball-card.card-won:has(> .pg),
 .specialist-market-card.settled-won:has(.pg) {
-  background: #bbf7d0 !important;
-  border-color: #15803d !important;
-  box-shadow: 0 2px 10px rgba(22, 163, 74, 0.25) !important;
+  background: #dcfce7 !important;
+  border-color: #16a34a !important;
+  box-shadow: 0 2px 8px rgba(22, 163, 74, 0.14) !important;
 }
 
 .fixture-card.glance-fixture-box.card-state-won:has(> .pg) .pg-pick,
 .bball-card.card-won:has(> .pg) .pg-pick,
 .specialist-market-card.settled-won:has(.pg) .pg-pick {
-  border-top-color: #4ade80;
+  border-top-color: #86efac;
 }
 
 .pg-settle--won {
@@ -366,7 +366,22 @@
   border-color: #dc2626 !important;
 }
 
-/* Diagonal band from bottom-left to top-right with LOST on it. Clicks pass through. */
+/* 3px line from bottom-left to top-right, plus a small LOST label on it at the centre. Taps pass through. */
+.fixture-card.glance-fixture-box.card-state-lost:has(> .pg)::before,
+.bball-card.card-lost:has(> .pg)::before,
+.specialist-market-card.settled-lost:has(.pg)::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 160%;
+  height: 3px;
+  transform: translate(-50%, -50%) rotate(-24deg);
+  background: #dc2626;
+  pointer-events: none;
+  z-index: 2;
+}
+
 .fixture-card.glance-fixture-box.card-state-lost:has(> .pg)::after,
 .bball-card.card-lost:has(> .pg)::after,
 .specialist-market-card.settled-lost:has(.pg)::after {
@@ -374,22 +389,18 @@
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 160%;
-  height: 28px;
   transform: translate(-50%, -50%) rotate(-24deg);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(220, 38, 38, 0.88);
+  padding: 1px 7px;
+  border-radius: 4px;
+  background: #dc2626;
   color: #fff;
   font-family: var(--font-heading);
-  font-size: 17px;
+  font-size: 11px;
   font-weight: 900;
-  letter-spacing: 0.32em;
-  text-indent: 0.32em;
-  box-shadow: 0 2px 8px rgba(127, 29, 29, 0.25);
+  line-height: 1.4;
+  letter-spacing: 0.12em;
   pointer-events: none;
-  z-index: 2;
+  z-index: 3;
 }
 
 .pg-settle--lost {
