@@ -1,0 +1,359 @@
+/* Banter Hub picks screens. Own styles (copied look of the prediction cards; nothing imported or
+   changed in the Predictions Hub). Uses the shared palette tokens from index.css. */
+
+.bh-today,
+.bh-mypicks {
+  display: grid;
+  gap: 12px;
+}
+
+.bh-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  padding: 12px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.bh-controls {
+  display: grid;
+  gap: 10px;
+}
+
+/* Date strip */
+.bh-dates {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) 30px;
+  gap: 6px;
+  align-items: stretch;
+}
+
+.bh-chips {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.bh-chip,
+.bh-arrow {
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  cursor: pointer;
+}
+
+.bh-chip {
+  padding: 6px 2px;
+  min-width: 0;
+  text-align: center;
+}
+
+.bh-chip b {
+  display: block;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bh-chip small {
+  display: block;
+  font-size: 10.5px;
+  color: var(--text-muted);
+}
+
+.bh-chip.is-active {
+  background: var(--green-primary);
+  border-color: var(--green-primary);
+  color: #fff;
+}
+
+.bh-chip.is-active small {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.bh-arrow {
+  font-size: 18px;
+  font-weight: 700;
+  padding: 0;
+}
+
+.bh-arrow:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* League tick boxes */
+.bh-leagues {
+  position: relative;
+}
+
+.bh-leagues-btn {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font: 600 13px var(--font-body);
+  cursor: pointer;
+}
+
+.bh-leagues-menu {
+  position: absolute;
+  z-index: 20;
+  left: 0;
+  right: 0;
+  top: calc(100% + 4px);
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 6px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.14);
+}
+
+.bh-league-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 6px;
+  border-radius: 8px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.bh-league-row:hover {
+  background: var(--bg-secondary);
+}
+
+.bh-league-row input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--green-primary);
+}
+
+.bh-league-row small {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+/* Section heading */
+.bh-sec {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  margin: 2px 2px 0;
+}
+
+.bh-sec h2 {
+  margin: 0;
+  font: 700 17px var(--font-heading);
+  color: var(--text-primary);
+}
+
+.bh-sec small,
+.bh-muted {
+  color: var(--text-muted);
+  font-size: 12.5px;
+}
+
+.bh-error {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: #fef2f2;
+  color: #b91c1c;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.bh-empty {
+  display: grid;
+  gap: 10px;
+  justify-items: start;
+  color: var(--text-secondary);
+}
+
+.bh-empty p {
+  margin: 0;
+}
+
+.bh-btn {
+  border: 1.5px solid var(--green-border);
+  background: var(--green-light);
+  color: var(--green-dark);
+  border-radius: 8px;
+  padding: 6px 12px;
+  font: 700 13px var(--font-body);
+  cursor: pointer;
+}
+
+.bh-list {
+  display: grid;
+  gap: 12px;
+}
+
+/* Fixture / pick card */
+.bh-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.bh-meta span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bh-lock {
+  flex: 0 0 auto;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: #b45309;
+  background: #fffbeb;
+  padding: 1px 7px;
+  border-radius: 6px;
+}
+
+.bh-lock.is-closed {
+  color: var(--text-muted);
+  background: var(--bg-tertiary);
+}
+
+.bh-teams {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 8px;
+  align-items: center;
+  margin: 8px 0 6px;
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.bh-right {
+  text-align: right;
+}
+
+.bh-vs {
+  font-size: 11px;
+  color: var(--text-light);
+  font-family: var(--font-mono);
+}
+
+.bh-market {
+  margin-top: 8px;
+}
+
+.bh-mkt-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 5px;
+}
+
+.bh-opts {
+  display: grid;
+  gap: 6px;
+}
+
+.bh-opts-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.bh-opts-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+.bh-opt {
+  padding: 9px 4px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font: 600 13px var(--font-body);
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.bh-opt:hover:not(:disabled) {
+  border-color: #4f46e5;
+}
+
+.bh-opt.is-selected {
+  background: #4f46e5;
+  border-color: #4f46e5;
+  color: #fff;
+}
+
+.bh-opt:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.bh-note {
+  margin: 8px 0 0;
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+.bh-pick-line {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding-top: 9px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.bh-pick-line b {
+  font: 700 15px var(--font-heading);
+  color: var(--text-primary);
+}
+
+.bh-status {
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: #fffbeb;
+  color: #b45309;
+}
+
+/* Settled colours: same look as the prediction cards (green won, red lost). */
+.bh-pick--won {
+  background: #dcfce7;
+  border-color: #16a34a;
+  border-width: 2px;
+}
+
+.bh-pick--lost {
+  background: #fee2e2;
+  border-color: #dc2626;
+  border-width: 2px;
+}
+
+.bh-status--won { background: #16a34a; color: #fff; }
+.bh-status--lost { background: #dc2626; color: #fff; }
+.bh-status--void { background: var(--bg-tertiary); color: var(--text-secondary); }
+
+.bh-chip:focus-visible,
+.bh-arrow:focus-visible,
+.bh-opt:focus-visible,
+.bh-btn:focus-visible,
+.bh-leagues-btn:focus-visible,
+.bh-league-row input:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+}

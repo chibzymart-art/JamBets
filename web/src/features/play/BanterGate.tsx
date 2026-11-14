@@ -15,7 +15,7 @@ interface BanterGateProps {
   isSignedIn: boolean;
   onCreateAccount: () => void;
   onOpenPricing: () => void;
-  children: (me: { handle: string; avatar: string }) => ReactNode;
+  children: (me: { handle: string; avatar: string; leagues: string[] | null }) => ReactNode;
 }
 
 export function BanterGate({ isSignedIn, onCreateAccount, onOpenPricing, children }: BanterGateProps) {
@@ -87,7 +87,7 @@ export function BanterGate({ isSignedIn, onCreateAccount, onOpenPricing, childre
     return <ChooseUsername onSaved={setState} onUpgrade={onOpenPricing} />;
   }
 
-  return <>{children({ handle: state.handle, avatar: state.avatar })}</>;
+  return <>{children({ handle: state.handle, avatar: state.avatar, leagues: state.leagues })}</>;
 }
 
 function ChooseUsername({ onSaved, onUpgrade }: { onSaved: (s: BanterState) => void; onUpgrade: () => void }) {
