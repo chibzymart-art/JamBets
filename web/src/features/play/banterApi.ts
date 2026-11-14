@@ -114,3 +114,25 @@ export const cancelFootballPick = (fixtureId: string, market: string) =>
 
 export const saveBanterLeagues = (leagues: string[]) =>
   call<unknown>('set_banter_leagues', { p_leagues: leagues });
+
+// ---------------------------------------------------------------------------
+// Leaderboard
+// ---------------------------------------------------------------------------
+
+export type LeaderboardPeriod = 'week' | 'month' | 'all';
+
+export interface LeaderboardRow {
+  place: number;
+  handle: string;
+  avatar_emoji: string;
+  points: number;
+  won: number;
+  lost: number;
+  voided: number;
+  settled: number;
+  hit_rate: number;
+  is_me: boolean;
+}
+
+export const fetchLeaderboard = (period: LeaderboardPeriod, limit = 50) =>
+  call<LeaderboardRow[]>('banter_leaderboard', { p_period: period, p_limit: limit });
