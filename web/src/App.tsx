@@ -17,9 +17,9 @@ import { AdminView } from './components/AdminView';
 import { PricingModal } from './components/PricingModal';
 import { FaqModal } from './components/FaqModal';
 import { NavigationFooter } from './components/NavigationFooter';
-import { HubSwitch, isPlayPath } from './components/HubSwitch';
+import { HubSwitch, isPlayPath, PLAY_BASE_PATH } from './components/HubSwitch';
 import { MobileDateStrip } from './components/MobileDateStrip';
-import { PLAY_TABS, playTabFromPath } from './features/play/playTabs';
+import './components/app-shell.css';
 
 // Play Hub is loaded only when someone opens it, so the Predictions Hub bundle is unchanged.
 const PlayHub = lazy(() => import('./features/play/PlayHub'));
@@ -2849,6 +2849,52 @@ export default function App() {
             countFor={(iso) => dynamicDateTabs.countByDate.get(iso)}
           />
 
+          {/* Phone control card (app layout): tier pills + four stat boxes. Same state and handlers as the KPI cards below. */}
+          {(() => {
+            const canSee = trialState.canViewFootballSettlements;
+            const allActive = selectedTier === 'all' && settlementFilter === 'all' && scoreStatusFilter === 'all';
+            const pills: { id: string; label: string; rate: number; active: boolean; onClick: () => void }[] = [
+              { id: 'all', label: 'All', rate: scorecardStats.allWinRate, active: allActive, onClick: () => { setSelectedTier('all'); setSettlementFilter('all'); setScoreStatusFilter('all'); } },
+              { id: 'BANGER', label: 'Banger', rate: scorecardStats.bangerWinRate, active: selectedTier === 'BANGER', onClick: () => chooseTier('BANGER') },
+              { id: 'TOP PICK', label: 'Top Pick', rate: scorecardStats.topPickWinRate, active: selectedTier === 'TOP PICK', onClick: () => chooseTier('TOP PICK') },
+              { id: 'HIGH', label: 'High', rate: scorecardStats.highWinRate, active: selectedTier === 'HIGH', onClick: () => chooseTier('HIGH') },
+              { id: 'MID', label: 'Mid', rate: scorecardStats.midWinRate, active: selectedTier === 'MID', onClick: () => chooseTier('MID') },
+              { id: 'LOW', label: 'Low', rate: scorecardStats.lowWinRate, active: selectedTier === 'LOW', onClick: () => chooseTier('LOW') },
+              { id: 'NO_SAFE_BANKER', label: 'Anti Loss', rate: scorecardStats.antiLossWinRate, active: selectedTier === 'NO_SAFE_BANKER', onClick: () => chooseTier('NO_SAFE_BANKER') },
+            ];
+            const gate = (fn: () => void) => () => {
+              if (trialState.isVisitor) handleRegisterClick();
+              else if (!canSee) setIsPricingModalOpen(true);
+              else fn();
+            };
+            const stats = [
+              { key: 'settled', label: 'Settled', value: activeTierStats.settled, cls: '', active: scoreStatusFilter === 'finished', onClick: gate(() => setScoreStatusFilter(scoreStatusFilter === 'finished' ? 'all' : 'finished')) },
+              { key: 'won', label: 'Won', value: activeTierStats.won, cls: 'is-won', active: settlementFilter === 'won', onClick: gate(() => setSettlementFilter(settlementFilter === 'won' ? 'all' : 'won')) },
+              { key: 'lost', label: 'Lost', value: activeTierStats.lost, cls: 'is-lost', active: settlementFilter === 'lost', onClick: gate(() => setSettlementFilter(settlementFilter === 'lost' ? 'all' : 'lost')) },
+              { key: 'rate', label: 'Win rate', value: `${activeTierStats.winRate}%`, cls: 'is-rate', active: false, onClick: gate(() => { setSettlementFilter('all'); setScoreStatusFilter('all'); }) },
+            ];
+            return (
+              <>
+                <div className="m-tiers" role="group" aria-label="Filter by confidence tier">
+                  {pills.map((p) => (
+                    <button key={p.id} type="button" className={`m-tier ${p.active ? 'is-active' : ''}`} onClick={p.onClick} aria-pressed={p.active}>
+                      {p.label}
+                      {canSee && p.rate > 0 ? <span className="m-tier-rate">{p.rate}%</span> : null}
+                    </button>
+                  ))}
+                </div>
+                <div className="m-stats">
+                  {stats.map((s) => (
+                    <button key={s.key} type="button" className={`m-stat ${s.cls} ${s.active ? 'is-active' : ''}`} onClick={s.onClick}>
+                      <small>{s.label}</small>
+                      <b>{canSee ? s.value : '🔒'}</b>
+                    </button>
+                  ))}
+                </div>
+              </>
+            );
+          })()}
+
           <div className="date-nav-pills-bar">
             {/* Pill 1: Select Date (Drop down of all past dates) */}
             <div
@@ -3195,6 +3241,55 @@ export default function App() {
           </div>
         </section>
 
+        {/* Phone heading row (app layout): "Football · Yesterday", in-play pill, league picker (same state as the league select above). */}
+        {(() => {
+          const isResultsView = selectedSport === 'football' && selectedDate === dynamicDateTabs.yesterdayIso;
+          const dayLabel =
+            selectedDate === 'all'
+              ? 'All dates'
+              : selectedDate === dynamicDateTabs.todayIso
+              ? 'Today'
+              : selectedDate === dynamicDateTabs.yesterdayIso
+              ? 'Yesterday'
+              : (() => {
+                  const [y, m, d] = selectedDate.split('-').map(Number);
+                  return new Date(Date.UTC(y, m - 1, d, 12)).toLocaleDateString('en-GB', { timeZone: 'UTC', weekday: 'short', day: 'numeric', month: 'short' });
+                })();
+          return (
+            <div className="m-sec">
+              <h2 className="m-sec-title">{isResultsView ? 'Results' : 'Football'} · {dayLabel}</h2>
+              <div className="m-sec-right">
+                {scorecardStats.liveCount > 0 && (
+                  <button
+                    type="button"
+                    className={`m-live ${settlementFilter === 'pending' ? 'is-active' : ''}`}
+                    onClick={() => setSettlementFilter(settlementFilter === 'pending' ? 'all' : 'pending')}
+                    title={`${scorecardStats.liveCount} live now · ${activeTierStats.pending} in play or pending`}
+                  >
+                    <i aria-hidden="true" />
+                    {scorecardStats.liveCount} live
+                  </button>
+                )}
+                <label className="m-league" title={`Times shown in ${timeZoneAbbr}`}>
+                  <span>{selectedLeague === 'all' ? 'All leagues' : (availableLeagues.find((l) => l.code === selectedLeague)?.name || 'League')}</span>
+                  <span aria-hidden="true">▾</span>
+                  <select
+                    value={selectedLeague}
+                    onChange={(e) => setSelectedLeague(e.target.value)}
+                    aria-label="Filter by league"
+                  >
+                    <option value="all">All Leagues ({fixtures.length})</option>
+                    {availableLeagues.map((lg) => (
+                      <option key={lg.code} value={lg.code}>
+                        {lg.name} ({lg.count})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* 7. MAIN DASHBOARD 3-COLUMN GRID (Left Ad Sidebar + Fixtures Stream + Watchlist Sidebar) */}
         <div className="main-dashboard-grid">
@@ -3629,33 +3724,56 @@ export default function App() {
         currentUser={currentUser}
       />
 
-      {/* MOBILE APP BOTTOM TAB BAR (Sport Selectors: Dashboard Only) */}
-      {isDashboard && (
-      <nav className="mobile-app-bottom-bar mobile-app-bottom-bar--sports" aria-label="Mobile Sports & Account Navigation">
-        {sportsList.map((sport) => {
-          const isActive = isSportActive(sport.id);
-
-          return (
-            <button
-              key={sport.id}
-              type="button"
-              className={`mobile-tab-item ${isActive ? 'active' : ''}`}
-              onClick={() => handleSportSelect(sport.id)}
-              title={`${sport.name} Predictions`}
-            >
-              <span className="mobile-tab-icon">{sport.icon}</span>
-              <span className="mobile-tab-label">
-                {sport.id === 'american_football' ? 'Am. Football' : sport.name}
-              </span>
-            </button>
-          );
-        })}
-
-        {/* Dedicated Account Setting Tab */}
+      {/* PHONE APP BAR (Predictions | Play | Contact Us | Profile). Phones only; replaces the old sport and Play bars
+          and the top hub switch. Desktop never shows it. */}
+      {(isDashboard || isPlay) && (
+      <nav className="app-bottom-nav" aria-label="App navigation">
+        <button
+          type="button"
+          className={`app-nav-item app-nav-item--pred ${isDashboard ? 'is-active' : ''}`}
+          onClick={() => {
+            if (isDashboard) { window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
+            let target: string = DASHBOARD_PATHS.football;
+            try {
+              const saved = window.sessionStorage.getItem('oddsbanta_last_predictions_path');
+              if (saved && saved.startsWith('/dashboard')) target = saved;
+            } catch {}
+            navigate(target);
+          }}
+          aria-current={isDashboard ? 'page' : undefined}
+        >
+          <span className="app-nav-ic" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2" /></svg>
+          </span>
+          Predictions
+        </button>
+        <button
+          type="button"
+          className={`app-nav-item app-nav-item--play ${isPlay ? 'is-active' : ''}`}
+          onClick={() => { if (!isPlay) navigate(PLAY_BASE_PATH); else window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+          aria-current={isPlay ? 'page' : undefined}
+        >
+          <span className="app-nav-ic" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="5" /><circle cx="12" cy="12" r="1.5" fill="currentColor" /></svg>
+          </span>
+          <span className="app-nav-new">New</span>
+          Play
+        </button>
+        <a
+          className="app-nav-item"
+          href="https://wa.me/2348130896049"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          <span className="app-nav-ic" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round"><path d="M20 12a8 8 0 0 1-11.6 7.1L4 20l1-4.2A8 8 0 1 1 20 12z" /><path d="M9 10.5c.5 2 2 3.5 4 4l1.2-1.1 2 .9" /></svg>
+          </span>
+          Contact Us
+        </a>
         <button
           type="button"
           id="btn-mobile-nav-account"
-          className={`mobile-tab-item ${isProfileModalOpen ? 'active' : ''}`}
+          className={`app-nav-item ${isProfileModalOpen ? 'is-active' : ''}`}
           onClick={() => {
             if (currentUser) {
               setIsProfileModalOpen(true);
@@ -3664,30 +3782,13 @@ export default function App() {
               setIsAuthModalOpen(true);
             }
           }}
-          title={currentUser ? 'Account Settings & Profile' : 'Sign In to Account'}
-          aria-label="Account Settings & Profile"
+          aria-label={currentUser ? 'Account Settings & Profile' : 'Sign In to Account'}
         >
-          <span className="mobile-tab-icon">👤</span>
-          <span className="mobile-tab-label">Account</span>
+          <span className="app-nav-ic" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><circle cx="12" cy="8" r="4" /><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6" /></svg>
+          </span>
+          Profile
         </button>
-      </nav>
-      )}
-
-      {/* MOBILE APP BOTTOM TAB BAR (Play Hub only; same bar styling as the dashboard) */}
-      {isPlay && (
-      <nav className="mobile-app-bottom-bar" aria-label="Play Hub sections">
-        {PLAY_TABS.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            className={`mobile-tab-item ${playTabFromPath(location.pathname) === t.id ? 'active' : ''}`}
-            onClick={() => navigate(t.path)}
-            title={t.label}
-          >
-            <span className="mobile-tab-icon">{t.icon}</span>
-            <span className="mobile-tab-label">{t.label}</span>
-          </button>
-        ))}
       </nav>
       )}
 
