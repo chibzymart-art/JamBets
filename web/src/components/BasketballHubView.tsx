@@ -13,6 +13,7 @@ import {
 } from '../lib/dateUtils';
 import { BasketballPredictionCard } from './BasketballPredictionCard';
 import { MobileDateStrip } from './MobileDateStrip';
+import { MobileTierPills, MobileStatBoxes, MobileHubHeading, dayHeadingLabel } from './MobileHubControls';
 import { LeftSidebarAd } from './LeftSidebarAd';
 import { WatchlistSidebar } from './WatchlistSidebar';
 import { FavoritePredictionItem } from './FavoritesDrawer';
@@ -551,6 +552,37 @@ export const BasketballHubView: React.FC<BasketballHubViewProps> = ({
           countFor={(iso) => dynamicDateTabs.countByDate.get(iso)}
         />
 
+        {/* Phone control card: tier pills + stat boxes (same handlers as the KPI cards below).
+            No Settled box: this hub has no settled count, only won/lost. */}
+        <MobileTierPills
+          pills={[
+            { id: 'all', label: 'All', rate: isSubscriber ? scorecardStats.allWinRate : null, active: selectedTier === 'all' && settlementFilter === 'all', onClick: () => { setSelectedTier('all'); setSettlementFilter('all'); } },
+            { id: 'BANGER', label: 'Banger', rate: isSubscriber ? scorecardStats.bangerWinRate : null, active: selectedTier === 'BANGER', onClick: () => { setSettlementFilter('all'); chooseTier('BANGER'); } },
+            { id: 'TOP PICK', label: 'Top Pick', rate: isSubscriber ? scorecardStats.topPickWinRate : null, active: selectedTier === 'TOP PICK', onClick: () => { setSettlementFilter('all'); chooseTier('TOP PICK'); } },
+            { id: 'HIGH CONFIDENCE', label: 'High', rate: isSubscriber ? scorecardStats.highWinRate : null, active: selectedTier === 'HIGH CONFIDENCE', onClick: () => { setSettlementFilter('all'); chooseTier('HIGH CONFIDENCE'); } },
+            { id: 'MID CONFIDENCE', label: 'Mid', rate: isSubscriber ? scorecardStats.midWinRate : null, active: selectedTier === 'MID CONFIDENCE', onClick: () => { setSettlementFilter('all'); chooseTier('MID CONFIDENCE'); } },
+            { id: 'NO_SAFE_BANKER', label: 'No Safe', rate: isSubscriber ? scorecardStats.noSafeWinRate : null, active: selectedTier === 'NO_SAFE_BANKER', onClick: () => { setSettlementFilter('all'); chooseTier('NO_SAFE_BANKER'); } },
+          ]}
+        />
+        <MobileStatBoxes
+          stats={(() => {
+            const gate = (fn: () => void) => () => {
+              if (!isSubscriber) { if (onOpenSubscription) onOpenSubscription(); return; }
+              fn();
+            };
+            const toggle = (f: 'won' | 'lost') => gate(() => {
+              const next = settlementFilter === f ? 'all' : f;
+              setSettlementFilter(next);
+              if (next !== 'all') setSelectedTier('all');
+            });
+            return [
+              { key: 'won', label: 'Won', value: isSubscriber ? scorecardStats.allWon : '🔒', tone: 'won' as const, active: settlementFilter === 'won', onClick: toggle('won') },
+              { key: 'lost', label: 'Lost', value: isSubscriber ? scorecardStats.allLost : '🔒', tone: 'lost' as const, active: settlementFilter === 'lost', onClick: toggle('lost') },
+              { key: 'rate', label: 'Win rate', value: isSubscriber ? `${scorecardStats.allWinRate}%` : '🔒', tone: 'rate' as const, onClick: gate(() => { setSettlementFilter('all'); setSelectedTier('all'); }) },
+            ];
+          })()}
+        />
+
         {/* Date Navigation Pills Bar: Strictly Ordered: Select Date (Drop down) | Yesterday | Today | Day+1 | Day+2 | Day+3 | All Dates */}
         <div className="date-nav-pills-bar">
           {/* Pill 1: Select Date (Drop down of all past dates) */}
@@ -826,6 +858,19 @@ export const BasketballHubView: React.FC<BasketballHubViewProps> = ({
           </div>
         </div>
       </section>
+
+      {/* Phone heading row: "Basketball · Today" + league picker (same state as the league select above). */}
+      <MobileHubHeading
+        title={`Basketball · ${dayHeadingLabel(selectedDate, dynamicDateTabs.todayIso, dynamicDateTabs.yesterdayIso)}`}
+        pickerValue={selectedLeague}
+        onPickerChange={setSelectedLeague}
+        pickerAllLabel="All leagues"
+        pickerAriaLabel="Filter by basketball league"
+        pickerOptions={[
+          { value: 'all', label: `All Leagues (${availableLeagues.reduce((sum, l) => sum + l.count, 0)})` },
+          ...availableLeagues.map((l) => ({ value: l.code, label: `${l.name} (${l.count})` })),
+        ]}
+      />
 
       {/* 2. MAIN DASHBOARD 3-COLUMN GRID: LEFT AD SIDEBAR + CENTER BASKETBALL STREAM + RIGHT WATCHLIST SIDEBAR */}
       <div className="main-dashboard-grid" style={{ marginTop: 16 }}>
