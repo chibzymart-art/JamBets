@@ -70,7 +70,7 @@ export function HubSwitch() {
         >
           <span className="hub-switch-icon" aria-hidden="true">🎯</span>
           <span className="hub-switch-dot hub-switch-dot--play" aria-hidden="true" />
-          <span>Play<span className="hub-switch-word"> Hub</span></span>
+          <span>Banter<span className="hub-switch-word"> Hub</span></span>
           <span className="hub-switch-new">New</span>
         </button>
       </div>

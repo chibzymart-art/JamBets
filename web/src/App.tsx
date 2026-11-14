@@ -3757,7 +3757,7 @@ export default function App() {
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="5" /><circle cx="12" cy="12" r="1.5" fill="currentColor" /></svg>
           </span>
           <span className="app-nav-new">New</span>
-          Play
+          Banter
         </button>
         <a
           className="app-nav-item"

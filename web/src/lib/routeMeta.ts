@@ -52,7 +52,7 @@ export const ROUTE_SEO: Record<string, RouteSeo> = {
     description: 'Cricket predictions with a 0–10 confidence score are coming soon to Oddsbanta.',
   },
   '/play': {
-    title: 'Play Hub: Make Your Own Calls | Oddsbanta',
+    title: 'Banter Hub: Make Your Own Calls | Oddsbanta',
     description:
       'Make your own football calls, compete on weekly leaderboards and start private leagues with friends. Free to play, coming soon to Oddsbanta.',
   },
