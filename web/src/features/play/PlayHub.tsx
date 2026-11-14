@@ -20,7 +20,7 @@ function SignupCta({ isSignedIn, onCreateAccount }: PlayHubProps) {
   if (isSignedIn) {
     return (
       <p className="play-cta-note">
-        You're signed in, so you're ready. Play opens here as soon as it launches.
+        You're signed in, so you're ready. Banter Hub opens here as soon as it launches.
       </p>
     );
   }
@@ -125,7 +125,7 @@ export default function PlayHub(props: PlayHubProps) {
 
   return (
     <div className="play-hub">
-      <nav className="play-tabs" aria-label="Play Hub sections">
+      <nav className="play-tabs" aria-label="Banter Hub sections">
         {PLAY_TABS.map((t) => (
           <NavLink
             key={t.id}
@@ -182,13 +182,13 @@ export default function PlayHub(props: PlayHubProps) {
           <EmptyTab
             {...props}
             icon="👤"
-            title="Your Play profile"
+            title="Your Banter profile"
             body="Choose a handle and an avatar, and show off your badges, form and record against the AI."
           />
         )}
 
         <p className="play-disclaimer">
-          Oddsbanta is an analytics tool, not a bookmaker. Play is a free game with no stakes. 18+.
+          Oddsbanta is an analytics tool, not a bookmaker. Banter Hub is a free game with no stakes. 18+.
         </p>
       </div>
     </div>
