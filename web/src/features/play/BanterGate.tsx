@@ -15,7 +15,12 @@ interface BanterGateProps {
   isSignedIn: boolean;
   onCreateAccount: () => void;
   onOpenPricing: () => void;
-  children: (me: { handle: string; avatar: string; leagues: string[] | null }) => ReactNode;
+  /** The hub. `onProfileSaved` lets a child (e.g. Profile) push a new server state, so the
+   *  "Signed in as" line updates without a reload. */
+  children: (
+    me: { handle: string; avatar: string; leagues: string[] | null },
+    onProfileSaved: (s: BanterState) => void,
+  ) => ReactNode;
 }
 
 export function BanterGate({ isSignedIn, onCreateAccount, onOpenPricing, children }: BanterGateProps) {
@@ -87,80 +92,110 @@ export function BanterGate({ isSignedIn, onCreateAccount, onOpenPricing, childre
     return <ChooseUsername onSaved={setState} onUpgrade={onOpenPricing} />;
   }
 
-  return <>{children({ handle: state.handle, avatar: state.avatar, leagues: state.leagues })}</>;
+  return <>{children({ handle: state.handle, avatar: state.avatar, leagues: state.leagues }, setState)}</>;
 }
 
 function ChooseUsername({ onSaved, onUpgrade }: { onSaved: (s: BanterState) => void; onUpgrade: () => void }) {
-  const [handle, setHandle] = useState('');
-  const [avatar, setAvatar] = useState(AVATAR_CHOICES[0]);
+  return (
+    <section className="play-card banter-gate">
+      <h1 className="play-title">Choose your username</h1>
+      <p className="play-lead">This is the name other members see on picks and the leaderboard. Your email is never shown.</p>
+      <ProfileForm submitLabel="Save username" onSaved={onSaved} onUpgrade={onUpgrade} />
+    </section>
+  );
+}
+
+/**
+ * Username + avatar form, shared by the first-time screen and the Profile tab.
+ * Same local checks and server error messages in both places (banterHandle.ts).
+ */
+export function ProfileForm({
+  initialHandle = '',
+  initialAvatar = AVATAR_CHOICES[0],
+  submitLabel,
+  onSaved,
+  onUpgrade,
+}: {
+  initialHandle?: string;
+  initialAvatar?: string;
+  submitLabel: string;
+  onSaved: (s: BanterState) => void;
+  onUpgrade?: () => void;
+}) {
+  const [handle, setHandle] = useState(initialHandle);
+  const [avatar, setAvatar] = useState(AVATAR_CHOICES.includes(initialAvatar) ? initialAvatar : AVATAR_CHOICES[0]);
   const [touched, setTouched] = useState(false);
   const [serverCode, setServerCode] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
 
   const localProblem = checkHandle(handle);
   const message = serverCode ? handleMessage(serverCode) : touched ? handleMessage(localProblem) : '';
+  const unchanged = handle.trim() === initialHandle && avatar === initialAvatar && initialHandle !== '';
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setTouched(true);
     setServerCode(null);
-    if (localProblem) return;
+    setSaved(false);
+    if (localProblem || unchanged) return;
     setSaving(true);
     const res = await saveBanterProfile(handle, avatar);
     setSaving(false);
-    if (res.ok) onSaved(res.state);
-    else setServerCode(res.code);
+    if (res.ok) {
+      setSaved(true);
+      onSaved(res.state);
+    } else {
+      setServerCode(res.code);
+    }
   };
 
   return (
-    <section className="play-card banter-gate">
-      <h1 className="play-title">Choose your username</h1>
-      <p className="play-lead">This is the name other members see on picks and the leaderboard. Your email is never shown.</p>
-      <form className="banter-form" onSubmit={submit} noValidate>
-        <label className="banter-label" htmlFor="banter-handle">Username</label>
-        <input
-          id="banter-handle"
-          className={`banter-input ${message ? 'is-invalid' : ''}`}
-          value={handle}
-          maxLength={HANDLE_MAX + 5}
-          autoComplete="off"
-          autoCapitalize="off"
-          spellCheck={false}
-          placeholder="e.g. LagosOracle"
-          onChange={(e) => { setHandle(e.target.value); setServerCode(null); }}
-          onBlur={() => setTouched(true)}
-          aria-invalid={!!message}
-          aria-describedby="banter-handle-help"
-        />
-        <p id="banter-handle-help" className={`banter-help ${message ? 'is-error' : ''}`} role={message ? 'alert' : undefined}>
-          {message || `3 to ${HANDLE_MAX} characters: letters, numbers and underscores.`}
-        </p>
+    <form className="banter-form" onSubmit={submit} noValidate>
+      <label className="banter-label" htmlFor="banter-handle">Username</label>
+      <input
+        id="banter-handle"
+        className={`banter-input ${message ? 'is-invalid' : ''}`}
+        value={handle}
+        maxLength={HANDLE_MAX + 5}
+        autoComplete="off"
+        autoCapitalize="off"
+        spellCheck={false}
+        placeholder="e.g. LagosOracle"
+        onChange={(e) => { setHandle(e.target.value); setServerCode(null); setSaved(false); }}
+        onBlur={() => setTouched(true)}
+        aria-invalid={!!message}
+        aria-describedby="banter-handle-help"
+      />
+      <p id="banter-handle-help" className={`banter-help ${message ? 'is-error' : ''}`} role={message ? 'alert' : undefined}>
+        {message || `3 to ${HANDLE_MAX} characters: letters, numbers and underscores.`}
+      </p>
 
-        <span className="banter-label">Avatar</span>
-        <div className="banter-avatars" role="radiogroup" aria-label="Avatar">
-          {AVATAR_CHOICES.map((a) => (
-            <button
-              key={a}
-              type="button"
-              role="radio"
-              aria-checked={avatar === a}
-              className={`banter-avatar ${avatar === a ? 'is-selected' : ''}`}
-              onClick={() => setAvatar(a)}
-            >
-              {a}
-            </button>
-          ))}
-        </div>
-
-        <div className="play-cta-row">
-          <button type="submit" className="play-btn-primary" disabled={saving}>
-            {saving ? 'Saving…' : 'Save username'}
+      <span className="banter-label">Avatar</span>
+      <div className="banter-avatars" role="radiogroup" aria-label="Avatar">
+        {AVATAR_CHOICES.map((a) => (
+          <button
+            key={a}
+            type="button"
+            role="radio"
+            aria-checked={avatar === a}
+            className={`banter-avatar ${avatar === a ? 'is-selected' : ''}`}
+            onClick={() => { setAvatar(a); setSaved(false); }}
+          >
+            {a}
           </button>
-          {serverCode === 'no_access' && (
-            <button type="button" className="banter-link" onClick={onUpgrade}>See plans</button>
-          )}
-        </div>
-      </form>
-    </section>
+        ))}
+      </div>
+
+      <div className="play-cta-row">
+        <button type="submit" className="play-btn-primary" disabled={saving || unchanged}>
+          {saving ? 'Saving…' : submitLabel}
+        </button>
+        {saved && <span className="play-cta-note" role="status">Saved.</span>}
+        {serverCode === 'no_access' && onUpgrade && (
+          <button type="button" className="banter-link" onClick={onUpgrade}>See plans</button>
+        )}
+      </div>
+    </form>
   );
 }

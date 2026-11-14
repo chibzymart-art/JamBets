@@ -175,3 +175,17 @@ export function leagueErrorMessage(code: string): string {
       return 'Something went wrong. Please try again.';
   }
 }
+
+// ---------------------------------------------------------------------------
+// Profile
+// ---------------------------------------------------------------------------
+
+/** The caller's own row from a leaderboard reply, or null when they have no settled picks then. */
+export function myLeaderboardRow<T extends { is_me: boolean }>(rows: T[] | null | undefined): T | null {
+  return (rows || []).find((r) => r.is_me) || null;
+}
+
+/** Number of picks still waiting for a result. */
+export function pendingCount(picks: { status: string }[] | null | undefined): number {
+  return (picks || []).filter((p) => p.status === 'pending').length;
+}
