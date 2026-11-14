@@ -45,7 +45,7 @@ export function handleMessage(code: string | null): string {
     case 'avatar_invalid':
       return 'Please pick one of the avatars.';
     case 'no_access':
-      return 'Your access has ended. Upgrade to keep using Banter Hub.';
+      return 'Banter Hub is for paid members. Upgrade to keep using it.';
     case 'not_signed_in':
       return 'Please sign in again.';
     case 'no_user_row':

@@ -47,6 +47,15 @@ test('client rules match the migration (pattern and reserved list)', () => {
   for (const r of RESERVED_HANDLES) assert.ok(sql.includes(`'${r}'`), `reserved word ${r} missing in SQL`);
 });
 
+test('access is paid members only (no trial clause)', () => {
+  const sql = readFileSync('../../supabase/migrations/20261114000001_banter_foundations.sql', 'utf8');
+  const fn = sql.slice(sql.indexOf('create or replace function public.has_banter_access()'), sql.indexOf('revoke execute on function public.has_banter_access()'));
+  assert.ok(fn.includes('public.is_paid_subscriber()'), 'uses the paid helper');
+  assert.ok(fn.includes('public.is_admin()'), 'admins keep access');
+  assert.ok(!fn.includes('is_football_entitled'), 'must not use the trial-inclusive football check');
+  assert.ok(!/created_at|interval/.test(fn), 'no trial clock in the access check');
+});
+
 test('server state maps to the right screen and fails closed', () => {
   assert.deepEqual(toBanterState(null), { status: 'error' });
   assert.deepEqual(toBanterState(undefined), { status: 'error' });

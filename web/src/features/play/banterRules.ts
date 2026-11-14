@@ -90,7 +90,7 @@ export function pickErrorMessage(code: string): string {
     case 'no_profile':
       return 'Choose a username first.';
     case 'no_access':
-      return 'Your access has ended. Upgrade to keep picking.';
+      return 'Banter Hub is for paid members. Upgrade to keep picking.';
     case 'not_signed_in':
       return 'Please sign in again.';
     default:
