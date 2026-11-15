@@ -282,7 +282,8 @@ export function snippet(text: string, max = 80): string {
   return chars.length > max ? `${chars.slice(0, max - 1).join('')}…` : flat;
 }
 
-export function notificationLine(kind: string, fromHandle: string): string {
+export function notificationLine(kind: string, fromHandle: string, reaction?: string | null): string {
+  if (kind === 'reaction') return `${fromHandle} reacted ${reactionEmoji(reaction)} to your message`;
   if (kind === 'topic_reply') return `${fromHandle} replied in your topic`;
   return `${fromHandle} replied to you`;
 }
@@ -320,8 +321,43 @@ export function discussionErrorMessage(code: string): string {
 
 /** Where a notification opens: the topic at that reply, or the league with that wall post. */
 export function notificationHref(n: { kind: string; topic_id?: string | null; reply_id?: string | null; league_id?: string | null; post_id?: string | null }): string {
-  if (n.kind === 'league_reply' && n.league_id && n.post_id) {
+  if (n.league_id && n.post_id) {
     return `/play/leagues?league=${encodeURIComponent(n.league_id)}&post=${encodeURIComponent(n.post_id)}`;
   }
-  return `/play/discussion?topic=${encodeURIComponent(n.topic_id || '')}&reply=${encodeURIComponent(n.reply_id || '')}`;
+  const reply = n.reply_id ? `&reply=${encodeURIComponent(n.reply_id)}` : '';
+  return `/play/discussion?topic=${encodeURIComponent(n.topic_id || '')}${reply}`;
+}
+
+// ---------------------------------------------------------------------------
+// Reactions
+// ---------------------------------------------------------------------------
+
+export const REACTIONS = [
+  { id: 'up', emoji: '👍', label: 'Upvote' },
+  { id: 'down', emoji: '👎', label: 'Thumbs down' },
+  { id: 'angry', emoji: '😡', label: 'Angry' },
+  { id: 'laugh', emoji: '😂', label: 'Laugh' },
+  { id: 'cry', emoji: '😢', label: 'Cry' },
+] as const;
+
+export function reactionEmoji(id: string | null | undefined): string {
+  return REACTIONS.find((r) => r.id === id)?.emoji || '👍';
+}
+
+type RKind = (typeof REACTIONS)[number]['id'];
+
+/** What a tap does locally (the server confirms): add, change, or remove the member's reaction. */
+export function applyReaction(
+  state: { counts: Partial<Record<RKind, number>>; mine: RKind | null },
+  tapped: RKind,
+): { counts: Partial<Record<RKind, number>>; mine: RKind | null } {
+  const counts = { ...state.counts };
+  const dec = (k: RKind) => { counts[k] = Math.max(0, (counts[k] || 0) - 1); if (!counts[k]) delete counts[k]; };
+  if (state.mine === tapped) {
+    dec(tapped);
+    return { counts, mine: null };
+  }
+  if (state.mine) dec(state.mine);
+  counts[tapped] = (counts[tapped] || 0) + 1;
+  return { counts, mine: tapped };
 }

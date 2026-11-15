@@ -80,7 +80,7 @@ test('subscriptions: https endpoints, sane key sizes, only your own removed', ()
 test('sender endpoint verifies the token with Supabase Auth and validates input', () => {
   assert.ok(api.includes('/auth/v1/user'));
   assert.ok(api.includes("return json(req, 401, { error: 'not_signed_in' })"));
-  assert.ok(api.includes("new Set(['reply', 'post', 'join'])") && api.includes('UUID.test(id)'));
+  assert.ok(api.includes("new Set(['reply', 'post', 'join', 'reaction'])") && api.includes('UUID.test(id)'));
   assert.ok(api.includes("serviceRpc<Target[]>('banter_push_targets', { p_sender: userId"));
   assert.ok(api.includes('banter_push_results') && api.includes('r.gone'));
   assert.ok(api.includes('429'));
