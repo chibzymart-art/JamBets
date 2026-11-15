@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { fetchLeaderboard, type LeaderboardPeriod, type LeaderboardRow } from './banterApi';
-import { BANTER_POINTS, formatPoints, splitLeaderboard } from './banterRules';
+import { fetchCrowns, fetchLeaderboard, type LeaderboardPeriod, type LeaderboardRow } from './banterApi';
+import { BANTER_POINTS, formatPoints, hasCrown, splitLeaderboard } from './banterRules';
 import './banter.css';
 
 /**
@@ -19,6 +19,14 @@ export function BanterLeaderboard() {
   const [period, setPeriod] = useState<LeaderboardPeriod>('week');
   const [rows, setRows] = useState<LeaderboardRow[] | null>(null);
   const [error, setError] = useState(false);
+  const [crown, setCrown] = useState<string | null>(null);
+
+  // Last week's winner wears the crown all this week.
+  useEffect(() => {
+    let live = true;
+    fetchCrowns().then((r) => { if (live && r.ok) setCrown(r.data?.overall || null); });
+    return () => { live = false; };
+  }, []);
 
   useEffect(() => {
     let live = true;
@@ -39,7 +47,10 @@ export function BanterLeaderboard() {
       <span className="bh-lb-place">{r.place}</span>
       <span className="bh-lb-avatar" aria-hidden="true">{r.avatar_emoji}</span>
       <span className="bh-lb-who">
-        <b>{r.handle}{r.is_me ? ' (you)' : ''}</b>
+        <b>
+          {r.handle}{r.is_me ? ' (you)' : ''}
+          {hasCrown(crown, r.handle) && <span className="bh-crown" title="Last week's winner" aria-label="Last week's winner">👑</span>}
+        </b>
         <small>{r.settled} picks · {r.won} won · {r.lost} lost{r.voided ? ` · ${r.voided} void` : ''}</small>
       </span>
       <span className="bh-lb-score">

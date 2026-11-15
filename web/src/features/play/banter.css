@@ -974,3 +974,13 @@
 .bh-member-card .bh-stat-grid > div { display: flex; flex-direction: column; gap: 2px; padding: 8px; border-radius: 10px; background: var(--bg-secondary); text-align: center; }
 .bh-member-card .bh-stat-grid small { color: var(--text-muted); font-size: 11px; }
 .bh-member-card .bh-stat-grid b { font-size: 17px; color: var(--text-primary); }
+
+/* Weekly winners and streaks */
+.bh-crown { margin-left: 4px; font-size: 14px; }
+.bh-streaks { display: grid; gap: 10px; }
+.bh-crown-line { margin: 0; padding: 8px 10px; border-radius: 10px; background: rgba(234, 179, 8, .14); font-size: 13.5px; }
+.bh-stat-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.bh-stat-grid > div { display: flex; flex-direction: column; gap: 2px; padding: 8px; border-radius: 10px; background: var(--bg-secondary); text-align: center; }
+.bh-stat-grid small { color: var(--text-muted); font-size: 11px; }
+.bh-stat-grid b { font-size: 17px; color: var(--text-primary); }
+@media (max-width: 420px) { .bh-stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
