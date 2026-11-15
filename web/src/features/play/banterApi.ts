@@ -261,6 +261,9 @@ export interface TopicSummary {
   replies: number;
   is_me: boolean;
   can_delete: boolean;
+  /** Missing until the mentions / pins database change is applied. */
+  is_pinned?: boolean;
+  can_pin?: boolean;
 }
 
 export interface TopicReply {
@@ -297,7 +300,7 @@ export interface TopicDetail {
 
 export interface BanterNotification {
   id: string;
-  kind: 'reply' | 'topic_reply' | 'league_reply' | 'reaction';
+  kind: 'reply' | 'topic_reply' | 'league_reply' | 'reaction' | 'mention';
   /** For kind 'reaction'. */
   reaction?: ReactionKind | null;
   topic_id: string | null;
@@ -342,3 +345,18 @@ export const fetchUnreadCount = () => call<number>('banter_unread_count', {});
 
 export const markNotificationsRead = (ids: string[] | null) =>
   call<number>('banter_mark_notifications_read', { p_ids: ids });
+
+// ---------------------------------------------------------------------------
+// Mentions and pins
+// ---------------------------------------------------------------------------
+
+export interface HandleSuggestion {
+  handle: string;
+  avatar_emoji: string;
+}
+
+export const searchHandles = (prefix: string, leagueId: string | null = null) =>
+  call<HandleSuggestion[]>('banter_search_handles', { p_prefix: prefix, p_league_id: leagueId });
+
+export const pinTopic = (topicId: string, pinned: boolean) =>
+  call<boolean>('banter_pin_topic', { p_topic_id: topicId, p_pinned: pinned });

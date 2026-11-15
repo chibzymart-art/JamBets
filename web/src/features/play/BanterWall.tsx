@@ -4,6 +4,7 @@ import { WALL_MAX, WALL_PAGE, snippet, timeAgo, wallCharsLeft, wallErrorMessage 
 import { liveKey, sendPing, topVisible, useLiveRefresh } from './banterLive';
 import { notifyPush } from './banterPush';
 import { BanterReactions } from './BanterReactions';
+import { MentionTextarea, MessageText } from './BanterMentions';
 import './banter.css';
 
 /**
@@ -160,15 +161,16 @@ export function BanterWall({
               </div>
             )}
             <label className="bh-mkt-label" htmlFor={boxId}>{replyTo ? `Your reply to ${replyTo.handle}` : 'Say something'}</label>
-            <textarea
+            <MentionTextarea
               id={boxId}
               ref={boxRef}
               className="bh-input bh-textarea"
               value={body}
+              onValueChange={setBody}
+              leagueId={leagueId}
               rows={3}
               maxLength={WALL_MAX + 40}
               placeholder={leagueId ? 'Banter with your league…' : 'Banter with other members…'}
-              onChange={(e) => setBody(e.target.value)}
             />
             <div className="bh-inline bh-wall-actions">
               <span className={`bh-counter ${left < 0 ? 'is-over' : left <= 20 ? 'is-near' : ''}`} aria-live="polite">{left}</span>
@@ -217,7 +219,7 @@ export function BanterWall({
                         </button>
                       )
                     )}
-                    <p className="bh-post-body">{p.body}</p>
+                    <p className="bh-post-body"><MessageText text={p.body} /></p>
                     {p.tagged_handle && (
                       <span className={`bh-tagged ${p.tagged_is_me ? 'is-me' : ''}`}>
                         🏷 {p.tagged_is_me ? 'You were tagged' : `${p.tagged_handle} was tagged`}

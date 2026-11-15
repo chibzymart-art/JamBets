@@ -95,7 +95,7 @@ test('posts render as plain text (no innerHTML, no linkify)', () => {
   const src = readFileSync('../../web/src/features/play/BanterWall.tsx', 'utf8');
   assert.ok(!src.includes('dangerouslySetInnerHTML'));
   assert.ok(!/linkify|autolink|<a /i.test(src));
-  assert.ok(src.includes('{p.body}'));
+  assert.ok(src.includes('text={p.body}'));
 });
 
 console.log(`banter-wall: ${passed} passed`);

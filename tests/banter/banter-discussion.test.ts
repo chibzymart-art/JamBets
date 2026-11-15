@@ -156,7 +156,7 @@ test('every Discussion error has a message, including not switched on yet', () =
 test('messages render as plain text (no innerHTML, no linkify)', () => {
   assert.ok(!ui.includes('dangerouslySetInnerHTML'));
   assert.ok(!/linkify|autolink|<a /i.test(ui));
-  assert.ok(ui.includes('{r.body}') && ui.includes('{data.topic.body}'));
+  assert.ok(ui.includes('text={r.body}') && ui.includes('text={data.topic.body}'));
 });
 
 console.log(`banter-discussion: ${passed} passed`);

@@ -6,6 +6,7 @@ import {
   deleteTopic,
   fetchTopic,
   fetchTopics,
+  pinTopic,
   postReply,
   type TopicDetail,
   type TopicReply,
@@ -26,6 +27,7 @@ import { RepliesToYou } from './BanterRepliesToYou';
 import { liveKey, nearBottom, sendPing, useLiveRefresh } from './banterLive';
 import { notifyPush } from './banterPush';
 import { BanterReactions } from './BanterReactions';
+import { MentionTextarea, MessageText } from './BanterMentions';
 import './banter.css';
 
 /**
@@ -114,7 +116,7 @@ function TopicList({
     const r = await fetchTopics(query, TOPIC_PAGE, 0);
     if (!r.ok) return;
     const fresh = r.data || [];
-    const sig = (l: TopicSummary[]) => l.map((t) => `${t.id}:${t.replies}:${t.last_activity_at}`).join('|');
+    const sig = (l: TopicSummary[]) => l.map((t) => `${t.id}:${t.replies}:${t.last_activity_at}:${t.is_pinned ? 1 : 0}`).join('|');
     if (sig(fresh) === sig(current.slice(0, fresh.length)) && fresh.length === Math.min(current.length, TOPIC_PAGE)) return;
     if (current.length <= TOPIC_PAGE && window.scrollY < 300) {
       setNow(Date.now());
@@ -153,8 +155,20 @@ function TopicList({
     setTitle('');
     setBody('');
     setComposing(false);
+    notifyPush('topic', r.data.id);
     sendPing(liveKey.topicList());
     onOpen(r.data.id);
+  };
+
+  const togglePin = async (t: TopicSummary) => {
+    setError(null);
+    const r = await pinTopic(t.id, !t.is_pinned);
+    if (!r.ok) {
+      setError(r.code === 'not_allowed' ? 'Only admins can pin topics.' : discussionErrorMessage(r.code));
+      return;
+    }
+    sendPing(liveKey.topicList());
+    await load();
   };
 
   const remove = async (id: string) => {
@@ -194,14 +208,14 @@ function TopicList({
                 <span className={`bh-counter ${titleLeft < 0 ? 'is-over' : titleLeft <= 15 ? 'is-near' : ''}`}>{titleLeft}</span>
               </div>
               <label className="bh-mkt-label" htmlFor="bh-topic-body">Start the discussion</label>
-              <textarea
+              <MentionTextarea
                 id="bh-topic-body"
                 className="bh-input bh-textarea"
                 value={body}
+                onValueChange={setBody}
                 rows={4}
                 maxLength={TOPIC_BODY_MAX + 50}
                 placeholder="Say what you think. Others can reply in the topic."
-                onChange={(e) => setBody(e.target.value)}
               />
               <div className="bh-inline bh-wall-actions">
                 <span className={`bh-counter ${bodyLeft < 0 ? 'is-over' : bodyLeft <= 50 ? 'is-near' : ''}`} aria-live="polite">{bodyLeft}</span>
@@ -252,7 +266,10 @@ function TopicList({
                   <div className="bh-post-main">
                     <button type="button" className="bh-topic-row bh-link" onClick={() => onOpen(t.id)}>
                       <span className="bh-post-main">
-                        <span className="bh-topic-title">{t.title}</span>
+                        <span className="bh-topic-title">
+                          {t.is_pinned && <span className="bh-pin-badge" aria-label="Pinned">📌 Pinned</span>}
+                          {t.title}
+                        </span>
                         <span className="bh-topic-preview">{t.preview}</span>
                       </span>
                     </button>
@@ -260,6 +277,11 @@ function TopicList({
                       <span>{t.handle}{t.is_me ? ' (you)' : ''}</span>
                       <span>💬 {t.replies} {t.replies === 1 ? 'reply' : 'replies'}</span>
                       <span title={new Date(t.last_activity_at).toLocaleString()}>active {timeAgo(t.last_activity_at, now)}</span>
+                      {t.can_pin && (
+                        <button type="button" className="bh-link" onClick={() => togglePin(t)}>
+                          {t.is_pinned ? 'Unpin' : '📌 Pin'}
+                        </button>
+                      )}
                       {t.can_delete && (
                         <button type="button" className="bh-link-danger" onClick={() => remove(t.id)}>Delete</button>
                       )}
@@ -446,7 +468,7 @@ function TopicView({ topicId, focusReply, onBack }: { topicId: string; focusRepl
                 )}
               </div>
               <h2>{data.topic.title}</h2>
-              <p className="bh-post-body">{data.topic.body}</p>
+              <p className="bh-post-body"><MessageText text={data.topic.body} /></p>
               <BanterReactions
                 kind="topic"
                 id={data.topic.id}
@@ -489,7 +511,7 @@ function TopicView({ topicId, focusReply, onBack }: { topicId: string; focusRepl
                         </button>
                       )
                     )}
-                    <p className="bh-post-body">{r.body}</p>
+                    <p className="bh-post-body"><MessageText text={r.body} /></p>
                     {r.tagged_handle && (
                       <span className={`bh-tagged ${r.tagged_is_me ? 'is-me' : ''}`}>
                         🏷 {r.tagged_is_me ? 'You were tagged' : `${r.tagged_handle} was tagged`}
@@ -528,15 +550,15 @@ function TopicView({ topicId, focusReply, onBack }: { topicId: string; focusRepl
               </div>
             )}
             <label className="bh-mkt-label" htmlFor="bh-reply-box">{replyTo ? `Your reply to ${replyTo.handle}` : 'Reply in this topic'}</label>
-            <textarea
+            <MentionTextarea
               id="bh-reply-box"
               ref={boxRef}
               className="bh-input bh-textarea"
               value={body}
+              onValueChange={setBody}
               rows={3}
               maxLength={REPLY_MAX + 40}
               placeholder="Join the discussion…"
-              onChange={(e) => setBody(e.target.value)}
             />
             <div className="bh-inline bh-wall-actions">
               <span className={`bh-counter ${left < 0 ? 'is-over' : left <= 30 ? 'is-near' : ''}`} aria-live="polite">{left}</span>
