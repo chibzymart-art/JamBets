@@ -815,3 +815,52 @@
 .bh-public-row:first-child { border-top: 0; }
 .bh-public-row .bh-league-title { flex: 1; min-width: 0; }
 .bh-public-row .bh-league-title b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Discussion */
+.bh-disc-search { margin-bottom: 8px; }
+.bh-topics { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.bh-topic-row {
+  display: flex; gap: 10px; align-items: flex-start; width: 100%; text-align: left;
+  cursor: pointer; border: 0; font: inherit; color: inherit;
+}
+.bh-topic-row .bh-post-main { flex: 1; min-width: 0; }
+.bh-topic-title { display: block; font-size: 15px; font-weight: 700; line-height: 1.3; overflow-wrap: anywhere; }
+.bh-topic-preview {
+  margin: 4px 0 0; color: var(--text-muted); font-size: 13px; line-height: 1.4;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere;
+}
+.bh-topic-meta { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 6px; color: var(--text-muted); font-size: 12px; }
+.bh-topic-head { margin-bottom: 10px; }
+.bh-topic-head h2 { margin: 6px 0; font-size: 18px; line-height: 1.3; overflow-wrap: anywhere; }
+.bh-back { padding: 0; }
+.bh-replies { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.bh-reply.is-target { outline: 2px solid var(--green-primary); outline-offset: 1px; }
+.bh-reply.is-tagged-me { border-left: 3px solid var(--green-primary); }
+.bh-quote {
+  display: block; width: 100%; text-align: left; margin: 2px 0 6px; padding: 6px 8px;
+  border: 0; border-left: 3px solid rgba(148, 163, 184, .45); border-radius: 6px;
+  background: rgba(148, 163, 184, .1); color: var(--text-muted); font: inherit; font-size: 12px; cursor: pointer;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.bh-quote b { color: inherit; }
+.bh-tagged { display: block; margin-top: 4px; font-size: 11px; color: var(--text-muted); }
+.bh-tagged.is-me { color: var(--green-primary); font-weight: 700; }
+.bh-reply-actions { display: flex; gap: 12px; margin-top: 4px; }
+.bh-replying {
+  display: flex; align-items: center; gap: 8px; padding: 6px 8px; margin-bottom: 6px;
+  border-radius: 8px; background: rgba(34, 197, 94, .1); font-size: 12px;
+}
+.bh-replying span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bh-notifs { margin-bottom: 12px; }
+.bh-notif-toggle { display: inline-flex; align-items: center; gap: 6px; }
+.bh-notif-count {
+  display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; padding: 0 5px;
+  border-radius: 999px; background: #ef4444; color: #fff; font-size: 11px; font-weight: 800;
+}
+.bh-notif-list { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.bh-notif {
+  display: flex; gap: 10px; width: 100%; text-align: left; padding: 8px 10px; border: 0; border-radius: 10px;
+  background: rgba(148, 163, 184, .08); color: inherit; font: inherit; cursor: pointer;
+}
+.bh-notif.is-unread { background: rgba(34, 197, 94, .12); }
+.bh-notif > span:last-child { flex: 1; min-width: 0; }
+.bh-notif small { display: block; color: var(--text-muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

@@ -217,3 +217,84 @@ export const postToWall = (body: string, leagueId: string | null) =>
   call<{ id: string; created_at: string }>('banter_post', { p_body: body.trim(), p_league_id: leagueId });
 
 export const deleteWallPost = (postId: string) => call<boolean>('banter_delete_post', { p_post_id: postId });
+
+// ---------------------------------------------------------------------------
+// Discussion (topics, replies, in-app notifications)
+// ---------------------------------------------------------------------------
+
+export interface TopicSummary {
+  id: string;
+  title: string;
+  preview: string;
+  handle: string;
+  avatar_emoji: string;
+  created_at: string;
+  last_activity_at: string;
+  replies: number;
+  is_me: boolean;
+  can_delete: boolean;
+}
+
+export interface TopicReply {
+  id: string;
+  body: string;
+  handle: string;
+  avatar_emoji: string;
+  created_at: string;
+  is_me: boolean;
+  can_delete: boolean;
+  tagged_handle: string | null;
+  tagged_is_me: boolean;
+  reply_to: { id: string; removed: true } | { id: string; removed: false; handle: string; preview: string } | null;
+}
+
+export interface TopicDetail {
+  topic: {
+    id: string;
+    title: string;
+    body: string;
+    handle: string;
+    avatar_emoji: string;
+    created_at: string;
+    last_activity_at: string;
+    is_me: boolean;
+    can_delete: boolean;
+  };
+  replies: TopicReply[];
+}
+
+export interface BanterNotification {
+  id: string;
+  kind: 'reply' | 'topic_reply';
+  topic_id: string;
+  topic_title: string;
+  reply_id: string;
+  preview: string;
+  from_handle: string;
+  from_avatar: string;
+  created_at: string;
+  is_read: boolean;
+}
+
+export const fetchTopics = (search: string, limit = 20, offset = 0) =>
+  call<TopicSummary[]>('banter_topics', { p_search: search.trim() || null, p_limit: limit, p_offset: offset });
+
+export const fetchTopic = (topicId: string) => call<TopicDetail>('banter_topic', { p_topic_id: topicId });
+
+export const createTopic = (title: string, body: string) =>
+  call<{ id: string; created_at: string }>('banter_create_topic', { p_title: title.trim(), p_body: body.trim() });
+
+export const postReply = (topicId: string, body: string, replyTo: string | null) =>
+  call<{ id: string; created_at: string }>('banter_post_reply', { p_topic_id: topicId, p_body: body.trim(), p_reply_to: replyTo });
+
+export const deleteTopic = (topicId: string) => call<boolean>('banter_delete_topic', { p_topic_id: topicId });
+
+export const deleteReply = (replyId: string) => call<boolean>('banter_delete_reply', { p_reply_id: replyId });
+
+export const fetchNotifications = (limit = 30) =>
+  call<BanterNotification[]>('banter_my_notifications', { p_limit: limit });
+
+export const fetchUnreadCount = () => call<number>('banter_unread_count', {});
+
+export const markNotificationsRead = (ids: string[] | null) =>
+  call<number>('banter_mark_notifications_read', { p_ids: ids });

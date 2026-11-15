@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { PLAY_TABS, playTabFromPath } from './playTabs';
 import { BanterGate } from './BanterGate';
@@ -6,7 +7,8 @@ import { BanterMyPicks } from './BanterMyPicks';
 import { BanterLeaderboard } from './BanterLeaderboard';
 import { BanterLeagues } from './BanterLeagues';
 import { BanterProfile } from './BanterProfile';
-import { BanterWall } from './BanterWall';
+import { BanterDiscussion } from './BanterDiscussion';
+import { fetchUnreadCount } from './banterApi';
 import { BANTER_POINTS } from './banterRules';
 import './play.css';
 
@@ -135,6 +137,21 @@ function EmptyTab({
 export default function PlayHub(props: PlayHubProps) {
   const location = useLocation();
   const tab = playTabFromPath(location.pathname);
+  const [unread, setUnread] = useState(0);
+
+  // Unread "Replies to you" for the Discussion tab badge. Quietly 0 when not live, signed out,
+  // without access or before the database change is applied.
+  const refreshUnread = () => {
+    if (!BANTER_LIVE || !props.isSignedIn) { setUnread(0); return; }
+    fetchUnreadCount().then((r) => setUnread(r.ok ? Number(r.data) || 0 : 0));
+  };
+  useEffect(() => {
+    refreshUnread();
+    if (!BANTER_LIVE || !props.isSignedIn) return;
+    const t = setInterval(refreshUnread, 60_000);
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.isSignedIn, location.pathname]);
 
   return (
     <div className="play-hub">
@@ -148,6 +165,9 @@ export default function PlayHub(props: PlayHubProps) {
           >
             <span aria-hidden="true">{t.icon}</span>
             {t.label}
+            {t.id === 'discussion' && unread > 0 && (
+              <span className="play-tab-badge" aria-label={`${unread} unread`}>{unread > 99 ? '99+' : unread}</span>
+            )}
           </NavLink>
         ))}
       </nav>
@@ -172,8 +192,8 @@ export default function PlayHub(props: PlayHubProps) {
                   <BanterLeaderboard />
                 ) : tab === 'leagues' ? (
                   <BanterLeagues />
-                ) : tab === 'wall' ? (
-                  <BanterWall />
+                ) : tab === 'discussion' ? (
+                  <BanterDiscussion onNotificationsChanged={refreshUnread} />
                 ) : tab === 'profile' ? (
                   <BanterProfile me={me} onProfileSaved={onProfileSaved} />
                 ) : (
@@ -236,12 +256,12 @@ function HubTabs({ tab, ...props }: PlayHubProps & { tab: ReturnType<typeof play
           />
         )}
 
-        {tab === 'wall' && (
+        {tab === 'discussion' && (
           <EmptyTab
             {...props}
             icon="💬"
-            title="Banter wall"
-            body="Post your takes and banter with other members, plus a private wall in every league."
+            title="Discussion"
+            body="Start a topic, reply to other members and get notified when someone replies to you. Every league keeps its own wall too."
           />
         )}
 
