@@ -83,6 +83,9 @@ test('follows: picks (collapsed), topics and Discussion posts; league posts only
   const pick = fnBody('banter_fanout_pick');
   assert.ok(pick.includes("interval '6 hours'") && pick.includes('item_count = n.item_count + 1'));
   assert.ok(sql.includes('after insert on public.football_user_picks'));
+  // A notification failure must never block a pick from saving.
+  assert.ok(pick.includes('exception when others then') && pick.includes('raise warning'));
+  assert.ok(/end;\s*return new;\s*end;\s*$/.test(pick), 'returns new after the guarded block');
   assert.ok(!fnBody('banter_fanout_post').includes('banter_follows'), 'no follower fan-out on league chats');
   const f = fnBody('banter_follow');
   assert.ok(f.includes("raise exception 'member_not_found'") && f.includes('v_target = v_uid'));

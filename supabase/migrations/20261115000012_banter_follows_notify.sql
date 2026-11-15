@@ -155,25 +155,30 @@ security definer
 set search_path = ''
 as $$
 begin
-  if exists (select 1 from public.player_profiles pp where pp.user_id = new.user_id and pp.leaderboard_banned) then
-    return new;
-  end if;
+  -- Notifications must never stop a pick from saving: any error here is logged and ignored.
+  begin
+    if exists (select 1 from public.player_profiles pp where pp.user_id = new.user_id and pp.leaderboard_banned) then
+      return new;
+    end if;
 
-  update public.banter_notifications n
-     set pick_id = new.id, item_count = n.item_count + 1, created_at = now()
-   where n.kind = 'follow_pick' and n.from_user_id = new.user_id and n.read_at is null
-     and n.created_at > now() - interval '6 hours'
-     and n.user_id in (select f.follower_id from public.banter_follows f where f.followee_id = new.user_id);
+    update public.banter_notifications n
+       set pick_id = new.id, item_count = n.item_count + 1, created_at = now()
+     where n.kind = 'follow_pick' and n.from_user_id = new.user_id and n.read_at is null
+       and n.created_at > now() - interval '6 hours'
+       and n.user_id in (select f.follower_id from public.banter_follows f where f.followee_id = new.user_id);
 
-  insert into public.banter_notifications (user_id, kind, pick_id, from_user_id)
-  select f.follower_id, 'follow_pick', new.id, new.user_id
-    from public.banter_follows f
-    join public.player_profiles pp on pp.user_id = f.follower_id and not pp.leaderboard_banned
-   where f.followee_id = new.user_id
-     and not exists (select 1 from public.banter_notifications n
-                      where n.kind = 'follow_pick' and n.from_user_id = new.user_id and n.user_id = f.follower_id
-                        and n.read_at is null and n.created_at > now() - interval '6 hours')
-     and public.banter_user_has_access(f.follower_id);
+    insert into public.banter_notifications (user_id, kind, pick_id, from_user_id)
+    select f.follower_id, 'follow_pick', new.id, new.user_id
+      from public.banter_follows f
+      join public.player_profiles pp on pp.user_id = f.follower_id and not pp.leaderboard_banned
+     where f.followee_id = new.user_id
+       and not exists (select 1 from public.banter_notifications n
+                        where n.kind = 'follow_pick' and n.from_user_id = new.user_id and n.user_id = f.follower_id
+                          and n.read_at is null and n.created_at > now() - interval '6 hours')
+       and public.banter_user_has_access(f.follower_id);
+  exception when others then
+    raise warning 'banter_fanout_pick skipped for pick %: %', new.id, sqlerrm;
+  end;
   return new;
 end;
 $$;
