@@ -23,6 +23,7 @@ import {
   topicTitleValid,
 } from './banterRules';
 import { RepliesToYou } from './BanterRepliesToYou';
+import { liveKey, nearBottom, sendPing, useLiveRefresh } from './banterLive';
 import './banter.css';
 
 /**
@@ -100,6 +101,29 @@ function TopicList({
     load();
   }, [load]);
 
+  // Live: new topics and new activity. Only the first page is refreshed in place, and only while
+  // the top of the list is on screen; otherwise a "New activity" chip offers the refresh.
+  const [newActivity, setNewActivity] = useState(false);
+  const topicsRef = useRef<TopicSummary[] | null>(null);
+  topicsRef.current = topics;
+  useLiveRefresh([liveKey.topicList()], async () => {
+    const current = topicsRef.current;
+    if (!current || loadError) return;
+    const r = await fetchTopics(query, TOPIC_PAGE, 0);
+    if (!r.ok) return;
+    const fresh = r.data || [];
+    const sig = (l: TopicSummary[]) => l.map((t) => `${t.id}:${t.replies}:${t.last_activity_at}`).join('|');
+    if (sig(fresh) === sig(current.slice(0, fresh.length)) && fresh.length === Math.min(current.length, TOPIC_PAGE)) return;
+    if (current.length <= TOPIC_PAGE && window.scrollY < 300) {
+      setNow(Date.now());
+      setTopics(fresh);
+      setHasMore(fresh.length === TOPIC_PAGE);
+      setNewActivity(false);
+    } else {
+      setNewActivity(true);
+    }
+  });
+
   const loadMore = async () => {
     if (!topics) return;
     setBusy(true);
@@ -127,6 +151,7 @@ function TopicList({
     setTitle('');
     setBody('');
     setComposing(false);
+    sendPing(liveKey.topicList());
     onOpen(r.data.id);
   };
 
@@ -135,6 +160,7 @@ function TopicList({
     const r = await deleteTopic(id);
     if (!r.ok) { setError(discussionErrorMessage(r.code)); return; }
     setTopics((t) => (t || []).filter((x) => x.id !== id));
+    sendPing(liveKey.topicList(), liveKey.topic(id));
   };
 
   return (
@@ -199,6 +225,16 @@ function TopicList({
               autoComplete="off"
             />
           </div>
+
+          {newActivity && (
+            <button
+              type="button"
+              className="bh-live-chip bh-live-chip--inline"
+              onClick={() => { setNewActivity(false); setTopics(null); void load(); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+            >
+              ↻ New activity, tap to refresh
+            </button>
+          )}
 
           {topics === null ? (
             <p className="bh-muted" aria-busy="true">Loading topics…</p>
@@ -266,6 +302,54 @@ function TopicView({ topicId, focusReply, onBack }: { topicId: string; focusRepl
   }, [topicId]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Live: new replies and tags show up while the topic is open. New replies are appended (nothing
+  // above them moves). Reading the latest: scroll to the first new one. Scrolled up: a chip.
+  const [newIds, setNewIds] = useState<string[]>([]);
+  const dataRef = useRef<TopicDetail | null>(null);
+  dataRef.current = data;
+  useLiveRefresh([liveKey.topic(topicId)], async () => {
+    const current = dataRef.current;
+    if (!current) return;
+    const r = await fetchTopic(topicId);
+    if (!r.ok) {
+      if (r.code === 'topic_not_found') setLoadError(discussionErrorMessage(r.code));
+      return; // a passing network error keeps what is on screen
+    }
+    const known = new Set(current.replies.map((x) => x.id));
+    const added = r.data.replies.filter((x) => !known.has(x.id) && !x.is_me).map((x) => x.id);
+    const sig = (d: TopicDetail) => d.replies.map((x) => `${x.id}:${x.tagged_handle || ''}`).join('|') + d.topic.title;
+    if (sig(r.data) === sig(current)) return;
+    const atBottom = nearBottom();
+    setNow(Date.now());
+    setData(r.data);
+    if (added.length === 0) return;
+    if (atBottom) {
+      setTimeout(() => {
+        document.getElementById(`bh-reply-${added[0]}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 50);
+      setHighlight(added[0]);
+    } else {
+      setNewIds((prev) => [...prev, ...added.filter((id) => !prev.includes(id))]);
+    }
+  });
+
+  const showNew = () => {
+    const first = newIds[0];
+    setNewIds([]);
+    if (first) {
+      document.getElementById(`bh-reply-${first}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setHighlight(first);
+    }
+  };
+
+  // Clear the chip once the member scrolls down to the newest messages themselves.
+  useEffect(() => {
+    if (newIds.length === 0) return;
+    const onScroll = () => { if (nearBottom(120)) setNewIds([]); };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, [newIds.length]);
   useEffect(() => { if (focusReply) setHighlight(focusReply); }, [focusReply]);
 
   // Coming from "Replies to you": scroll to that message once it is on screen.
@@ -306,6 +390,11 @@ function TopicView({ topicId, focusReply, onBack }: { topicId: string; focusRepl
       : await postReply(topicId, body, replyTo ? replyTo.id : null);
     setBusy(false);
     if (!r.ok) { setError(discussionErrorMessage(r.code)); return; }
+    // Tell everyone looking: this topic, the topic list, and the members this reply notifies.
+    const pings = [liveKey.topic(topicId), liveKey.topicList()];
+    if (replyTo && !replyTo.is_me) pings.push(liveKey.member(replyTo.handle));
+    if (data && !data.topic.is_me) pings.push(liveKey.member(data.topic.handle));
+    sendPing(...pings);
     setBody('');
     setReplyTo(null);
     await load();
@@ -316,6 +405,7 @@ function TopicView({ topicId, focusReply, onBack }: { topicId: string; focusRepl
     setError(null);
     const r = await deleteReply(id);
     if (!r.ok) { setError(discussionErrorMessage(r.code)); return; }
+    sendPing(liveKey.topic(topicId), liveKey.topicList());
     await load();
   };
 
@@ -323,6 +413,7 @@ function TopicView({ topicId, focusReply, onBack }: { topicId: string; focusRepl
     setError(null);
     const r = await deleteTopic(topicId);
     if (!r.ok) { setError(discussionErrorMessage(r.code)); return; }
+    sendPing(liveKey.topic(topicId), liveKey.topicList());
     onBack();
   };
 
@@ -402,6 +493,12 @@ function TopicView({ topicId, focusReply, onBack }: { topicId: string; focusRepl
                 </li>
               ))}
             </ul>
+          )}
+
+          {newIds.length > 0 && (
+            <button type="button" className="bh-live-chip" onClick={showNew} aria-live="polite">
+              ↓ {newIds.length} new {newIds.length === 1 ? 'message' : 'messages'}
+            </button>
           )}
 
           <form className="bh-card bh-wall-form" onSubmit={submit}>

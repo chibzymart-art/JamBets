@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { deleteWallPost, fetchWall, postToWall, type WallPost } from './banterApi';
 import { WALL_MAX, WALL_PAGE, snippet, timeAgo, wallCharsLeft, wallErrorMessage } from './banterRules';
+import { liveKey, sendPing, topVisible, useLiveRefresh } from './banterLive';
 import './banter.css';
 
 /**
@@ -46,6 +47,42 @@ export function BanterWall({
 
   useEffect(() => { if (focusPostId) setHighlight(focusPostId); }, [focusPostId]);
 
+  // Live: newest posts are at the top. If the top of the wall is on screen they slide in; if the
+  // member has scrolled down to read, nothing moves and a "new messages" chip waits at the top.
+  const listRef = useRef<HTMLDivElement | null>(null);
+  const postsRef = useRef<WallPost[] | null>(null);
+  postsRef.current = posts;
+  const [pending, setPending] = useState<WallPost[] | null>(null);
+  const merge = (fresh: WallPost[], current: WallPost[]) => {
+    const oldest = fresh.length ? fresh[fresh.length - 1].created_at : null;
+    const older = oldest ? current.filter((p) => p.created_at < oldest && !fresh.some((f) => f.id === p.id)) : current;
+    return fresh.length < WALL_PAGE ? fresh : [...fresh, ...older];
+  };
+  useLiveRefresh([leagueId ? liveKey.league(leagueId) : null], async () => {
+    const current = postsRef.current;
+    if (!current || loadError) return;
+    const r = await fetchWall(leagueId, null, WALL_PAGE);
+    if (!r.ok) return;
+    const fresh = r.data || [];
+    const sig = (l: WallPost[]) => l.map((p) => `${p.id}:${p.tagged_handle || ''}`).join('|');
+    if (sig(fresh) === sig(current.slice(0, fresh.length))) return;
+    const added = fresh.filter((f) => !current.some((p) => p.id === f.id) && !f.is_me);
+    if (added.length === 0 || topVisible(listRef.current)) {
+      setNow(Date.now());
+      setPosts(merge(fresh, current));
+      setPending(null);
+    } else {
+      setPending(fresh);
+    }
+  });
+
+  const showPending = () => {
+    if (pending && posts) { setNow(Date.now()); setPosts(merge(pending, posts)); }
+    setPending(null);
+    listRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+  const pendingCount = pending && posts ? pending.filter((f) => !posts.some((p) => p.id === f.id)).length : 0;
+
   // Scroll to the highlighted post once it is on screen, then let the highlight fade.
   useEffect(() => {
     if (!posts || !highlight) return;
@@ -86,8 +123,10 @@ export function BanterWall({
     const r = await postToWall(body, leagueId, replyTo ? replyTo.id : null);
     setBusy(false);
     if (!r.ok) { setError(wallErrorMessage(r.code)); return; }
+    sendPing(leagueId ? liveKey.league(leagueId) : null, replyTo && !replyTo.is_me ? liveKey.member(replyTo.handle) : null);
     setBody('');
     setReplyTo(null);
+    setPending(null);
     await load();
   };
 
@@ -96,6 +135,7 @@ export function BanterWall({
     const r = await deleteWallPost(id);
     if (!r.ok) { setError(wallErrorMessage(r.code)); return; }
     setPosts((p) => (p || []).filter((x) => x.id !== id));
+    sendPing(leagueId ? liveKey.league(leagueId) : null);
   };
 
   return (
@@ -139,6 +179,13 @@ export function BanterWall({
           </form>
 
           {error && <p className="bh-error" role="alert">{error}</p>}
+
+          <div ref={listRef} />
+          {pendingCount > 0 && (
+            <button type="button" className="bh-live-chip bh-live-chip--inline" onClick={showPending} aria-live="polite">
+              ↑ {pendingCount} new {pendingCount === 1 ? 'message' : 'messages'}
+            </button>
+          )}
 
           {posts === null ? (
             <p className="bh-muted" aria-busy="true">Loading the wall…</p>
