@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useUserTimeZone } from '../../lib/dateUtils';
 import { fetchLeaderboard, fetchMyFootballPicks, type BanterState, type LeaderboardPeriod, type LeaderboardRow } from './banterApi';
 import { ProfileForm } from './BanterGate';
+import { fetchMyTennisPicks } from './banterTennisApi';
 import { formatPoints, myLeaderboardRow, pendingCount } from './banterRules';
 import './banter.css';
 
@@ -46,8 +47,8 @@ export function BanterProfile({
 
   useEffect(() => {
     let live = true;
-    fetchMyFootballPicks(null, timeZone).then((r) => {
-      if (live && r.ok) setPending(pendingCount(r.data));
+    Promise.all([fetchMyFootballPicks(null, timeZone), fetchMyTennisPicks(null, timeZone)]).then(([f, t]) => {
+      if (live && f.ok) setPending(pendingCount(f.data) + (t.ok ? pendingCount(t.data) : 0));
     });
     return () => { live = false; };
   }, [timeZone]);
