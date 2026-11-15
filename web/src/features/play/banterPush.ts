@@ -125,7 +125,7 @@ export async function turnOffPush(): Promise<boolean> {
 }
 
 /** After a successful post: ask the server to notify the right members. Never throws or blocks. */
-export function notifyPush(kind: 'reply' | 'post' | 'join' | 'reaction' | 'topic', id: string | null | undefined): void {
+export function notifyPush(kind: 'reply' | 'post' | 'join' | 'reaction' | 'topic' | 'pick' | 'follow', id: string | null | undefined): void {
   if (!id) return;
   void (async () => {
     try {
@@ -150,6 +150,9 @@ export interface PushSettings {
   replies: boolean;
   league_messages: boolean;
   league_activity: boolean;
+  /** Missing until the follows database change is applied. */
+  thread_messages?: boolean;
+  follows?: boolean;
   muted_leagues: string[];
   devices: number;
 }
@@ -164,7 +167,24 @@ export async function fetchPushSettings(): Promise<PushSettings | null> {
   }
 }
 
-export async function savePushSettings(s: Pick<PushSettings, 'replies' | 'league_messages' | 'league_activity'>): Promise<boolean> {
+export async function savePushSettings(
+  s: Pick<PushSettings, 'replies' | 'league_messages' | 'league_activity' | 'thread_messages' | 'follows'>,
+): Promise<boolean> {
+  if (s.thread_messages !== undefined || s.follows !== undefined) {
+    try {
+      const { error } = await supabase.rpc('banter_set_push_settings', {
+        p_replies: s.replies,
+        p_league_messages: s.league_messages,
+        p_league_activity: s.league_activity,
+        p_thread_messages: s.thread_messages ?? null,
+        p_follows: s.follows ?? null,
+      });
+      if (!error) return true;
+      if (!(error.code === 'PGRST202' || /could not find the function/i.test(error.message || ''))) return false;
+    } catch {
+      return false;
+    }
+  }
   try {
     const { error } = await supabase.rpc('banter_set_push_settings', {
       p_replies: s.replies,

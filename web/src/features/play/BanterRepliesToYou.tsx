@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { fetchNotifications, markNotificationsRead, type BanterNotification } from './banterApi';
-import { notificationHref, notificationLine, snippet, timeAgo } from './banterRules';
+import { notificationHref, notificationLine, opensMemberCard, snippet, timeAgo } from './banterRules';
+import { openMember } from './BanterMembers';
 import { notifyLocal, onLocalNotify } from './banterLive';
 import './banter.css';
 
@@ -48,6 +49,7 @@ export function RepliesToYou({ onChanged }: { onChanged?: () => void }) {
   };
 
   const go = (n: BanterNotification) => {
+    if (opensMemberCard(n.kind)) { openMember(n.from_handle); return; }
     navigate(notificationHref(n));
     window.scrollTo({ top: 0 });
   };
@@ -66,9 +68,11 @@ export function RepliesToYou({ onChanged }: { onChanged?: () => void }) {
               <button type="button" className={`bh-notif ${n.is_read ? '' : 'is-unread'}`} onClick={() => go(n)}>
                 <span className="bh-lb-avatar" aria-hidden="true">{n.from_avatar}</span>
                 <span>
-                  <b>{notificationLine(n.kind, n.from_handle, n.reaction)}</b> · <small style={{ display: 'inline' }}>{timeAgo(n.created_at, now)}</small>
+                  <b>{notificationLine(n.kind, n.from_handle, n.reaction, n.item_count || 1)}</b> · <small style={{ display: 'inline' }}>{timeAgo(n.created_at, now)}</small>
                   <small>
-                    {n.league_id ? `in league “${n.league_name}”` : `in “${n.topic_title}”`}: {snippet(n.preview, 90)}
+                    {n.kind === 'follower' ? 'Tap to see their card'
+                      : n.kind === 'follow_pick' ? snippet(n.preview, 90)
+                      : `${n.league_id ? `in league “${n.league_name}”` : `in “${n.topic_title}”`}: ${snippet(n.preview, 90)}`}
                   </small>
                 </span>
               </button>

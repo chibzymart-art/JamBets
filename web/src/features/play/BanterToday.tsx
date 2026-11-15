@@ -12,6 +12,7 @@ import {
 } from './banterApi';
 import { FOOTBALL_MARKETS, initialLeagueTicks, lockLabel, pickErrorMessage } from './banterRules';
 import { SharePickPanel } from './BanterSharePick';
+import { notifyPush } from './banterPush';
 import './banter.css';
 
 /**
@@ -96,6 +97,8 @@ export function BanterToday({ savedLeagues }: { savedLeagues: string[] | null })
     } else if (current === value) {
       setJustPicked(null);
     }
+    // A new pick (not a change or a cancel): followers may get a push.
+    if (!current && res.data && typeof res.data === 'object' && 'id' in res.data) notifyPush('pick', (res.data as { id: string }).id);
     setMyPicks((m) => {
       const next = { ...m };
       if (current === value) delete next[key];

@@ -327,7 +327,10 @@ export interface TopicDetail {
 
 export interface BanterNotification {
   id: string;
-  kind: 'reply' | 'topic_reply' | 'league_reply' | 'reaction' | 'mention';
+  kind: 'reply' | 'topic_reply' | 'league_reply' | 'reaction' | 'mention'
+    | 'thread_message' | 'follow_pick' | 'follow_topic' | 'follow_post' | 'follower';
+  /** follow_pick: how many picks this one stands for. */
+  item_count?: number;
   /** For kind 'reaction'. */
   reaction?: ReactionKind | null;
   topic_id: string | null;
@@ -380,10 +383,45 @@ export const markNotificationsRead = (ids: string[] | null) =>
 export interface HandleSuggestion {
   handle: string;
   avatar_emoji: string;
+  /** In the current topic / league (listed first). */
+  in_thread?: boolean;
 }
 
-export const searchHandles = (prefix: string, leagueId: string | null = null) =>
-  call<HandleSuggestion[]>('banter_search_handles', { p_prefix: prefix, p_league_id: leagueId });
+/** Suggestions for @: the people in this topic or league first (even before a letter is typed). */
+export async function searchHandles(prefix: string, leagueId: string | null = null, topicId: string | null = null) {
+  if (!topicId) return call<HandleSuggestion[]>('banter_search_handles', { p_prefix: prefix, p_league_id: leagueId });
+  const r = await call<HandleSuggestion[]>('banter_search_handles', { p_prefix: prefix, p_league_id: leagueId, p_topic_id: topicId });
+  // Before the follows database change only the two-argument version exists.
+  if (!r.ok && r.code === 'not_ready') return call<HandleSuggestion[]>('banter_search_handles', { p_prefix: prefix, p_league_id: leagueId });
+  return r;
+}
 
 export const pinTopic = (topicId: string, pinned: boolean) =>
   call<boolean>('banter_pin_topic', { p_topic_id: topicId, p_pinned: pinned });
+
+// ---------------------------------------------------------------------------
+// Follows
+// ---------------------------------------------------------------------------
+
+export interface BanterMember {
+  handle: string;
+  avatar_emoji: string;
+  is_me: boolean;
+  is_following: boolean;
+  follows_you: boolean;
+  followers: number;
+  following: number;
+  record: { settled: number; won: number; lost: number; points: number } | null;
+}
+
+export interface MyFollows {
+  followers: number;
+  following: number;
+  followers_list: { handle: string; avatar_emoji: string }[];
+  following_list: { handle: string; avatar_emoji: string }[];
+}
+
+export const fetchMember = (handle: string) => call<BanterMember>('banter_member', { p_handle: handle });
+export const fetchMyFollows = () => call<MyFollows>('banter_my_follows', {});
+export const followMember = (handle: string, follow: boolean) =>
+  call<{ following: boolean; followers: number; notification_id: string | null }>('banter_follow', { p_handle: handle, p_follow: follow });
