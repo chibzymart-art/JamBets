@@ -215,7 +215,33 @@ export interface WallPost {
   /** Missing until the reactions database change is applied. */
   reactions?: ReactionCounts | null;
   my_reaction?: ReactionKind | null;
+  /** A shared pick (missing until the share-pick database change is applied). */
+  pick?: SharedPick | null;
 }
+
+/** A member's own football pick shared into a message, read live by the server. */
+export interface SharedPick {
+  id: string;
+  market: string;
+  selection: string;
+  kickoff_at: string;
+  status: 'pending' | 'won' | 'lost' | 'void';
+  points: number | null;
+  league_name: string | null;
+  league_country: string | null;
+  home_team: string | null;
+  away_team: string | null;
+  home_score: number | null;
+  away_score: number | null;
+}
+
+export const sharePick = (pickId: string, dest: { topicId?: string; leagueId?: string }, comment: string) =>
+  call<{ id: string; created_at: string; kind: 'reply' | 'post' }>('banter_share_pick', {
+    p_pick_id: pickId,
+    p_topic_id: dest.topicId || null,
+    p_league_id: dest.leagueId || null,
+    p_comment: comment.trim() || null,
+  });
 
 export type ReactionKind = 'up' | 'down' | 'angry' | 'laugh' | 'cry';
 export type ReactionTarget = 'topic' | 'reply' | 'post';
@@ -279,6 +305,7 @@ export interface TopicReply {
   reply_to: QuotedMessage | null;
   reactions?: ReactionCounts | null;
   my_reaction?: ReactionKind | null;
+  pick?: SharedPick | null;
 }
 
 export interface TopicDetail {

@@ -5,6 +5,7 @@ import { liveKey, sendPing, topVisible, useLiveRefresh } from './banterLive';
 import { notifyPush } from './banterPush';
 import { BanterReactions } from './BanterReactions';
 import { MentionTextarea, MessageText } from './BanterMentions';
+import { PickCard } from './BanterSharePick';
 import './banter.css';
 
 /**
@@ -67,7 +68,7 @@ export function BanterWall({
     const r = await fetchWall(leagueId, null, WALL_PAGE);
     if (!r.ok) return;
     const fresh = r.data || [];
-    const sig = (l: WallPost[]) => l.map((p) => `${p.id}:${p.tagged_handle || ''}:${JSON.stringify(p.reactions || {})}`).join('|');
+    const sig = (l: WallPost[]) => l.map((p) => `${p.id}:${p.tagged_handle || ''}:${JSON.stringify(p.reactions || {})}:${p.pick?.status || ''}`).join('|');
     if (sig(fresh) === sig(current.slice(0, fresh.length))) return;
     const added = fresh.filter((f) => !current.some((p) => p.id === f.id) && !f.is_me);
     if (added.length === 0 || topVisible(listRef.current)) {
@@ -220,6 +221,7 @@ export function BanterWall({
                       )
                     )}
                     <p className="bh-post-body"><MessageText text={p.body} /></p>
+                    {p.pick && <PickCard pick={p.pick} />}
                     {p.tagged_handle && (
                       <span className={`bh-tagged ${p.tagged_is_me ? 'is-me' : ''}`}>
                         🏷 {p.tagged_is_me ? 'You were tagged' : `${p.tagged_handle} was tagged`}

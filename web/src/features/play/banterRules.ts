@@ -393,3 +393,30 @@ export function mentionQueryAt(text: string, caret: number): { prefix: string; s
   if (!m) return null;
   return { prefix: m[2], start: before.length - m[2].length - 1 };
 }
+
+// ---------------------------------------------------------------------------
+// Shared picks
+// ---------------------------------------------------------------------------
+
+export const PICK_MARKET_NAME: Record<string, string> = { '1X2': 'Match result', OU25: 'Goals 2.5', BTTS: 'Both teams score' };
+export const PICK_STATUS_TEXT: Record<'pending' | 'won' | 'lost' | 'void', string> = {
+  pending: 'Pending',
+  won: '✓ Won',
+  lost: '✗ Lost',
+  void: '⊘ Void',
+};
+
+export function shareErrorMessage(code: string): string {
+  switch (code) {
+    case 'pick_not_found':
+      return 'You can only share your own picks.';
+    case 'destination_invalid':
+      return 'Choose one topic or one league.';
+    case 'not_ready':
+      return "Sharing picks isn't switched on yet. Please check back soon.";
+    case 'not_member':
+      return "You're not in that league.";
+    default:
+      return discussionErrorMessage(code);
+  }
+}

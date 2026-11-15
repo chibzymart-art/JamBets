@@ -28,6 +28,7 @@ import { liveKey, nearBottom, sendPing, useLiveRefresh } from './banterLive';
 import { notifyPush } from './banterPush';
 import { BanterReactions } from './BanterReactions';
 import { MentionTextarea, MessageText } from './BanterMentions';
+import { PickCard } from './BanterSharePick';
 import './banter.css';
 
 /**
@@ -343,7 +344,7 @@ function TopicView({ topicId, focusReply, onBack }: { topicId: string; focusRepl
     const known = new Set(current.replies.map((x) => x.id));
     const added = r.data.replies.filter((x) => !known.has(x.id) && !x.is_me).map((x) => x.id);
     const sig = (d: TopicDetail) =>
-      d.replies.map((x) => `${x.id}:${x.tagged_handle || ''}:${JSON.stringify(x.reactions || {})}`).join('|')
+      d.replies.map((x) => `${x.id}:${x.tagged_handle || ''}:${JSON.stringify(x.reactions || {})}:${x.pick?.status || ''}`).join('|')
       + d.topic.title + JSON.stringify(d.topic.reactions || {});
     if (sig(r.data) === sig(current)) return;
     const atBottom = nearBottom();
@@ -512,6 +513,7 @@ function TopicView({ topicId, focusReply, onBack }: { topicId: string; focusRepl
                       )
                     )}
                     <p className="bh-post-body"><MessageText text={r.body} /></p>
+                    {r.pick && <PickCard pick={r.pick} />}
                     {r.tagged_handle && (
                       <span className={`bh-tagged ${r.tagged_is_me ? 'is-me' : ''}`}>
                         🏷 {r.tagged_is_me ? 'You were tagged' : `${r.tagged_handle} was tagged`}
