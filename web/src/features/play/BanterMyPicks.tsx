@@ -1,17 +1,19 @@
 import { useEffect, useState } from 'react';
 import { useUserTimeZone } from '../../lib/dateUtils';
 import { fetchMyFootballPicks, type BanterPick } from './banterApi';
-import { selectionLabel } from './banterRules';
+import { PICK_MARKET_NAME, PICK_STATUS_TEXT, selectionLabel } from './banterRules';
+import { SharePickPanel } from './BanterSharePick';
 import './banter.css';
 
-const MARKET_NAME: Record<string, string> = { '1X2': 'Match result', OU25: 'Goals 2.5', BTTS: 'Both teams score' };
-const STATUS_TEXT: Record<BanterPick['status'], string> = { pending: 'Pending', won: '✓ Won', lost: '✗ Lost', void: '⊘ Void' };
+const MARKET_NAME = PICK_MARKET_NAME;
+const STATUS_TEXT = PICK_STATUS_TEXT;
 
 /** The member's own picks for the last 60 days: pending first, then settled (green won, red lost). */
 export function BanterMyPicks() {
   const { timeZone } = useUserTimeZone();
   const [picks, setPicks] = useState<BanterPick[] | null>(null);
   const [error, setError] = useState(false);
+  const [sharing, setSharing] = useState<string | null>(null);
 
   useEffect(() => {
     let live = true;
@@ -57,6 +59,12 @@ export function BanterMyPicks() {
           {p.points != null && p.status !== 'pending' ? ` · ${p.points} pts` : ''}
         </span>
       </div>
+      <div className="bh-reply-actions">
+        <button type="button" className="bh-link" onClick={() => setSharing(sharing === p.id ? null : p.id)} aria-expanded={sharing === p.id}>
+          📣 Share
+        </button>
+      </div>
+      {sharing === p.id && <SharePickPanel pickId={p.id} onClose={() => setSharing(null)} />}
     </article>
   );
 

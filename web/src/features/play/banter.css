@@ -924,3 +924,25 @@
   display: inline-block; margin-right: 6px; padding: 1px 7px; border-radius: 999px; vertical-align: middle;
   background: rgba(234, 179, 8, .16); color: #a16207; font-size: 10.5px; font-weight: 800;
 }
+
+/* Shared picks */
+.bh-pick-card {
+  margin-top: 8px; padding: 10px 12px; border: 1px solid var(--border-subtle); border-left-width: 4px;
+  border-radius: 10px; background: var(--bg-secondary); display: grid; gap: 6px;
+}
+.bh-pick-card.bh-pick--won { border-left-color: var(--green-primary); background: rgba(34, 197, 94, .08); }
+.bh-pick-card.bh-pick--lost { border-left-color: #dc2626; background: rgba(220, 38, 38, .07); }
+.bh-pick-card.bh-pick--void { border-left-color: var(--border-strong); }
+.bh-pick-card.bh-pick--pending { border-left-color: #eab308; }
+.bh-share-panel { margin-top: 10px; padding: 10px 12px; border-radius: 10px; background: var(--bg-secondary); display: grid; gap: 8px; }
+.bh-share-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; max-height: 220px; overflow-y: auto; }
+.bh-share-opt {
+  display: flex; gap: 10px; align-items: center; width: 100%; padding: 8px 10px; text-align: left; cursor: pointer;
+  border: 1px solid var(--border-subtle); border-radius: 10px; background: var(--bg-card); color: var(--text-primary); font: inherit;
+}
+.bh-share-opt span:last-child { display: flex; flex-direction: column; min-width: 0; }
+.bh-share-opt b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bh-share-opt small { color: var(--text-muted); font-size: 12px; }
+.bh-share-opt.is-active { border-color: var(--green-primary); background: rgba(34, 197, 94, .1); }
+.bh-just-picked .bh-inline { align-items: center; flex-wrap: wrap; gap: 8px; }
+.bh-just-picked .bh-inline > span { flex: 1; min-width: 0; font-size: 13.5px; }

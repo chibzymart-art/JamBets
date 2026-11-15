@@ -11,6 +11,7 @@ import {
   type BanterLeague,
 } from './banterApi';
 import { FOOTBALL_MARKETS, initialLeagueTicks, lockLabel, pickErrorMessage } from './banterRules';
+import { SharePickPanel } from './BanterSharePick';
 import './banter.css';
 
 /**
@@ -72,6 +73,9 @@ export function BanterToday({ savedLeagues }: { savedLeagues: string[] | null })
   );
   const hiddenCount = (fixtures || []).length - visible.length;
 
+  const [justPicked, setJustPicked] = useState<{ id: string; label: string } | null>(null);
+  const [sharingPick, setSharingPick] = useState(false);
+
   const pick = async (f: BanterFixture, market: string, value: string) => {
     const key = `${f.fixture_id}:${market}`;
     setBusy(key);
@@ -84,6 +88,13 @@ export function BanterToday({ savedLeagues }: { savedLeagues: string[] | null })
     if (!res.ok) {
       setError(pickErrorMessage(res.code));
       return;
+    }
+    const saved = res.data as { id?: string } | boolean | null;
+    if (current !== value && saved && typeof saved === 'object' && saved.id) {
+      setJustPicked({ id: saved.id, label: `${f.home_team || 'Home'} v ${f.away_team || 'Away'}` });
+      setSharingPick(false);
+    } else if (current === value) {
+      setJustPicked(null);
     }
     setMyPicks((m) => {
       const next = { ...m };
@@ -126,6 +137,19 @@ export function BanterToday({ savedLeagues }: { savedLeagues: string[] | null })
       </div>
 
       {error && <p className="bh-error" role="alert">{error}</p>}
+      {justPicked && (
+        <div className="bh-card bh-just-picked" role="status">
+          {sharingPick ? (
+            <SharePickPanel pickId={justPicked.id} onClose={() => { setSharingPick(false); setJustPicked(null); }} />
+          ) : (
+            <div className="bh-inline">
+              <span>✓ Pick saved: {justPicked.label}</span>
+              <button type="button" className="bh-btn" onClick={() => setSharingPick(true)}>📣 Share it</button>
+              <button type="button" className="bh-link" onClick={() => setJustPicked(null)} aria-label="Dismiss">✕</button>
+            </div>
+          )}
+        </div>
+      )}
 
       {fixtures === null ? (
         <p className="bh-muted" aria-busy="true">Loading matches…</p>
