@@ -4,9 +4,13 @@ import {
   createLeague,
   fetchLeagueTable,
   fetchMyLeagues,
+  fetchPublicLeagues,
   joinLeague,
+  joinPublicLeague,
   leaveLeague,
+  setLeaguePublic,
   type BanterLeagueSummary,
+  type PublicLeague,
   type LeaderboardPeriod,
   type LeaderboardRow,
 } from './banterApi';
@@ -24,8 +28,9 @@ import { BanterWall } from './BanterWall';
 import './banter.css';
 
 /**
- * Banter Hub private leagues: create one, share the invite link, join with a code or link,
- * and see each league's week / month / all-time table. Paid members only (server-checked).
+ * Banter Hub leagues: create a public or private one, share the invite link, join with a code or
+ * link, browse and join public leagues, and see each league's week / month / all-time table.
+ * Paid members only (server-checked).
  */
 
 const PERIODS: { id: LeaderboardPeriod; label: string }[] = [
@@ -41,6 +46,8 @@ export function BanterLeagues() {
   const [openId, setOpenId] = useState<string | null>(null);
 
   const [newName, setNewName] = useState('');
+  const [newPublic, setNewPublic] = useState(false);
+  const [publicKey, setPublicKey] = useState(0);
   const [joinCode, setJoinCode] = useState(() => normaliseInvite(searchParams.get('join') || ''));
   const [formError, setFormError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -79,11 +86,17 @@ export function BanterLeagues() {
       return;
     }
     setBusy(true);
-    const r = await createLeague(name);
+    const r = await createLeague(name, newPublic);
     setBusy(false);
     if (!r.ok) { setFormError(leagueErrorMessage(r.code)); return; }
     setNewName('');
-    setNotice(`"${r.data.name}" is ready. Share the invite link below.`);
+    setNotice(
+      newPublic
+        ? `"${r.data.name}" is ready and listed in Public leagues. You can also share the invite link below.`
+        : `"${r.data.name}" is ready. Share the invite link below.`,
+    );
+    setNewPublic(false);
+    setPublicKey((k) => k + 1);
     await load();
     setOpenId(r.data.league_id);
   };
@@ -108,7 +121,14 @@ export function BanterLeagues() {
   const onLeft = async (message: string) => {
     setOpenId(null);
     setNotice(message);
+    setPublicKey((k) => k + 1);
     await load();
+  };
+
+  const onPublicChanged = async (message: string, openLeagueId?: string) => {
+    setNotice(message);
+    await load();
+    if (openLeagueId) setOpenId(openLeagueId);
   };
 
   if (leagues === null) return <p className="bh-muted" aria-busy="true">Loading your leagues…</p>;
@@ -132,6 +152,7 @@ export function BanterLeagues() {
                   open={openId === l.league_id}
                   onToggle={() => setOpenId(openId === l.league_id ? null : l.league_id)}
                   onLeft={onLeft}
+                  onVisibilityChanged={() => { setPublicKey((k) => k + 1); load(); }}
                 />
               ))}
             </div>
@@ -168,9 +189,36 @@ export function BanterLeagues() {
                 />
                 <button type="submit" className="bh-btn" disabled={busy}>Create</button>
               </div>
+              <div className="bh-seg bh-vis-choice" role="radiogroup" aria-label="Who can find this league">
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={!newPublic}
+                  className={`bh-seg-btn ${!newPublic ? 'is-active' : ''}`}
+                  onClick={() => setNewPublic(false)}
+                >
+                  🔒 Private
+                </button>
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={newPublic}
+                  className={`bh-seg-btn ${newPublic ? 'is-active' : ''}`}
+                  onClick={() => setNewPublic(true)}
+                >
+                  🌍 Public
+                </button>
+              </div>
+              <p className="bh-note">
+                {newPublic
+                  ? 'Public: listed for every member to find and join. You can switch it to private later.'
+                  : 'Private: hidden. Only people you send the invite code or link to can join.'}
+              </p>
             </form>
             {formError && <p className="bh-error" role="alert">{formError}</p>}
           </div>
+
+          <PublicLeagues key={publicKey} onChanged={onPublicChanged} />
         </>
       )}
     </div>
@@ -182,12 +230,17 @@ function LeagueCard({
   open,
   onToggle,
   onLeft,
+  onVisibilityChanged,
 }: {
   league: BanterLeagueSummary;
   open: boolean;
   onToggle: () => void;
   onLeft: (message: string) => void;
+  onVisibilityChanged: () => void;
 }) {
+  const [isPublic, setIsPublic] = useState(!!league.is_public);
+  const [savingVis, setSavingVis] = useState(false);
+  useEffect(() => { setIsPublic(!!league.is_public); }, [league.is_public]);
   const [period, setPeriod] = useState<LeaderboardPeriod>('week');
   const [rows, setRows] = useState<LeaderboardRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -226,12 +279,29 @@ function LeagueCard({
     onLeft(r.data === 'deleted' ? `"${league.name}" was deleted.` : `You left "${league.name}".`);
   };
 
+  const toggleVisibility = async () => {
+    const next = !isPublic;
+    setSavingVis(true);
+    const r = await setLeaguePublic(league.league_id, next);
+    setSavingVis(false);
+    if (!r.ok) {
+      setError(r.code === 'not_ready' ? leagueErrorMessage('public_not_ready') : leagueErrorMessage(r.code));
+      return;
+    }
+    setError(null);
+    setIsPublic(next);
+    onVisibilityChanged();
+  };
+
   return (
     <article className="bh-card bh-league">
       <button type="button" className="bh-league-head" onClick={onToggle} aria-expanded={open}>
         <span className="bh-league-icon" aria-hidden="true">👥</span>
         <span className="bh-league-title">
-          <b>{league.name}</b>
+          <b>
+            {league.name}{' '}
+            <span className={`bh-vis-badge ${isPublic ? 'is-public' : ''}`}>{isPublic ? 'Public' : 'Private'}</span>
+          </b>
           <small>{league.members} {league.members === 1 ? 'member' : 'members'}{league.is_owner ? ' · you created it' : ''}</small>
         </span>
         <span aria-hidden="true">{open ? '▴' : '▾'}</span>
@@ -248,6 +318,18 @@ function LeagueCard({
             <a className="bh-btn" href={telegramShareUrl(league.name, league.invite_code)} target="_blank" rel="noopener noreferrer">Telegram</a>
           </div>
           <p className="bh-note">Invite code: <b>{league.invite_code}</b></p>
+
+          {league.is_owner && (
+            <div className="bh-vis-row">
+              <span>
+                <b>{isPublic ? '🌍 Public' : '🔒 Private'}</b>
+                <small>{isPublic ? 'Anyone in the Banter Hub can find and join.' : 'Hidden. Invite code or link only.'}</small>
+              </span>
+              <button type="button" className="bh-btn" onClick={toggleVisibility} disabled={savingVis}>
+                {savingVis ? 'Saving…' : isPublic ? 'Make private' : 'Make public'}
+              </button>
+            </div>
+          )}
 
           <div className="bh-seg" role="tablist" aria-label="League table period">
             {PERIODS.map((p) => (
@@ -301,5 +383,111 @@ function LeagueCard({
         </div>
       )}
     </article>
+  );
+}
+
+/** Public leagues anyone in the Banter Hub can join or leave at will. Invite codes are never shown here. */
+function PublicLeagues({ onChanged }: { onChanged: (message: string, openLeagueId?: string) => void }) {
+  const [search, setSearch] = useState('');
+  const [query, setQuery] = useState('');
+  const [order, setOrder] = useState<'newest' | 'biggest'>('newest');
+  const [rows, setRows] = useState<PublicLeague[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [confirmLeaveId, setConfirmLeaveId] = useState<string | null>(null);
+  const [reload, setReload] = useState(0);
+
+  useEffect(() => {
+    const t = setTimeout(() => setQuery(search), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  useEffect(() => {
+    let live = true;
+    setRows(null);
+    fetchPublicLeagues(query, order).then((r) => {
+      if (!live) return;
+      if (!r.ok) {
+        setError(r.code === 'not_ready' ? leagueErrorMessage('public_not_ready') : leagueErrorMessage(r.code));
+        setRows([]);
+        return;
+      }
+      setError(null);
+      setRows(r.data || []);
+    });
+    return () => { live = false; };
+  }, [query, order, reload]);
+
+  const join = async (l: PublicLeague) => {
+    setBusyId(l.league_id);
+    const r = await joinPublicLeague(l.league_id);
+    setBusyId(null);
+    if (!r.ok) { setError(leagueErrorMessage(r.code)); return; }
+    setReload((n) => n + 1);
+    onChanged(r.data.already_member ? `You're already in "${r.data.name}".` : `You joined "${r.data.name}".`, r.data.league_id);
+  };
+
+  const leave = async (l: PublicLeague) => {
+    if (confirmLeaveId !== l.league_id) { setConfirmLeaveId(l.league_id); return; }
+    setBusyId(l.league_id);
+    const r = await leaveLeague(l.league_id);
+    setBusyId(null);
+    setConfirmLeaveId(null);
+    if (!r.ok) { setError(leagueErrorMessage(r.code)); return; }
+    setReload((n) => n + 1);
+    onChanged(r.data === 'deleted' ? `"${l.name}" was deleted.` : `You left "${l.name}".`);
+  };
+
+  return (
+    <section className="bh-public" aria-label="Public leagues">
+      <div className="bh-sec"><h2>Public leagues</h2><small>{rows ? rows.length : ''}</small></div>
+      <div className="bh-card bh-forms">
+        <div className="bh-inline">
+          <input
+            className="bh-input"
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search public leagues"
+            aria-label="Search public leagues"
+            autoComplete="off"
+          />
+        </div>
+        <div className="bh-seg" role="tablist" aria-label="Sort public leagues">
+          <button type="button" role="tab" aria-selected={order === 'newest'} className={`bh-seg-btn ${order === 'newest' ? 'is-active' : ''}`} onClick={() => setOrder('newest')}>Newest</button>
+          <button type="button" role="tab" aria-selected={order === 'biggest'} className={`bh-seg-btn ${order === 'biggest' ? 'is-active' : ''}`} onClick={() => setOrder('biggest')}>Biggest</button>
+        </div>
+        {error && <p className="bh-error" role="alert">{error}</p>}
+        {rows === null ? (
+          <p className="bh-muted" aria-busy="true">Loading public leagues…</p>
+        ) : rows.length === 0 && !error ? (
+          <p className="bh-muted">{query ? 'No public league matches that search.' : 'No public leagues yet. Create one and pick Public.'}</p>
+        ) : (
+          <ul className="bh-public-list">
+            {rows.map((l) => (
+              <li key={l.league_id} className="bh-public-row">
+                <span className="bh-league-icon" aria-hidden="true">🌍</span>
+                <span className="bh-league-title">
+                  <b>{l.name}</b>
+                  <small>
+                    {l.members} {l.members === 1 ? 'member' : 'members'}
+                    {l.creator_handle ? ` · by ${l.creator_handle}` : ''}
+                  </small>
+                </span>
+                {l.is_member ? (
+                  <button type="button" className="bh-link-danger" onClick={() => leave(l)} disabled={busyId === l.league_id}>
+                    {confirmLeaveId === l.league_id ? 'Tap again' : 'Leave'}
+                  </button>
+                ) : (
+                  <button type="button" className="bh-btn" onClick={() => join(l)} disabled={busyId === l.league_id}>
+                    {busyId === l.league_id ? 'Joining…' : 'Join'}
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </section>
   );
 }
