@@ -11,6 +11,7 @@ import { BanterDiscussion } from './BanterDiscussion';
 import { fetchUnreadCount } from './banterApi';
 import { liveKey, notifyLocal, onLocalNotify, useLiveRefresh } from './banterLive';
 import { PushPrompt } from './BanterPushUI';
+import { MemberSheetHost } from './BanterMembers';
 import { BANTER_POINTS } from './banterRules';
 import './play.css';
 
@@ -186,6 +187,7 @@ export default function PlayHub(props: PlayHubProps) {
               <>
                 <MemberLive handle={me.handle} />
                 <PushPrompt />
+                <MemberSheetHost />
                 <p className="banter-me">
                   <span aria-hidden="true">{me.avatar}</span> Signed in as <strong>{me.handle}</strong>
                 </p>

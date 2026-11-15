@@ -19,6 +19,8 @@ type Props = Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, 'value' | 'onChan
   onValueChange: (v: string) => void;
   /** On a league wall: suggest only that league's members. */
   leagueId?: string | null;
+  /** In a topic: the people in it are suggested first, straight after "@". */
+  topicId?: string | null;
 };
 
 /**
@@ -26,7 +28,7 @@ type Props = Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, 'value' | 'onChan
  * pick, Escape closes; tapping a name inserts "@name ". The server decides who is really mentioned.
  */
 export const MentionTextarea = forwardRef<HTMLTextAreaElement | null, Props>(function MentionTextarea(
-  { value, onValueChange, leagueId = null, onKeyDown, ...rest },
+  { value, onValueChange, leagueId = null, topicId = null, onKeyDown, ...rest },
   ref,
 ) {
   const inner = useRef<HTMLTextAreaElement | null>(null);
@@ -45,11 +47,11 @@ export const MentionTextarea = forwardRef<HTMLTextAreaElement | null, Props>(fun
     if (!query) { setItems([]); return; }
     let live = true;
     const t = setTimeout(async () => {
-      const r = await searchHandles(query.prefix, leagueId);
+      const r = await searchHandles(query.prefix, leagueId, topicId);
       if (live) { setItems(r.ok ? r.data || [] : []); setActive(0); }
     }, 180);
     return () => { live = false; clearTimeout(t); };
-  }, [query?.prefix, query?.start, leagueId]);
+  }, [query?.prefix, query?.start, leagueId, topicId]);
 
   const pick = (h: HandleSuggestion) => {
     const el = inner.current;
@@ -98,6 +100,7 @@ export const MentionTextarea = forwardRef<HTMLTextAreaElement | null, Props>(fun
                 onClick={() => pick(h)}
               >
                 <span aria-hidden="true">{h.avatar_emoji}</span> @{h.handle}
+                {h.in_thread && <small className="bh-mention-here">{leagueId ? 'in this league' : 'in this topic'}</small>}
               </button>
             </li>
           ))}

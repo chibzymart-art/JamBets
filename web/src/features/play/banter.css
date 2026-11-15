@@ -946,3 +946,31 @@
 .bh-share-opt.is-active { border-color: var(--green-primary); background: rgba(34, 197, 94, .1); }
 .bh-just-picked .bh-inline { align-items: center; flex-wrap: wrap; gap: 8px; }
 .bh-just-picked .bh-inline > span { flex: 1; min-width: 0; font-size: 13.5px; }
+/* Members and follows */
+.bh-member-link {
+  padding: 0; border: 0; background: none; font: inherit; font-weight: inherit; color: inherit; cursor: pointer;
+  text-decoration: underline; text-decoration-color: transparent; text-underline-offset: 2px;
+}
+.bh-member-link:hover, .bh-member-link:focus-visible { text-decoration-color: currentColor; }
+.bh-sheet-backdrop {
+  position: fixed; inset: 0; z-index: 1000; display: flex; align-items: flex-end; justify-content: center;
+  background: rgba(15, 23, 42, .45); padding: 16px;
+}
+.bh-sheet {
+  width: 100%; max-width: 420px; max-height: 85vh; overflow-y: auto; border-radius: 16px; padding: 14px 16px 18px;
+  background: var(--bg-card); box-shadow: 0 12px 40px rgba(0, 0, 0, .25);
+}
+@media (min-width: 640px) { .bh-sheet-backdrop { align-items: center; } }
+.bh-member-card { display: grid; gap: 10px; }
+.bh-member-head { display: flex; gap: 12px; align-items: center; }
+.bh-member-head > div { display: flex; flex-direction: column; }
+.bh-member-head small { color: var(--text-muted); font-size: 12px; }
+.bh-stat-grid--3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.bh-btn-ghost { background: transparent; color: var(--green-primary); border: 1px solid var(--green-primary); }
+.bh-follows { display: grid; gap: 10px; }
+.bh-follow-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; max-height: 280px; overflow-y: auto; }
+.bh-mention-here { margin-left: auto; color: var(--text-muted); font-size: 11px; }
+.bh-member-card .bh-stat-grid { display: grid; gap: 8px; }
+.bh-member-card .bh-stat-grid > div { display: flex; flex-direction: column; gap: 2px; padding: 8px; border-radius: 10px; background: var(--bg-secondary); text-align: center; }
+.bh-member-card .bh-stat-grid small { color: var(--text-muted); font-size: 11px; }
+.bh-member-card .bh-stat-grid b { font-size: 17px; color: var(--text-primary); }

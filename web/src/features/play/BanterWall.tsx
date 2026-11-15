@@ -6,6 +6,7 @@ import { notifyPush } from './banterPush';
 import { BanterReactions } from './BanterReactions';
 import { MentionTextarea, MessageText } from './BanterMentions';
 import { PickCard } from './BanterSharePick';
+import { MemberName } from './BanterMembers';
 import './banter.css';
 
 /**
@@ -208,7 +209,7 @@ export function BanterWall({
                   <span className="bh-lb-avatar" aria-hidden="true">{p.avatar_emoji}</span>
                   <div className="bh-post-main">
                     <div className="bh-post-head">
-                      <b>{p.handle}{p.is_me ? ' (you)' : ''}</b>
+                      <b><MemberName handle={p.handle} isMe={p.is_me} /></b>
                       <small title={new Date(p.created_at).toLocaleString()}>{timeAgo(p.created_at, now)}</small>
                     </div>
                     {p.reply_to && (

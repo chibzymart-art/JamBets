@@ -29,6 +29,7 @@ import { notifyPush } from './banterPush';
 import { BanterReactions } from './BanterReactions';
 import { MentionTextarea, MessageText } from './BanterMentions';
 import { PickCard } from './BanterSharePick';
+import { MemberName } from './BanterMembers';
 import './banter.css';
 
 /**
@@ -275,7 +276,7 @@ function TopicList({
                       </span>
                     </button>
                     <div className="bh-topic-meta">
-                      <span>{t.handle}{t.is_me ? ' (you)' : ''}</span>
+                      <span><MemberName handle={t.handle} isMe={t.is_me} /></span>
                       <span>💬 {t.replies} {t.replies === 1 ? 'reply' : 'replies'}</span>
                       <span title={new Date(t.last_activity_at).toLocaleString()}>active {timeAgo(t.last_activity_at, now)}</span>
                       {t.can_pin && (
@@ -462,7 +463,7 @@ function TopicView({ topicId, focusReply, onBack }: { topicId: string; focusRepl
             <span className="bh-lb-avatar" aria-hidden="true">{data.topic.avatar_emoji}</span>
             <div className="bh-post-main">
               <div className="bh-post-head">
-                <b>{data.topic.handle}{data.topic.is_me ? ' (you)' : ''}</b>
+                <b><MemberName handle={data.topic.handle} isMe={data.topic.is_me} /></b>
                 <small title={new Date(data.topic.created_at).toLocaleString()}>{timeAgo(data.topic.created_at, now)}</small>
                 {data.topic.can_delete && (
                   <button type="button" className="bh-link-danger" onClick={removeTopic}>Delete topic</button>
@@ -500,7 +501,7 @@ function TopicView({ topicId, focusReply, onBack }: { topicId: string; focusRepl
                   <span className="bh-lb-avatar" aria-hidden="true">{r.avatar_emoji}</span>
                   <div className="bh-post-main">
                     <div className="bh-post-head">
-                      <b>{r.handle}{r.is_me ? ' (you)' : ''}</b>
+                      <b><MemberName handle={r.handle} isMe={r.is_me} /></b>
                       <small title={new Date(r.created_at).toLocaleString()}>{timeAgo(r.created_at, now)}</small>
                     </div>
                     {r.reply_to && (
@@ -554,6 +555,7 @@ function TopicView({ topicId, focusReply, onBack }: { topicId: string; focusRepl
             <label className="bh-mkt-label" htmlFor="bh-reply-box">{replyTo ? `Your reply to ${replyTo.handle}` : 'Reply in this topic'}</label>
             <MentionTextarea
               id="bh-reply-box"
+              topicId={topicId}
               ref={boxRef}
               className="bh-input bh-textarea"
               value={body}

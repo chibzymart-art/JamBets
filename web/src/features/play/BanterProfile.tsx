@@ -3,6 +3,7 @@ import { useUserTimeZone } from '../../lib/dateUtils';
 import { fetchLeaderboard, fetchMyFootballPicks, type BanterState, type LeaderboardPeriod, type LeaderboardRow } from './banterApi';
 import { ProfileForm } from './BanterGate';
 import { PushSettingsCard } from './BanterPushUI';
+import { FollowsCard } from './BanterMembers';
 import { formatPoints, myLeaderboardRow, pendingCount } from './banterRules';
 import './banter.css';
 
@@ -78,6 +79,8 @@ export function BanterProfile({
           />
         </div>
       )}
+
+      <FollowsCard />
 
       <div className="bh-sec"><h2>Notifications</h2></div>
       <PushSettingsCard />

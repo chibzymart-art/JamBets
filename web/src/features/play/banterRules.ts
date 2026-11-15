@@ -282,9 +282,14 @@ export function snippet(text: string, max = 80): string {
   return chars.length > max ? `${chars.slice(0, max - 1).join('')}…` : flat;
 }
 
-export function notificationLine(kind: string, fromHandle: string, reaction?: string | null): string {
+export function notificationLine(kind: string, fromHandle: string, reaction?: string | null, count = 1): string {
   if (kind === 'reaction') return `${fromHandle} reacted ${reactionEmoji(reaction)} to your message`;
   if (kind === 'mention') return `${fromHandle} mentioned you`;
+  if (kind === 'thread_message') return `${fromHandle} sent a new message`;
+  if (kind === 'follow_post') return `${fromHandle} posted in Discussion`;
+  if (kind === 'follow_topic') return `${fromHandle} started a topic`;
+  if (kind === 'follow_pick') return count > 1 ? `${fromHandle} made ${count} picks` : `${fromHandle} made a pick`;
+  if (kind === 'follower') return `${fromHandle} started following you`;
   if (kind === 'topic_reply') return `${fromHandle} replied in your topic`;
   return `${fromHandle} replied to you`;
 }
@@ -418,5 +423,35 @@ export function shareErrorMessage(code: string): string {
       return "You're not in that league.";
     default:
       return discussionErrorMessage(code);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Follows
+// ---------------------------------------------------------------------------
+
+/** Notifications that open a member's card instead of a message. */
+export function opensMemberCard(kind: string): boolean {
+  return kind === 'follow_pick' || kind === 'follower';
+}
+
+export function followErrorMessage(code: string): string {
+  switch (code) {
+    case 'member_not_found':
+      return "We couldn't find that member.";
+    case 'too_many_follows':
+      return 'You can follow up to 500 members.';
+    case 'too_fast':
+      return 'Slow down a little and try again in a while.';
+    case 'banned':
+      return "You can't follow members right now.";
+    case 'no_profile':
+      return 'Choose a username first.';
+    case 'no_access':
+      return 'Banter Hub is for paid members.';
+    case 'not_ready':
+      return "Following isn't switched on yet. Please check back soon.";
+    default:
+      return 'Something went wrong. Please try again.';
   }
 }

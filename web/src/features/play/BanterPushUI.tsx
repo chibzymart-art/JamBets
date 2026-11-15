@@ -125,7 +125,7 @@ export function PushSettingsCard() {
     setBusy(false);
   };
 
-  const flip = async (key: 'replies' | 'league_messages' | 'league_activity') => {
+  const flip = async (key: 'replies' | 'league_messages' | 'league_activity' | 'thread_messages' | 'follows') => {
     if (!settings) return;
     const next = { ...settings, [key]: !settings[key] };
     setSettings(next);
@@ -161,10 +161,12 @@ export function PushSettingsCard() {
             ['replies', 'Replies and tags', 'Someone replies to you or tags you'],
             ['league_messages', 'League messages', 'New messages on your league walls'],
             ['league_activity', 'League activity', 'Someone joins one of your leagues'],
-          ] as const).map(([key, label, hint]) => (
+            ['thread_messages', 'Topic messages', 'New messages in topics you started or replied to'],
+            ['follows', 'People you follow', 'Their picks, topics and posts, and new followers'],
+          ] as const).filter(([key]) => settings[key] !== undefined).map(([key, label, hint]) => (
             <li key={key}>
               <label className="bh-switch">
-                <input type="checkbox" checked={settings[key]} onChange={() => flip(key)} />
+                <input type="checkbox" checked={!!settings[key]} onChange={() => flip(key)} />
                 <span>
                   <b>{label}</b>
                   <small>{hint}</small>
