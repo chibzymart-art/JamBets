@@ -150,15 +150,45 @@ export interface BanterLeagueSummary {
   is_owner: boolean;
   members: number;
   created_at: string;
+  /** Missing until the public-leagues database change is applied (treated as private). */
+  is_public?: boolean;
 }
 
 export const fetchMyLeagues = () => call<BanterLeagueSummary[]>('banter_my_leagues', {});
 
-export const createLeague = (name: string) =>
-  call<{ league_id: string; name: string; invite_code: string }>('banter_create_league', { p_name: name.trim() });
+export async function createLeague(name: string, isPublic = false) {
+  const r = await call<{ league_id: string; name: string; invite_code: string; is_public?: boolean }>(
+    'banter_create_league',
+    { p_name: name.trim(), p_is_public: isPublic },
+  );
+  // Before the public-leagues database change is applied, only the one-argument version exists.
+  if (!r.ok && r.code === 'not_ready' && !isPublic) {
+    return call<{ league_id: string; name: string; invite_code: string }>('banter_create_league', { p_name: name.trim() });
+  }
+  if (!r.ok && r.code === 'not_ready' && isPublic) return { ok: false as const, code: 'public_not_ready' };
+  return r;
+}
 
 export const joinLeague = (code: string) =>
   call<{ league_id: string; name: string; already_member: boolean }>('banter_join_league', { p_invite_code: code.trim().toUpperCase() });
+
+export interface PublicLeague {
+  league_id: string;
+  name: string;
+  creator_handle: string | null;
+  members: number;
+  is_member: boolean;
+  created_at: string;
+}
+
+export const fetchPublicLeagues = (search: string, order: 'newest' | 'biggest' = 'newest', limit = 30, offset = 0) =>
+  call<PublicLeague[]>('banter_public_leagues', { p_search: search.trim() || null, p_limit: limit, p_offset: offset, p_order: order });
+
+export const joinPublicLeague = (leagueId: string) =>
+  call<{ league_id: string; name: string; already_member: boolean }>('banter_join_public_league', { p_league_id: leagueId });
+
+export const setLeaguePublic = (leagueId: string, isPublic: boolean) =>
+  call<boolean>('banter_set_league_public', { p_league_id: leagueId, p_is_public: isPublic });
 
 export const leaveLeague = (leagueId: string) =>
   call<'left' | 'deleted'>('banter_leave_league', { p_league_id: leagueId });

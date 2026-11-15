@@ -169,6 +169,10 @@ export function leagueErrorMessage(code: string): string {
       return 'Banter Hub is for paid members. Upgrade to use leagues.';
     case 'not_ready':
       return "Leagues aren't switched on yet. Please check back soon.";
+    case 'public_not_ready':
+      return "Public leagues aren't switched on yet. Create it as private for now, or try again soon.";
+    case 'not_owner':
+      return 'Only the person who created this league can change that.';
     case 'not_signed_in':
       return 'Please sign in again.';
     default:
