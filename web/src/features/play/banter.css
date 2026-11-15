@@ -905,3 +905,22 @@
 .bh-react.is-mine { border-color: var(--green-primary); background: rgba(34, 197, 94, .14); opacity: 1; }
 .bh-react.is-mine small { color: var(--green-primary); }
 .bh-react-error { color: #b91c1c; font-size: 11.5px; }
+
+/* Mentions */
+.bh-mention { color: var(--green-primary); font-weight: 700; }
+.bh-mention-wrap { position: relative; }
+.bh-mention-list {
+  position: absolute; left: 0; right: 0; top: 100%; z-index: 20; margin: 4px 0 0; padding: 4px;
+  list-style: none; border: 1px solid var(--border-subtle); border-radius: 10px;
+  background: var(--bg-card); box-shadow: 0 8px 24px rgba(0, 0, 0, .16); max-height: 260px; overflow-y: auto;
+}
+.bh-mention-opt {
+  display: flex; gap: 8px; align-items: center; width: 100%; padding: 8px 10px; border: 0; border-radius: 8px;
+  background: transparent; color: var(--text-primary); font: inherit; font-size: 14px; text-align: left; cursor: pointer;
+}
+.bh-mention-opt.is-active, .bh-mention-opt:hover { background: var(--bg-secondary); }
+/* Pins */
+.bh-pin-badge {
+  display: inline-block; margin-right: 6px; padding: 1px 7px; border-radius: 999px; vertical-align: middle;
+  background: rgba(234, 179, 8, .16); color: #a16207; font-size: 10.5px; font-weight: 800;
+}

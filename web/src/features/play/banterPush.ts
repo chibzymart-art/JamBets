@@ -125,7 +125,7 @@ export async function turnOffPush(): Promise<boolean> {
 }
 
 /** After a successful post: ask the server to notify the right members. Never throws or blocks. */
-export function notifyPush(kind: 'reply' | 'post' | 'join' | 'reaction', id: string | null | undefined): void {
+export function notifyPush(kind: 'reply' | 'post' | 'join' | 'reaction' | 'topic', id: string | null | undefined): void {
   if (!id) return;
   void (async () => {
     try {

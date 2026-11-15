@@ -284,6 +284,7 @@ export function snippet(text: string, max = 80): string {
 
 export function notificationLine(kind: string, fromHandle: string, reaction?: string | null): string {
   if (kind === 'reaction') return `${fromHandle} reacted ${reactionEmoji(reaction)} to your message`;
+  if (kind === 'mention') return `${fromHandle} mentioned you`;
   if (kind === 'topic_reply') return `${fromHandle} replied in your topic`;
   return `${fromHandle} replied to you`;
 }
@@ -302,6 +303,8 @@ export function discussionErrorMessage(code: string): string {
       return "You can't post in Discussion right now.";
     case 'topic_not_found':
       return 'That topic is no longer there.';
+    case 'too_many_pinned':
+      return 'Up to 5 topics can be pinned. Unpin one first.';
     case 'reply_not_found':
       return 'The message you were replying to is no longer there.';
     case 'not_allowed':
@@ -360,4 +363,33 @@ export function applyReaction(
   if (state.mine) dec(state.mine);
   counts[tapped] = (counts[tapped] || 0) + 1;
   return { counts, mine: tapped };
+}
+
+// ---------------------------------------------------------------------------
+// Mentions (the database decides who is really mentioned; this is for display and suggestions)
+// ---------------------------------------------------------------------------
+
+/** "@name" tokens: same rule as usernames (3 to 20 letters, numbers, underscores). */
+const MENTION_RE = /(^|[^A-Za-z0-9_@])(@[A-Za-z0-9_]{3,20})(?![A-Za-z0-9_])/g;
+
+/** Splits text into plain parts and @mention parts, for highlighting. */
+export function splitMentions(text: string): { text: string; mention: boolean }[] {
+  const out: { text: string; mention: boolean }[] = [];
+  let last = 0;
+  for (const m of (text || '').matchAll(MENTION_RE)) {
+    const start = (m.index || 0) + m[1].length;
+    if (start > last) out.push({ text: text.slice(last, start), mention: false });
+    out.push({ text: m[2], mention: true });
+    last = start + m[2].length;
+  }
+  if (last < (text || '').length) out.push({ text: text.slice(last), mention: false });
+  return out;
+}
+
+/** If the caret sits right after "@abc", the prefix being typed and where its "@" starts. */
+export function mentionQueryAt(text: string, caret: number): { prefix: string; start: number } | null {
+  const before = (text || '').slice(0, caret);
+  const m = before.match(/(^|[^A-Za-z0-9_@])@([A-Za-z0-9_]{0,20})$/);
+  if (!m) return null;
+  return { prefix: m[2], start: before.length - m[2].length - 1 };
 }

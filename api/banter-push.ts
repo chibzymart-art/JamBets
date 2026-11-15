@@ -4,6 +4,7 @@
 // POST /api/banter-push {kind,id}  -> sends push notifications for one new message or event
 //   kind: 'reply' (Discussion reply id) | 'post' (league wall post id) | 'join' (league id just joined)
 //         | 'reaction' (a reaction id: the message's writer is notified)
+//         | 'topic' (a new topic id: members mentioned in it are notified)
 //   Authorization: Bearer <the member's Supabase access token>
 //
 // The token is checked against Supabase Auth (never trusted on its own). Recipients, text and links
@@ -30,7 +31,7 @@ const ALLOWED_ORIGINS = new Set([
   'http://localhost:3000',
 ]);
 
-const KINDS = new Set(['reply', 'post', 'join', 'reaction']);
+const KINDS = new Set(['reply', 'post', 'join', 'reaction', 'topic']);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // Per-instance burst limit on top of the database guards (one push per message, 120 per hour).
