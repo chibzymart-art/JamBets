@@ -11,6 +11,7 @@ import {
   type BanterLeague,
 } from './banterApi';
 import { FOOTBALL_MARKETS, initialLeagueTicks, lockLabel, pickErrorMessage } from './banterRules';
+import { BanterTennisToday } from './BanterTennisToday';
 import './banter.css';
 
 /**
@@ -22,7 +23,7 @@ const BACK_DAYS = 7;
 const FORWARD_DAYS = 4;
 const CHIPS = 4;
 
-export function BanterToday({ savedLeagues }: { savedLeagues: string[] | null }) {
+function BanterFootballToday({ savedLeagues }: { savedLeagues: string[] | null }) {
   const { timeZone } = useUserTimeZone();
   const todayIso = getDateDetailsByOffset(0, timeZone).iso;
   const [offset, setOffset] = useState(0);
@@ -232,6 +233,20 @@ function LeagueTicks({ leagues, ticks, onChange }: { leagues: BanterLeague[]; ti
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+/** Today tab: choose a sport, then make calls. Football and tennis keep separate screens and data. */
+export function BanterToday({ savedLeagues }: { savedLeagues: string[] | null }) {
+  const [sport, setSport] = useState<'football' | 'tennis'>('football');
+  return (
+    <div className="bh-today">
+      <div className="bh-seg bh-seg-2" role="tablist" aria-label="Sport">
+        <button type="button" role="tab" aria-selected={sport === 'football'} className={`bh-seg-btn ${sport === 'football' ? 'is-active' : ''}`} onClick={() => setSport('football')}>Football</button>
+        <button type="button" role="tab" aria-selected={sport === 'tennis'} className={`bh-seg-btn ${sport === 'tennis' ? 'is-active' : ''}`} onClick={() => setSport('tennis')}>Tennis</button>
+      </div>
+      {sport === 'football' ? <BanterFootballToday savedLeagues={savedLeagues} /> : <BanterTennisToday />}
     </div>
   );
 }

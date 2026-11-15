@@ -62,3 +62,18 @@ jobs:
             echo "=== BANTER SETTLEMENT: DRY RUN (set BANTER_SETTLE_LIVE=true to write) ==="
             python -m python.src.banter.football_settlement
           fi
+
+      - name: Settle tennis picks (dry run unless BANTER_SETTLE_LIVE is true)
+        continue-on-error: true
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          BANTER_SETTLE_LIVE: ${{ (github.event_name == 'workflow_dispatch' && inputs.live) && 'true' || vars.BANTER_SETTLE_LIVE }}
+        run: |
+          if [ "$BANTER_SETTLE_LIVE" = "true" ]; then
+            echo "=== BANTER TENNIS SETTLEMENT: LIVE ==="
+            python -m python.src.banter.tennis_settlement --live
+          else
+            echo "=== BANTER TENNIS SETTLEMENT: DRY RUN ==="
+            python -m python.src.banter.tennis_settlement
+          fi

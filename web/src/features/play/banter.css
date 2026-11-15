@@ -864,3 +864,7 @@
 .bh-notif.is-unread { background: rgba(34, 197, 94, .12); }
 .bh-notif > span:last-child { flex: 1; min-width: 0; }
 .bh-notif small { display: block; color: var(--text-muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.bh-seg-2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}

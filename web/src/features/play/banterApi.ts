@@ -87,9 +87,9 @@ export interface BanterPick {
   away_score: number | null;
 }
 
-type Result<T> = { ok: true; data: T } | { ok: false; code: string };
+export type Result<T> = { ok: true; data: T } | { ok: false; code: string };
 
-async function call<T>(fn: string, args: Record<string, unknown>): Promise<Result<T>> {
+export async function call<T>(fn: string, args: Record<string, unknown>): Promise<Result<T>> {
   try {
     const { data, error } = await supabase.rpc(fn, args);
     if (error) return { ok: false, code: errorCode(error) };
