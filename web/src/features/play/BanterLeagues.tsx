@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   createLeague,
+  fetchCrowns,
   fetchLeagueTable,
   fetchMyLeagues,
   fetchPublicLeagues,
@@ -18,6 +19,7 @@ import {
   LEAGUE_NAME_MAX,
   LEAGUE_NAME_MIN,
   formatPoints,
+  hasCrown,
   inviteLink,
   leagueErrorMessage,
   normaliseInvite,
@@ -59,6 +61,14 @@ export function BanterLeagues({ onNotificationsChanged }: { onNotificationsChang
   const [formError, setFormError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  // Last week's winner in each of your leagues wears the crown all this week.
+  const [crowns, setCrowns] = useState<Record<string, string>>({});
+  useEffect(() => {
+    let live = true;
+    fetchCrowns().then((r) => { if (live && r.ok) setCrowns(r.data?.leagues || {}); });
+    return () => { live = false; };
+  }, []);
 
   const load = useCallback(async () => {
     const r = await fetchMyLeagues();
@@ -162,6 +172,7 @@ export function BanterLeagues({ onNotificationsChanged }: { onNotificationsChang
                   onToggle={() => setOpenId(openId === l.league_id ? null : l.league_id)}
                   onLeft={onLeft}
                   focusPostId={l.league_id === linkLeague ? linkPost : null}
+                  crown={crowns[l.league_id] || null}
                   onVisibilityChanged={() => { setPublicKey((k) => k + 1); load(); }}
                 />
               ))}
@@ -242,6 +253,7 @@ function LeagueCard({
   onLeft,
   onVisibilityChanged,
   focusPostId = null,
+  crown = null,
 }: {
   league: BanterLeagueSummary;
   open: boolean;
@@ -249,6 +261,7 @@ function LeagueCard({
   onLeft: (message: string) => void;
   onVisibilityChanged: () => void;
   focusPostId?: string | null;
+  crown?: string | null;
 }) {
   const [isPublic, setIsPublic] = useState(!!league.is_public);
   const [savingVis, setSavingVis] = useState(false);
@@ -368,7 +381,10 @@ function LeagueCard({
                   <span className="bh-lb-place">{r.place}</span>
                   <span className="bh-lb-avatar" aria-hidden="true">{r.avatar_emoji}</span>
                   <span className="bh-lb-who">
-                    <b>{r.handle}{r.is_me ? ' (you)' : ''}</b>
+                    <b>
+                      {r.handle}{r.is_me ? ' (you)' : ''}
+                      {hasCrown(crown, r.handle) && <span className="bh-crown" title="Last week's league winner" aria-label="Last week's league winner">👑</span>}
+                    </b>
                     <small>{r.settled} picks · {r.won} won · {r.lost} lost</small>
                   </span>
                   <span className="bh-lb-score">

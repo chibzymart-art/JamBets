@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useUserTimeZone } from '../../lib/dateUtils';
-import { fetchLeaderboard, fetchMyFootballPicks, type BanterState, type LeaderboardPeriod, type LeaderboardRow } from './banterApi';
+import { fetchLeaderboard, fetchMyFootballPicks, fetchMyStreaks, type BanterStreaks, type BanterState, type LeaderboardPeriod, type LeaderboardRow } from './banterApi';
 import { ProfileForm } from './BanterGate';
 import { PushSettingsCard } from './BanterPushUI';
 import { FollowsCard } from './BanterMembers';
@@ -80,6 +80,8 @@ export function BanterProfile({
         </div>
       )}
 
+      <StreaksCard />
+
       <FollowsCard />
 
       <div className="bh-sec"><h2>Notifications</h2></div>
@@ -124,6 +126,34 @@ export function BanterProfile({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/** Crowns this week, current and best winning streak, and weeks won. Hidden until switched on. */
+function StreaksCard() {
+  const [s, setS] = useState<BanterStreaks | null | undefined>(undefined);
+  useEffect(() => {
+    let live = true;
+    fetchMyStreaks().then((r) => { if (live) setS(r.ok ? r.data : null); });
+    return () => { live = false; };
+  }, []);
+  if (!s) return null;
+  const crowns = [s.crown_overall ? 'Leaderboard' : null, ...s.crown_leagues].filter(Boolean) as string[];
+  return (
+    <div className="bh-card bh-streaks">
+      {crowns.length > 0 && (
+        <p className="bh-crown-line">
+          <span aria-hidden="true">👑</span> Last week's winner: <b>{crowns.join(', ')}</b>
+        </p>
+      )}
+      <div className="bh-stat-grid">
+        <div><small>Current streak</small><b>{s.current_streak > 0 ? `🔥 ${s.current_streak}` : '0'}</b></div>
+        <div><small>Best streak</small><b>{s.best_streak}</b></div>
+        <div><small>Weeks won</small><b>{s.weeks_won}</b></div>
+        <div><small>League weeks won</small><b>{s.league_weeks_won}</b></div>
+      </div>
+      <p className="bh-note">A streak counts won picks in a row; a void doesn't break or extend it.</p>
     </div>
   );
 }

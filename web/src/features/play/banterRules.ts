@@ -455,3 +455,12 @@ export function followErrorMessage(code: string): string {
       return 'Something went wrong. Please try again.';
   }
 }
+
+// ---------------------------------------------------------------------------
+// Weekly winners
+// ---------------------------------------------------------------------------
+
+/** Crown holder check, case-insensitive (handles are unique ignoring case). */
+export function hasCrown(holder: string | null | undefined, handle: string | null | undefined): boolean {
+  return !!holder && !!handle && holder.toLowerCase() === handle.toLowerCase();
+}

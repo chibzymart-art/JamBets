@@ -425,3 +425,26 @@ export const fetchMember = (handle: string) => call<BanterMember>('banter_member
 export const fetchMyFollows = () => call<MyFollows>('banter_my_follows', {});
 export const followMember = (handle: string, follow: boolean) =>
   call<{ following: boolean; followers: number; notification_id: string | null }>('banter_follow', { p_handle: handle, p_follow: follow });
+
+// ---------------------------------------------------------------------------
+// Weekly winners and streaks
+// ---------------------------------------------------------------------------
+
+/** This week's crowns: winners of the last completed week (overall, and per league you are in). */
+export interface BanterCrowns {
+  week_start: string | null;
+  overall: string | null;
+  leagues: Record<string, string>;
+}
+
+export interface BanterStreaks {
+  current_streak: number;
+  best_streak: number;
+  weeks_won: number;
+  league_weeks_won: number;
+  crown_overall: boolean;
+  crown_leagues: string[];
+}
+
+export const fetchCrowns = () => call<BanterCrowns>('banter_crowns', {});
+export const fetchMyStreaks = () => call<BanterStreaks | null>('banter_my_streaks', {});
