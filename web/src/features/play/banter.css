@@ -877,3 +877,17 @@
   .bh-live-chip { animation: bh-live-in .2s ease-out; }
   @keyframes bh-live-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 }
+
+/* Push notifications */
+.bh-push-card { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 12px; }
+.bh-push-icon { font-size: 22px; line-height: 1; }
+.bh-push-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.bh-push-main small { color: var(--text-muted); font-size: 12.5px; line-height: 1.4; }
+.bh-push-main .bh-push-msg { color: var(--text-primary); }
+.bh-push-settings { display: flex; flex-direction: column; gap: 10px; }
+.bh-push-toggles { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.bh-switch { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; }
+.bh-switch input { margin-top: 3px; width: 18px; height: 18px; accent-color: var(--green-primary); flex: none; }
+.bh-switch span { display: flex; flex-direction: column; }
+.bh-switch small { color: var(--text-muted); font-size: 12px; }
+.bh-league-actions { flex-wrap: wrap; gap: 12px; }

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { deleteWallPost, fetchWall, postToWall, type WallPost } from './banterApi';
 import { WALL_MAX, WALL_PAGE, snippet, timeAgo, wallCharsLeft, wallErrorMessage } from './banterRules';
 import { liveKey, sendPing, topVisible, useLiveRefresh } from './banterLive';
+import { notifyPush } from './banterPush';
 import './banter.css';
 
 /**
@@ -123,6 +124,7 @@ export function BanterWall({
     const r = await postToWall(body, leagueId, replyTo ? replyTo.id : null);
     setBusy(false);
     if (!r.ok) { setError(wallErrorMessage(r.code)); return; }
+    if (leagueId) notifyPush('post', r.data.id);
     sendPing(leagueId ? liveKey.league(leagueId) : null, replyTo && !replyTo.is_me ? liveKey.member(replyTo.handle) : null);
     setBody('');
     setReplyTo(null);

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useUserTimeZone } from '../../lib/dateUtils';
 import { fetchLeaderboard, fetchMyFootballPicks, type BanterState, type LeaderboardPeriod, type LeaderboardRow } from './banterApi';
 import { ProfileForm } from './BanterGate';
+import { PushSettingsCard } from './BanterPushUI';
 import { formatPoints, myLeaderboardRow, pendingCount } from './banterRules';
 import './banter.css';
 
@@ -77,6 +78,9 @@ export function BanterProfile({
           />
         </div>
       )}
+
+      <div className="bh-sec"><h2>Notifications</h2></div>
+      <PushSettingsCard />
 
       <div className="bh-sec"><h2>Your record</h2></div>
       <div className="bh-seg" role="tablist" aria-label="Record period">

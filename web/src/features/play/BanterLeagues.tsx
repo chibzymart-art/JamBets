@@ -26,6 +26,8 @@ import {
 } from './banterRules';
 import { BanterWall } from './BanterWall';
 import { RepliesToYou } from './BanterRepliesToYou';
+import { LeagueMuteButton } from './BanterPushUI';
+import { notifyPush } from './banterPush';
 import './banter.css';
 
 /**
@@ -116,6 +118,7 @@ export function BanterLeagues({ onNotificationsChanged }: { onNotificationsChang
     const r = await joinLeague(code);
     setBusy(false);
     if (!r.ok) { setFormError(leagueErrorMessage(r.code)); return; }
+    if (!r.data.already_member) notifyPush('join', r.data.league_id);
     setJoinCode('');
     clearJoinParam();
     setNotice(r.data.already_member ? `You're already in "${r.data.name}".` : `You joined "${r.data.name}".`);
@@ -380,6 +383,7 @@ function LeagueCard({
           <BanterWall leagueId={league.league_id} title="League wall" focusPostId={focusPostId} />
 
           <div className="bh-inline bh-league-actions">
+            <LeagueMuteButton leagueId={league.league_id} />
             <button type="button" className="bh-link-danger" onClick={leave}>
               {confirmLeave
                 ? league.is_owner ? 'Tap again to delete this league for everyone' : 'Tap again to leave'
@@ -432,6 +436,7 @@ function PublicLeagues({ onChanged }: { onChanged: (message: string, openLeagueI
     const r = await joinPublicLeague(l.league_id);
     setBusyId(null);
     if (!r.ok) { setError(leagueErrorMessage(r.code)); return; }
+    if (!r.data.already_member) notifyPush('join', r.data.league_id);
     setReload((n) => n + 1);
     onChanged(r.data.already_member ? `You're already in "${r.data.name}".` : `You joined "${r.data.name}".`, r.data.league_id);
   };
