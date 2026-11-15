@@ -20,6 +20,7 @@ import {
   telegramShareUrl,
   whatsappShareUrl,
 } from './banterRules';
+import { BanterWall } from './BanterWall';
 import './banter.css';
 
 /**
@@ -284,6 +285,8 @@ function LeagueCard({
               ))}
             </ol>
           )}
+
+          <BanterWall leagueId={league.league_id} title="League wall" />
 
           <div className="bh-inline bh-league-actions">
             <button type="button" className="bh-link-danger" onClick={leave}>

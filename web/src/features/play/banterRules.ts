@@ -189,3 +189,59 @@ export function myLeaderboardRow<T extends { is_me: boolean }>(rows: T[] | null 
 export function pendingCount(picks: { status: string }[] | null | undefined): number {
   return (picks || []).filter((p) => p.status === 'pending').length;
 }
+
+// ---------------------------------------------------------------------------
+// Wall
+// ---------------------------------------------------------------------------
+
+export const WALL_MAX = 280;
+export const WALL_PAGE = 30;
+
+/** Characters left for a post (counted after trimming, like the database check). */
+export function wallCharsLeft(body: string): number {
+  return WALL_MAX - [...(body || '').trim()].length;
+}
+
+/** "just now", "5m", "3h", "2d", or a short date for older posts. */
+export function timeAgo(iso: string, nowMs: number): string {
+  const t = new Date(iso).getTime();
+  if (!Number.isFinite(t)) return '';
+  const s = Math.max(0, Math.floor((nowMs - t) / 1000));
+  if (s < 45) return 'just now';
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${Math.max(1, m)}m`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h`;
+  const d = Math.floor(h / 24);
+  if (d < 7) return `${d}d`;
+  return new Date(t).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+}
+
+export function wallErrorMessage(code: string): string {
+  switch (code) {
+    case 'body_invalid':
+      return `Posts need 1 to ${WALL_MAX} characters.`;
+    case 'too_fast':
+      return 'Slow down a little: one post every 10 seconds.';
+    case 'daily_limit':
+      return "You've reached today's limit of 60 posts. Try again later.";
+    case 'banned':
+      return "You can't post on the wall right now.";
+    case 'not_member':
+      return "You're not in that league.";
+    case 'not_allowed':
+      return 'You can only delete your own posts.';
+    case 'post_not_found':
+      return 'That post is no longer there.';
+    case 'no_profile':
+      return 'Choose a username first.';
+    case 'no_access':
+      return 'Banter Hub is for paid members. Upgrade to post.';
+    case 'not_ready':
+      return "The wall isn't switched on yet. Please check back soon.";
+    case 'not_signed_in':
+      return 'Please sign in again.';
+    default:
+      return 'Something went wrong. Please try again.';
+  }
+}

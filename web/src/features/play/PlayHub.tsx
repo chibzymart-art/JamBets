@@ -6,6 +6,7 @@ import { BanterMyPicks } from './BanterMyPicks';
 import { BanterLeaderboard } from './BanterLeaderboard';
 import { BanterLeagues } from './BanterLeagues';
 import { BanterProfile } from './BanterProfile';
+import { BanterWall } from './BanterWall';
 import { BANTER_POINTS } from './banterRules';
 import './play.css';
 
@@ -171,6 +172,8 @@ export default function PlayHub(props: PlayHubProps) {
                   <BanterLeaderboard />
                 ) : tab === 'leagues' ? (
                   <BanterLeagues />
+                ) : tab === 'wall' ? (
+                  <BanterWall />
                 ) : tab === 'profile' ? (
                   <BanterProfile me={me} onProfileSaved={onProfileSaved} />
                 ) : (
@@ -230,6 +233,15 @@ function HubTabs({ tab, ...props }: PlayHubProps & { tab: ReturnType<typeof play
             icon="👥"
             title="Leagues"
             body="Start a private league, share the invite link on WhatsApp or Telegram, and keep your own table and banter wall with friends."
+          />
+        )}
+
+        {tab === 'wall' && (
+          <EmptyTab
+            {...props}
+            icon="💬"
+            title="Banter wall"
+            body="Post your takes and banter with other members, plus a private wall in every league."
           />
         )}
 
