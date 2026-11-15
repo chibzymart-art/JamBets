@@ -791,3 +791,7 @@
 .bh-more {
   justify-self: center;
 }
+
+.bh-seg-2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
