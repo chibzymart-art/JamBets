@@ -165,3 +165,25 @@ export const leaveLeague = (leagueId: string) =>
 
 export const fetchLeagueTable = (leagueId: string, period: LeaderboardPeriod) =>
   call<LeaderboardRow[]>('banter_league_table', { p_league_id: leagueId, p_period: period });
+
+// ---------------------------------------------------------------------------
+// Wall
+// ---------------------------------------------------------------------------
+
+export interface WallPost {
+  id: string;
+  handle: string;
+  avatar_emoji: string;
+  body: string;
+  created_at: string;
+  is_me: boolean;
+  can_delete: boolean;
+}
+
+export const fetchWall = (leagueId: string | null, before: string | null, limit = 30) =>
+  call<WallPost[]>('banter_wall', { p_league_id: leagueId, p_before: before, p_limit: limit });
+
+export const postToWall = (body: string, leagueId: string | null) =>
+  call<{ id: string; created_at: string }>('banter_post', { p_body: body.trim(), p_league_id: leagueId });
+
+export const deleteWallPost = (postId: string) => call<boolean>('banter_delete_post', { p_post_id: postId });
