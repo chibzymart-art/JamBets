@@ -86,9 +86,9 @@ test('every wall error has a message, including not switched on yet', () => {
   }
 });
 
-test('Wall tab exists at /play/wall', () => {
-  assert.ok(PLAY_TABS.some((t) => t.id === 'wall' && t.path === '/play/wall'));
-  assert.equal(playTabFromPath('/play/wall'), 'wall');
+test('the old /play/wall address opens Discussion (league walls stay)', () => {
+  assert.ok(!PLAY_TABS.some((t) => (t.id as string) === 'wall'));
+  assert.equal(playTabFromPath('/play/wall'), 'discussion');
 });
 
 test('posts render as plain text (no innerHTML, no linkify)', () => {

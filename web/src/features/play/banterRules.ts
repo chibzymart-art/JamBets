@@ -249,3 +249,70 @@ export function wallErrorMessage(code: string): string {
       return 'Something went wrong. Please try again.';
   }
 }
+
+// ---------------------------------------------------------------------------
+// Discussion
+// ---------------------------------------------------------------------------
+
+export const TOPIC_TITLE_MIN = 3;
+export const TOPIC_TITLE_MAX = 120;
+export const TOPIC_BODY_MAX = 1000;
+export const REPLY_MAX = 500;
+export const TOPIC_PAGE = 20;
+
+/** Characters left (counted after trimming, emoji as one, like the database check). */
+export function charsLeft(text: string, max: number): number {
+  return max - [...(text || '').trim()].length;
+}
+
+/** Title as the database stores it: whitespace collapsed, trimmed. */
+export function cleanTitle(title: string): string {
+  return (title || '').replace(/\s+/g, ' ').trim();
+}
+
+export function topicTitleValid(title: string): boolean {
+  const n = [...cleanTitle(title)].length;
+  return n >= TOPIC_TITLE_MIN && n <= TOPIC_TITLE_MAX;
+}
+
+/** Short one-line quote of a message for the "replying to" strip. */
+export function snippet(text: string, max = 80): string {
+  const flat = (text || '').replace(/\s+/g, ' ').trim();
+  const chars = [...flat];
+  return chars.length > max ? `${chars.slice(0, max - 1).join('')}…` : flat;
+}
+
+export function notificationLine(kind: string, fromHandle: string): string {
+  return kind === 'reply' ? `${fromHandle} replied to you` : `${fromHandle} replied in your topic`;
+}
+
+export function discussionErrorMessage(code: string): string {
+  switch (code) {
+    case 'title_invalid':
+      return `Topic titles need ${TOPIC_TITLE_MIN} to ${TOPIC_TITLE_MAX} characters.`;
+    case 'body_invalid':
+      return `Messages need 1 to ${TOPIC_BODY_MAX} characters for a topic, or up to ${REPLY_MAX} for a reply.`;
+    case 'too_fast':
+      return 'Slow down a little: one message every 10 seconds.';
+    case 'daily_limit':
+      return "You've reached today's limit of 60 messages. Try again later.";
+    case 'banned':
+      return "You can't post in Discussion right now.";
+    case 'topic_not_found':
+      return 'That topic is no longer there.';
+    case 'reply_not_found':
+      return 'The message you were replying to is no longer there.';
+    case 'not_allowed':
+      return 'You can only delete your own messages.';
+    case 'no_profile':
+      return 'Choose a username first.';
+    case 'no_access':
+      return 'Banter Hub is for paid members. Upgrade to join the discussion.';
+    case 'not_ready':
+      return "Discussion isn't switched on yet. Please check back soon.";
+    case 'not_signed_in':
+      return 'Please sign in again.';
+    default:
+      return 'Something went wrong. Please try again.';
+  }
+}
