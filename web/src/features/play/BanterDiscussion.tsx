@@ -24,6 +24,7 @@ import {
 } from './banterRules';
 import { RepliesToYou } from './BanterRepliesToYou';
 import { liveKey, nearBottom, sendPing, useLiveRefresh } from './banterLive';
+import { notifyPush } from './banterPush';
 import './banter.css';
 
 /**
@@ -390,6 +391,7 @@ function TopicView({ topicId, focusReply, onBack }: { topicId: string; focusRepl
       : await postReply(topicId, body, replyTo ? replyTo.id : null);
     setBusy(false);
     if (!r.ok) { setError(discussionErrorMessage(r.code)); return; }
+    notifyPush('reply', r.data.id);
     // Tell everyone looking: this topic, the topic list, and the members this reply notifies.
     const pings = [liveKey.topic(topicId), liveKey.topicList()];
     if (replyTo && !replyTo.is_me) pings.push(liveKey.member(replyTo.handle));
