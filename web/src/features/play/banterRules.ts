@@ -283,7 +283,8 @@ export function snippet(text: string, max = 80): string {
 }
 
 export function notificationLine(kind: string, fromHandle: string): string {
-  return kind === 'reply' ? `${fromHandle} replied to you` : `${fromHandle} replied in your topic`;
+  if (kind === 'topic_reply') return `${fromHandle} replied in your topic`;
+  return `${fromHandle} replied to you`;
 }
 
 export function discussionErrorMessage(code: string): string {
@@ -315,4 +316,12 @@ export function discussionErrorMessage(code: string): string {
     default:
       return 'Something went wrong. Please try again.';
   }
+}
+
+/** Where a notification opens: the topic at that reply, or the league with that wall post. */
+export function notificationHref(n: { kind: string; topic_id?: string | null; reply_id?: string | null; league_id?: string | null; post_id?: string | null }): string {
+  if (n.kind === 'league_reply' && n.league_id && n.post_id) {
+    return `/play/leagues?league=${encodeURIComponent(n.league_id)}&post=${encodeURIComponent(n.post_id)}`;
+  }
+  return `/play/discussion?topic=${encodeURIComponent(n.topic_id || '')}&reply=${encodeURIComponent(n.reply_id || '')}`;
 }

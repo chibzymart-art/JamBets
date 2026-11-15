@@ -191,7 +191,7 @@ export default function PlayHub(props: PlayHubProps) {
                 ) : tab === 'leaderboard' ? (
                   <BanterLeaderboard />
                 ) : tab === 'leagues' ? (
-                  <BanterLeagues />
+                  <BanterLeagues onNotificationsChanged={refreshUnread} />
                 ) : tab === 'discussion' ? (
                   <BanterDiscussion onNotificationsChanged={refreshUnread} />
                 ) : tab === 'profile' ? (

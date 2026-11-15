@@ -1,21 +1,34 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { deleteWallPost, fetchWall, postToWall, type WallPost } from './banterApi';
-import { WALL_MAX, WALL_PAGE, timeAgo, wallCharsLeft, wallErrorMessage } from './banterRules';
+import { WALL_MAX, WALL_PAGE, snippet, timeAgo, wallCharsLeft, wallErrorMessage } from './banterRules';
 import './banter.css';
 
 /**
- * A Banter wall: the public wall (leagueId null) or one league's wall. Newest first, load more,
- * post box with a character counter, delete own posts (admins: any), manual refresh.
- * Post text is rendered as plain text only (React escapes it; no HTML, no auto-linking).
+ * A Banter wall (used for each league's wall). Newest first, load more, post box with a character
+ * counter, Reply on every message (quotes it, tags its author and notifies them), delete own posts
+ * (admins: any), manual refresh. Post text is rendered as plain text only (React escapes it; no
+ * HTML, no auto-linking). focusPostId scrolls to and highlights one post (from "Replies to you").
  */
-export function BanterWall({ leagueId = null, title = 'Banter wall' }: { leagueId?: string | null; title?: string }) {
+export function BanterWall({
+  leagueId = null,
+  title = 'Banter wall',
+  focusPostId = null,
+}: {
+  leagueId?: string | null;
+  title?: string;
+  focusPostId?: string | null;
+}) {
   const [posts, setPosts] = useState<WallPost[] | null>(null);
   const [hasMore, setHasMore] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [body, setBody] = useState('');
+  const [replyTo, setReplyTo] = useState<WallPost | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [now, setNow] = useState(() => Date.now());
+  const [highlight, setHighlight] = useState<string | null>(focusPostId);
+  const boxRef = useRef<HTMLTextAreaElement | null>(null);
+  const boxId = `bh-wall-${leagueId || 'public'}`;
 
   const load = useCallback(async () => {
     setNow(Date.now());
@@ -31,6 +44,17 @@ export function BanterWall({ leagueId = null, title = 'Banter wall' }: { leagueI
     load();
   }, [load]);
 
+  useEffect(() => { if (focusPostId) setHighlight(focusPostId); }, [focusPostId]);
+
+  // Scroll to the highlighted post once it is on screen, then let the highlight fade.
+  useEffect(() => {
+    if (!posts || !highlight) return;
+    const el = document.getElementById(`bh-post-${highlight}`);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    const t = setTimeout(() => setHighlight(null), 2500);
+    return () => clearTimeout(t);
+  }, [posts, highlight]);
+
   const loadMore = async () => {
     if (!posts || posts.length === 0) return;
     setBusy(true);
@@ -44,15 +68,26 @@ export function BanterWall({ leagueId = null, title = 'Banter wall' }: { leagueI
 
   const left = wallCharsLeft(body);
 
+  const startReply = (p: WallPost) => {
+    setReplyTo(p);
+    setTimeout(() => boxRef.current?.focus(), 0);
+  };
+
+  const jumpTo = (id: string) => {
+    const el = document.getElementById(`bh-post-${id}`);
+    if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); setHighlight(id); }
+  };
+
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
     if (left < 0 || body.trim().length === 0) { setError(wallErrorMessage('body_invalid')); return; }
     setBusy(true);
-    const r = await postToWall(body, leagueId);
+    const r = await postToWall(body, leagueId, replyTo ? replyTo.id : null);
     setBusy(false);
     if (!r.ok) { setError(wallErrorMessage(r.code)); return; }
     setBody('');
+    setReplyTo(null);
     await load();
   };
 
@@ -75,9 +110,16 @@ export function BanterWall({ leagueId = null, title = 'Banter wall' }: { leagueI
       ) : (
         <>
           <form className="bh-card bh-wall-form" onSubmit={submit}>
-            <label className="bh-mkt-label" htmlFor={`bh-wall-${leagueId || 'public'}`}>Say something</label>
+            {replyTo && (
+              <div className="bh-replying">
+                <span>↩ Replying to <b>{replyTo.handle}</b>: {snippet(replyTo.body, 60)}</span>
+                <button type="button" className="bh-link" onClick={() => setReplyTo(null)} aria-label="Stop replying to this message">✕</button>
+              </div>
+            )}
+            <label className="bh-mkt-label" htmlFor={boxId}>{replyTo ? `Your reply to ${replyTo.handle}` : 'Say something'}</label>
             <textarea
-              id={`bh-wall-${leagueId || 'public'}`}
+              id={boxId}
+              ref={boxRef}
               className="bh-input bh-textarea"
               value={body}
               rows={3}
@@ -87,9 +129,13 @@ export function BanterWall({ leagueId = null, title = 'Banter wall' }: { leagueI
             />
             <div className="bh-inline bh-wall-actions">
               <span className={`bh-counter ${left < 0 ? 'is-over' : left <= 20 ? 'is-near' : ''}`} aria-live="polite">{left}</span>
-              <button type="submit" className="bh-btn" disabled={busy || left < 0 || body.trim().length === 0}>Post</button>
+              <button type="submit" className="bh-btn" disabled={busy || left < 0 || body.trim().length === 0}>{replyTo ? 'Reply' : 'Post'}</button>
             </div>
-            <p className="bh-note">Keep it friendly. Plain text, up to {WALL_MAX} characters.</p>
+            <p className="bh-note">
+              {replyTo && !replyTo.is_me
+                ? `${replyTo.handle} will be tagged and notified.`
+                : `Keep it friendly. Plain text, up to ${WALL_MAX} characters. Tap ↩ Reply on a message to answer someone; they get notified.`}
+            </p>
           </form>
 
           {error && <p className="bh-error" role="alert">{error}</p>}
@@ -101,17 +147,38 @@ export function BanterWall({ leagueId = null, title = 'Banter wall' }: { leagueI
           ) : (
             <ul className="bh-posts">
               {posts.map((p) => (
-                <li key={p.id} className={`bh-card bh-post ${p.is_me ? 'is-me' : ''}`}>
+                <li
+                  key={p.id}
+                  id={`bh-post-${p.id}`}
+                  className={`bh-card bh-post bh-reply ${p.is_me ? 'is-me' : ''} ${p.tagged_is_me ? 'is-tagged-me' : ''} ${highlight === p.id ? 'is-target' : ''}`}
+                >
                   <span className="bh-lb-avatar" aria-hidden="true">{p.avatar_emoji}</span>
                   <div className="bh-post-main">
                     <div className="bh-post-head">
                       <b>{p.handle}{p.is_me ? ' (you)' : ''}</b>
                       <small title={new Date(p.created_at).toLocaleString()}>{timeAgo(p.created_at, now)}</small>
+                    </div>
+                    {p.reply_to && (
+                      p.reply_to.removed ? (
+                        <span className="bh-quote">↪ Replying to a message that was removed</span>
+                      ) : (
+                        <button type="button" className="bh-quote" onClick={() => jumpTo(p.reply_to!.id)}>
+                          ↪ <b>{p.reply_to.handle}</b>: {snippet(p.reply_to.preview, 80)}
+                        </button>
+                      )
+                    )}
+                    <p className="bh-post-body">{p.body}</p>
+                    {p.tagged_handle && (
+                      <span className={`bh-tagged ${p.tagged_is_me ? 'is-me' : ''}`}>
+                        🏷 {p.tagged_is_me ? 'You were tagged' : `${p.tagged_handle} was tagged`}
+                      </span>
+                    )}
+                    <div className="bh-reply-actions">
+                      <button type="button" className="bh-link" onClick={() => startReply(p)}>↩ Reply</button>
                       {p.can_delete && (
                         <button type="button" className="bh-link-danger" onClick={() => remove(p.id)}>Delete</button>
                       )}
                     </div>
-                    <p className="bh-post-body">{p.body}</p>
                   </div>
                 </li>
               ))}

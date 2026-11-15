@@ -25,6 +25,7 @@ import {
   whatsappShareUrl,
 } from './banterRules';
 import { BanterWall } from './BanterWall';
+import { RepliesToYou } from './BanterRepliesToYou';
 import './banter.css';
 
 /**
@@ -39,11 +40,15 @@ const PERIODS: { id: LeaderboardPeriod; label: string }[] = [
   { id: 'all', label: 'All time' },
 ];
 
-export function BanterLeagues() {
+export function BanterLeagues({ onNotificationsChanged }: { onNotificationsChanged?: () => void } = {}) {
   const [searchParams, setSearchParams] = useSearchParams();
+  // From "Replies to you": ?league=<id>&post=<id> opens that league and scrolls to the post.
+  const linkLeague = searchParams.get('league');
+  const linkPost = searchParams.get('post');
   const [leagues, setLeagues] = useState<BanterLeagueSummary[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [openId, setOpenId] = useState<string | null>(null);
+  const [openId, setOpenId] = useState<string | null>(linkLeague);
+  useEffect(() => { if (linkLeague) setOpenId(linkLeague); }, [linkLeague, linkPost]);
 
   const [newName, setNewName] = useState('');
   const [newPublic, setNewPublic] = useState(false);
@@ -137,6 +142,7 @@ export function BanterLeagues() {
     <div className="bh-today">
       {loadError && <p className="bh-error" role="alert">{loadError}</p>}
       {notice && <p className="bh-notice" role="status">{notice}</p>}
+      {!loadError && <RepliesToYou key={`${linkLeague}-${linkPost}`} onChanged={onNotificationsChanged} />}
 
       {!loadError && (
         <>
@@ -152,6 +158,7 @@ export function BanterLeagues() {
                   open={openId === l.league_id}
                   onToggle={() => setOpenId(openId === l.league_id ? null : l.league_id)}
                   onLeft={onLeft}
+                  focusPostId={l.league_id === linkLeague ? linkPost : null}
                   onVisibilityChanged={() => { setPublicKey((k) => k + 1); load(); }}
                 />
               ))}
@@ -231,12 +238,14 @@ function LeagueCard({
   onToggle,
   onLeft,
   onVisibilityChanged,
+  focusPostId = null,
 }: {
   league: BanterLeagueSummary;
   open: boolean;
   onToggle: () => void;
   onLeft: (message: string) => void;
   onVisibilityChanged: () => void;
+  focusPostId?: string | null;
 }) {
   const [isPublic, setIsPublic] = useState(!!league.is_public);
   const [savingVis, setSavingVis] = useState(false);
@@ -368,7 +377,7 @@ function LeagueCard({
             </ol>
           )}
 
-          <BanterWall leagueId={league.league_id} title="League wall" />
+          <BanterWall leagueId={league.league_id} title="League wall" focusPostId={focusPostId} />
 
           <div className="bh-inline bh-league-actions">
             <button type="button" className="bh-link-danger" onClick={leave}>

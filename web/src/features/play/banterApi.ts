@@ -208,13 +208,28 @@ export interface WallPost {
   created_at: string;
   is_me: boolean;
   can_delete: boolean;
+  /** Missing until the reply-everywhere database change is applied. */
+  tagged_handle?: string | null;
+  tagged_is_me?: boolean;
+  reply_to?: QuotedMessage | null;
 }
+
+/** The message a reply answers: a live one (with a short preview) or one that was removed. */
+export type QuotedMessage =
+  | { id: string; removed: true }
+  | { id: string; removed: false; handle: string; preview: string; topic?: boolean };
 
 export const fetchWall = (leagueId: string | null, before: string | null, limit = 30) =>
   call<WallPost[]>('banter_wall', { p_league_id: leagueId, p_before: before, p_limit: limit });
 
-export const postToWall = (body: string, leagueId: string | null) =>
-  call<{ id: string; created_at: string }>('banter_post', { p_body: body.trim(), p_league_id: leagueId });
+export async function postToWall(body: string, leagueId: string | null, replyTo: string | null = null) {
+  const plain = { p_body: body.trim(), p_league_id: leagueId };
+  if (!replyTo) return call<{ id: string; created_at: string }>('banter_post', plain);
+  const r = await call<{ id: string; created_at: string }>('banter_post', { ...plain, p_reply_to: replyTo });
+  // Before the reply-everywhere database change only the two-argument version exists: post it plainly.
+  if (!r.ok && r.code === 'not_ready') return call<{ id: string; created_at: string }>('banter_post', plain);
+  return r;
+}
 
 export const deleteWallPost = (postId: string) => call<boolean>('banter_delete_post', { p_post_id: postId });
 
@@ -245,7 +260,7 @@ export interface TopicReply {
   can_delete: boolean;
   tagged_handle: string | null;
   tagged_is_me: boolean;
-  reply_to: { id: string; removed: true } | { id: string; removed: false; handle: string; preview: string } | null;
+  reply_to: QuotedMessage | null;
 }
 
 export interface TopicDetail {
@@ -265,10 +280,14 @@ export interface TopicDetail {
 
 export interface BanterNotification {
   id: string;
-  kind: 'reply' | 'topic_reply';
-  topic_id: string;
-  topic_title: string;
-  reply_id: string;
+  kind: 'reply' | 'topic_reply' | 'league_reply';
+  topic_id: string | null;
+  topic_title: string | null;
+  reply_id: string | null;
+  /** League wall replies (kind 'league_reply'). */
+  league_id?: string | null;
+  league_name?: string | null;
+  post_id?: string | null;
   preview: string;
   from_handle: string;
   from_avatar: string;
@@ -284,8 +303,14 @@ export const fetchTopic = (topicId: string) => call<TopicDetail>('banter_topic',
 export const createTopic = (title: string, body: string) =>
   call<{ id: string; created_at: string }>('banter_create_topic', { p_title: title.trim(), p_body: body.trim() });
 
-export const postReply = (topicId: string, body: string, replyTo: string | null) =>
-  call<{ id: string; created_at: string }>('banter_post_reply', { p_topic_id: topicId, p_body: body.trim(), p_reply_to: replyTo });
+export async function postReply(topicId: string, body: string, replyTo: string | null, toTopic = false) {
+  const plain = { p_topic_id: topicId, p_body: body.trim(), p_reply_to: replyTo };
+  if (!toTopic || replyTo) return call<{ id: string; created_at: string }>('banter_post_reply', plain);
+  const r = await call<{ id: string; created_at: string }>('banter_post_reply', { ...plain, p_reply_to_topic: true });
+  // Before the reply-everywhere database change: a plain reply (the topic author is still notified).
+  if (!r.ok && r.code === 'not_ready') return call<{ id: string; created_at: string }>('banter_post_reply', plain);
+  return r;
+}
 
 export const deleteTopic = (topicId: string) => call<boolean>('banter_delete_topic', { p_topic_id: topicId });
 

@@ -4,12 +4,9 @@ import {
   createTopic,
   deleteReply,
   deleteTopic,
-  fetchNotifications,
   fetchTopic,
   fetchTopics,
-  markNotificationsRead,
   postReply,
-  type BanterNotification,
   type TopicDetail,
   type TopicReply,
   type TopicSummary,
@@ -21,11 +18,11 @@ import {
   TOPIC_TITLE_MAX,
   charsLeft,
   discussionErrorMessage,
-  notificationLine,
   snippet,
   timeAgo,
   topicTitleValid,
 } from './banterRules';
+import { RepliesToYou } from './BanterRepliesToYou';
 import './banter.css';
 
 /**
@@ -39,10 +36,10 @@ export function BanterDiscussion({ onNotificationsChanged }: { onNotificationsCh
   const topicId = searchParams.get('topic');
   const focusReply = searchParams.get('reply');
 
-  const openTopic = (id: string, replyId?: string) => {
+  const openTopic = (id: string) => {
     const next = new URLSearchParams(searchParams);
     next.set('topic', id);
-    if (replyId) next.set('reply', replyId); else next.delete('reply');
+    next.delete('reply');
     setSearchParams(next);
     window.scrollTo({ top: 0 });
   };
@@ -68,7 +65,7 @@ function TopicList({
   onOpen,
   onNotificationsChanged,
 }: {
-  onOpen: (id: string, replyId?: string) => void;
+  onOpen: (id: string) => void;
   onNotificationsChanged?: () => void;
 }) {
   const [search, setSearch] = useState('');
@@ -151,7 +148,7 @@ function TopicList({
         <p className="bh-error" role="alert">{loadError}</p>
       ) : (
         <>
-          <RepliesToYou onOpen={onOpen} onChanged={onNotificationsChanged} />
+          <RepliesToYou onChanged={onNotificationsChanged} />
 
           {composing ? (
             <form className="bh-card bh-wall-form" onSubmit={submit}>
@@ -244,71 +241,6 @@ function TopicList({
   );
 }
 
-function RepliesToYou({
-  onOpen,
-  onChanged,
-}: {
-  onOpen: (id: string, replyId?: string) => void;
-  onChanged?: () => void;
-}) {
-  const [items, setItems] = useState<BanterNotification[] | null>(null);
-  const [open, setOpen] = useState(false);
-  const now = Date.now();
-
-  useEffect(() => {
-    let live = true;
-    fetchNotifications(30).then((r) => {
-      if (live) setItems(r.ok ? r.data || [] : []);
-    });
-    return () => { live = false; };
-  }, []);
-
-  if (!items || items.length === 0) return null;
-  const unread = items.filter((n) => !n.is_read);
-
-  const toggle = async () => {
-    const next = !open;
-    setOpen(next);
-    // Opening the list marks what it shows as read.
-    if (next && unread.length > 0) {
-      const r = await markNotificationsRead(unread.map((n) => n.id));
-      if (r.ok) {
-        setItems((all) => (all || []).map((n) => ({ ...n, is_read: true })));
-        onChanged?.();
-      }
-    }
-  };
-
-  return (
-    <div className="bh-notifs">
-      <button type="button" className="bh-link bh-notif-toggle" onClick={toggle} aria-expanded={open}>
-        🔔 Replies to you
-        {unread.length > 0 && <span className="bh-notif-count">{unread.length}</span>}
-        <span aria-hidden="true">{open ? '▴' : '▾'}</span>
-      </button>
-      {open && (
-        <ul className="bh-notif-list">
-          {items.map((n) => (
-            <li key={n.id}>
-              <button
-                type="button"
-                className={`bh-notif ${n.is_read ? '' : 'is-unread'}`}
-                onClick={() => onOpen(n.topic_id, n.reply_id)}
-              >
-                <span className="bh-lb-avatar" aria-hidden="true">{n.from_avatar}</span>
-                <span>
-                  <b>{notificationLine(n.kind, n.from_handle)}</b> · <small style={{ display: 'inline' }}>{timeAgo(n.created_at, now)}</small>
-                  <small>in “{n.topic_title}”: {snippet(n.preview, 90)}</small>
-                </span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
-
 // ---------------------------------------------------------------------------
 // One topic with its replies
 // ---------------------------------------------------------------------------
@@ -318,7 +250,8 @@ function TopicView({ topicId, focusReply, onBack }: { topicId: string; focusRepl
   const [loadError, setLoadError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [body, setBody] = useState('');
-  const [replyTo, setReplyTo] = useState<TopicReply | null>(null);
+  // What the reply box answers: one reply, the topic's opening post, or nothing (a plain reply).
+  const [replyTo, setReplyTo] = useState<{ topic: true; handle: string; body: string; is_me: boolean } | (TopicReply & { topic?: false }) | null>(null);
   const [busy, setBusy] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const [highlight, setHighlight] = useState<string | null>(focusReply);
@@ -333,6 +266,7 @@ function TopicView({ topicId, focusReply, onBack }: { topicId: string; focusRepl
   }, [topicId]);
 
   useEffect(() => { load(); }, [load]);
+  useEffect(() => { if (focusReply) setHighlight(focusReply); }, [focusReply]);
 
   // Coming from "Replies to you": scroll to that message once it is on screen.
   useEffect(() => {
@@ -346,11 +280,18 @@ function TopicView({ topicId, focusReply, onBack }: { topicId: string; focusRepl
   const left = charsLeft(body, REPLY_MAX);
 
   const startReplyTo = (r: TopicReply) => {
-    setReplyTo(r);
+    setReplyTo({ ...r, topic: false });
+    setTimeout(() => boxRef.current?.focus(), 0);
+  };
+
+  const startReplyToTopic = () => {
+    if (!data) return;
+    setReplyTo({ topic: true, handle: data.topic.handle, body: data.topic.body, is_me: data.topic.is_me });
     setTimeout(() => boxRef.current?.focus(), 0);
   };
 
   const jumpTo = (id: string) => {
+    if (data && id === data.topic.id) { window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
     const el = document.getElementById(`bh-reply-${id}`);
     if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); setHighlight(id); }
   };
@@ -360,7 +301,9 @@ function TopicView({ topicId, focusReply, onBack }: { topicId: string; focusRepl
     setError(null);
     if (left < 0 || body.trim().length === 0) { setError(`Replies need 1 to ${REPLY_MAX} characters.`); return; }
     setBusy(true);
-    const r = await postReply(topicId, body, replyTo ? replyTo.id : null);
+    const r = replyTo?.topic
+      ? await postReply(topicId, body, null, true)
+      : await postReply(topicId, body, replyTo ? replyTo.id : null);
     setBusy(false);
     if (!r.ok) { setError(discussionErrorMessage(r.code)); return; }
     setBody('');
@@ -408,6 +351,9 @@ function TopicView({ topicId, focusReply, onBack }: { topicId: string; focusRepl
               </div>
               <h2>{data.topic.title}</h2>
               <p className="bh-post-body">{data.topic.body}</p>
+              <div className="bh-reply-actions">
+                <button type="button" className="bh-link" onClick={startReplyToTopic}>↩ Reply</button>
+              </div>
             </div>
           </article>
 
@@ -436,7 +382,7 @@ function TopicView({ topicId, focusReply, onBack }: { topicId: string; focusRepl
                         <span className="bh-quote">↪ Replying to a message that was removed</span>
                       ) : (
                         <button type="button" className="bh-quote" onClick={() => jumpTo(r.reply_to!.id)}>
-                          ↪ <b>{r.reply_to.handle}</b>: {snippet(r.reply_to.preview, 80)}
+                          ↪ <b>{r.reply_to.handle}</b>{r.reply_to.topic ? ' (opening post)' : ''}: {snippet(r.reply_to.preview, 80)}
                         </button>
                       )
                     )}
@@ -447,9 +393,7 @@ function TopicView({ topicId, focusReply, onBack }: { topicId: string; focusRepl
                       </span>
                     )}
                     <div className="bh-reply-actions">
-                      {!r.is_me && (
-                        <button type="button" className="bh-link" onClick={() => startReplyTo(r)}>↩ Reply</button>
-                      )}
+                      <button type="button" className="bh-link" onClick={() => startReplyTo(r)}>↩ Reply</button>
                       {r.can_delete && (
                         <button type="button" className="bh-link-danger" onClick={() => removeReply(r.id)}>Delete</button>
                       )}
@@ -463,7 +407,7 @@ function TopicView({ topicId, focusReply, onBack }: { topicId: string; focusRepl
           <form className="bh-card bh-wall-form" onSubmit={submit}>
             {replyTo && (
               <div className="bh-replying">
-                <span>↩ Replying to <b>{replyTo.handle}</b>: {snippet(replyTo.body, 60)}</span>
+                <span>↩ Replying to <b>{replyTo.handle}</b>{replyTo.topic ? ' (opening post)' : ''}: {snippet(replyTo.body, 60)}</span>
                 <button type="button" className="bh-link" onClick={() => setReplyTo(null)} aria-label="Stop replying to this message">✕</button>
               </div>
             )}
@@ -483,7 +427,9 @@ function TopicView({ topicId, focusReply, onBack }: { topicId: string; focusRepl
               <button type="submit" className="bh-btn" disabled={busy || left < 0 || body.trim().length === 0}>Reply</button>
             </div>
             <p className="bh-note">
-              {replyTo ? `${replyTo.handle} will be tagged and notified.` : 'Tap ↩ Reply on a message to answer someone directly; they get notified.'}
+              {replyTo && !replyTo.is_me
+                ? `${replyTo.handle} will be tagged and notified.`
+                : 'Tap ↩ Reply on any message to answer someone directly; they get notified.'}
             </p>
           </form>
 
