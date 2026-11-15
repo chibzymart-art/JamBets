@@ -66,9 +66,9 @@ export function RepliesToYou({ onChanged }: { onChanged?: () => void }) {
               <button type="button" className={`bh-notif ${n.is_read ? '' : 'is-unread'}`} onClick={() => go(n)}>
                 <span className="bh-lb-avatar" aria-hidden="true">{n.from_avatar}</span>
                 <span>
-                  <b>{notificationLine(n.kind, n.from_handle)}</b> · <small style={{ display: 'inline' }}>{timeAgo(n.created_at, now)}</small>
+                  <b>{notificationLine(n.kind, n.from_handle, n.reaction)}</b> · <small style={{ display: 'inline' }}>{timeAgo(n.created_at, now)}</small>
                   <small>
-                    {n.kind === 'league_reply' ? `in league “${n.league_name}”` : `in “${n.topic_title}”`}: {snippet(n.preview, 90)}
+                    {n.league_id ? `in league “${n.league_name}”` : `in “${n.topic_title}”`}: {snippet(n.preview, 90)}
                   </small>
                 </span>
               </button>

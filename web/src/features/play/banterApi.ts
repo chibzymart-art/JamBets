@@ -212,7 +212,20 @@ export interface WallPost {
   tagged_handle?: string | null;
   tagged_is_me?: boolean;
   reply_to?: QuotedMessage | null;
+  /** Missing until the reactions database change is applied. */
+  reactions?: ReactionCounts | null;
+  my_reaction?: ReactionKind | null;
 }
+
+export type ReactionKind = 'up' | 'down' | 'angry' | 'laugh' | 'cry';
+export type ReactionTarget = 'topic' | 'reply' | 'post';
+export type ReactionCounts = Partial<Record<ReactionKind, number>>;
+
+export const react = (kind: ReactionTarget, id: string, reaction: ReactionKind) =>
+  call<{ state: 'added' | 'changed' | 'removed'; reaction_id: string | null; counts: ReactionCounts | null; mine: ReactionKind | null }>(
+    'banter_react',
+    { p_kind: kind, p_id: id, p_reaction: reaction },
+  );
 
 /** The message a reply answers: a live one (with a short preview) or one that was removed. */
 export type QuotedMessage =
@@ -261,6 +274,8 @@ export interface TopicReply {
   tagged_handle: string | null;
   tagged_is_me: boolean;
   reply_to: QuotedMessage | null;
+  reactions?: ReactionCounts | null;
+  my_reaction?: ReactionKind | null;
 }
 
 export interface TopicDetail {
@@ -274,13 +289,17 @@ export interface TopicDetail {
     last_activity_at: string;
     is_me: boolean;
     can_delete: boolean;
+    reactions?: ReactionCounts | null;
+    my_reaction?: ReactionKind | null;
   };
   replies: TopicReply[];
 }
 
 export interface BanterNotification {
   id: string;
-  kind: 'reply' | 'topic_reply' | 'league_reply';
+  kind: 'reply' | 'topic_reply' | 'league_reply' | 'reaction';
+  /** For kind 'reaction'. */
+  reaction?: ReactionKind | null;
   topic_id: string | null;
   topic_title: string | null;
   reply_id: string | null;

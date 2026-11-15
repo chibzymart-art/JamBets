@@ -25,6 +25,7 @@ import {
 import { RepliesToYou } from './BanterRepliesToYou';
 import { liveKey, nearBottom, sendPing, useLiveRefresh } from './banterLive';
 import { notifyPush } from './banterPush';
+import { BanterReactions } from './BanterReactions';
 import './banter.css';
 
 /**
@@ -319,7 +320,9 @@ function TopicView({ topicId, focusReply, onBack }: { topicId: string; focusRepl
     }
     const known = new Set(current.replies.map((x) => x.id));
     const added = r.data.replies.filter((x) => !known.has(x.id) && !x.is_me).map((x) => x.id);
-    const sig = (d: TopicDetail) => d.replies.map((x) => `${x.id}:${x.tagged_handle || ''}`).join('|') + d.topic.title;
+    const sig = (d: TopicDetail) =>
+      d.replies.map((x) => `${x.id}:${x.tagged_handle || ''}:${JSON.stringify(x.reactions || {})}`).join('|')
+      + d.topic.title + JSON.stringify(d.topic.reactions || {});
     if (sig(r.data) === sig(current)) return;
     const atBottom = nearBottom();
     setNow(Date.now());
@@ -444,6 +447,13 @@ function TopicView({ topicId, focusReply, onBack }: { topicId: string; focusRepl
               </div>
               <h2>{data.topic.title}</h2>
               <p className="bh-post-body">{data.topic.body}</p>
+              <BanterReactions
+                kind="topic"
+                id={data.topic.id}
+                counts={data.topic.reactions}
+                mine={data.topic.my_reaction}
+                pingKeys={[liveKey.topic(topicId), data.topic.is_me ? null : liveKey.member(data.topic.handle)]}
+              />
               <div className="bh-reply-actions">
                 <button type="button" className="bh-link" onClick={startReplyToTopic}>↩ Reply</button>
               </div>
@@ -485,6 +495,13 @@ function TopicView({ topicId, focusReply, onBack }: { topicId: string; focusRepl
                         🏷 {r.tagged_is_me ? 'You were tagged' : `${r.tagged_handle} was tagged`}
                       </span>
                     )}
+                    <BanterReactions
+                      kind="reply"
+                      id={r.id}
+                      counts={r.reactions}
+                      mine={r.my_reaction}
+                      pingKeys={[liveKey.topic(topicId), r.is_me ? null : liveKey.member(r.handle)]}
+                    />
                     <div className="bh-reply-actions">
                       <button type="button" className="bh-link" onClick={() => startReplyTo(r)}>↩ Reply</button>
                       {r.can_delete && (

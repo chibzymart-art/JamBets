@@ -891,3 +891,17 @@
 .bh-switch span { display: flex; flex-direction: column; }
 .bh-switch small { color: var(--text-muted); font-size: 12px; }
 .bh-league-actions { flex-wrap: wrap; gap: 12px; }
+
+/* Reactions */
+.bh-reactions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 6px; }
+.bh-react {
+  display: inline-flex; align-items: center; gap: 3px; min-height: 28px; padding: 2px 8px;
+  border: 1px solid var(--border-subtle); border-radius: 999px; background: transparent;
+  font: inherit; font-size: 14px; line-height: 1; cursor: pointer; color: var(--text-primary);
+}
+.bh-react small { font-size: 11.5px; font-weight: 700; color: var(--text-muted); }
+.bh-react:not(.has-count):not(.is-mine) { opacity: .6; }
+.bh-react:hover, .bh-react:focus-visible { opacity: 1; border-color: var(--border-strong); }
+.bh-react.is-mine { border-color: var(--green-primary); background: rgba(34, 197, 94, .14); opacity: 1; }
+.bh-react.is-mine small { color: var(--green-primary); }
+.bh-react-error { color: #b91c1c; font-size: 11.5px; }

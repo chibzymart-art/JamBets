@@ -3,6 +3,7 @@ import { deleteWallPost, fetchWall, postToWall, type WallPost } from './banterAp
 import { WALL_MAX, WALL_PAGE, snippet, timeAgo, wallCharsLeft, wallErrorMessage } from './banterRules';
 import { liveKey, sendPing, topVisible, useLiveRefresh } from './banterLive';
 import { notifyPush } from './banterPush';
+import { BanterReactions } from './BanterReactions';
 import './banter.css';
 
 /**
@@ -65,7 +66,7 @@ export function BanterWall({
     const r = await fetchWall(leagueId, null, WALL_PAGE);
     if (!r.ok) return;
     const fresh = r.data || [];
-    const sig = (l: WallPost[]) => l.map((p) => `${p.id}:${p.tagged_handle || ''}`).join('|');
+    const sig = (l: WallPost[]) => l.map((p) => `${p.id}:${p.tagged_handle || ''}:${JSON.stringify(p.reactions || {})}`).join('|');
     if (sig(fresh) === sig(current.slice(0, fresh.length))) return;
     const added = fresh.filter((f) => !current.some((p) => p.id === f.id) && !f.is_me);
     if (added.length === 0 || topVisible(listRef.current)) {
@@ -222,6 +223,13 @@ export function BanterWall({
                         🏷 {p.tagged_is_me ? 'You were tagged' : `${p.tagged_handle} was tagged`}
                       </span>
                     )}
+                    <BanterReactions
+                      kind="post"
+                      id={p.id}
+                      counts={p.reactions}
+                      mine={p.my_reaction}
+                      pingKeys={[leagueId ? liveKey.league(leagueId) : null, p.is_me ? null : liveKey.member(p.handle)]}
+                    />
                     <div className="bh-reply-actions">
                       <button type="button" className="bh-link" onClick={() => startReply(p)}>↩ Reply</button>
                       {p.can_delete && (
