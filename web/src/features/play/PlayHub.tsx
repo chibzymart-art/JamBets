@@ -9,6 +9,7 @@ import { BanterLeagues } from './BanterLeagues';
 import { BanterProfile } from './BanterProfile';
 import { BanterDiscussion } from './BanterDiscussion';
 import { fetchUnreadCount } from './banterApi';
+import { liveKey, notifyLocal, onLocalNotify, useLiveRefresh } from './banterLive';
 import { BANTER_POINTS } from './banterRules';
 import './play.css';
 
@@ -147,11 +148,12 @@ export default function PlayHub(props: PlayHubProps) {
   };
   useEffect(() => {
     refreshUnread();
-    if (!BANTER_LIVE || !props.isSignedIn) return;
-    const t = setInterval(refreshUnread, 60_000);
-    return () => clearInterval(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.isSignedIn, location.pathname]);
+  // Something about "Replies to you" changed in this tab (read, new reply): refresh the badge.
+  useEffect(() => onLocalNotify(refreshUnread),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [props.isSignedIn]);
 
   return (
     <div className="play-hub">
@@ -181,6 +183,7 @@ export default function PlayHub(props: PlayHubProps) {
           >
             {(me, onProfileSaved) => (
               <>
+                <MemberLive handle={me.handle} />
                 <p className="banter-me">
                   <span aria-hidden="true">{me.avatar}</span> Signed in as <strong>{me.handle}</strong>
                 </p>
@@ -212,6 +215,15 @@ export default function PlayHub(props: PlayHubProps) {
       </div>
     </div>
   );
+}
+
+/**
+ * Live updates for the signed-in member on every Banter tab: a ping on their own channel (someone
+ * replied to or tagged them) or the 15-second poll refreshes the unread badge and the bell.
+ */
+function MemberLive({ handle }: { handle: string }) {
+  useLiveRefresh([liveKey.member(handle)], () => notifyLocal(), { intervalMs: 15_000 });
+  return null;
 }
 
 /** The coming-soon content of each tab (unchanged). */

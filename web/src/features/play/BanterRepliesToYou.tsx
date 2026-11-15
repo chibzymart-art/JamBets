@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { fetchNotifications, markNotificationsRead, type BanterNotification } from './banterApi';
 import { notificationHref, notificationLine, snippet, timeAgo } from './banterRules';
+import { notifyLocal, onLocalNotify } from './banterLive';
 import './banter.css';
 
 /**
@@ -14,13 +15,21 @@ export function RepliesToYou({ onChanged }: { onChanged?: () => void }) {
   const [open, setOpen] = useState(false);
   const now = Date.now();
 
+  const [tick, setTick] = useState(0);
   useEffect(() => {
     let live = true;
     fetchNotifications(30).then((r) => {
-      if (live) setItems(r.ok ? r.data || [] : []);
+      if (!live) return;
+      // A passing error keeps what is shown; the first load shows nothing on error.
+      if (r.ok) setItems(r.data || []);
+      else setItems((cur) => cur || []);
     });
     return () => { live = false; };
-  }, []);
+  }, [tick]);
+
+  // Live: new replies and tags appear without leaving the page. The hub's member channel (a ping
+  // or its 15-second poll) and this tab's own actions call notifyLocal.
+  useEffect(() => onLocalNotify(() => setTick((t) => t + 1)), []);
 
   if (!items || items.length === 0) return null;
   const unread = items.filter((n) => !n.is_read);
@@ -33,6 +42,7 @@ export function RepliesToYou({ onChanged }: { onChanged?: () => void }) {
       if (r.ok) {
         setItems((all) => (all || []).map((n) => ({ ...n, is_read: true })));
         onChanged?.();
+        notifyLocal();
       }
     }
   };
