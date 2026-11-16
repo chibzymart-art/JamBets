@@ -18,11 +18,13 @@ import { PricingModal } from './components/PricingModal';
 import { FaqModal } from './components/FaqModal';
 import { NavigationFooter } from './components/NavigationFooter';
 import { HubSwitch, isPlayPath, PLAY_BASE_PATH } from './components/HubSwitch';
+import { DesktopHubTabs, isVirtualLifePath, VIRTUAL_LIFE_PATH } from './components/DesktopHubTabs';
 import { MobileDateStrip } from './components/MobileDateStrip';
 import './components/app-shell.css';
 
 // Play Hub is loaded only when someone opens it, so the Predictions Hub bundle is unchanged.
 const PlayHub = lazy(() => import('./features/play/PlayHub'));
+const VirtualLifePage = lazy(() => import('./features/virtual-life/VirtualLifePage'));
 import { FixtureCard } from './components/FixtureCard';
 import { FavoritesDrawer, FavoritePredictionItem } from './components/FavoritesDrawer';
 import { FloatingFavoritesWidget } from './components/FloatingFavoritesWidget';
@@ -1348,6 +1350,8 @@ export default function App() {
 
   /** Play Hub pages (/play...). The hub switch shows on Predictions (dashboard) and Play pages only. */
   const isPlay = isPlayPath(location.pathname);
+  /** Virtual Life preview page (desktop hub tabs). */
+  const isVirtualLife = isVirtualLifePath(location.pathname);
 
   const isSportActive = (sportId: string) => {
     const p = location.pathname.replace(/\/+$/, '');
@@ -2362,6 +2366,8 @@ export default function App() {
       </header>
 
       <main className="app-container">
+        {/* Desktop hub tabs: Prediction Hub / Banter Hub / Virtual Life (hidden on phones by CSS) */}
+        {(isDashboard || isPlay || isVirtualLife) && <DesktopHubTabs />}
         {/* Predictions Hub sport tabs (moved here from the top bar) */}
         {isDashboard && (
         <nav className="sport-subtabs" aria-label="Sports">
@@ -3700,6 +3706,15 @@ export default function App() {
                   }}
                   onOpenPricing={() => setIsPricingModalOpen(true)}
                 />
+              </Suspense>
+            }
+          />
+          {/* VIRTUAL LIFE (preview page: feature list + Coming Soon, no data) */}
+          <Route
+            path={VIRTUAL_LIFE_PATH}
+            element={
+              <Suspense fallback={<div className="play-hub-loading" aria-busy="true" />}>
+                <VirtualLifePage />
               </Suspense>
             }
           />
