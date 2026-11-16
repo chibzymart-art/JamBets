@@ -1,0 +1,124 @@
+/* Virtual Life preview page. Scoped to .vlife so nothing else is affected. */
+
+.vlife {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 8px 0 24px;
+}
+
+.vlife-hero {
+  text-align: center;
+  padding: 28px 20px 24px;
+  border: 1px solid #fcd34d;
+  border-radius: 18px;
+  background: linear-gradient(160deg, #fffbeb 0%, #ffffff 70%);
+  box-shadow: 0 6px 0 #fcd34d, 0 12px 24px rgba(15, 23, 42, 0.08);
+  margin-bottom: 26px;
+}
+
+.vlife-kicker {
+  display: inline-block;
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #92400e;
+  background: #fef3c7;
+  border-radius: 999px;
+  padding: 4px 10px;
+}
+
+.vlife-title {
+  font-family: var(--font-heading);
+  font-size: 34px;
+  font-weight: 800;
+  color: var(--text-primary);
+  margin: 10px 0 6px;
+}
+
+.vlife-lead {
+  font-family: var(--font-body);
+  font-size: 15px;
+  color: var(--text-secondary);
+  margin: 0 auto;
+  max-width: 560px;
+  line-height: 1.5;
+}
+
+.vlife-list {
+  list-style: none;
+  margin: 0 0 26px;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.vlife-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 14px 16px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  background: var(--bg-card);
+  box-shadow: var(--shadow-sm);
+}
+
+.vlife-item-icon {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: #fffbeb;
+  font-size: 19px;
+  line-height: 1;
+}
+
+.vlife-item-text {
+  display: grid;
+  gap: 2px;
+  font-family: var(--font-body);
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
+
+.vlife-item-text strong {
+  font-family: var(--font-heading);
+  font-size: 15.5px;
+  color: var(--text-primary);
+}
+
+.vlife-soon {
+  text-align: center;
+  padding: 24px 20px;
+  border-radius: 16px;
+  background: linear-gradient(160deg, #d97706 0%, #92400e 130%);
+  color: #ffffff;
+  box-shadow: 0 6px 0 #78350f, 0 12px 24px rgba(15, 23, 42, 0.15);
+}
+
+.vlife-soon-badge {
+  display: inline-block;
+  font-family: var(--font-heading);
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.vlife-soon p {
+  font-family: var(--font-body);
+  font-size: 14px;
+  margin: 8px auto 0;
+  max-width: 520px;
+  color: rgba(255, 255, 255, 0.9);
+  line-height: 1.5;
+}
+
+@media (max-width: 768px) {
+  .vlife-title { font-size: 28px; }
+  .vlife-hero { padding: 22px 14px 18px; }
+}

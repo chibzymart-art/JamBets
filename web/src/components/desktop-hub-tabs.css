@@ -1,0 +1,277 @@
+/* Desktop hub tabs in the top menu bar (Prediction Hub / Banter Hub / Virtual Life),
+   plus bolder 3D sport tabs. Desktop only: everything is inside min-width 769px, so phones are unchanged. */
+
+.dhub-tabs {
+  display: none;
+}
+
+@media (min-width: 769px) {
+  /* The hub slot in the top bar grows to fill the space between the logo and the account buttons. */
+  .header-hub-slot {
+    flex: 1 1 auto;
+    margin: 0 24px;
+  }
+
+  /* Keep the logo and account buttons at their natural size; the tabs take the remaining space. */
+  .site-header-inner:has(.dhub-tabs) > .header-left-group,
+  .site-header-inner:has(.dhub-tabs) > .header-right-actions {
+    flex-shrink: 0;
+  }
+
+  /* The three tabs replace the small two-button switch on desktop. */
+  .header-hub-slot .hub-switch-wrap {
+    display: none;
+  }
+
+  .dhub-tabs {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+    width: 100%;
+    padding-bottom: 5px; /* room for the 3D ledge */
+  }
+
+  .dhub-tab {
+    --dhub-c: var(--green-primary);
+    --dhub-c-dark: var(--green-dark);
+    --dhub-c-soft: var(--green-light);
+    --dhub-c-border: var(--green-border);
+
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 10px;
+    width: 100%;
+    min-width: 0;
+    padding: 7px 14px;
+    border: 1px solid var(--dhub-c-border);
+    border-radius: 12px;
+    background: linear-gradient(180deg, #ffffff 0%, var(--dhub-c-soft) 100%);
+    color: var(--text-primary);
+    cursor: pointer;
+    box-shadow:
+      0 5px 0 var(--dhub-c-border),
+      0 8px 14px rgba(15, 23, 42, 0.10);
+    transform: translateY(0);
+    transition: transform 0.1s ease, box-shadow 0.1s ease, background 0.15s ease;
+  }
+
+  .dhub-tab--banter {
+    --dhub-c: #4f46e5;
+    --dhub-c-dark: #3730a3;
+    --dhub-c-soft: #eef2ff;
+    --dhub-c-border: #c7d2fe;
+  }
+
+  .dhub-tab--virtual {
+    --dhub-c: #d97706;
+    --dhub-c-dark: #92400e;
+    --dhub-c-soft: #fffbeb;
+    --dhub-c-border: #fcd34d;
+  }
+
+  .dhub-tab:hover {
+    transform: translateY(-1px);
+    box-shadow:
+      0 6px 0 var(--dhub-c-border),
+      0 11px 18px rgba(15, 23, 42, 0.12);
+  }
+
+  .dhub-tab:active {
+    transform: translateY(4px);
+    box-shadow:
+      0 1px 0 var(--dhub-c-border),
+      0 3px 6px rgba(15, 23, 42, 0.10);
+  }
+
+  .dhub-tab.is-active {
+    border-color: var(--dhub-c-dark);
+    background: linear-gradient(180deg, var(--dhub-c) 0%, var(--dhub-c-dark) 135%);
+    color: #ffffff;
+    transform: translateY(2px);
+    box-shadow:
+      0 3px 0 var(--dhub-c-dark),
+      0 6px 12px rgba(15, 23, 42, 0.18),
+      inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  }
+
+  .dhub-tab.is-active:hover {
+    transform: translateY(2px);
+  }
+
+  .dhub-tab:focus-visible {
+    outline: 3px solid var(--border-focus);
+    outline-offset: 3px;
+  }
+
+  .dhub-tab-symbol {
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+    width: 34px;
+    height: 34px;
+    border-radius: 9px;
+    background: linear-gradient(145deg, var(--dhub-c) 0%, var(--dhub-c-dark) 120%);
+    color: #ffffff;
+    box-shadow:
+      0 2px 0 var(--dhub-c-dark),
+      inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  }
+
+  .dhub-tab-symbol svg {
+    width: 19px;
+    height: 19px;
+  }
+
+  .dhub-tab.is-active .dhub-tab-symbol {
+    background: rgba(255, 255, 255, 0.95);
+    color: var(--dhub-c);
+    box-shadow:
+      0 2px 0 rgba(0, 0, 0, 0.18),
+      inset 0 1px 0 #ffffff;
+  }
+
+  .dhub-tab.is-active .dhub-tab-symbol circle[fill='#fff'] {
+    fill: var(--dhub-c-soft);
+  }
+
+  .dhub-tab-text {
+    display: grid;
+    gap: 1px;
+    min-width: 0;
+    text-align: left;
+  }
+
+  .dhub-tab-sub {
+    font-family: var(--font-body);
+    font-size: 11.5px;
+    font-weight: 600;
+    line-height: 1.2;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .dhub-tab.is-active .dhub-tab-sub {
+    color: rgba(255, 255, 255, 0.88);
+  }
+
+  .dhub-tab-label {
+    min-width: 0;
+    font-family: var(--font-heading);
+    font-size: 16px;
+    font-weight: 800;
+    line-height: 1.15;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .dhub-tab-badge {
+    margin-left: auto;
+    flex: 0 0 auto;
+    font-family: var(--font-body);
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    padding: 2px 7px;
+    border-radius: 999px;
+    background: var(--dhub-c);
+    color: #ffffff;
+  }
+
+  .dhub-tab.is-active .dhub-tab-badge {
+    background: rgba(255, 255, 255, 0.95);
+    color: var(--dhub-c-dark);
+  }
+
+  /* Narrow desktops: keep the three tabs on one line by dropping the symbol tile first. */
+  @media (max-width: 1100px) {
+    .header-hub-slot { margin: 0 12px; }
+    .dhub-tabs { gap: 8px; }
+    .dhub-tab { padding: 7px 8px; gap: 6px; }
+    .dhub-tab-symbol { width: 28px; height: 28px; }
+    .dhub-tab-label { font-size: 14px; }
+    .dhub-tab-sub { display: none; }
+  }
+
+  @media (max-width: 960px) {
+    .dhub-tab-symbol { display: none; }
+  }
+
+  /* ---- Predictions Hub sport tabs: bolder, raised 3D chips (look only, same buttons) ---- */
+  .sport-subtabs {
+    gap: 10px;
+    border-bottom: 0;
+    margin: 6px 0 16px;
+    padding: 4px 2px 9px; /* room for the ledge and the hover lift */
+  }
+
+  .sport-subtab,
+  .sport-subtab--markets {
+    margin: 0;
+    padding: 9px 16px;
+    border: 1px solid var(--border-strong);
+    border-radius: 11px;
+    background: linear-gradient(180deg, #ffffff 0%, var(--bg-tertiary) 100%);
+    font-family: var(--font-heading);
+    font-size: 15px;
+    font-weight: 800;
+    letter-spacing: 0;
+    color: var(--text-primary);
+    box-shadow:
+      0 4px 0 var(--border-strong),
+      0 6px 12px rgba(15, 23, 42, 0.08);
+    transform: translateY(0);
+    transition: transform 0.1s ease, box-shadow 0.1s ease;
+  }
+
+  .sport-subtab:hover {
+    color: var(--text-primary);
+    transform: translateY(-1px);
+    box-shadow:
+      0 5px 0 var(--border-strong),
+      0 9px 16px rgba(15, 23, 42, 0.10);
+  }
+
+  .sport-subtab:active {
+    transform: translateY(3px);
+    box-shadow:
+      0 1px 0 var(--border-strong),
+      0 2px 4px rgba(15, 23, 42, 0.08);
+  }
+
+  .sport-subtab.active,
+  .sport-subtab--markets.active {
+    border-color: var(--green-dark);
+    background: linear-gradient(180deg, var(--green-primary) 0%, var(--green-dark) 140%);
+    color: #ffffff;
+    transform: translateY(2px);
+    box-shadow:
+      0 2px 0 var(--green-dark),
+      0 4px 10px rgba(15, 23, 42, 0.16),
+      inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  }
+
+  .sport-subtab-icon {
+    font-size: 18px;
+  }
+
+  .sport-subtab--markets {
+    font-size: 14px;
+  }
+
+  .sport-subtab-soon {
+    font-weight: 800;
+    background: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+  }
+
+  .sport-subtab.active .sport-subtab-soon {
+    background: rgba(255, 255, 255, 0.9);
+    color: var(--green-dark);
+  }
+}
