@@ -2163,9 +2163,11 @@ export default function App() {
           </div>
 
             {/* Top bar centre: Predictions Hub / Play Hub switch (sport tabs moved below the header) */}
-          {(isDashboard || isPlay) && (
+          {(isDashboard || isPlay || isVirtualLife) && (
           <div className="header-hub-slot">
             <HubSwitch />
+            {/* Desktop: Prediction Hub / Banter Hub / Virtual Life tabs in the top bar (CSS shows one or the other) */}
+            <DesktopHubTabs />
           </div>
           )}
 
@@ -2366,8 +2368,6 @@ export default function App() {
       </header>
 
       <main className="app-container">
-        {/* Desktop hub tabs: Prediction Hub / Banter Hub / Virtual Life (hidden on phones by CSS) */}
-        {(isDashboard || isPlay || isVirtualLife) && <DesktopHubTabs />}
         {/* Predictions Hub sport tabs (moved here from the top bar) */}
         {isDashboard && (
         <nav className="sport-subtabs" aria-label="Sports">

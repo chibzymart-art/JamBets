@@ -50,7 +50,7 @@ function VirtualLifeSymbol() {
 }
 
 /**
- * Desktop-only hub navigation: three full-width, raised (3D) tabs.
+ * Desktop-only hub navigation in the top menu bar: three raised (3D) tabs filling the bar's centre.
  * Hidden on phones by CSS, where the existing mobile navigation stays as it is.
  * Only reads the URL and navigates; it does not touch any hub's state.
  */
@@ -78,8 +78,8 @@ export function DesktopHubTabs() {
 
   const tabs: { id: HubId; label: string; sub: string; Symbol: () => ReactElement; badge?: string }[] = [
     { id: 'predictions', label: 'Prediction Hub', sub: 'Data-driven picks', Symbol: PredictionsSymbol },
-    { id: 'banter', label: 'Banter Hub', sub: 'Predict against members', Symbol: BanterSymbol },
-    { id: 'virtual', label: 'Virtual Life', sub: 'Fan world', Symbol: VirtualLifeSymbol, badge: 'Soon' },
+    { id: 'banter', label: 'Banter Hub', sub: 'Predict, chat and banter with members', Symbol: BanterSymbol },
+    { id: 'virtual', label: 'Virtual Life', sub: 'Your fan world', Symbol: VirtualLifeSymbol, badge: 'Soon' },
   ];
 
   return (
