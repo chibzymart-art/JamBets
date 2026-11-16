@@ -3742,7 +3742,7 @@ export default function App() {
 
       {/* PHONE APP BAR (Predictions | Play | Contact Us | Profile). Phones only; replaces the old sport and Play bars
           and the top hub switch. Desktop never shows it. */}
-      {(isDashboard || isPlay) && (
+      {(isDashboard || isPlay || isVirtualLife) && (
       <nav className="app-bottom-nav" aria-label="App navigation">
         <button
           type="button"
@@ -3774,6 +3774,18 @@ export default function App() {
           </span>
           <span className="app-nav-new">New</span>
           Banter
+        </button>
+        <button
+          type="button"
+          className={`app-nav-item app-nav-item--vlife ${isVirtualLife ? 'is-active' : ''}`}
+          onClick={() => { if (!isVirtualLife) navigate(VIRTUAL_LIFE_PATH); else window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+          aria-current={isVirtualLife ? 'page' : undefined}
+        >
+          <span className="app-nav-ic" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="5.5" /><ellipse cx="12" cy="12" rx="10" ry="3.4" transform="rotate(-20 12 12)" /></svg>
+          </span>
+          <span className="app-nav-new app-nav-new--soon">Soon</span>
+          Virtual Life
         </button>
         <a
           className="app-nav-item"
