@@ -275,3 +275,26 @@
     color: var(--green-dark);
   }
 }
+
+/* Phones: Virtual Life item in the bottom app bar (the bar grows from 4 to 5 slots only when it is there). */
+@media (max-width: 768px) {
+  .app-bottom-nav:has(.app-nav-item--vlife) {
+    grid-template-columns: repeat(5, 1fr);
+  }
+
+  .app-nav-item--vlife {
+    white-space: nowrap;
+  }
+
+  .app-nav-item--vlife.is-active {
+    color: #b45309;
+  }
+
+  .app-nav-item--vlife.is-active .app-nav-ic {
+    background: #fffbeb;
+  }
+
+  .app-nav-new.app-nav-new--soon {
+    background: #d97706;
+  }
+}
