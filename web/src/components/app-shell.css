@@ -430,3 +430,13 @@
     padding-top: 0 !important;
   }
 }
+
+/* Cookie notice on phones: sit above the bottom app bar so "Accept All" / "Essential Only" can be
+   tapped (the bar is drawn on top of anything in the bottom ~70px). Phones only; desktop unchanged. */
+@media (max-width: 768px) {
+  body .cookie-consent-floating-pill {
+    bottom: calc(84px + env(safe-area-inset-bottom, 0px));
+    max-height: calc(100vh - 120px);
+    overflow-y: auto;
+  }
+}
