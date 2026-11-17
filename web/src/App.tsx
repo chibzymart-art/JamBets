@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback, useRef, Fragment, lazy, Suspense } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef, Fragment, Suspense } from 'react';
 import { Routes, Route, Navigate, useNavigate, useLocation, Link } from 'react-router-dom';
 import { supabase } from './lib/supabase';
 import { getCircuitBreaker, SafeStorage, withTimeout } from './lib/circuitBreaker';
@@ -21,10 +21,12 @@ import { HubSwitch, isPlayPath, PLAY_BASE_PATH } from './components/HubSwitch';
 import { DesktopHubTabs, isVirtualLifePath, VIRTUAL_LIFE_PATH } from './components/DesktopHubTabs';
 import { MobileDateStrip } from './components/MobileDateStrip';
 import './components/app-shell.css';
+import { lazyWithReload } from './lib/lazyReload';
 
 // Play Hub is loaded only when someone opens it, so the Predictions Hub bundle is unchanged.
-const PlayHub = lazy(() => import('./features/play/PlayHub'));
-const VirtualLifePage = lazy(() => import('./features/virtual-life/VirtualLifePage'));
+// If a new deploy removed the old file, reload once instead of showing the error screen.
+const PlayHub = lazyWithReload('play', () => import('./features/play/PlayHub'));
+const VirtualLifePage = lazyWithReload('vlife', () => import('./features/virtual-life/VirtualLifePage'));
 import { FixtureCard } from './components/FixtureCard';
 import { FavoritesDrawer, FavoritePredictionItem } from './components/FavoritesDrawer';
 import { FloatingFavoritesWidget } from './components/FloatingFavoritesWidget';
