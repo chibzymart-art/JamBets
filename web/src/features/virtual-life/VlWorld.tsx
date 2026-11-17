@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { VlAvatar } from './VlAvatar';
-import { vlBuy, vlCheckIn, vlLeaderboard, vlSetAvatar, vlTravel, type VlLeaderRow } from './vlifeApi';
+import { vlAdminGrant, vlBuy, vlCheckIn, vlLeaderboard, vlSetAvatar, vlTravel, type VlLeaderRow } from './vlifeApi';
 import {
   SLOT_KINDS,
   VL_COINS_PER_WIN,
+  VL_WELCOME_COINS,
+  canAfford,
   checkinBonus,
   currentCity,
   formatCoins,
@@ -67,9 +69,9 @@ export function VlWorld({ state, onRefresh }: { state: Ready; onRefresh: () => P
           <h1 id="vl-title">{state.handle}</h1>
           <small>{city ? `${city.flag} In ${city.name}` : '🏠 At home'}</small>
         </div>
-        <div className="vl-wallet" aria-label={`${formatCoins(state.balance)} Banta Coins`}>
+        <div className="vl-wallet" aria-label={state.isAdmin ? 'Unlimited Banta Coins' : `${formatCoins(state.balance)} Banta Coins`}>
           <span className="vl-coin" aria-hidden="true">B</span>
-          <b>{formatCoins(state.balance)}</b>
+          <b>{state.isAdmin ? 'Unlimited' : formatCoins(state.balance)}</b>
           <small>Banta Coins</small>
         </div>
       </header>
@@ -155,6 +157,8 @@ function HomeTab({ state, onRefresh, say, goTo }: TabProps) {
         </button>
       </div>
 
+      {state.isAdmin && <AdminGiveCoins say={say} onRefresh={onRefresh} />}
+
       <div className="vl-sec"><h2>Your room</h2></div>
       <VlRoom state={state} onShop={() => goTo?.('shop')} />
 
@@ -163,7 +167,7 @@ function HomeTab({ state, onRefresh, say, goTo }: TabProps) {
         <ul>
           <li><span aria-hidden="true">🎯</span> <b>+{VL_COINS_PER_WIN}</b> for every Banter Hub pick you win</li>
           <li><span aria-hidden="true">📅</span> <b>+5 to +11</b> for your daily check-in</li>
-          <li><span aria-hidden="true">🎁</span> <b>+50</b> welcome coins on your first visit</li>
+          <li><span aria-hidden="true">🎁</span> <b>+{formatCoins(VL_WELCOME_COINS)}</b> welcome coins to start</li>
         </ul>
         <p className="vl-muted">So far you've earned {formatCoins(state.earnedTotal)} coins, {state.wonPicksPaid} of them from won picks.</p>
       </div>
@@ -183,6 +187,48 @@ function HomeTab({ state, onRefresh, say, goTo }: TabProps) {
         </>
       )}
     </div>
+  );
+}
+
+/** Admin only: give Banta Coins to a member by Banter username or email. The server checks admin. */
+function AdminGiveCoins({ say, onRefresh }: { say: TabProps['say']; onRefresh: TabProps['onRefresh'] }) {
+  const [who, setWho] = useState('');
+  const [amount, setAmount] = useState('100');
+  const [busy, setBusy] = useState(false);
+  const n = Math.floor(Number(amount));
+  const valid = who.trim().length >= 3 && Number.isFinite(n) && n >= 1 && n <= 100000;
+
+  const give = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!valid) return;
+    setBusy(true);
+    const r = await vlAdminGrant(who, n);
+    if (r.ok) {
+      say(`Gave ${formatCoins(r.data.amount)} coins to ${r.data.handle ?? who.trim()}. Their balance: ${formatCoins(r.data.balance)}.`);
+      setWho('');
+      await onRefresh();
+    } else {
+      say(vlErrorMessage(r.code), 'err');
+    }
+    setBusy(false);
+  };
+
+  return (
+    <form className="vl-card vl-admin" onSubmit={give}>
+      <h3>Admin: give coins</h3>
+      <div className="vl-admin-row">
+        <label className="vl-admin-field">
+          <span>Username or email</span>
+          <input value={who} onChange={(e) => setWho(e.target.value)} placeholder="e.g. LagosOracle" autoComplete="off" autoCapitalize="off" spellCheck={false} />
+        </label>
+        <label className="vl-admin-field vl-admin-amount">
+          <span>Coins</span>
+          <input value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^0-9]/g, ''))} inputMode="numeric" />
+        </label>
+        <button type="submit" className="vl-btn vl-btn--gold" disabled={!valid || busy}>{busy ? 'Giving…' : 'Give'}</button>
+      </div>
+      <p className="vl-muted">1 to 100,000 coins per gift. Shows in their coin history as "Gift from admin".</p>
+    </form>
   );
 }
 
@@ -382,7 +428,7 @@ function ShopTab({ state, onRefresh, say }: TabProps) {
             <div className="vl-shop-grid">
               {items.map((c) => {
                 const owned = isOwned(c, state.owned);
-                const short = state.balance < c.price;
+                const short = !canAfford(c.price, state.balance, state.isAdmin);
                 return (
                   <div key={c.key} className={`vl-shop-item ${owned ? 'is-owned' : ''}`}>
                     <ItemIcon item={c} />
@@ -464,7 +510,7 @@ function TravelTab({ state, onRefresh, say }: TabProps) {
                 <button
                   type="button"
                   className={`vl-btn vl-btn--sm ${confirm === c.key ? 'vl-btn--gold' : ''}`}
-                  disabled={busy !== null || state.balance < c.price}
+                  disabled={busy !== null || !canAfford(c.price, state.balance, state.isAdmin)}
                   onClick={() => fly(c.key, c.name)}
                   aria-label={confirm === c.key ? `Confirm flight to ${c.name} for ${c.price} coins` : `Fly to ${c.name} for ${c.price} coins`}
                 >

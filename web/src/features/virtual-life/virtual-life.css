@@ -613,3 +613,27 @@
 @media (prefers-reduced-motion: reduce) {
   .vl-city.is-landed { animation: none; }
 }
+
+/* Admin: give coins */
+.vl-admin { border-color: #c4b5fd; background: linear-gradient(160deg, #f5f3ff 0%, var(--bg-card) 80%); }
+.vl-admin h3 { font-family: var(--font-heading); font-size: 16px; margin: 0 0 10px; }
+.vl-admin-row { display: flex; align-items: flex-end; gap: 8px; margin-bottom: 8px; }
+.vl-admin-field { display: grid; gap: 4px; flex: 1 1 auto; min-width: 0; font-size: 12.5px; font-weight: 600; color: var(--text-secondary); }
+.vl-admin-amount { flex: 0 0 96px; }
+.vl-admin-field input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 9px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text-primary);
+  background: var(--bg-card);
+}
+@media (max-width: 768px) {
+  .vl-admin-row { flex-wrap: wrap; }
+  .vl-admin-field { flex: 1 1 100%; }
+  .vl-admin-amount { flex: 1 1 0; }
+}
