@@ -68,10 +68,12 @@ export function BanterToday({ savedLeagues }: { savedLeagues: string[] | null })
     load();
   }, [load]);
 
-  const visible = useMemo(
-    () => (fixtures || []).filter((f) => ticks.includes(f.league_code)),
-    [fixtures, ticks],
-  );
+  // Open matches first; locked, live and finished ones drop below. Each group keeps its order.
+  const visible = useMemo(() => {
+    const ticked = (fixtures || []).filter((f) => ticks.includes(f.league_code));
+    const isOpen = (f: BanterFixture) => f.status === 'scheduled' && lockLabel(f.kickoff_at, now) !== null;
+    return [...ticked.filter(isOpen), ...ticked.filter((f) => !isOpen(f))];
+  }, [fixtures, ticks, now]);
   const hiddenCount = (fixtures || []).length - visible.length;
 
   const [justPicked, setJustPicked] = useState<{ id: string; label: string } | null>(null);
