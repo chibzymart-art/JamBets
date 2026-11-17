@@ -10,7 +10,7 @@ import {
   type BanterFixture,
   type BanterLeague,
 } from './banterApi';
-import { FOOTBALL_MARKETS, initialLeagueTicks, lockLabel, pickErrorMessage } from './banterRules';
+import { FOOTBALL_MARKETS, initialLeagueTicks, lockLabel, openFixturesFirst, pickErrorMessage } from './banterRules';
 import { SharePickPanel } from './BanterSharePick';
 import { notifyPush } from './banterPush';
 import './banter.css';
@@ -69,8 +69,8 @@ export function BanterToday({ savedLeagues }: { savedLeagues: string[] | null })
   }, [load]);
 
   const visible = useMemo(
-    () => (fixtures || []).filter((f) => ticks.includes(f.league_code)),
-    [fixtures, ticks],
+    () => openFixturesFirst((fixtures || []).filter((f) => ticks.includes(f.league_code)), now),
+    [fixtures, ticks, now],
   );
   const hiddenCount = (fixtures || []).length - visible.length;
 
