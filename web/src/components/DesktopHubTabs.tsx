@@ -79,7 +79,7 @@ export function DesktopHubTabs() {
   const tabs: { id: HubId; label: string; sub: string; Symbol: () => ReactElement; badge?: string }[] = [
     { id: 'predictions', label: 'Prediction Hub', sub: 'Data-driven picks', Symbol: PredictionsSymbol },
     { id: 'banter', label: 'Banter Hub', sub: 'Predict, chat and banter with members', Symbol: BanterSymbol },
-    { id: 'virtual', label: 'Virtual Life', sub: 'Your fan world', Symbol: VirtualLifeSymbol, badge: 'Soon' },
+    { id: 'virtual', label: 'Virtual Life', sub: 'Your fan world', Symbol: VirtualLifeSymbol, badge: 'New' },
   ];
 
   return (

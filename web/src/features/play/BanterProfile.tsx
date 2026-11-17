@@ -4,6 +4,7 @@ import { fetchLeaderboard, fetchMyFootballPicks, fetchMyStreaks, type BanterStre
 import { ProfileForm } from './BanterGate';
 import { PushSettingsCard } from './BanterPushUI';
 import { FollowsCard } from './BanterMembers';
+import { BanterCoinsCard } from './BanterCoins';
 import { formatPoints, myLeaderboardRow, pendingCount } from './banterRules';
 import './banter.css';
 
@@ -79,6 +80,8 @@ export function BanterProfile({
           />
         </div>
       )}
+
+      <BanterCoinsCard />
 
       <StreaksCard />
 

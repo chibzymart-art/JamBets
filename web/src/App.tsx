@@ -3709,12 +3709,19 @@ export default function App() {
               </Suspense>
             }
           />
-          {/* VIRTUAL LIFE (preview page: feature list + Coming Soon, no data) */}
+          {/* VIRTUAL LIFE (paid members: coins, avatar, room, shop, travel; others see the preview) */}
           <Route
             path={VIRTUAL_LIFE_PATH}
             element={
               <Suspense fallback={<div className="play-hub-loading" aria-busy="true" />}>
-                <VirtualLifePage />
+                <VirtualLifePage
+                  isSignedIn={!!currentUser}
+                  onCreateAccount={() => {
+                    setAuthModalMode('register');
+                    setIsAuthModalOpen(true);
+                  }}
+                  onOpenPricing={() => setIsPricingModalOpen(true)}
+                />
               </Suspense>
             }
           />
@@ -3784,7 +3791,7 @@ export default function App() {
           <span className="app-nav-ic" aria-hidden="true">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="5.5" /><ellipse cx="12" cy="12" rx="10" ry="3.4" transform="rotate(-20 12 12)" /></svg>
           </span>
-          <span className="app-nav-new app-nav-new--soon">Soon</span>
+          <span className="app-nav-new">New</span>
           Virtual Life
         </button>
         <a
