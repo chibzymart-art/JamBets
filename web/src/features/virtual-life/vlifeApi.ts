@@ -18,7 +18,9 @@ function errorCode(err: { message?: string; code?: string } | null): string {
 export async function fetchVlState(isSignedIn: boolean): Promise<VlState> {
   if (!isSignedIn) return { status: 'visitor' };
   try {
-    const { data, error } = await supabase.rpc('vl_get_state');
+    // vl_get_state_admin adds is_admin; fall back to vl_get_state until that migration is applied.
+    let { data, error } = await supabase.rpc('vl_get_state_admin');
+    if (error && errorCode(error) === 'not_ready') ({ data, error } = await supabase.rpc('vl_get_state'));
     if (error) return errorCode(error) === 'not_ready' ? { status: 'not_ready' } : { status: 'error' };
     return toVlState(data);
   } catch {
@@ -45,6 +47,10 @@ export const vlTravel = (cityKey: string) =>
 
 export const vlSetAvatar = (s: VlAvatarSlots) =>
   call<VlAvatarSlots>('vl_set_avatar', { p_base: s.base, p_kit: s.kit, p_gear: s.gear, p_badge: s.badge });
+
+/** Admin only: give coins to a member by Banter username or account email. */
+export const vlAdminGrant = (who: string, amount: number) =>
+  call<{ handle: string | null; amount: number; balance: number }>('vl_admin_grant', { p_who: who.trim(), p_amount: amount });
 
 export interface VlLeaderRow {
   place: number;

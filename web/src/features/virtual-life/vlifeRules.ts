@@ -34,7 +34,7 @@ export interface VlAvatarSlots {
 
 export interface VlLedgerRow {
   amount: number;
-  reason: 'pick_won' | 'welcome' | 'checkin' | 'shop' | 'travel';
+  reason: 'pick_won' | 'welcome' | 'welcome_topup' | 'checkin' | 'admin_grant' | 'shop' | 'travel';
   at: string;
 }
 
@@ -52,6 +52,7 @@ export type VlState =
   | {
       status: 'ready';
       handle: string;
+      isAdmin: boolean;
       balance: number;
       earnedTotal: number;
       wonPicksPaid: number;
@@ -67,7 +68,7 @@ export type VlState =
 
 /** Coins per won Banter pick, welcome coins, check-in base and cap (must match the SQL). */
 export const VL_COINS_PER_WIN = 10;
-export const VL_WELCOME_COINS = 50;
+export const VL_WELCOME_COINS = 1000;
 export const VL_CHECKIN_BASE = 5;
 export const VL_CHECKIN_MAX = 11;
 
@@ -129,6 +130,8 @@ export function formatCoins(n: number): string {
 const REASON_LABEL: Record<VlLedgerRow['reason'], string> = {
   pick_won: 'Won Banter pick',
   welcome: 'Welcome coins',
+  welcome_topup: 'Welcome top-up',
+  admin_grant: 'Gift from admin',
   checkin: 'Daily check-in',
   shop: 'Shop',
   travel: 'Flight',
@@ -150,6 +153,9 @@ const ERRORS: Record<string, string> = {
   no_access: 'Virtual Life is for paid members.',
   no_profile: 'Choose your Banter Hub username first.',
   not_signed_in: 'Please sign in again.',
+  not_admin: 'Only admins can give coins.',
+  member_not_found: 'No member found with that username or email.',
+  amount_invalid: 'Enter an amount from 1 to 100,000.',
 };
 
 export function vlErrorMessage(code: string): string {
@@ -168,6 +174,7 @@ export function toVlState(raw: any): VlState {
   return {
     status: 'ready',
     handle: raw.handle,
+    isAdmin: raw.is_admin === true,
     balance: raw.balance,
     earnedTotal: Number(raw.earned_total) || 0,
     wonPicksPaid: Number(raw.won_picks_paid) || 0,
@@ -180,4 +187,9 @@ export function toVlState(raw: any): VlState {
     trips: Array.isArray(raw.trips) ? raw.trips : [],
     recent: Array.isArray(raw.recent) ? raw.recent : [],
   };
+}
+
+/** Admins have unlimited coins: the server never refuses their spends. */
+export function canAfford(price: number, balance: number, isAdmin: boolean): boolean {
+  return isAdmin || balance >= price;
 }

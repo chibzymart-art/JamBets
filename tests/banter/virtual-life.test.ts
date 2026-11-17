@@ -122,7 +122,9 @@ test('helpers: ownership, defaults, location, errors, state parsing fails closed
 
 test('website: page never sends amounts; missing functions show Coming Soon; profile card is additive', () => {
   const api = web('vlifeApi.ts');
-  assert.ok(!/p_amount|amount:/.test(api));
+  // Buying, flying and checking in never send an amount (only the admin gift does, admin-checked on the server).
+  const memberCalls = api.split('\n').filter((l) => /vl_buy|vl_travel|vl_check_in|vl_set_avatar/.test(l)).join('\n');
+  assert.ok(memberCalls && !/p_amount|amount:/.test(memberCalls));
   assert.ok(api.includes("'not_ready'") && web('VirtualLifePage.tsx').includes("state.status === 'not_ready'"));
   const profile = readFileSync('../../web/src/features/play/BanterProfile.tsx', 'utf8');
   assert.ok(profile.includes('<BanterCoinsCard />'));
