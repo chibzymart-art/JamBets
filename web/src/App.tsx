@@ -36,6 +36,7 @@ import { reportEasyEasySignup } from './lib/easyeasy';
 import { updatePageSeo } from './lib/seo';
 import { useGeoCurrency } from './lib/geoCurrency';
 import { useTrialStatus, useVirtualWindow } from './hooks';
+import { useSlipSync } from './hooks/useSlipSync';
 import { effectivePlan } from './lib/effectivePlan';
 import { LandingPage } from './pages/Landing';
 import { SubscriptionPage } from './pages/Subscription';
@@ -252,6 +253,9 @@ export default function App() {
       localStorage.removeItem('jambets_favorites');
     } catch {}
   };
+
+  // Acca slip follows the signed-in member across devices (account copy in public.user_slips).
+  useSlipSync(currentUser?.id ?? null, favoriteItems, favorites, setFavoriteItems, setFavorites);
 
   const [, setLatencyMs] = useState<number | null>(null);
   const [, setLastRefreshed] = useState<Date>(new Date());
