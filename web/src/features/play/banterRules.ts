@@ -69,6 +69,15 @@ export function selectionLabel(market: string, selection: string, home?: string,
   return selection;
 }
 
+/**
+ * Today list order: matches still open for picks first, then locked / live / finished ones.
+ * Each group keeps its original (kickoff) order, so only locked matches move down.
+ */
+export function openFixturesFirst<T extends { status: string; kickoff_at: string }>(list: T[], nowMs: number): T[] {
+  const isOpen = (f: T) => f.status === 'scheduled' && lockLabel(f.kickoff_at, nowMs) !== null;
+  return [...list.filter(isOpen), ...list.filter((f) => !isOpen(f))];
+}
+
 /** "Locks in 2h 05m", "Locks in 4m", or null once locked. */
 export function lockLabel(kickoffIso: string, nowMs: number): string | null {
   const lockAt = new Date(kickoffIso).getTime() - PICK_LOCK_SECONDS * 1000;
