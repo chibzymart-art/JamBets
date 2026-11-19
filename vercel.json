@@ -65,7 +65,7 @@
   ],
   "redirects": [
     {
-      "source": "/:path((?!api/).*)",
+      "source": "/:path((?!api/|google5200066df2277ada\\.html$).*)",
       "has": [{ "type": "host", "value": "jambets.vercel.app" }],
       "destination": "https://www.oddsbanta.com/:path",
       "permanent": true
