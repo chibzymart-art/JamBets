@@ -13,7 +13,6 @@ import {
 } from './types';
 import { AuthModal } from './components/AuthModal';
 import { ProfileModal } from './components/ProfileModal';
-import { AdminView } from './components/AdminView';
 import { PricingModal } from './components/PricingModal';
 import { FaqModal } from './components/FaqModal';
 import { NavigationFooter } from './components/NavigationFooter';
@@ -27,11 +26,21 @@ import { lazyWithReload } from './lib/lazyReload';
 // If a new deploy removed the old file, reload once instead of showing the error screen.
 const PlayHub = lazyWithReload('play', () => import('./features/play/PlayHub'));
 const VirtualLifePage = lazyWithReload('vlife', () => import('./features/virtual-life/VirtualLifePage'));
+// Heavier pages load on demand, like Banter and Virtual Life, so the first page on a phone downloads less.
+// Each one looks and behaves exactly as before; only the moment its code downloads changes.
+const TennisHubView = lazyWithReload('tennis', () => import('./components/TennisHubView').then((m) => ({ default: m.TennisHubView })));
+const BasketballHubView = lazyWithReload('basketball', () => import('./components/BasketballHubView').then((m) => ({ default: m.BasketballHubView })));
+const OtherMarketsPage = lazyWithReload('goals', () => import('./pages/OtherMarketsPage').then((m) => ({ default: m.OtherMarketsPage })));
+const AdminView = lazyWithReload('admin', () => import('./components/AdminView').then((m) => ({ default: m.AdminView })));
+const SubscriptionPage = lazyWithReload('subscription', () => import('./pages/Subscription').then((m) => ({ default: m.SubscriptionPage })));
+const AboutPage = lazyWithReload('about', () => import('./pages/AboutPage').then((m) => ({ default: m.AboutPage })));
+const pageLoading = <div className="lazy-page-loading" aria-busy="true" style={{ minHeight: '60vh' }} />;
 import { FixtureCard } from './components/FixtureCard';
 import { FavoritesDrawer, FavoritePredictionItem } from './components/FavoritesDrawer';
 import { FloatingFavoritesWidget } from './components/FloatingFavoritesWidget';
 import { BotHubModal } from './components/BotHubModal';
 import { CookieConsentBanner } from './components/CookieConsentBanner';
+import { InstallAppPrompt } from './components/InstallAppPrompt';
 import { AdBannerSlot } from './components/AdBannerSlot';
 import { initAttributionTracker } from './lib/attribution';
 import { reportEasyEasySignup } from './lib/easyeasy';
@@ -41,11 +50,10 @@ import { useTrialStatus, useVirtualWindow } from './hooks';
 import { useSlipSync } from './hooks/useSlipSync';
 import { effectivePlan } from './lib/effectivePlan';
 import { LandingPage } from './pages/Landing';
-import { SubscriptionPage } from './pages/Subscription';
 import { PasswordRecoveryPage } from './pages/PasswordRecovery';
 import { AuthConfirmPage } from './pages/AuthConfirm';
-import { AboutPage } from './pages/AboutPage';
-import { OtherMarketsPage } from './pages/OtherMarketsPage';
+// goals.css stays in the main stylesheet (same order as before) so the Goals hub looks identical now that its code loads on demand.
+import './goals.css';
 import { WatchlistSidebar } from './components/WatchlistSidebar';
 import { LeftSidebarAd } from './components/LeftSidebarAd';
 import {
@@ -57,9 +65,7 @@ import {
   getFixtureLocalDate
 } from './lib/dateUtils';
 import './tennis.css';
-import { TennisHubView } from './components/TennisHubView';
 import './basketball.css';
-import { BasketballHubView } from './components/BasketballHubView';
 import { seoForPath, DASHBOARD_PATHS } from './lib/routeMeta';
 import { getFootballTierPriority, getTierHeaderByRank, lockedTierTotalsForScope } from './lib/confidenceScore';
 import type { LockedTierCounts } from './lib/confidenceScore';
@@ -2485,11 +2491,13 @@ export default function App() {
           <Route
             path="/about"
             element={
-              <AboutPage
-                favoriteItems={favoriteItems}
-                onToggleFavoriteItem={toggleFavoriteItem}
-                onOpenFavoritesDrawer={() => setIsFavoritesDrawerOpen(true)}
-              />
+              <Suspense fallback={pageLoading}>
+                <AboutPage
+                  favoriteItems={favoriteItems}
+                  onToggleFavoriteItem={toggleFavoriteItem}
+                  onOpenFavoritesDrawer={() => setIsFavoritesDrawerOpen(true)}
+                />
+              </Suspense>
             }
           />
 
@@ -2497,21 +2505,23 @@ export default function App() {
           <Route
             path="/subscription"
             element={
-              <SubscriptionPage
-                currentUser={currentUser}
-                userRole={userPlan}
-                subscription={subscription}
-                onRefreshUser={() => {
-                  if (currentUser?.id) fetchUserData(currentUser.id);
-                }}
-                onOpenAuth={(mode) => {
-                  setAuthModalMode(mode);
-                  setIsAuthModalOpen(true);
-                }}
-                favoriteItems={favoriteItems}
-                onToggleFavoriteItem={toggleFavoriteItem}
-                onOpenFavoritesDrawer={() => setIsFavoritesDrawerOpen(true)}
-              />
+              <Suspense fallback={pageLoading}>
+                <SubscriptionPage
+                  currentUser={currentUser}
+                  userRole={userPlan}
+                  subscription={subscription}
+                  onRefreshUser={() => {
+                    if (currentUser?.id) fetchUserData(currentUser.id);
+                  }}
+                  onOpenAuth={(mode) => {
+                    setAuthModalMode(mode);
+                    setIsAuthModalOpen(true);
+                  }}
+                  favoriteItems={favoriteItems}
+                  onToggleFavoriteItem={toggleFavoriteItem}
+                  onOpenFavoritesDrawer={() => setIsFavoritesDrawerOpen(true)}
+                />
+              </Suspense>
             }
           />
 
@@ -2536,24 +2546,26 @@ export default function App() {
           <Route
             path={DASHBOARD_PATHS.goals}
             element={
-              <OtherMarketsPage
-                currentUser={currentUser}
-                userRole={userPlan}
-                isAdmin={isAdmin}
-                canViewPredictions={canViewSpecialistMarkets}
-                isVisitor={trialState.isVisitor}
-                isTrialExpired={trialState.isTrialExpired}
-                canViewSettlements={trialState.canViewFootballSettlements}
-                onOpenAuth={(mode) => {
-                  setAuthModalMode(mode);
-                  setIsAuthModalOpen(true);
-                }}
-                onOpenSubscription={() => navigate('/subscription')}
-                favoriteItems={favoriteItems}
-                onToggleFavoriteItem={toggleFavoriteItem}
-                isFavoriteItem={isFavoriteItem}
-                onOpenFavoritesDrawer={() => setIsFavoritesDrawerOpen(true)}
-              />
+              <Suspense fallback={pageLoading}>
+                <OtherMarketsPage
+                  currentUser={currentUser}
+                  userRole={userPlan}
+                  isAdmin={isAdmin}
+                  canViewPredictions={canViewSpecialistMarkets}
+                  isVisitor={trialState.isVisitor}
+                  isTrialExpired={trialState.isTrialExpired}
+                  canViewSettlements={trialState.canViewFootballSettlements}
+                  onOpenAuth={(mode) => {
+                    setAuthModalMode(mode);
+                    setIsAuthModalOpen(true);
+                  }}
+                  onOpenSubscription={() => navigate('/subscription')}
+                  favoriteItems={favoriteItems}
+                  onToggleFavoriteItem={toggleFavoriteItem}
+                  isFavoriteItem={isFavoriteItem}
+                  onOpenFavoritesDrawer={() => setIsFavoritesDrawerOpen(true)}
+                />
+              </Suspense>
             }
           />
 
@@ -2562,25 +2574,27 @@ export default function App() {
             path={DASHBOARD_PATHS.tennis}
             element={
               <div id="fixtures-view-section" style={{ paddingTop: '8px' }}>
-                <TennisHubView
-                  currentUser={currentUser}
-                  userRole={userPlan}
-                  isAdmin={isAdmin}
-                  canViewPredictions={canViewMultiSport}
-                  favoriteItems={favoriteItems}
-                  onToggleFavoriteItem={toggleFavoriteItem}
-                  isFavoriteItem={isFavoriteItem}
-                  onOpenFavoritesDrawer={() => setIsFavoritesDrawerOpen(true)}
-                  onOpenAuth={(mode) => {
-                    setAuthModalMode(mode);
-                    setIsAuthModalOpen(true);
-                  }}
-                  onOpenSubscription={() => navigate('/subscription')}
-                  onBackToFootball={() => {
-                    setSelectedSport('football');
-                    navigate(DASHBOARD_PATHS.football);
-                  }}
-                />
+                <Suspense fallback={pageLoading}>
+                  <TennisHubView
+                    currentUser={currentUser}
+                    userRole={userPlan}
+                    isAdmin={isAdmin}
+                    canViewPredictions={canViewMultiSport}
+                    favoriteItems={favoriteItems}
+                    onToggleFavoriteItem={toggleFavoriteItem}
+                    isFavoriteItem={isFavoriteItem}
+                    onOpenFavoritesDrawer={() => setIsFavoritesDrawerOpen(true)}
+                    onOpenAuth={(mode) => {
+                      setAuthModalMode(mode);
+                      setIsAuthModalOpen(true);
+                    }}
+                    onOpenSubscription={() => navigate('/subscription')}
+                    onBackToFootball={() => {
+                      setSelectedSport('football');
+                      navigate(DASHBOARD_PATHS.football);
+                    }}
+                  />
+                </Suspense>
               </div>
             }
           />
@@ -2590,25 +2604,27 @@ export default function App() {
             path={DASHBOARD_PATHS.basketball}
             element={
               <div id="fixtures-view-section" style={{ paddingTop: '8px' }}>
-                <BasketballHubView
-                  currentUser={currentUser}
-                  userRole={userPlan}
-                  isAdmin={isAdmin}
-                  canViewPredictions={canViewMultiSport}
-                  favoriteItems={favoriteItems}
-                  onToggleFavoriteItem={toggleFavoriteItem}
-                  isFavoriteItem={isFavoriteItem}
-                  onOpenFavoritesDrawer={() => setIsFavoritesDrawerOpen(true)}
-                  onOpenAuth={(mode) => {
-                    setAuthModalMode(mode);
-                    setIsAuthModalOpen(true);
-                  }}
-                  onOpenSubscription={() => navigate('/subscription')}
-                  onBackToFootball={() => {
-                    setSelectedSport('football');
-                    navigate(DASHBOARD_PATHS.football);
-                  }}
-                />
+                <Suspense fallback={pageLoading}>
+                  <BasketballHubView
+                    currentUser={currentUser}
+                    userRole={userPlan}
+                    isAdmin={isAdmin}
+                    canViewPredictions={canViewMultiSport}
+                    favoriteItems={favoriteItems}
+                    onToggleFavoriteItem={toggleFavoriteItem}
+                    isFavoriteItem={isFavoriteItem}
+                    onOpenFavoritesDrawer={() => setIsFavoritesDrawerOpen(true)}
+                    onOpenAuth={(mode) => {
+                      setAuthModalMode(mode);
+                      setIsAuthModalOpen(true);
+                    }}
+                    onOpenSubscription={() => navigate('/subscription')}
+                    onBackToFootball={() => {
+                      setSelectedSport('football');
+                      navigate(DASHBOARD_PATHS.football);
+                    }}
+                  />
+                </Suspense>
               </div>
             }
           />
@@ -2686,14 +2702,16 @@ export default function App() {
                   </p>
                 </div>
               ) : isAdmin ? (
-                <AdminView
-                  currentUserProfile={profile}
-                  onBackToFixtures={() => navigate(DASHBOARD_PATHS.football)}
-                  onOpenAuthModal={() => {
-                    setAuthModalMode('signin');
-                    setIsAuthModalOpen(true);
-                  }}
-                />
+                <Suspense fallback={pageLoading}>
+                  <AdminView
+                    currentUserProfile={profile}
+                    onBackToFixtures={() => navigate(DASHBOARD_PATHS.football)}
+                    onOpenAuthModal={() => {
+                      setAuthModalMode('signin');
+                      setIsAuthModalOpen(true);
+                    }}
+                  />
+                </Suspense>
               ) : (
                 <Navigate to="/" replace />
               )
@@ -3956,6 +3974,9 @@ export default function App() {
 
       {/* Global NDPR / GDPR Cookie Consent & Attribution Banner */}
       <CookieConsentBanner />
+
+      {/* "Add to home screen" card (phones only; waits for the cookie notice) */}
+      <InstallAppPrompt />
     </div>
   );
 }
