@@ -220,6 +220,23 @@ export const AboutPage: React.FC<AboutPageProps> = ({
               }}
             >
               <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: '#0f172a', margin: '0 0 8px 0' }}>
+                Is Oddsbanta the same as SportsBanta or Sportsbant?
+              </h3>
+              <p style={{ fontSize: '0.925rem', color: '#475569', lineHeight: 1.6, margin: 0 }}>
+                No. Oddsbanta is a separate, unrelated product. Our only website is www.oddsbanta.com. We publish AI football, tennis and basketball predictions with a 0–10 confidence score, and we do not take bets, offer cashback or hold customer funds.
+              </p>
+            </div>
+
+            <div
+              style={{
+                background: '#ffffff',
+                border: '1px solid #e2e8f0',
+                borderRadius: '12px',
+                padding: '20px',
+                boxShadow: '0 2px 6px rgba(0, 0, 0, 0.03)',
+              }}
+            >
+              <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: '#0f172a', margin: '0 0 8px 0' }}>
                 What sports does Oddsbanta cover?
               </h3>
               <p style={{ fontSize: '0.925rem', color: '#475569', lineHeight: 1.6, margin: 0 }}>

@@ -101,6 +101,7 @@
       "destination": "/api/ssr?path=/dashboard/:page"
     },
     { "source": "/subscription", "destination": "/api/ssr?path=/subscription" },
+    { "source": "/about", "destination": "/api/ssr?path=/about" },
     { "source": "/sitemap.xml", "destination": "/api/sitemap" },
     {
       "source": "/((?!api/|assets/).*)",
