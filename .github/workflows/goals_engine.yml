@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       ou25_wipe_pending:
-        description: 'Replace all pending Over/Under 2.5 picks (settled picks and 1H picks are never touched)'
+        description: 'Replace pending Over/Under 2.5 picks more than 48h away (locked, settled and 1H picks are never touched)'
         type: boolean
         default: false
 

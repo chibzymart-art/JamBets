@@ -51,7 +51,11 @@ fixture rows and 2,000 team rows and called FotMob, Google News and Gemini per f
 
 ## Operations
 
-- Replace all pending O/U picks once (for example after a model change): run the
-  `goals_engine` workflow manually with `ou25_wipe_pending` ticked.
+- Replace pending O/U picks (for example after a model change): run the `goals_engine`
+  workflow manually with `ou25_wipe_pending` ticked. Only picks more than 48 hours away are
+  replaced; locked and settled picks stay.
+- Lock: trigger `trg_enforce_goals_prediction_immutability` (migration
+  `20261120000002_ou25_prediction_lock.sql`, O/U market only) freezes settled picks and picks
+  kicking off within 48 hours. The engine also skips those fixtures.
 - Refit: rerun the backtest scripts kept in the project files (`o25-investigation`) and update
   `CAL_MODEL`, `CAL_BLEND` and `THRESHOLDS` in `ou25/model.py`.
