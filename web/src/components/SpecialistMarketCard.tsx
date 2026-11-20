@@ -99,10 +99,11 @@ export const SpecialistMarketCard: React.FC<SpecialistMarketCardProps> = ({
       };
     }
 
-    // 2. Over 2.5 Goals
+    // 2. Over/Under 2.5 Goals
     if (
       prediction.market === 'over_2.5_goals' ||
-      prediction.prediction.toLowerCase().includes('over 2.5')
+      prediction.prediction.toLowerCase().includes('over 2.5') ||
+      prediction.prediction.toLowerCase().includes('under 2.5')
     ) {
       const hScore =
         fixture?.home_score ??
@@ -116,7 +117,7 @@ export const SpecialistMarketCard: React.FC<SpecialistMarketCardProps> = ({
         return {
           label: 'Total Goals',
           value: `${total} Goals`,
-          detail: total >= 3 ? 'Over 2.5 Threshold Exceeded' : 'Under 2.5 Threshold',
+          detail: total >= 3 ? 'Over 2.5 (3+ goals)' : 'Under 2.5 (2 goals or fewer)',
         };
       }
       return null;

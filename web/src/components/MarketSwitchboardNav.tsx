@@ -32,7 +32,7 @@ const MARKET_TABS: MarketTabConfig[] = [
   },
   {
     id: 'over_2.5_goals',
-    label: 'Over 2.5 Goals',
+    label: 'Over/Under 2.5',
     icon: '🎯',
     badgeTag: 'POISSON xG',
     description: 'Calibrated Bivariate Poisson goal expectancy & box penalty area density',

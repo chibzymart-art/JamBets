@@ -230,7 +230,7 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
   // SEO Update
   useEffect(() => {
     const marketLabels: Record<string, string> = {
-      'over_2.5_goals': 'Over 2.5 Goals',
+      'over_2.5_goals': 'Over/Under 2.5 Goals',
       'ht_over_0.5_goals': '1st Half Over 0.5 Blitz',
       corners: 'Corners Specialist',
     };

@@ -109,11 +109,19 @@ class GoalsSettlementEngine:
                         outcome = "won"
                         notes = f"Won! Confirmed match had goals ({final_str})"
 
-            # --- MARKET 2: Full-Time Over 2.5 Goals ---
+            # --- MARKET 2: Full-Time Over/Under 2.5 Goals (stored as market "over_2.5_goals") ---
             elif market == "over_2.5_goals":
                 if is_finished and h_score is not None and a_score is not None:
                     total_goals = h_score + a_score
-                    if total_goals >= 3:
+                    is_under_pick = str(pred.get("predicted_outcome") or "").upper().startswith("UNDER")
+                    if is_under_pick:
+                        if total_goals <= 2:
+                            outcome = "won"
+                            notes = f"Won! Final Score: {final_str} ({total_goals} goals <= 2, Under 2.5)"
+                        else:
+                            outcome = "lost"
+                            notes = f"Lost. Final Score: {final_str} ({total_goals} goals > 2, Under 2.5)"
+                    elif total_goals >= 3:
                         outcome = "won"
                         notes = f"Won! Final Score: {final_str} ({total_goals} goals >= 3)"
                     else:

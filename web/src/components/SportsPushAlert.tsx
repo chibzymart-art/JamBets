@@ -43,7 +43,7 @@ export const SportsPushAlert: React.FC<SportsPushAlertProps> = ({
           const home = formatClubName(p.fixture?.home_team?.short_name || p.fixture?.home_team?.name || 'Home');
           const away = formatClubName(p.fixture?.away_team?.short_name || p.fixture?.away_team?.name || 'Away');
           new Notification(`Oddsbanta Signal: ${home} vs ${away}`, {
-            body: `🔥 High Edge Detected: ${p.market === 'over_2.5_goals' ? 'Over 2.5 Goals' : '1H Over 0.5'} (${Math.round((p.probability || 0.75) * 100)}% Confidence)`,
+            body: `🔥 High Edge Detected: ${p.market === 'over_2.5_goals' ? (String(p.predicted_outcome || '').toUpperCase().startsWith('UNDER') ? 'Under 2.5 Goals' : 'Over 2.5 Goals') : '1H Over 0.5'} (${Math.round((p.probability || 0.75) * 100)}% Confidence)`,
             icon: '/oddsbanta-logo.svg',
           });
         }
@@ -59,7 +59,9 @@ export const SportsPushAlert: React.FC<SportsPushAlertProps> = ({
   const homeName = formatClubName(pred.fixture?.home_team?.short_name || pred.fixture?.home_team?.name || pred.metadata?.home_team || 'Home');
   const awayName = formatClubName(pred.fixture?.away_team?.short_name || pred.fixture?.away_team?.name || pred.metadata?.away_team || 'Away');
   const prob = Math.round((pred.probability || 0.75) * 100);
-  const marketLabel = pred.market === 'over_2.5_goals' ? 'Over 2.5 Goals' : '1st Half Over 0.5';
+  const marketLabel = pred.market === 'over_2.5_goals'
+    ? (String(pred.predicted_outcome || '').toUpperCase().startsWith('UNDER') ? 'Under 2.5 Goals' : 'Over 2.5 Goals')
+    : '1st Half Over 0.5';
 
   const isFav = isFavorite ? isFavorite(pred.fixture_id, pred.market, pred.predicted_outcome) : false;
 

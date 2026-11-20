@@ -1,32 +1,47 @@
 """
-JamBets — Over 2.5 Goals Specialist Engine (Ground-Up Rebuild)
-Integrates:
-1. High-capacity historical data provider (minimum 6 matches per team)
-2. Strict Tier 1 & Tier 2 competition whitelisting (bans amateur non-league)
-3. Resilient FotMob rolling npxG enricher
-4. Match Intent & Contextual Stakes Engine (MII multiplier)
-5. Bivariate Dixon-Coles joint distribution modeling
-6. 5-Stage Multi-Factor Quality Gates
+JamBets — Over/Under 2.5 Goals Engine (v2, two-sided)
+
+Predicts OVER_2.5 or UNDER_2.5 for upcoming league fixtures, in two tiers
+(ELITE / STANDARD), stored in public.goals_predictions under the existing
+market key 'over_2.5_goals' (kept so feeds, counts and settlement keep working).
+
+Why v2 (measured 20 Nov 2026): v1 rated teams from ~18 days of results, never
+calibrated its probability and could only say Over; its live record was 221 won /
+174 lost (56%) while it showed ~75% confidence. v2:
+  * rates teams from ~18 months of league results (age-weighted, shrunk),
+  * calibrates the Dixon-Coles probability on 22,961 past matches,
+  * blends in bookmaker Over/Under 2.5 prices where available (free CSV feed),
+  * tips whichever side clears its own backtested bar, or nothing.
+
+Data cost per run: ~4-8 small Supabase requests (was 3,000+ rows plus per-fixture
+FotMob, Google News and Gemini calls). History comes from football-data.co.uk with a
+12-hour disk cache. See python/src/goals/ou25/.
 """
 
-import sys
+import math
 import os
-from datetime import datetime, timezone, timedelta
-from typing import List, Dict, Any, Optional
+import sys
+from collections import defaultdict
+from datetime import datetime, timedelta, timezone
+from typing import Any, Dict, List, Optional, Tuple
 
-# Ensure project root is in sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../..')))
 if hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(encoding='utf-8')
 
 from python.src.db.supabase_client import CloudSupabaseClient
-from python.src.goals.data_provider import GoalsDataProvider
-from python.src.goals.fotmob_enricher import ResilientFotMobEnricher
-from python.src.goals.match_intent_engine import MatchIntentEngine
-from python.src.goals.dixon_coles_goals import DixonColesGoalsModel
-from python.src.goals.ai_scout import GroundedGoalsAiScout
-from python.src.football.h2h_analyzer import H2HAnalyzer
-from python.src.sources.google_news import GoogleNewsAdapter
+from python.src.goals.ou25 import model as ou_model
+from python.src.goals.ou25.matcher import best_match
+from python.src.goals.ou25.sources import LEAGUE_SOURCES, devig, load_histories, load_upcoming_odds
+
+MARKET = "over_2.5_goals"          # storage key for the Over/Under 2.5 market (unchanged)
+MODEL_VERSION = "ou25-v2"
+HORIZON_DAYS = 4
+LOCK_HOURS = 48                    # same 48h immutability window as the DB trigger
+
+
+def _ts(d: datetime) -> str:
+    return d.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def clean_league_name(name: str) -> str:
@@ -42,355 +57,253 @@ def clean_league_name(name: str) -> str:
     return name
 
 
+def _slug_or_name(fx: Dict[str, Any], side: str, idx: int) -> Tuple[str, str]:
+    """(matching key, display name) for one side of a fixture. Team `name` is the slug."""
+    team = fx.get(f"{side}_team") or {}
+    parts = (fx.get("canonical_key") or "").split(":")
+    slug = team.get("name") or (parts[idx] if len(parts) > idx else "")
+    display = team.get("short_name") or slug.replace("-", " ").title()
+    return slug.replace("-", " "), display
+
+
+def _team_form(hist, team: str, last_n: int = 10) -> Optional[int]:
+    """Over 2.5 % in a team's last N league matches (for the card's form stats)."""
+    idx = [i for i in range(len(hist.home) - 1, -1, -1) if hist.home[i] == team or hist.away[i] == team][:last_n]
+    if not idx:
+        return None
+    overs = sum(1 for i in idx if hist.hg[i] + hist.ag[i] >= 3)
+    return int(round(100.0 * overs / len(idx)))
+
+
+def _h2h_rate(hist, a: str, b: str) -> Optional[int]:
+    idx = [i for i in range(len(hist.home)) if {hist.home[i], hist.away[i]} == {a, b}]
+    if len(idx) < 2:
+        return None
+    return int(round(100.0 * sum(1 for i in idx if hist.hg[i] + hist.ag[i] >= 3) / len(idx)))
+
+
+def _rationale(side: str, lam_h: float, lam_a: float, p_side: float, p_market: Optional[float],
+               home: str, away: str) -> Tuple[str, str]:
+    total = lam_h + lam_a
+    tempo = "HIGH_TEMPO" if total >= 3.0 else ("DEFENSIVE_LOW_BLOCK" if total <= 2.3 else "BALANCED")
+    line = f"Model projects {home} {lam_h:.2f} - {lam_a:.2f} {away} ({total:.2f} goals in total)."
+    if p_market is not None:
+        mkt = p_market if side == "OVER_2.5" else 1.0 - p_market
+        line += f" Bookmakers price {'Over' if side == 'OVER_2.5' else 'Under'} 2.5 at {mkt * 100:.0f}%;"
+    line += f" calibrated chance of {'3+ goals' if side == 'OVER_2.5' else '2 goals or fewer'}: {p_side * 100:.0f}%."
+    return line, tempo
+
+
 class Over25GoalsEngine:
-    """
-    Dedicated institutional engine evaluating fixtures strictly for
-    Over 2.5 Goals and 1st Half Over 0.5 Goals signals.
-    """
+    """Two-sided Over/Under 2.5 engine (class name kept for run_goals_cycle)."""
 
     def __init__(self, db: Optional[CloudSupabaseClient] = None):
         self.db = db or CloudSupabaseClient()
-        self.data_provider = GoalsDataProvider(self.db)
-        self.enricher = ResilientFotMobEnricher()
-        self.ai_scout = GroundedGoalsAiScout()
-        self.google_news = GoogleNewsAdapter()
 
-    def run(self, max_fixtures: int = 500, wipe_pending: bool = False) -> Dict[str, Any]:
-        """
-        Executes a complete Over 2.5 evaluation pass.
-        """
-        print("⚽ [Over25Engine] Launching Rebuilt Institutional Over 2.5 Goals Engine...")
+    # ------------------------------------------------------------------ data
+    def _fixtures(self, now: datetime) -> List[Dict[str, Any]]:
+        codes = ",".join(sorted(LEAGUE_SOURCES))
+        select = (
+            "id,target_kickoff_at,canonical_key,status,"
+            "league:football_leagues!inner(code,name),"
+            "home_team:football_teams!football_fixtures_home_team_id_fkey(name,short_name),"
+            "away_team:football_teams!football_fixtures_away_team_id_fkey(name,short_name)"
+        )
+        params = {
+            "select": select,
+            "status": "in.(scheduled,live,in_progress,halftime)",
+            "target_kickoff_at": f"gte.{_ts(now - timedelta(minutes=5))}",
+            "and": f"(target_kickoff_at.lte.{_ts(now + timedelta(days=HORIZON_DAYS))})",
+            "league.code": f"in.({codes})",
+            "order": "target_kickoff_at.asc",
+            "limit": "1000",
+        }
+        try:
+            return self.db.get("football_fixtures", params) or []
+        except Exception as e:  # filter on the embedded league not accepted: filter here instead
+            print(f"⚠️ [OU25] Embedded league filter failed ({e}); filtering locally.")
+            params.pop("league.code")
+            rows = self.db.get("football_fixtures", params) or []
+            return [r for r in rows if (r.get("league") or {}).get("code") in LEAGUE_SOURCES]
+
+    def _existing(self, fixture_ids: List[str]) -> Dict[str, Dict[str, Any]]:
+        out: Dict[str, Dict[str, Any]] = {}
+        for i in range(0, len(fixture_ids), 100):
+            chunk = fixture_ids[i:i + 100]
+            rows = self.db.get("goals_predictions", {
+                "select": "id,fixture_id,settlement_status,target_kickoff_at,predicted_outcome",
+                "market": f"eq.{MARKET}",
+                "fixture_id": f"in.({','.join(chunk)})",
+            }) or []
+            for r in rows:
+                out[r["fixture_id"]] = r
+        return out
+
+    # ------------------------------------------------------------------- run
+    def run(self, max_fixtures: int = 1000, wipe_pending: bool = False) -> Dict[str, Any]:
+        print("⚽ [OU25] Launching Over/Under 2.5 engine v2 (two-sided, calibrated)...")
         now = datetime.now(timezone.utc)
         now_iso = now.isoformat()
-        min_kickoff = (now - timedelta(minutes=5)).isoformat()
-        max_kickoff = (now + timedelta(days=4)).isoformat()
-
-        # 1. Load verified historical data into provider
-        loaded = self.data_provider.load_historical_dataset()
-        print(f"📈 [Over25Engine] Active team profiles loaded: {len(self.data_provider.team_profiles)}")
+        lock_until = now + timedelta(hours=LOCK_HOURS)
 
         if wipe_pending:
-            print("🧹 [Over25Engine] Wiping pending over_2.5_goals predictions...")
-            self.db.delete("goals_predictions", {
-                "market": "eq.over_2.5_goals",
-                "settlement_status": "eq.pending"
-            })
+            print("🧹 [OU25] Wiping pending Over/Under 2.5 predictions (settled rows are kept)...")
+            self.db.delete("goals_predictions", {"market": f"eq.{MARKET}", "settlement_status": "eq.pending"})
 
-        # 2. Identify locked predictions (immutable within 48 hours or already settled)
-        lock_window_iso = (now + timedelta(hours=48)).isoformat()
-        locked_keys = set()
-        try:
-            if not wipe_pending:
-                locked_48h = self.db.get("goals_predictions", {
-                    "target_kickoff_at": f"lte.{lock_window_iso}",
-                    "settlement_status": "eq.pending",
-                    "select": "fixture_id,market"
-                })
-                for p in (locked_48h or []):
-                    locked_keys.add((p.get("fixture_id"), p.get("market")))
-
-            settled_preds = self.db.get("goals_predictions", {
-                "settlement_status": "in.(won,lost)",
-                "select": "fixture_id,market"
-            })
-            for p in (settled_preds or []):
-                locked_keys.add((p.get("fixture_id"), p.get("market")))
-
-            if locked_keys:
-                print(f"🔒 [Over25Engine] Preserving {len(locked_keys)} locked/settled prediction records.")
-        except Exception as e:
-            print(f"⚠️ [Over25Engine] Lock check notice: {e}")
-
-        # 3. Query forward scheduled fixtures (up to 4 days)
-        fixtures = self.db.get("football_fixtures", {
-            "status": "in.(scheduled,live,in_progress,halftime)",
-            "target_kickoff_at": f"gte.{min_kickoff}",
-            "order": "target_kickoff_at.asc",
-            "limit": str(max_fixtures)
-        })
-
+        fixtures = self._fixtures(now)[:max_fixtures]
         if not fixtures:
-            print("ℹ️ [Over25Engine] No forward fixtures found for goal analysis.")
+            print("ℹ️ [OU25] No upcoming fixtures in supported leagues.")
             return {"status": "success", "evaluated": 0, "published": 0}
 
-        # Query team names
-        team_ids = list(set(
-            [f.get("home_team_id") for f in fixtures if f.get("home_team_id")] +
-            [f.get("away_team_id") for f in fixtures if f.get("away_team_id")]
-        ))
-        teams: Dict[str, str] = {}
-        for i in range(0, len(team_ids), 50):
-            chunk = team_ids[i:i + 50]
-            id_list = ','.join(chunk)
-            for t in self.db.get("football_teams", {"id": f"in.({id_list})"}):
-                teams[t["id"]] = t.get("short_name") or t.get("name")
-
-        # Query leagues
-        leagues_raw = self.db.get("football_leagues", {"limit": "500"})
-        leagues: Dict[str, str] = {l["id"]: clean_league_name(l["name"]) for l in leagues_raw}
-        league_codes: Dict[str, str] = {l["id"]: l.get("code", "") for l in leagues_raw}
-
-        print(f"📊 [Over25Engine] Evaluating {len(fixtures)} candidate fixtures against 5 Quality Gates...")
-
-        records_to_upsert: List[Dict[str, Any]] = []
-        over25_published = 0
-        ht05_published = 0
-        rejections: Dict[str, int] = {
-            "league_not_eligible": 0,
-            "insufficient_sample_size": 0,
-            "tactical_gridlock_intent": 0,
-            "underdog_blowout_risk": 0,
-            "clean_sheet_suppression": 0,
-            "below_probability_threshold": 0
+        existing = self._existing([f["id"] for f in fixtures])  # after any wipe: settled rows stay protected
+        leagues = sorted({(f.get("league") or {}).get("code") for f in fixtures} - {None})
+        histories = load_histories(leagues, now=now)
+        odds_rows = load_upcoming_odds()
+        odds_by_league: Dict[str, list] = defaultdict(list)
+        for o in odds_rows:
+            odds_by_league[o.league].append(o)
+        today = now.timestamp() / 86400.0
+        ratings = {
+            lg: ou_model.league_ratings(h.days, h.home, h.away, h.hg, h.ag, as_of_day=math.floor(today) + 1)
+            for lg, h in histories.items()
         }
+        print(f"📊 [OU25] {len(fixtures)} fixtures, {len(histories)} leagues with history, "
+              f"{len(odds_rows)} odds rows.")
+
+        stats = defaultdict(int)
+        records: List[Dict[str, Any]] = []
+        candidates_cache: Dict[str, List[str]] = {}
+        keep_ids = set()
 
         for f in fixtures:
             fid = f["id"]
+            league = f.get("league") or {}
+            lg = league.get("code")
             kickoff_at = f.get("target_kickoff_at")
-            if not kickoff_at:
+            hist, rat = histories.get(lg), ratings.get(lg)
+            if not kickoff_at or not hist or not rat:
+                stats["no_history"] += 1
                 continue
 
-            try:
-                k_dt = datetime.fromisoformat(kickoff_at.replace("Z", "+00:00"))
-                if k_dt < (now - timedelta(minutes=5)) or k_dt > (now + timedelta(days=4)):
+            prev = existing.get(fid)
+            if prev:
+                if prev.get("settlement_status") in ("won", "lost", "void"):
+                    stats["already_settled"] += 1
+                    keep_ids.add(fid)
                     continue
-            except Exception:
+                k = datetime.fromisoformat(kickoff_at.replace("Z", "+00:00"))
+                if k <= lock_until:
+                    stats["locked_48h"] += 1   # DB trigger freezes these; leave them
+                    keep_ids.add(fid)
+                    continue
+
+            if lg not in candidates_cache:
+                candidates_cache[lg] = sorted(set(hist.home) | set(hist.away))
+            h_key, h_disp = _slug_or_name(f, "home", 1)
+            a_key, a_disp = _slug_or_name(f, "away", 2)
+            fd_h = best_match(h_key, candidates_cache[lg])
+            fd_a = best_match(a_key, candidates_cache[lg])
+            if not fd_h or not fd_a or fd_h == fd_a:
+                stats["team_not_matched"] += 1
                 continue
 
-            canonical_key = f.get("canonical_key") or ""
-            parts = canonical_key.split(":") if ":" in canonical_key else []
-            l_code = parts[0] if len(parts) > 0 else league_codes.get(f.get("league_id"), "")
-            h_slug = parts[1] if len(parts) > 1 else ""
-            a_slug = parts[2] if len(parts) > 2 else ""
-
-            home_team_id = f.get("home_team_id")
-            away_team_id = f.get("away_team_id")
-            home_name = teams.get(home_team_id) or h_slug
-            away_name = teams.get(away_team_id) or a_slug
-            league_name = leagues.get(f.get("league_id")) or "Football League"
-
-            if not home_name or not away_name:
+            rp = ou_model.raw_probability(rat, fd_h, fd_a)
+            if not rp:
+                stats["insufficient_sample"] += 1
                 continue
+            p_raw, lam_h, lam_a = rp
 
-            # =================================================================
-            # QUALITY GATE 1: Competition Whitelist
-            # =================================================================
-            if not self.data_provider.is_league_eligible(l_code, league_name, home_name, away_name):
-                rejections["league_not_eligible"] += 1
+            # Bookmaker price: same site, same spelling, kickoff within a day
+            p_market, odds = None, None
+            kday = kickoff_at[:10]
+            for o in odds_by_league.get(lg, []):
+                if o.home == fd_h and o.away == fd_a and abs(
+                        (datetime.fromisoformat(o.date) - datetime.fromisoformat(kday)).days) <= 1:
+                    p_market, odds = devig(o.over, o.under), o
+                    break
+
+            p_over = ou_model.calibrated_over(p_raw, p_market)
+            pick = ou_model.choose_pick(p_over, p_market is not None, lg)
+            if not pick:
+                stats["no_edge"] += 1
                 continue
+            side, tier, p_side = pick
+            stats[tier] += 1
+            keep_ids.add(fid)
 
-            # =================================================================
-            # QUALITY GATE 2: Minimum Sample Size (>= 6 verified matches)
-            # =================================================================
-            is_intl = l_code in {"EUR_NL", "CAF_AFCON_Q", "CONCACAF_NL", "FIFA_FRIENDLY", "FIFA_WCQ_CONMEBOL", "FIFA_WCQ_UEFA", "FIFA_WCQ_CAF", "FIFA_WCQ_AFC"}
-            hp = self.data_provider.get_team_profile(home_team_id) or self.data_provider.get_team_profile(h_slug)
-            ap = self.data_provider.get_team_profile(away_team_id) or self.data_provider.get_team_profile(a_slug)
+            rationale, tempo = _rationale(side, lam_h, lam_a, p_side, p_market, h_disp, a_disp)
+            h_form, a_form = _team_form(hist, fd_h), _team_form(hist, fd_a)
+            h2h = _h2h_rate(hist, fd_h, fd_a)
+            ht_p = 1.0 - math.exp(-(lam_h + lam_a) * 0.44)
+            records.append({
+                "fixture_id": fid,
+                "market": MARKET,
+                "predicted_outcome": side,
+                "probability": round(p_side, 4),
+                "confidence_tier": tier,
+                "xg_combined": round(lam_h + lam_a, 2),
+                "home_over25_rate": h_form,
+                "away_over25_rate": a_form,
+                "h2h_over25_rate": h2h if h2h is not None else (
+                    int(round(((h_form or 50) + (a_form or 50)) / 2))),
+                "ht_goal_frequency": int(round(ht_p * 100)),
+                "avg_first_goal_minute": max(15, min(36, int(35 - (ht_p * 18)))),
+                "target_kickoff_at": kickoff_at,
+                "settlement_status": "pending",
+                "metadata": {
+                    "model_version": MODEL_VERSION,
+                    "home_team": h_disp,
+                    "away_team": a_disp,
+                    "league": clean_league_name(league.get("name") or lg),
+                    "side": side,
+                    "tier": tier,
+                    "lambda_home": round(lam_h, 2),
+                    "lambda_away": round(lam_a, 2),
+                    "p_over_raw": round(p_raw, 4),
+                    "p_over_calibrated": round(p_over, 4),
+                    "p_under_calibrated": round(1 - p_over, 4),
+                    "p_over_market": round(p_market, 4) if p_market is not None else None,
+                    "odds_over": odds.over if odds else None,
+                    "odds_under": odds.under if odds else None,
+                    "has_odds": p_market is not None,
+                    "source_names": [fd_h, fd_a],
+                    "tactical_rationale": rationale,
+                    "goal_tempo": tempo,
+                    "ai_source": "ou25-v2",
+                    "generated_at": now_iso,
+                },
+            })
 
-            if is_intl:
-                if not hp or not hp.has_sufficient_history:
-                    hp = self.data_provider._get_or_create_profile(home_team_id or h_slug, h_slug)
-                    hp.has_sufficient_history = True
-                    hp.home_matches = 4
-                    hp.home_goals_scored = 1.45 * 4
-                    hp.home_goals_conceded = 1.15 * 4
-                if not ap or not ap.has_sufficient_history:
-                    ap = self.data_provider._get_or_create_profile(away_team_id or a_slug, a_slug)
-                    ap.has_sufficient_history = True
-                    ap.away_matches = 4
-                    ap.away_goals_scored = 1.15 * 4
-                    ap.away_goals_conceded = 1.45 * 4
+        for i in range(0, len(records), 50):
+            self.db.post("goals_predictions", records[i:i + 50], on_conflict="fixture_id,market")
 
-            # Require sufficient history for both clubs (strictly prevents blind 1.80+1.52 defaults)
-            if not hp or not ap or not hp.has_sufficient_history or not ap.has_sufficient_history:
-                rejections["insufficient_sample_size"] += 1
-                continue
+        # Drop stale pending v1/v2 picks beyond the 48h lock that no longer qualify.
+        stale = [fid for fid, r in existing.items()
+                 if fid not in keep_ids and r.get("settlement_status") == "pending"
+                 and datetime.fromisoformat(r["target_kickoff_at"].replace("Z", "+00:00")) > lock_until]
+        for i in range(0, len(stale), 100):
+            self.db.delete("goals_predictions", {
+                "market": f"eq.{MARKET}", "settlement_status": "eq.pending",
+                "fixture_id": f"in.({','.join(stale[i:i + 100])})",
+            })
 
-            # Retrieve baseline league goal expectations
-            baseline = self.data_provider.get_league_baseline(l_code)
-            base_h = baseline["home_goals"]
-            base_a = baseline["away_goals"]
-
-            # =================================================================
-            # QUALITY GATE 3: Match Intent & Contextual Stakes
-            # =================================================================
-            intent = MatchIntentEngine.evaluate_intent(
-                home_team=home_name,
-                away_team=away_name,
-                league_code=l_code,
-                league_name=league_name,
-                competition_stage=f.get("competition_stage"),
-                home_clean_sheet_pct=hp.home_clean_sheet_pct,
-                away_clean_sheet_pct=ap.away_clean_sheet_pct,
-                home_scoring_rate=hp.home_scoring_rate,
-                away_scoring_rate=ap.away_scoring_rate,
-                metadata=f.get("metadata")
-            )
-
-            # Reject if tactical gridlock (fear of losing / low-block mid-block clash)
-            if intent.intent_classification == "TACTICAL_GRIDLOCK_PRAGMATISM" or intent.match_intent_index < 0.88:
-                rejections["tactical_gridlock_intent"] += 1
-                continue
-
-            # =================================================================
-            # Compute Dixon-Coles Projected Lambdas
-            # =================================================================
-            # Bayesian weighted attack/defense
-            K = 4.0
-            w_h = hp.home_matches / (hp.home_matches + K)
-            w_a = ap.away_matches / (ap.away_matches + K)
-
-            att_h = w_h * (hp.home_scoring_rate / max(0.5, base_h)) + (1.0 - w_h) * 1.0
-            def_h = w_h * (hp.home_conceding_rate / max(0.5, base_a)) + (1.0 - w_h) * 1.0
-            att_a = w_a * (ap.away_scoring_rate / max(0.5, base_a)) + (1.0 - w_a) * 1.0
-            def_a = w_a * (ap.away_conceding_rate / max(0.5, base_h)) + (1.0 - w_a) * 1.0
-
-            # Scale by Match Intent Index (MII)
-            lambda_h = base_h * att_h * def_a * intent.lambda_modifier
-            lambda_a = base_a * att_a * def_h * intent.lambda_modifier
-
-            # Blend with rolling FotMob npxG if available
-            xg_home = self.enricher.get_team_xg_metrics(home_name, l_code)
-            xg_away = self.enricher.get_team_xg_metrics(away_name, l_code)
-
-            if xg_home and "npxg_for" in xg_home:
-                lambda_h = 0.65 * lambda_h + 0.35 * xg_home["npxg_for"]
-            if xg_away and "npxg_for" in xg_away:
-                lambda_a = 0.65 * lambda_a + 0.35 * xg_away["npxg_for"]
-
-            # Live Intelligence: Squad Injuries & News
-            debuff_h, debuff_a = 1.0, 1.0
-            try:
-                h_news = self.google_news.fetch_injury_news(home_name)
-                if h_news and "modifier_debuff" in h_news:
-                    debuff_h = float(h_news.get("modifier_debuff", 1.0))
-                a_news = self.google_news.fetch_injury_news(away_name)
-                if a_news and "modifier_debuff" in a_news:
-                    debuff_a = float(a_news.get("modifier_debuff", 1.0))
-            except Exception:
-                pass
-
-            # Direct H2H Analysis
-            h2h_res = H2HAnalyzer.analyze(home_name, away_name)
-
-            lambda_h = lambda_h * debuff_h * h2h_res.h2h_lambda_home_mod
-            lambda_a = lambda_a * debuff_a * h2h_res.h2h_lambda_away_mod
-
-            lambda_h = round(max(0.40, min(3.80, lambda_h)), 2)
-            lambda_a = round(max(0.30, min(3.20, lambda_a)), 2)
-
-            # =================================================================
-            # QUALITY GATE 4: Dual Attacking Floor (BTTS Requirement)
-            # =================================================================
-            # Reject if underdog is expected to be shut out (< 0.85 goals)
-            # unless favorite is an absolute juggernaut (lambda >= 2.50)
-            if min(lambda_h, lambda_a) < 0.85 and max(lambda_h, lambda_a) < 2.50:
-                rejections["underdog_blowout_risk"] += 1
-                continue
-
-            # =================================================================
-            # BIVARIATE DIXON-COLES PROBABILITIES
-            # =================================================================
-            dixon_res = DixonColesGoalsModel.calculate_probabilities(lambda_h, lambda_a)
-            raw_p_over25 = dixon_res["p_over_25"]
-            raw_p_ht05 = dixon_res["p_ht_over05"]
-
-            # =================================================================
-            # GROUNDED AI TACTICAL SCOUT
-            # =================================================================
-            ai_res = self.ai_scout.analyze_fixture_goals(
-                home_team=home_name,
-                away_team=away_name,
-                league_name=league_name,
-                lambda_h=lambda_h,
-                lambda_a=lambda_a,
-                p_over25=raw_p_over25,
-                p_btts=dixon_res["p_btts_yes"],
-                mii=intent.match_intent_index,
-                intent_classification=intent.intent_classification,
-                home_over25_rate=int(hp.home_over25_pct * 100),
-                away_over25_rate=int(ap.away_over25_pct * 100),
-                home_clean_sheet_rate=int(hp.home_clean_sheet_pct * 100),
-                away_clean_sheet_rate=int(ap.away_clean_sheet_pct * 100)
-            )
-
-            final_p_over25 = round(max(0.10, min(0.95, raw_p_over25 + ai_res["over25_adjustment"])), 4)
-            final_p_ht05 = round(max(0.25, min(0.97, raw_p_ht05)), 4)
-
-            # Shared metadata
-            base_meta = {
-                "home_team": home_name,
-                "away_team": away_name,
-                "league": league_name,
-                "lambda_home": lambda_h,
-                "lambda_away": lambda_a,
-                "xg_combined": dixon_res["xg_combined"],
-                "match_intent_index": intent.match_intent_index,
-                "intent_classification": intent.intent_classification,
-                "intent_rationale": intent.intent_rationale,
-                "tactical_rationale": ai_res["tactical_rationale"],
-                "goal_tempo": ai_res["goal_tempo"],
-                "ai_confidence": ai_res["ai_confidence"],
-                "ai_source": ai_res["source"],
-                "home_matches_evaluated": hp.matches_analyzed,
-                "away_matches_evaluated": ap.matches_analyzed,
-                "home_clean_sheet_pct": round(hp.home_clean_sheet_pct, 2),
-                "away_clean_sheet_pct": round(ap.away_clean_sheet_pct, 2),
-                "home_over25_pct": round(hp.home_over25_pct, 2),
-                "away_over25_pct": round(ap.away_over25_pct, 2),
-                "generated_at": now_iso
-            }
-
-            # =================================================================
-            # QUALITY GATE 5: Over 2.5 Value Threshold (Requires >= 66%)
-            # =================================================================
-            qualifies_over25 = final_p_over25 >= 0.66 and intent.is_favorable_for_over
-
-            if qualifies_over25:
-                if (fid, "over_2.5_goals") not in locked_keys:
-                    tier_over25 = (
-                        "GOAL_MACHINE" if (final_p_over25 >= 0.80 and dixon_res["xg_combined"] >= 3.20)
-                        else ("OVER_25_LOCK" if final_p_over25 >= 0.74 else "LEAN_OVER")
-                    )
-                    records_to_upsert.append({
-                        "fixture_id": fid,
-                        "market": "over_2.5_goals",
-                        "predicted_outcome": "OVER_2.5",
-                        "probability": final_p_over25,
-                        "confidence_tier": tier_over25,
-                        "xg_combined": dixon_res["xg_combined"],
-                        "home_over25_rate": int(hp.home_over25_pct * 100),
-                        "away_over25_rate": int(ap.away_over25_pct * 100),
-                        "h2h_over25_rate": int(round(h2h_res.h2h_over25_pct * 100)) if h2h_res.has_sufficient_h2h else int(round((hp.home_over25_pct + ap.away_over25_pct) / 2.0 * 100)),
-                        "ht_goal_frequency": int(dixon_res["p_ht_over05"] * 100),
-                        "avg_first_goal_minute": max(15, min(36, int(35 - (raw_p_ht05 * 18)))),
-                        "target_kickoff_at": kickoff_at,
-                        "settlement_status": "pending",
-                        "metadata": base_meta
-                    })
-                    over25_published += 1
-            else:
-                rejections["below_probability_threshold"] += 1
-
-        # Batch upsert into public.goals_predictions
-        if records_to_upsert:
-            batch_size = 50
-            for i in range(0, len(records_to_upsert), batch_size):
-                chunk = records_to_upsert[i:i + batch_size]
-                self.db.post("goals_predictions", chunk, on_conflict="fixture_id,market")
-
-        print(f"✅ [Over25Engine] Completed run. Published {over25_published} Over 2.5 Goals predictions.")
-        print(f"   Rejection Breakdown: {rejections}")
-
+        overs = sum(1 for r in records if r["predicted_outcome"] == "OVER_2.5")
+        print(f"✅ [OU25] Published {len(records)} picks ({overs} Over, {len(records) - overs} Under). "
+              f"Removed {len(stale)} stale picks. Breakdown: {dict(stats)}")
         return {
             "status": "success",
             "evaluated": len(fixtures),
-            "published": len(records_to_upsert),
-            "over25_published": over25_published,
-            "ht05_published": ht05_published,
-            "rejections": rejections
+            "published": len(records),
+            "over25_published": overs,
+            "under25_published": len(records) - overs,
+            "removed_stale": len(stale),
+            "breakdown": dict(stats),
         }
 
 
 if __name__ == "__main__":
-    engine = Over25GoalsEngine()
-    engine.run()
+    import argparse
+    ap = argparse.ArgumentParser(description="Over/Under 2.5 engine v2")
+    ap.add_argument("--wipe-pending", action="store_true")
+    a = ap.parse_args()
+    print(Over25GoalsEngine().run(wipe_pending=a.wipe_pending))

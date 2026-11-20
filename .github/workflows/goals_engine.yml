@@ -5,6 +5,11 @@ on:
     # Run daily at 1:00 AM WAT (00:00 UTC) - 60 minutes after Core Football Ingestion completes
     - cron: '0 0 * * *'
   workflow_dispatch:
+    inputs:
+      ou25_wipe_pending:
+        description: 'Replace all pending Over/Under 2.5 picks (settled picks and 1H picks are never touched)'
+        type: boolean
+        default: false
 
 concurrency:
   group: football-goals-specialists-engine
@@ -31,6 +36,14 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r python/requirements.txt
+
+      - name: Replace pending Over/Under 2.5 picks (manual runs only)
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.ou25_wipe_pending }}
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: python -m python.src.goals.over25_engine --wipe-pending
 
       - name: Execute Goals Specialist Engine
         env:

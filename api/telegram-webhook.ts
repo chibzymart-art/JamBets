@@ -537,11 +537,17 @@ const GOALS_LABELS: Record<string, string> = {
   'ht_over_0.5_goals': '1st Half Over 0.5 Goals',
 };
 
-/** Over 2.5 / 1st-half 0.5 goals (goals_predictions). The other goals market for the same match is a sub-pick. */
+/** "Under 2.5 Goals" when the Over/Under 2.5 engine picked the Under side. */
+function goalsLabel(market: string, outcome?: string | null): string {
+  if (market === 'over_2.5_goals' && String(outcome || '').toUpperCase().startsWith('UNDER')) return 'Under 2.5 Goals';
+  return GOALS_LABELS[market];
+}
+
+/** Over/Under 2.5 / 1st-half 0.5 goals (goals_predictions). The other goals market for the same match is a sub-pick. */
 async function loadGoalsCards(range: { startUtc: string; endUtc: string }, market: string): Promise<ListCard[] | null> {
   const rows = await fetchRows(
     'goals_predictions',
-    `id,fixture_id,market,probability,confidence_tier,xg_combined,target_kickoff_at,settlement_status,actual_score,ht_score,${FOOTBALL_FIXTURE_JOIN}`,
+    `id,fixture_id,market,predicted_outcome,probability,confidence_tier,xg_combined,target_kickoff_at,settlement_status,actual_score,ht_score,${FOOTBALL_FIXTURE_JOIN}`,
     range,
     '&settlement_status=neq.void'
   );
@@ -562,8 +568,8 @@ async function loadGoalsCards(range: { startUtc: string; endUtc: string }, marke
         title: `${(f.home_team?.name || 'Home').replace(/-/g, ' ')} vs ${(f.away_team?.name || 'Away').replace(/-/g, ' ')}`,
         league: f.league?.code || f.league?.name || 'League',
         kickoff: watTime(r.target_kickoff_at || f.target_kickoff_at),
-        main: { label: GOALS_LABELS[market], probability: normalizeProbability(r.probability), tier: r.confidence_tier || undefined, result: normalizeResult(r.settlement_status) },
-        subs: others.map(o => ({ label: GOALS_LABELS[o.market], probability: normalizeProbability(o.probability), tier: o.confidence_tier || undefined, result: normalizeResult(o.settlement_status) })),
+        main: { label: goalsLabel(market, r.predicted_outcome), probability: normalizeProbability(r.probability), tier: r.confidence_tier || undefined, result: normalizeResult(r.settlement_status) },
+        subs: others.map(o => ({ label: goalsLabel(o.market, o.predicted_outcome), probability: normalizeProbability(o.probability), tier: o.confidence_tier || undefined, result: normalizeResult(o.settlement_status) })),
         score: [r.actual_score ? `FT ${r.actual_score}` : '', r.ht_score ? `HT ${r.ht_score}` : ''].filter(Boolean).join(' · ') || undefined,
         note: Number.isFinite(xg) && xg > 0 ? `Expected goals (xG): ${xg.toFixed(2)}` : undefined,
         tiers: [],
