@@ -62,6 +62,8 @@ function tierFromLegacyCategory(category?: string | null): ScoreTier | null {
     case 'HIGH_CONFIDENCE':
     case 'HIGHCONFIDENCE':
     case 'EARLY_STRIKE':
+    case 'ELITE_OVER':
+    case 'ELITE_UNDER':
       return SCORE_TIERS.tier8;
     case 'MID_CONFIDENCE':
     case 'MIDCONFIDENCE':
@@ -71,6 +73,8 @@ function tierFromLegacyCategory(category?: string | null): ScoreTier | null {
     case 'LEAN_OVER':
     case 'OVER_25_LOCK':
     case 'GOAL_MACHINE':
+    case 'STANDARD_OVER':
+    case 'STANDARD_UNDER':
       return SCORE_TIERS.tier6;
     case 'RISKY':
       return SCORE_TIERS.tierLow;

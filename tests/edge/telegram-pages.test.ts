@@ -191,7 +191,7 @@ check('page 1 starts at match 1 and lists all its sub-picks', !!body && /<b>1\. 
 check('main pick shows % and tier', !!body && /🎯 <b>Over 1\.5 Goals<\/b> — <b>97%<\/b> · Banger/.test(body.text));
 check('no "more fixtures on dashboard" cut-off', !!body && !/more fixtures/i.test(body.text));
 const kb = buttons(body?.reply_markup).map((b) => b.text);
-check('tabs: football active, then Over 2.5, 1H 0.5, Corners, Basketball, Tennis', ['• ⚽ Football •', '🎯 Over 2.5', '⏱️ 1H 0.5', '🚩 Corners', '🏀 Basketball', '🎾 Tennis'].every((t) => kb.includes(t)), JSON.stringify(kb));
+check('tabs: football active, then O/U 2.5, 1H 0.5, Corners, Basketball, Tennis', ['• ⚽ Football •', '🎯 O/U 2.5', '⏱️ 1H 0.5', '🚩 Corners', '🏀 Basketball', '🎾 Tennis'].every((t) => kb.includes(t)), JSON.stringify(kb));
 const TODAY = lagosTodayKey();
 check('day switch: dated prev, today marked, dated next', kb.includes(`‹ ${shortDay(shiftDateKey(TODAY, -1))}`) && kb.includes(`• ${shortDay(TODAY)}`) && kb.includes(`${shortDay(shiftDateKey(TODAY, 1))} ›`) && !kb.some((t) => /Today|Tomorrow/.test(t)), JSON.stringify(kb));
 check('refresh button on the list', buttons(body?.reply_markup).some((b) => b.text === '🔄 Refresh' && b.callback_data === 'rf|football'));
@@ -224,7 +224,7 @@ ed = editBody();
 check('Tennis tab: no safe banker, but every other pick listed', !!ed && /Lucio Ratti vs Carlos Maria Zarate/.test(ed.text) && /ATP Villa Maria, Argentina · R32/.test(ed.text) && /No safe banker/.test(ed.text) && /Lucio Ratti \+1\.5 Sets · 75%/.test(ed.text) && /Over 25\.5 Games · 51%/.test(ed.text), ed?.text);
 
 calls = [];
-await press(PAID, tab('🎯 Over 2.5'));
+await press(PAID, tab('🎯 O/U 2.5'));
 ed = editBody();
 check('Over 2.5 tab: only over 2.5 rows, with 1H 0.5 as a sub-pick and xG', !!ed && /Over 2\.5 Goals<\/b> — <b>81%<\/b> · Goal Machine/.test(ed.text) && /1st Half Over 0\.5 Goals · 78%/.test(ed.text) && /xG\): 3\.12/.test(ed.text) && /1 match\b/.test(ed.text), ed?.text);
 
@@ -345,7 +345,7 @@ check('unsettled picks show no badge', !!body && /<b>1\. Home 1 vs Away 1<\/b>\n
 check('day results line with hit rate', !!body && /📊 Results: ✅ 1 won · ❌ 1 lost · ⏳ 19 to play  \(50% hit rate\)/.test(body.text), body?.text.slice(0, 200));
 
 calls = [];
-await press(PAID, (buttons(body?.reply_markup).find((b) => b.text === '🎯 Over 2.5')?.callback_data) as string);
+await press(PAID, (buttons(body?.reply_markup).find((b) => b.text === '🎯 O/U 2.5')?.callback_data) as string);
 check('goals card shows FT and HT score and result', /📋 <b>FT 3-1 · HT 1-0<\/b>/.test(editBody()?.text || '') && /✅ WON/.test(editBody()?.text || ''), editBody()?.text);
 
 

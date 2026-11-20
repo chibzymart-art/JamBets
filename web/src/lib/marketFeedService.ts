@@ -151,6 +151,12 @@ function computeTacticalAnalysis(
       };
     } else {
       const xg = raw.xg_combined ? raw.xg_combined.toFixed(2) : '2.85';
+      if (String(raw.predicted_outcome || '').toUpperCase().startsWith('UNDER')) {
+        return {
+          tag: 'LOW_TEMPO',
+          rationale: `${home} and ${away} project ${xg} combined goals. The model expects a tight contest with 2 goals or fewer.`,
+        };
+      }
       return {
         tag: Number(xg) >= 3.0 ? 'GOAL_MACHINE' : 'HIGH_TEMPO',
         rationale: `${home} and ${away} exhibit open attacking profiles with ${xg} combined expected goals. Both sides feature proactive transition play and defensive vulnerabilities that strongly favor a high-scoring contest exceeding 2.5 goals.`,
@@ -175,6 +181,11 @@ function computeTacticalAnalysis(
   };
 }
 
+/** Over/Under 2.5 pick label from the stored outcome ("OVER_2.5" / "UNDER_2.5"). */
+export function ouPickLabel(outcome?: string | null): string {
+  return String(outcome || '').toUpperCase().startsWith('UNDER') ? 'Under 2.5 Goals' : 'Over 2.5 Goals';
+}
+
 function normalizePrediction(
   raw: any,
   marketCategory: 'goals' | 'corners',
@@ -197,13 +208,15 @@ function normalizePrediction(
       marketIcon = '⏱️';
     } else {
       market = 'over_2.5_goals';
-      marketLabel = 'Over 2.5 Goals';
+      marketLabel = 'Over/Under 2.5 Goals';
       marketIcon = '🎯';
     }
   }
 
   const predictionText =
-    raw.prediction || raw.predicted_outcome || (marketCategory === 'corners' ? raw.market : 'Signal');
+    market === 'over_2.5_goals'
+      ? ouPickLabel(raw.predicted_outcome)
+      : raw.prediction || raw.predicted_outcome || (marketCategory === 'corners' ? raw.market : 'Signal');
 
   const tactical = computeTacticalAnalysis(raw, marketCategory, forcedMarketType);
 

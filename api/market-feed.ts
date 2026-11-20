@@ -293,9 +293,9 @@ function normalizePrediction(
       predictionTitle = '1H Over 0.5 Goals';
     } else {
       market = 'over_2.5_goals';
-      marketLabel = 'Over 2.5 Goals';
+      marketLabel = 'Over/Under 2.5 Goals';
       marketIcon = '🎯';
-      predictionTitle = 'Over 2.5 Goals';
+      predictionTitle = String(raw.predicted_outcome || '').toUpperCase().startsWith('UNDER') ? 'Under 2.5 Goals' : 'Over 2.5 Goals';
     }
     metrics = {
       xg_combined: raw.xg_combined,

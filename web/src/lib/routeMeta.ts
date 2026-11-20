@@ -24,9 +24,9 @@ export const ROUTE_SEO: Record<string, RouteSeo> = {
       'Today’s football predictions with a 0–10 confidence score per pick, published before kickoff. Every pick is locked before kickoff.',
   },
   '/dashboard/goals': {
-    title: 'Over 2.5 Goals & First-Half Goals Predictions | Oddsbanta',
+    title: 'Over/Under 2.5 Goals & First-Half Goals Predictions | Oddsbanta',
     description:
-      'Football goals predictions for Over 2.5 goals and first-half goals, rated on a 0–10 confidence score and settled automatically after every match.',
+      'Football goals predictions for Over/Under 2.5 goals and first-half goals, rated on a 0–10 confidence score and settled automatically after every match.',
   },
   '/dashboard/tennis': {
     title: 'Tennis Predictions Today: ATP & WTA | Oddsbanta',

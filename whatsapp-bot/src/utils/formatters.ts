@@ -9,7 +9,7 @@ export function formatMarketName(market: string): string {
   if (m.startsWith('over_under_')) return `Total Goals (${market.replace('over_under_', '')})`;
   if (m === 'btts') return 'Both Teams To Score';
   if (m === 'ht_over_0.5_goals') return '1st Half Over 0.5';
-  if (m === 'over_2.5_goals') return 'Over 2.5 Goals';
+  if (m === 'over_2.5_goals') return 'Over/Under 2.5 Goals';
   return market.replace(/_/g, ' ').toUpperCase();
 }
 
@@ -26,6 +26,8 @@ export function formatOutcome(outcome: string): string {
   if (o === 'no') return 'No (NG)';
   if (o === 'over') return 'Over';
   if (o === 'under') return 'Under';
+  if (o === 'over_2.5') return 'Over 2.5';
+  if (o === 'under_2.5') return 'Under 2.5';
   return outcome.toUpperCase();
 }
 
