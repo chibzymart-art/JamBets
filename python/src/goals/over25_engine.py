@@ -147,8 +147,10 @@ class Over25GoalsEngine:
         lock_until = now + timedelta(hours=LOCK_HOURS)
 
         if wipe_pending:
-            print("🧹 [OU25] Wiping pending Over/Under 2.5 predictions (settled rows are kept)...")
-            self.db.delete("goals_predictions", {"market": f"eq.{MARKET}", "settlement_status": "eq.pending"})
+            # Only picks beyond the 48h lock are replaced; locked and settled picks are never touched.
+            print("🧹 [OU25] Wiping pending Over/Under 2.5 predictions beyond the 48h lock...")
+            self.db.delete("goals_predictions", {"market": f"eq.{MARKET}", "settlement_status": "eq.pending",
+                                                 "target_kickoff_at": f"gt.{_ts(lock_until)}"})
 
         fixtures = self._fixtures(now)[:max_fixtures]
         if not fixtures:
