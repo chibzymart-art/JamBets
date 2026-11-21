@@ -204,10 +204,6 @@ export const CricketHubView: React.FC<CricketHubViewProps> = ({
       <div className="ck-hub-head">
         <div>
           <h1>🏏 Cricket predictions</h1>
-          <p>
-            Every match is simulated ball by ball 20,000 times from each player's record. The percentage is the
-            chance each team wins, updated after the toss once the XIs are known.
-          </p>
         </div>
         {feed && feed.stats.settled > 0 && (
           <div className="ck-record">
