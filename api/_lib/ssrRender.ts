@@ -125,11 +125,10 @@ const META: Record<SsrRoute, RouteMeta> = {
     comingSoon: true,
   },
   '/dashboard/cricket': {
-    title: 'Cricket Predictions: Coming Soon | Oddsbanta',
-    description: 'Cricket predictions with a 0–10 confidence score are coming soon to Oddsbanta.',
-    h1: 'Cricket predictions: coming soon',
-    intro: 'Cricket is not live yet. Football, tennis and basketball picks are available in the dashboard now.',
-    comingSoon: true,
+    title: 'Cricket Predictions: T20 and ODI Win Probabilities | Oddsbanta',
+    description: 'Cricket predictions for T20 and ODI matches: each team\'s win probability, toss updates, live scores and settled results.',
+    h1: 'Cricket predictions',
+    intro: 'Win probabilities for T20 and ODI matches, updated after the toss, with live scores and settled results. Picks lock 48 hours before the start.',
   },
   '/subscription': {
     title: 'Plans & Pricing | Oddsbanta',
@@ -256,7 +255,7 @@ function sportsList(): string {
 <li><a href="/dashboard/tennis">Tennis</a>: live</li>
 <li><a href="/dashboard/basketball">Basketball</a>: live</li>
 <li><a href="/dashboard/american-football">American football</a>: coming soon</li>
-<li><a href="/dashboard/cricket">Cricket</a>: coming soon</li>
+<li><a href="/dashboard/cricket">Cricket</a>: live</li>
 </ul></section>`;
 }
 

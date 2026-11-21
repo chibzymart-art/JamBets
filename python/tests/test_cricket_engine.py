@@ -216,3 +216,15 @@ def test_winner_from_text_and_league_key():
     assert winner_from_text("Desert Vipers won the Super Over", "Desert Vipers", "MI Emirates") == "Desert Vipers"
     assert league_key("International League T20", "United Arab Emirates") == "ilt"
     assert league_key("Australia v England 2026", "Twenty20 Internationals") is None
+
+
+def test_refresh_only_outside_48h_lock():
+    from datetime import datetime, timezone
+    from python.src.cricket.run_engine import is_refreshable, DAYS_AHEAD, LOCK_HOURS
+    now = datetime(2026, 11, 21, 12, 0, tzinfo=timezone.utc)
+    assert DAYS_AHEAD >= 4 and LOCK_HOURS == 48
+    assert is_refreshable("2026-11-24T12:00:00+00:00", now)       # 72h out
+    assert is_refreshable("2026-11-23T12:06:00Z", now)            # 48h06m out
+    assert not is_refreshable("2026-11-23T12:03:00+00:00", now)   # inside 5-min margin
+    assert not is_refreshable("2026-11-22T09:00:00+00:00", now)   # tomorrow
+    assert not is_refreshable("2026-11-21T10:00:00+00:00", now)   # started

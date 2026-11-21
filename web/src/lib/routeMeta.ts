@@ -48,8 +48,8 @@ export const ROUTE_SEO: Record<string, RouteSeo> = {
     description: 'American football predictions with a 0–10 confidence score are coming soon to Oddsbanta.',
   },
   '/dashboard/cricket': {
-    title: 'Cricket Predictions: Coming Soon | Oddsbanta',
-    description: 'Cricket predictions with a 0–10 confidence score are coming soon to Oddsbanta.',
+    title: 'Cricket Predictions: T20 and ODI Win Probabilities | Oddsbanta',
+    description: 'Cricket predictions for T20 and ODI matches: each team\'s win probability, toss updates, live scores and settled results.',
   },
   '/play': {
     title: 'Banter Hub: Make Your Own Calls | Oddsbanta',

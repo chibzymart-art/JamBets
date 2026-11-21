@@ -12,14 +12,26 @@ export const config = {
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || 'https://vepcoopomlfjageijsew.supabase.co';
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 
-interface CricketFeedData {
+interface DayData {
   fixtures: any[];
   predictions: any[];
   cached_at: string;
 }
 
-let cache: { data: CricketFeedData; expiresAt: number } | null = null;
-let inflight: Promise<CricketFeedData> | null = null;
+interface IndexData {
+  fixtures: { id: string; start_time: string; status: string }[];
+  predictions: { fixture_id: string; stage: string; settlement_status: string }[];
+}
+
+const FIVE_MIN = 300_000;
+const LIVE_TTL = 30_000;
+const MAX_DAY_ENTRIES = 40;
+const LOCK_MS = 48 * 3600 * 1000;
+
+let indexCache: { data: IndexData; expiresAt: number } | null = null;
+let indexInflight: Promise<IndexData> | null = null;
+const dayCache = new Map<string, { data: DayData; expiresAt: number }>();
+const dayInflight = new Map<string, Promise<DayData>>();
 
 function getCorsOrigin(req: Request): string {
   const origin = req.headers.get('Origin') || '';
@@ -40,50 +52,152 @@ function serviceHeaders(): Record<string, string> {
   };
 }
 
-async function fetchUpstream(): Promise<CricketFeedData> {
-  const from = new Date(Date.now() - 2 * 86400 * 1000).toISOString();
-  const to = new Date(Date.now() + 4 * 86400 * 1000).toISOString();
-  const range = `start_time=gte.${encodeURIComponent(from)}&start_time=lte.${encodeURIComponent(to)}`;
-  const [fxRes, prRes] = await Promise.all([
-    fetch(`${SUPABASE_URL}/rest/v1/cricket_fixtures?select=*&${range}&order=start_time.asc`, { headers: serviceHeaders() }),
-    fetch(`${SUPABASE_URL}/rest/v1/cricket_predictions?select=*&${range}&order=start_time.asc`, { headers: serviceHeaders() }),
-  ]);
-  if (!fxRes.ok || !prRes.ok) {
-    throw new Error(`cricket upstream ${fxRes.status}/${prRes.status}`);
+// ------------------------------------------------------------ time zones
+function validTimeZone(tz: string | null): string {
+  if (!tz || tz.length > 64) return 'Africa/Lagos';
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: tz });
+    return tz;
+  } catch {
+    return 'Africa/Lagos';
   }
-  return {
-    fixtures: await fxRes.json(),
-    predictions: await prRes.json(),
-    cached_at: new Date().toISOString(),
-  };
 }
 
-async function getData(): Promise<CricketFeedData> {
-  if (cache && cache.expiresAt > Date.now()) return cache.data;
-  if (!inflight) {
-    inflight = fetchUpstream()
+function tzOffsetMs(ms: number, tz: string): number {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: tz, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+  }).formatToParts(new Date(ms));
+  const get = (t: string) => Number(parts.find((p) => p.type === t)?.value);
+  const asUtc = Date.UTC(get('year'), get('month') - 1, get('day'), get('hour') % 24, get('minute'), get('second'));
+  return asUtc - Math.floor(ms / 1000) * 1000;
+}
+
+/** UTC instant of local midnight starting `iso` (YYYY-MM-DD) in `tz`. */
+function localMidnightUtc(iso: string, tz: string): number {
+  const [y, m, d] = iso.split('-').map(Number);
+  const guess = Date.UTC(y, m - 1, d);
+  let t = guess - tzOffsetMs(guess, tz);
+  t = guess - tzOffsetMs(t, tz); // second pass handles DST changes
+  return t;
+}
+
+function localDateOf(ms: number, tz: string): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(ms));
+}
+
+function addDays(iso: string, n: number): string {
+  const [y, m, d] = iso.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10);
+}
+
+// ------------------------------------------------------------ upstream
+async function fetchAll(path: string): Promise<any[]> {
+  const out: any[] = [];
+  for (let page = 0; page < 20; page++) {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}&limit=1000&offset=${page * 1000}`, { headers: serviceHeaders() });
+    if (!res.ok) throw new Error(`cricket upstream ${res.status}`);
+    const rows = await res.json();
+    out.push(...rows);
+    if (rows.length < 1000) break;
+  }
+  return out;
+}
+
+async function fetchDay(fromIso: string, toIso: string): Promise<DayData> {
+  const range = `start_time=gte.${encodeURIComponent(fromIso)}&start_time=lt.${encodeURIComponent(toIso)}`;
+  const [fixtures, predictions] = await Promise.all([
+    fetchAll(`cricket_fixtures?select=*&${range}&order=start_time.asc,id.asc`),
+    fetchAll(`cricket_predictions?select=*&${range}&order=start_time.asc,id.asc`),
+  ]);
+  return { fixtures, predictions, cached_at: new Date().toISOString() };
+}
+
+async function fetchIndex(): Promise<IndexData> {
+  const since = new Date(Date.now() - 400 * 86400 * 1000).toISOString();
+  const [fixtures, predictions] = await Promise.all([
+    fetchAll(`cricket_fixtures?select=id,start_time,status&start_time=gte.${encodeURIComponent(since)}&order=start_time.asc,id.asc`),
+    fetchAll(`cricket_predictions?select=fixture_id,stage,settlement_status&start_time=gte.${encodeURIComponent(since)}&order=id.asc`),
+  ]);
+  return { fixtures, predictions };
+}
+
+async function getIndex(): Promise<IndexData> {
+  if (indexCache && indexCache.expiresAt > Date.now()) return indexCache.data;
+  if (!indexInflight) {
+    indexInflight = fetchIndex()
       .then((data) => {
         const live = data.fixtures.some((f) => f.status === 'live');
-        cache = { data, expiresAt: Date.now() + (live ? 30_000 : 300_000) };
+        indexCache = { data, expiresAt: Date.now() + (live ? LIVE_TTL : FIVE_MIN) };
         return data;
       })
       .finally(() => {
-        inflight = null;
+        indexInflight = null;
       });
   }
-  return inflight;
+  return indexInflight;
 }
 
-// Latest stage wins: a toss-time prediction replaces the provisional one on the card;
-// both stay stored (and locked) in the database.
-function latestByFixture(predictions: any[]): Map<string, any> {
-  const order: Record<string, number> = { provisional: 0, toss: 1 };
-  const map = new Map<string, any>();
-  for (const p of predictions) {
-    const cur = map.get(p.fixture_id);
-    if (!cur || (order[p.stage] ?? 0) > (order[cur.stage] ?? 0)) map.set(p.fixture_id, p);
+async function getDay(fromIso: string, toIso: string): Promise<DayData> {
+  const key = `${fromIso}|${toIso}`;
+  const hit = dayCache.get(key);
+  if (hit && hit.expiresAt > Date.now()) return hit.data;
+  let p = dayInflight.get(key);
+  if (!p) {
+    p = fetchDay(fromIso, toIso)
+      .then((data) => {
+        const live = data.fixtures.some((f) => f.status === 'live');
+        if (dayCache.size >= MAX_DAY_ENTRIES) dayCache.delete(dayCache.keys().next().value as string);
+        dayCache.set(key, { data, expiresAt: Date.now() + (live ? LIVE_TTL : FIVE_MIN) });
+        return data;
+      })
+      .finally(() => {
+        dayInflight.delete(key);
+      });
+    dayInflight.set(key, p);
+  }
+  return p;
+}
+
+// ------------------------------------------------------------ pick of record
+// The pick of record is the first stage published: 'provisional' (it may be refreshed
+// until 48h before the start, then the database locks it), or 'toss' when the match
+// was first seen after the toss. A later toss-time prediction is shown as an update
+// beside it and never replaces the pick or its result.
+const STAGE_ORDER: Record<string, number> = { provisional: 0, toss: 1 };
+
+function byFixture<T extends { fixture_id: string; stage: string }>(rows: T[]): Map<string, { pick: T; update: T | null }> {
+  const map = new Map<string, { pick: T; update: T | null }>();
+  const sorted = [...rows].sort((a, b) => (STAGE_ORDER[a.stage] ?? 9) - (STAGE_ORDER[b.stage] ?? 9));
+  for (const r of sorted) {
+    const cur = map.get(r.fixture_id);
+    if (!cur) map.set(r.fixture_id, { pick: r, update: null });
+    else if (!cur.update) cur.update = r;
   }
   return map;
+}
+
+function tally(rows: { settlement_status: string }[]) {
+  const won = rows.filter((r) => r.settlement_status === 'won').length;
+  const lost = rows.filter((r) => r.settlement_status === 'lost').length;
+  const voided = rows.filter((r) => r.settlement_status === 'void').length;
+  return { settled: won + lost, won, lost, void: voided };
+}
+
+function publicPrediction(p: any, entitled: boolean) {
+  if (!entitled) return { locked: true, settlement_status: p.settlement_status };
+  return {
+    stage: p.stage,
+    home_win_prob: Number(p.home_win_prob),
+    away_win_prob: Number(p.away_win_prob),
+    predicted_winner: p.predicted_winner,
+    probability: Number(p.probability),
+    tier: p.tier,
+    bat_first: p.bat_first,
+    first_innings_median: p.first_innings_median === null ? null : Number(p.first_innings_median),
+    settlement_status: p.settlement_status,
+    created_at: p.created_at,
+  };
 }
 
 export default async function handler(req: Request): Promise<Response> {
@@ -111,39 +225,51 @@ export default async function handler(req: Request): Promise<Response> {
   const rawToken = authHeader?.startsWith('Bearer ') ? authHeader.slice(7).trim() : authHeader?.trim() || null;
   const entitled = hasMultiSportAccess(await verifyEdgeAccess(rawToken));
 
+  const url = new URL(req.url);
+  const tz = validTimeZone(url.searchParams.get('tz'));
+  const todayLocal = localDateOf(Date.now(), tz);
+  const rawDate = url.searchParams.get('date') || '';
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(rawDate) && !Number.isNaN(Date.parse(rawDate)) ? rawDate : todayLocal;
+  const fromIso = new Date(localMidnightUtc(date, tz)).toISOString();
+  const toIso = new Date(localMidnightUtc(addDays(date, 1), tz)).toISOString();
+
   try {
-    const data = await getData();
-    const latest = latestByFixture(data.predictions);
-    const matches = data.fixtures.map((f) => {
-      const p = latest.get(f.id);
-      const settled = p && p.settlement_status !== 'pending';
-      const prediction = !p
-        ? null
-        : entitled
-          ? {
-              stage: p.stage,
-              home_win_prob: Number(p.home_win_prob),
-              away_win_prob: Number(p.away_win_prob),
-              predicted_winner: p.predicted_winner,
-              probability: Number(p.probability),
-              tier: p.tier,
-              bat_first: p.bat_first,
-              first_innings_median: p.first_innings_median === null ? null : Number(p.first_innings_median),
-              settlement_status: p.settlement_status,
-              created_at: p.created_at,
-            }
-          : { locked: true, settlement_status: settled ? p.settlement_status : 'pending' };
-      return { ...f, prediction };
+    const [day, index] = await Promise.all([getDay(fromIso, toIso), getIndex()]);
+    const picks = byFixture(day.predictions);
+    const now = Date.now();
+    const matches = day.fixtures.map((f) => {
+      const entry = picks.get(f.id);
+      const startMs = Date.parse(f.start_time);
+      return {
+        ...f,
+        pick_locked: !entry || entry.pick.settlement_status !== 'pending' || startMs - now <= LOCK_MS,
+        prediction: entry ? publicPrediction(entry.pick, entitled) : null,
+        toss_update: entry?.update && entitled ? publicPrediction(entry.update, true) : null,
+      };
     });
-    const settledRows = [...latest.values()].filter((p) => p.settlement_status === 'won' || p.settlement_status === 'lost');
-    const won = settledRows.filter((p) => p.settlement_status === 'won').length;
+
+    // Dates with matches, in the visitor's time zone (for the date dropdown and chip counts).
+    const counts = new Map<string, number>();
+    for (const f of index.fixtures) {
+      const iso = localDateOf(Date.parse(f.start_time), tz);
+      counts.set(iso, (counts.get(iso) || 0) + 1);
+    }
+    const dates = [...counts.entries()].sort(([a], [b]) => b.localeCompare(a)).map(([iso, count]) => ({ iso, count }));
+    const overall = tally([...byFixture(index.predictions).values()].map((e) => e.pick));
+    const dayStats = tally([...picks.values()].map((e) => e.pick));
+
     return new Response(
       JSON.stringify({
         success: true,
         is_subscriber: entitled,
+        date,
+        today: todayLocal,
+        tz,
         matches,
-        stats: { settled: settledRows.length, won, lost: settledRows.length - won },
-        cached_at: data.cached_at,
+        dates,
+        stats: overall,
+        day_stats: dayStats,
+        cached_at: day.cached_at,
       }),
       { status: 200, headers: corsHeaders }
     );
