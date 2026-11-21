@@ -206,3 +206,13 @@ def test_cricbuzz_parse_toss_venue_odds():
         parse_mcenter({"nothing": 1})
     html = '<a href="/live-cricket-scores/151338/aus-vs-eng">x</a><a href="/cricket-scores/151338/aus">y</a>'
     assert match_ids_from_html(html) == ["151338"]
+
+
+def test_winner_from_text_and_league_key():
+    from python.src.cricket.run_engine import winner_from_text, league_key
+    assert winner_from_text("Netherlands win by 7 wickets", "Oman", "Netherlands") == "Netherlands"
+    assert winner_from_text("Match tied", "A", "B") is None
+    assert winner_from_text("No result", "A", "B") is None
+    assert winner_from_text("Desert Vipers won the Super Over", "Desert Vipers", "MI Emirates") == "Desert Vipers"
+    assert league_key("International League T20", "United Arab Emirates") == "ilt"
+    assert league_key("Australia v England 2026", "Twenty20 Internationals") is None
