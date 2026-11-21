@@ -210,6 +210,16 @@
     padding: 4px 2px 9px; /* room for the ledge and the hover lift */
   }
 
+  /* Centre the tab row. Auto-margin spacers (not justify-content: center) so that if the row
+     ever overflows it still scrolls from the first tab instead of clipping it. */
+  .sport-subtabs::before,
+  .sport-subtabs::after {
+    content: '';
+    flex: 0 0 0;
+  }
+  .sport-subtabs::before { margin-left: auto; }
+  .sport-subtabs::after { margin-right: auto; }
+
   .sport-subtab,
   .sport-subtab--markets {
     margin: 0;
