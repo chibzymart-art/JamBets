@@ -160,6 +160,8 @@ export const SpecialistMarketCard: React.FC<SpecialistMarketCardProps> = ({
     return null;
   })();
 
+  // Over/Under 2.5 shows the pick's probability only, never a tier label.
+  const isOu25 = prediction.market === 'over_2.5_goals';
   const [isExpanded, setIsExpanded] = React.useState(false);
 
   const handleFavoriteClick = (e: React.MouseEvent) => {
@@ -206,7 +208,7 @@ export const SpecialistMarketCard: React.FC<SpecialistMarketCardProps> = ({
               : null
           }
           isLive={isLive}
-          tierLabel={!isLocked && prediction.confidence_tier ? prediction.confidence_tier.replace(/_/g, ' ') : null}
+          tierLabel={!isLocked && !isOu25 && prediction.confidence_tier ? prediction.confidence_tier.replace(/_/g, ' ') : null}
           tierClassName={`confidence-tier-pill tier-${prediction.confidence_tier?.toLowerCase()}`}
           settle={isSettled && !isLocked ? (isWon ? 'won' : isLost ? 'lost' : 'void') : null}
           marketLabel={`${prediction.market_icon} ${prediction.market_label}`}
@@ -245,7 +247,7 @@ export const SpecialistMarketCard: React.FC<SpecialistMarketCardProps> = ({
             )
           }
           scoreText={!isLocked && prediction.display_probability !== null ? `${prediction.display_probability}%` : null}
-          scoreSub={!isLocked && prediction.display_probability !== null ? 'edge conf.' : null}
+          scoreSub={!isLocked && prediction.display_probability !== null ? (isOu25 ? 'probability' : 'edge conf.') : null}
           slip={!isLocked && onToggleFavorite ? { active: isFavorite, onClick: handleFavoriteClick } : null}
           expanded={isExpanded}
           onToggle={() => setIsExpanded(!isExpanded)}

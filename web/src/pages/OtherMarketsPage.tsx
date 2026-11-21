@@ -268,6 +268,19 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
       return true;
     });
 
+    // Over/Under 2.5: ranked purely by the pick's probability (highest first), no tier groups.
+    if (activeMarket === 'over_2.5_goals') {
+      const pr = (x: UnifiedMarketPrediction) =>
+        typeof x.probability === 'number' ? (x.probability > 1 ? x.probability / 100 : x.probability) : -1;
+      return list.sort((a, b) => {
+        if (Math.abs(pr(b) - pr(a)) > 0.0001) return pr(b) - pr(a);
+        const timeA = new Date(a.target_kickoff_at || a.fixture?.target_kickoff_at || 0).getTime();
+        const timeB = new Date(b.target_kickoff_at || b.fixture?.target_kickoff_at || 0).getTime();
+        if (!isNaN(timeA) && !isNaN(timeB) && timeA !== timeB) return timeA - timeB;
+        return (a.id || '').localeCompare(b.id || '');
+      });
+    }
+
     // Arranged strictly by Tier Priority: Bangers first, Top pick, High, Mid, Low, Anti-loss
     // No longer arranged by kickoff time.
     return list.sort((a, b) => {
@@ -285,7 +298,7 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
 
       return (a.id || '').localeCompare(b.id || '');
     });
-  }, [predictions, statusFilter, searchQuery, isPaidUser]);
+  }, [predictions, statusFilter, searchQuery, isPaidUser, activeMarket]);
 
 
   // Summary counts for current batch
@@ -743,7 +756,8 @@ export const OtherMarketsPage: React.FC<OtherMarketsPageProps> = ({
               const currentRank = getFootballTierPriority(prediction.confidence_category, prediction.confidence_tier, prediction.probability);
               const prevPred = idx > 0 ? visiblePredictions[idx - 1] : null;
               const prevRank = prevPred ? getFootballTierPriority(prevPred.confidence_category, prevPred.confidence_tier, prevPred.probability) : null;
-              const isTierSlotStart = idx === 0 || currentRank !== prevRank;
+              // Over/Under 2.5 is ranked by probability alone, so it shows no tier group headers.
+              const isTierSlotStart = activeMarket !== 'over_2.5_goals' && (idx === 0 || currentRank !== prevRank);
               const tierHeader = getTierHeaderByRank(currentRank);
 
               return (
