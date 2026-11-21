@@ -92,12 +92,15 @@ BEGIN
     END IF;
     RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+$$ LANGUAGE plpgsql SECURITY INVOKER SET search_path = public;
 
 DROP TRIGGER IF EXISTS trg_enforce_cricket_prediction_immutability ON public.cricket_predictions;
 CREATE TRIGGER trg_enforce_cricket_prediction_immutability
     BEFORE UPDATE OR DELETE ON public.cricket_predictions
     FOR EACH ROW EXECUTE FUNCTION public.enforce_cricket_prediction_immutability();
+
+-- Trigger-only function: nobody needs to call it directly (Security Advisor).
+REVOKE EXECUTE ON FUNCTION public.enforce_cricket_prediction_immutability() FROM PUBLIC, anon, authenticated;
 
 -- ---------------------------------------------------------------- access
 ALTER TABLE public.cricket_fixtures ENABLE ROW LEVEL SECURITY;
