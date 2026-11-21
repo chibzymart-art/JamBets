@@ -2723,51 +2723,6 @@ export default function App() {
             path="/dashboard"
             element={
               <div id="fixtures-view-section">
-                {/* 2. FOOTBALL PREDICTION MARKETS SELECTOR BAR (General & Other Markets) */}
-                <div className="prediction-markets-bar" role="tablist" aria-label="Football Prediction Markets">
-                  <div
-                    className={`market-nav-card ${location.pathname === DASHBOARD_PATHS.football ? 'active' : ''}`}
-                    onClick={() => handleSportSelect('football')}
-                    role="tab"
-                    aria-selected={location.pathname === DASHBOARD_PATHS.football}
-                    tabIndex={0}
-                  >
-                    <div className="market-nav-card-left">
-                      <div className="market-nav-icon-circle">⚽</div>
-                      <div className="market-nav-titles">
-                        <span className="market-nav-title-text">General</span>
-                        <span className="market-nav-sub-text">
-                          Core 1X2, Double Chance & Totals • {availableLeagues.length} Leagues
-                        </span>
-                      </div>
-                    </div>
-                    <span className="market-nav-count-pill">
-                      {selectedDate !== 'all' ? `${filteredFixtures.length} Matches` : `${dynamicDateTabs.all.count} Matches`}
-                    </span>
-                  </div>
-
-                  <div
-                    className={`market-nav-card ${location.pathname === DASHBOARD_PATHS.goals ? 'active' : ''}`}
-                    onClick={() => navigate(DASHBOARD_PATHS.goals)}
-                    role="tab"
-                    aria-selected={location.pathname === DASHBOARD_PATHS.goals}
-                    tabIndex={0}
-                  >
-                    <div className="market-nav-card-left">
-                      <div className="market-nav-icon-circle">🎯</div>
-                      <div className="market-nav-titles">
-                        <span className="market-nav-title-text">Other Markets</span>
-                        <span className="market-nav-sub-text">
-                          Over 2.5 Goals, 1H Blitz & Corners
-                        </span>
-                      </div>
-                    </div>
-                    <span className="market-nav-count-pill specialist-pill">
-                      3 Specialist Models
-                    </span>
-                  </div>
-                </div>
-
                 {loading && fixtures.length === 0 ? (
                   <div className="engine-loading-container" role="status" aria-live="polite">
                     <div className="engine-loading-card">
