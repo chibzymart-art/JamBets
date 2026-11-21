@@ -28,6 +28,7 @@ const PlayHub = lazyWithReload('play', () => import('./features/play/PlayHub'));
 const VirtualLifePage = lazyWithReload('vlife', () => import('./features/virtual-life/VirtualLifePage'));
 // Heavier pages load on demand, like Banter and Virtual Life, so the first page on a phone downloads less.
 // Each one looks and behaves exactly as before; only the moment its code downloads changes.
+const CricketHubView = lazyWithReload('cricket', () => import('./components/CricketHubView').then((m) => ({ default: m.CricketHubView })));
 const TennisHubView = lazyWithReload('tennis', () => import('./components/TennisHubView').then((m) => ({ default: m.TennisHubView })));
 const BasketballHubView = lazyWithReload('basketball', () => import('./components/BasketballHubView').then((m) => ({ default: m.BasketballHubView })));
 const OtherMarketsPage = lazyWithReload('goals', () => import('./pages/OtherMarketsPage').then((m) => ({ default: m.OtherMarketsPage })));
@@ -1329,13 +1330,12 @@ export default function App() {
       id: 'cricket',
       name: 'Cricket',
       icon: '🏏',
-      isAvailable: sportsState.cricket?.isAvailable ?? false,
+      // Cricket hub is live (its own feed and page); the football data loader is not involved.
+      isAvailable: true,
       fixtureCount: sportsState.cricket?.fixtureCount ?? 0,
       leagueCount: sportsState.cricket?.leagueCount ?? 0,
-      statusLabel: sportsState.cricket?.isAvailable ? 'Available' : 'Coming Soon',
-      subtext: sportsState.cricket?.isAvailable
-        ? `${sportsState.cricket.leagueCount} Available Leagues`
-        : 'Coming Soon'
+      statusLabel: 'Available',
+      subtext: 'T20 and ODI'
     }
   ], [sportsState, availableLeagues]);
 
@@ -2058,7 +2058,7 @@ export default function App() {
                           }}
                         >
                           <span className="hamburger-item-icon">🏏</span>
-                          <span className="hamburger-item-label">Cricket (Coming Soon)</span>
+                          <span className="hamburger-item-label">Cricket</span>
                         </Link>
 
                         <button
@@ -2655,22 +2655,27 @@ export default function App() {
             }
           />
 
-          {/* DASHBOARD ROUTE: CRICKET (COMING SOON) */}
+          {/* DASHBOARD ROUTE: CRICKET PREDICTIONS */}
           <Route
             path={DASHBOARD_PATHS.cricket}
             element={
-              <div className="coming-soon-panel">
-                <div className="coming-soon-icon-circle">🏏</div>
-                <h2 className="coming-soon-title">Cricket Predictions</h2>
-                <span className="coming-soon-status-badge">⏳ Coming Soon</span>
-                <p className="coming-soon-desc">
-                  Cricket quantitative match simulations with 0–10 confidence scores are coming soon to Oddsbanta.
-                </p>
-                <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', marginTop: 16 }}>
-                  <button type="button" className="coming-soon-back-btn" onClick={() => handleSportSelect('football')}>
-                    ⚽ View Football Predictions
-                  </button>
-                </div>
+              <div id="fixtures-view-section" style={{ paddingTop: '8px' }}>
+                <Suspense fallback={pageLoading}>
+                  <CricketHubView
+                    currentUser={currentUser}
+                    isAdmin={isAdmin}
+                    canViewPredictions={canViewMultiSport}
+                    onOpenAuth={(mode) => {
+                      setAuthModalMode(mode);
+                      setIsAuthModalOpen(true);
+                    }}
+                    onOpenSubscription={() => navigate('/subscription')}
+                    onBackToFootball={() => {
+                      setSelectedSport('football');
+                      navigate(DASHBOARD_PATHS.football);
+                    }}
+                  />
+                </Suspense>
               </div>
             }
           />

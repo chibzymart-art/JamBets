@@ -56,3 +56,22 @@ report shows in the run summary.
 - Tier cut-offs are chosen on data before the test period.
 
 Data: Cricsheet.org
+
+## Live engine (phase 2)
+
+- `python -m python.src.cricket.run_engine predict` (hourly workflow
+  `cricket_engine.yml`): scrapes LiveScore for yesterday to +2 days, publishes a
+  `provisional` prediction (probable XIs, both batting orders averaged) and,
+  once toss and XIs are out, a `toss` prediction. Only unstarted matches are
+  predicted. Rows are inserted with ignore-duplicates; the database trigger
+  makes published prediction columns immutable.
+- `python -m python.src.cricket.run_engine settle`: marks won / lost / void
+  from LiveScore results 3+ hours after the start.
+- Tables: `cricket_fixtures` (public read), `cricket_predictions` (BigBang VIP
+  + admin via `is_multisport_entitled()`), migration
+  `20261121000010_cricket_engine.sql`.
+- Feed: `api/cricket-feed.ts` (redacts probabilities for non-VIP users).
+- UI: `web/src/components/CricketHubView.tsx` at `/dashboard/cricket`.
+- Tiers: ELITE is disabled (`ELITE_ENABLED = False`) until the back-test passes
+  90% on 200+ picks in both periods; STANDARD = 65%+ with 9+ rated players per
+  side and every player matched; otherwise WATCH.

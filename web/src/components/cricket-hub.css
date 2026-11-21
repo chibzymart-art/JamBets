@@ -1,0 +1,43 @@
+.ck-hub { max-width: 1100px; margin: 0 auto; padding: 8px 16px 32px; }
+.ck-hub-head { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; flex-wrap: wrap; }
+.ck-hub-head h1 { font-size: 1.5rem; margin: 4px 0 6px; color: var(--text-primary); }
+.ck-hub-head p { margin: 0; color: var(--text-secondary); max-width: 640px; font-size: 0.92rem; line-height: 1.45; }
+.ck-record { background: var(--bg-card, #fff); border: 1px solid var(--border-subtle); border-radius: 12px; padding: 10px 14px; text-align: center; min-width: 120px; }
+.ck-record strong { display: block; font-size: 1.3rem; color: var(--green-dark, #166534); font-family: var(--font-mono, monospace); }
+.ck-record span { font-size: 0.78rem; color: var(--text-muted); }
+.ck-filters { display: flex; gap: 8px; margin: 16px 0 8px; }
+.ck-filters button { border: 1px solid var(--border-subtle); background: var(--bg-card, #fff); color: var(--text-primary); border-radius: 999px; padding: 6px 14px; font-weight: 600; cursor: pointer; }
+.ck-filters button.active { background: var(--green-primary, #16a34a); border-color: var(--green-primary, #16a34a); color: #fff; }
+.ck-day h2 { font-size: 1rem; color: var(--text-secondary); margin: 18px 0 10px; text-transform: uppercase; letter-spacing: 0.04em; }
+.ck-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; }
+.ck-card { background: var(--bg-card, #fff); border: 1px solid var(--border-subtle); border-radius: 14px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; box-shadow: var(--shadow-sm, none); min-width: 0; }
+.ck-card-head { display: flex; align-items: center; gap: 8px; font-size: 0.78rem; color: var(--text-muted); }
+.ck-format { background: var(--bg-tertiary, #f1f5f9); color: var(--text-primary); border-radius: 6px; padding: 2px 6px; font-weight: 700; }
+.ck-comp { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ck-badge { border-radius: 6px; padding: 2px 6px; background: var(--bg-tertiary, #f1f5f9); color: var(--text-secondary); font-weight: 600; }
+.ck-live { background: #dc2626; color: #fff; }
+.ck-team { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; align-items: center; font-size: 0.95rem; color: var(--text-primary); }
+.ck-team-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ck-fav .ck-team-name { font-weight: 700; }
+.ck-team-score { font-family: var(--font-mono, monospace); font-size: 0.85rem; color: var(--text-secondary); }
+.ck-team-prob { display: inline-flex; align-items: center; gap: 6px; font-family: var(--font-mono, monospace); }
+.ck-bar { width: 64px; height: 6px; background: var(--bg-tertiary, #e2e8f0); border-radius: 3px; overflow: hidden; display: inline-block; }
+.ck-bar span { display: block; height: 100%; background: var(--text-muted, #94a3b8); }
+.ck-fav .ck-bar span { background: var(--green-primary, #16a34a); }
+.ck-pick { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; font-size: 0.85rem; color: var(--text-primary); border-top: 1px dashed var(--border-subtle); padding-top: 8px; }
+.ck-stage { color: var(--text-muted); font-size: 0.78rem; }
+.ck-tier { margin-left: 6px; background: var(--green-light, #dcfce7); color: var(--green-dark, #166534); border: 1px solid var(--green-border, #86efac); border-radius: 6px; padding: 1px 6px; font-size: 0.72rem; font-weight: 700; }
+.ck-result { margin-left: auto; border-radius: 6px; padding: 2px 8px; font-weight: 700; font-size: 0.78rem; }
+.ck-won { background: #dcfce7; color: #166534; }
+.ck-lost { background: #fee2e2; color: #991b1b; }
+.ck-void { background: var(--bg-tertiary, #f1f5f9); color: var(--text-secondary); }
+.ck-unlock { border: 1px dashed var(--green-border, #86efac); background: var(--green-light, #f0fdf4); color: var(--green-dark, #166534); border-radius: 10px; padding: 8px; font-weight: 600; cursor: pointer; }
+.ck-foot { display: flex; flex-direction: column; gap: 2px; font-size: 0.75rem; color: var(--text-muted); }
+.ck-note { color: var(--text-muted); font-size: 0.85rem; padding: 4px 0; }
+.ck-error { color: #b91c1c; }
+.ck-empty { text-align: center; padding: 32px 16px; color: var(--text-secondary); }
+.ck-credit { margin-top: 24px; font-size: 0.72rem; color: var(--text-muted); text-align: center; }
+@media (max-width: 480px) {
+  .ck-grid { grid-template-columns: 1fr; }
+  .ck-bar { width: 44px; }
+}
