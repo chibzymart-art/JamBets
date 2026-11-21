@@ -12,7 +12,7 @@ on:
       days:
         description: 'Days ahead to predict'
         required: false
-        default: '2'
+        default: '4'
       dry_run:
         description: 'Run without writing to Supabase'
         type: boolean
@@ -58,7 +58,7 @@ jobs:
       - name: Predict
         run: |
           python -m python.src.cricket.run_engine predict \
-            --days "${{ github.event.inputs.days || '2' }}" \
+            --days "${{ github.event.inputs.days || '4' }}" \
             ${{ github.event.inputs.dry_run == 'true' && '--dry-run' || '' }}
 
       - name: Settle

@@ -60,17 +60,24 @@ Data: Cricsheet.org
 ## Live engine (phase 2)
 
 - `python -m python.src.cricket.run_engine predict` (hourly workflow
-  `cricket_engine.yml`): scrapes LiveScore for yesterday to +2 days, publishes a
+  `cricket_engine.yml`): scrapes LiveScore for yesterday to +4 days, publishes a
   `provisional` prediction (probable XIs, both batting orders averaged) and,
   once toss and XIs are out, a `toss` prediction. Only unstarted matches are
-  predicted. Rows are inserted with ignore-duplicates; the database trigger
-  makes published prediction columns immutable.
+  predicted.
+- **48-hour lock**: a provisional row may be refreshed while the match is more
+  than 48 hours away. From 48 hours before the start, and once settled, the
+  trigger (migration `20261121000011_cricket_lock_48h.sql`) keeps every
+  prediction column unchanged. The pick of record (shown and graded on the
+  card) is the first stage published; a later toss prediction is shown as an
+  update beside it and never replaces it.
 - `python -m python.src.cricket.run_engine settle`: marks won / lost / void
   from LiveScore results 3+ hours after the start.
 - Tables: `cricket_fixtures` (public read), `cricket_predictions` (BigBang VIP
   + admin via `is_multisport_entitled()`), migration
   `20261121000010_cricket_engine.sql`.
-- Feed: `api/cricket-feed.ts` (redacts probabilities for non-VIP users).
+- Feed: `api/cricket-feed.ts?date=YYYY-MM-DD&tz=Area/City` returns one local day,
+  the list of dates with matches, and day and all-time records (redacts
+  probabilities for non-VIP users).
 - UI: `web/src/components/CricketHubView.tsx` at `/dashboard/cricket`.
 - Tiers: ELITE is disabled (`ELITE_ENABLED = False`) until the back-test passes
   90% on 200+ picks in both periods; STANDARD = 65%+ with 9+ rated players per

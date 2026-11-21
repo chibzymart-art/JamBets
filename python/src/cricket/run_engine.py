@@ -1,7 +1,7 @@
 """
 Cricket engine runner: scrape, simulate, screen, publish and settle.
 
-    python -m python.src.cricket.run_engine predict [--days 2] [--dry-run]
+    python -m python.src.cricket.run_engine predict [--days 4] [--dry-run]
     python -m python.src.cricket.run_engine settle  [--dry-run]
 
 predict:
@@ -12,8 +12,10 @@ predict:
      XI, averaged over both possible batting orders.
      After the toss with XIs announced: 'toss' prediction from the real XI
      and the real batting order.
-  4. Calibrate with the back-test blend, screen, and insert. Inserts never
-     overwrite: the database lock makes published rows immutable.
+  4. Calibrate with the back-test blend, screen, and insert. New rows never
+     overwrite. A 'provisional' row may be refreshed while the match is more
+     than 48 hours away; from 48 hours before the start (and once settled) the
+     database trigger keeps it unchanged.
 
 settle:
   Reads pending predictions whose match should be over, scrapes the result
@@ -60,6 +62,8 @@ BLEND = {
 # Tiers. ELITE stays off until a back-test shows 90%+ on 200+ picks in both
 # the selection and test periods (owner decision, 21 Nov 2026).
 ELITE_ENABLED = False
+DAYS_AHEAD = 4    # predict today plus the next 4 days
+LOCK_HOURS = 48   # picks never change within 48h of the start (DB trigger enforces it)
 ELITE_MIN_PROB = 0.80
 STANDARD_MIN_PROB = 0.65
 MIN_RATED_PLAYERS = 9
@@ -296,20 +300,40 @@ def run_predict(days: int, dry_run: bool, refresh: bool) -> int:
     model, matches = build_model(refresh)
     book = TeamBook(matches)
     reg = Register.download(DATA_DIR)
-    rows = []
+    rows: List[dict] = []
+    refresh_rows: List[dict] = []
     for fx in todo:
         try:
             p = predict_fixture(model, book, reg, fx)
         except Exception as exc:  # one bad fixture must not stop the run
             logger.exception("predict %s failed: %s", fx.event_id, exc)
             continue
-        if p and (p["fixture_id"], p["stage"]) not in existing:
+        if not p:
+            continue
+        key = (p["fixture_id"], p["stage"])
+        if key not in existing:
             rows.append(p)
-            logger.info("%s %s v %s: %s %.1f%% (%s)", p["stage"], fx.home, fx.away,
-                        p["predicted_winner"], p["probability"] * 100, p["tier"])
+        elif is_refreshable(p["start_time"]):
+            refresh_rows.append(p)
+        else:
+            continue
+        logger.info("%s %s v %s: %s %.1f%% (%s)%s", p["stage"], fx.home, fx.away,
+                    p["predicted_winner"], p["probability"] * 100, p["tier"],
+                    " [refresh]" if key in existing else "")
+    # New rows never overwrite anything.
     db.upsert("cricket_predictions", rows, "fixture_id,stage", ignore_duplicates=True)
-    logger.info("published %d predictions", len(rows))
-    return len(rows)
+    # Rows more than 48h out may be refreshed; the database trigger keeps every
+    # row within 48h of the start (or settled) unchanged regardless.
+    db.upsert("cricket_predictions", refresh_rows, "fixture_id,stage", ignore_duplicates=False)
+    logger.info("published %d new, refreshed %d unlocked predictions", len(rows), len(refresh_rows))
+    return len(rows) + len(refresh_rows)
+
+
+def is_refreshable(start_iso: str, now: Optional[datetime] = None) -> bool:
+    """True while a match is comfortably more than LOCK_HOURS away (5 min margin)."""
+    now = now or datetime.now(timezone.utc)
+    start = datetime.fromisoformat(start_iso.replace("Z", "+00:00"))
+    return start - now > timedelta(hours=LOCK_HOURS, minutes=5)
 
 
 # ----------------------------------------------------------------- settle
@@ -384,7 +408,7 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     sub = ap.add_subparsers(dest="cmd", required=True)
     p = sub.add_parser("predict")
-    p.add_argument("--days", type=int, default=2)
+    p.add_argument("--days", type=int, default=DAYS_AHEAD)
     p.add_argument("--dry-run", action="store_true")
     p.add_argument("--refresh-history", action="store_true")
     s = sub.add_parser("settle")
